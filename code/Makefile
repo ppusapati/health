@@ -102,6 +102,10 @@ manifests-validate: ## Render and schema-validate every overlay
 			kubeconform -strict -summary -schema-location default || exit 1; \
 	done
 
+.PHONY: test-contract
+test-contract: ## API contract semantics: permissions and error codes (SRS-API-013)
+	TEST_DATABASE_URL="$(TEST_DATABASE_URL)" go test ./internal/app/ -run Contract -count=1 -v
+
 .PHONY: test-migrations
 test-migrations: ## Schema change invariants (expand/contract, notes, partitioning)
 	go test ./tools/migrations/ -count=1
@@ -167,4 +171,4 @@ mobile-test: ## Run Flutter unit and widget tests
 	cd apps/mobile && flutter test
 
 .PHONY: ci
-ci: lint test-fitness test-infra test-security test-migrations test ## Everything CI runs
+ci: lint test-fitness test-infra test-security test-migrations test-contract test ## Everything CI runs

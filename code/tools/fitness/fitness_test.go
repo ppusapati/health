@@ -669,3 +669,44 @@ func TestSchemaRuleDetectorsWork(t *testing.T) {
 		t.Error("the timestamp detector misclassifies timestamptz")
 	}
 }
+
+// External gateways stay out of the domain (SRS-API-012).
+//
+// The verification clause is "external standard changes do not force internal
+// DB model rewrite", and the way that stays true is a translation boundary
+// nobody is tempted to skip. The temptation is real and specific: FHIR
+// resources look enough like domain aggregates that storing a fhir.Patient
+// directly saves a mapping layer — until the next FHIR release renumbers a
+// field and the migration is a data migration rather than a code change.
+//
+// So a gateway package may depend on a domain, and no domain, application or
+// adapter package may depend on a gateway.
+func TestGatewaysAreNotImportedByTheDomain(t *testing.T) {
+	for _, f := range loadGoFiles(t) {
+		rel := filepath.ToSlash(f.rel)
+		// A gateway may import inward; that is the direction translation runs.
+		if strings.Contains(rel, "internal/gateway/") {
+			continue
+		}
+		for _, imp := range f.imports {
+			if strings.Contains(imp, "/internal/gateway/") {
+				t.Errorf("%s imports %s. A gateway translates an external standard; "+
+					"depending on one inward means a change to that standard reaches "+
+					"the domain and the database (SRS-API-012)", rel, imp)
+			}
+		}
+	}
+}
+
+// TestGatewayRuleDetectorWorks proves the rule can fail while no gateway
+// exists yet, so it is not asserting nothing while reporting green.
+func TestGatewayRuleDetectorWorks(t *testing.T) {
+	offending := "github.com/ppusapati/health/code/internal/gateway/fhir"
+	if !strings.Contains(offending, "/internal/gateway/") {
+		t.Fatal("the gateway detector does not recognise a gateway import")
+	}
+	innocent := "github.com/ppusapati/health/code/internal/organization/domain"
+	if strings.Contains(innocent, "/internal/gateway/") {
+		t.Fatal("the gateway detector fires on a domain import")
+	}
+}

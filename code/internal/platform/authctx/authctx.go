@@ -13,6 +13,7 @@ package authctx
 import (
 	"context"
 	"errors"
+	"time"
 )
 
 // PurposeOfUse constrains what a caller may do with data it is entitled to see.
@@ -80,6 +81,14 @@ type Session struct {
 	// PermittedPurposes lists the purposes-of-use this credential may assert.
 	// Same rule: empty grants nothing.
 	PermittedPurposes []PurposeOfUse
+
+	// IssuedAt is when the credential this session came from was minted.
+	//
+	// It is what makes revocation propagate: an account's revocation watermark
+	// is compared against it on every request, so disabling a user kills the
+	// sessions they already hold rather than waiting for a token to expire on
+	// its own (SRS-IAM-006).
+	IssuedAt time.Time
 
 	// CorrelationID is stable across RPC, event and workflow hops.
 	CorrelationID string

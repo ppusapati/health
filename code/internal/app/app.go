@@ -52,6 +52,19 @@ type Deps struct {
 	// disables limiting, which is why the composition root supplies a default
 	// rather than leaving it unset.
 	RateLimit platformtransport.RateLimitConfig
+
+	// ProcedureDeadlines overrides the default request budget for named
+	// procedures (SRS-API-010). Nil gives every procedure the default, which
+	// is the right answer for anything that should not be slow — a genuinely
+	// long operation belongs in a job (SRS-API-011) rather than a longer
+	// timeout.
+	ProcedureDeadlines map[string]time.Duration
+
+	// Revoker refuses sessions belonging to disabled or moved users
+	// (SRS-IAM-006). Nil disables the check, which is correct only where no
+	// revocation store exists yet — ADR-008 is open, so the development
+	// verifier has nothing to revoke against.
+	Revoker platformtransport.SessionRevoker
 }
 
 // Server holds the assembled HTTP handler and the services behind it.
@@ -102,14 +115,29 @@ func New(deps Deps) *Server {
 		Clock:        systemClock{},
 	}
 
-	interceptors := connect.WithInterceptors(
+	chain := []connect.Interceptor{
 		platformtransport.NewTracingInterceptor(),
 		platformtransport.NewErrorInterceptor(),
+		// Bounds every request before anything expensive starts, so an
+		// abandoned browser request cannot leave a handler holding a
+		// transaction (SRS-API-010).
+		platformtransport.NewDeadlineInterceptor(deps.ProcedureDeadlines),
 		platformtransport.NewPeerRateLimitInterceptor(rateLimiter),
 		platformtransport.NewAuthInterceptor(deps.Verifier),
 		platformtransport.NewSubjectRateLimitInterceptor(rateLimiter),
-		platformtransport.NewEntitlementInterceptor(entitlements, nil),
-	)
+	}
+	// Revocation runs immediately after authentication, so a disabled user's
+	// existing session is refused before any handler sees it (SRS-IAM-006).
+	// Optional because it costs a lookup per request, and a deployment with no
+	// revocation store configured should fail loudly at wiring rather than
+	// silently skip the check — so a nil Revoker means the feature is off by
+	// configuration, not by accident.
+	if deps.Revoker != nil {
+		chain = append(chain, platformtransport.NewRevocationInterceptor(deps.Revoker))
+	}
+	chain = append(chain, platformtransport.NewEntitlementInterceptor(entitlements, nil))
+
+	interceptors := connect.WithInterceptors(chain...)
 
 	mux := http.NewServeMux()
 	mux.Handle(organizationv1connect.NewOrganizationServiceHandler(

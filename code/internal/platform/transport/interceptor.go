@@ -71,7 +71,7 @@ func NewAuthInterceptor(verifier TokenVerifier) connect.UnaryInterceptorFunc {
 			}.SpanAttrs()...)
 
 			if PublicProcedures[req.Spec().Procedure] {
-				return next(ctx, req)
+				return withCorrelationHeader(next(ctx, req))(correlationID)
 			}
 
 			token := bearerToken(header.Get(HeaderAuthorization))
@@ -117,8 +117,28 @@ func NewAuthInterceptor(verifier TokenVerifier) connect.UnaryInterceptorFunc {
 				SubjectID: session.SubjectID,
 			}.SpanAttrs()...)
 
-			return next(authctx.WithSession(ctx, authctx.NewSession(session)), req)
+			return withCorrelationHeader(
+				next(authctx.WithSession(ctx, authctx.NewSession(session)), req))(correlationID)
 		}
+	}
+}
+
+// withCorrelationHeader echoes the correlation id on a successful response.
+//
+// A failure already carries it in the structured error detail, so before this
+// a client could join a failed call to a trace and a successful one not at
+// all — which is backwards, because the calls somebody investigates after the
+// fact are usually the ones that returned 200 and did the wrong thing
+// (SRS-API-014).
+//
+// Written as a curried closure so the two call sites above stay one-liners
+// rather than each repeating the nil-response check.
+func withCorrelationHeader(resp connect.AnyResponse, err error) func(string) (connect.AnyResponse, error) {
+	return func(correlationID string) (connect.AnyResponse, error) {
+		if err == nil && resp != nil {
+			resp.Header().Set(HeaderCorrelationID, correlationID)
+		}
+		return resp, err
 	}
 }
 

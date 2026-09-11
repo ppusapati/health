@@ -80,6 +80,39 @@ jobs:
       - name: Check for breaking changes
         run: buf breaking --against '../.git#branch=origin/main,subdir=code'
 
+  contract:
+    name: API contract semantics
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: code/go.sum
+      # SRS-API-013: buf breaking holds the wire shape; this holds the
+      # behaviour it cannot see — which permission an RPC needs and which
+      # status it answers with when refused. A handler can change NOT_FOUND to
+      # PERMISSION_DENIED without touching a byte of the proto, and that change
+      # is a security change.
+      - name: Contract tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
+        run: go test ./internal/app/ -run Contract -count=1 -v
+
   fitness:
     name: Architecture fitness tests
     runs-on: ubuntu-latest
