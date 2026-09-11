@@ -116,6 +116,84 @@ acknowledged before replaying the rest.
 only record that a consumer missed a fact, and its absence reads as "nothing
 went wrong".
 
+### Workflow instances are not advancing
+
+The engine is tick-driven. `Stalled` is the query that distinguishes "the engine
+is not running" from "these instances are legitimately waiting on a human".
+
+```sql
+SELECT status, count(*), min(updated_at) AS oldest
+FROM platform_workflow.instance
+GROUP BY 1 ORDER BY 1;
+```
+
+`running` or `compensating` rows whose `updated_at` is minutes old are stalled:
+they should be moving. `awaiting_signal` and `awaiting_timer` are not — those
+are the workflow working.
+
+A stalled instance is one of:
+
+| Cause | How it looks | Action |
+|---|---|---|
+| No engine is ticking | Every runnable instance is stale, across tenants | Check the process is up; this is an outage, not a workflow problem |
+| The instance is pinned to an unregistered definition version | `last_error` names the missing definition | Deploy the version, or migrate the instance (below) |
+| A step keeps failing | `attempts` climbing, `last_error` populated | Fix the cause; the instance retries with backoff and then compensates |
+| A replica is holding it | One instance stale, others moving | Wait one tick; the lock is released when that transaction ends |
+
+The whole execution record is in `platform_workflow.history`, ordered by
+`sequence`. Read it before doing anything: it says what already ran, which is
+what decides whether a compensator is safe to trigger.
+
+### Migrating a running workflow to a new definition version
+
+A running instance is pinned to the version it started on — that is what makes
+deploying a workflow change safe. When an instance is waiting on the very step a
+new version fixes, `Engine.Migrate` moves that one instance.
+
+It resumes at the step with the **same name** in the target version, and refuses
+rather than guessing when there is no safe resume point:
+
+- the step no longer exists in the target version;
+- the step exists but changed kind (a human task that became a service step
+  would execute the approval instead of waiting for it);
+- the instance is terminal, or is mid-compensation.
+
+Migrate one instance, confirm it advances, then do the rest. Migration resets
+the retry budget for the current step and is recorded in history, so an incident
+review can tell an instance that started on v2 from one that was moved to it.
+
+**Do not** edit `definition_version` directly. The step index has to be
+recomputed by name, and a hand-edited row resumes at whatever step now sits at
+the old index.
+
+### A rule set cannot be published
+
+Publication requires a different person from the author (`created_by <>
+published_by`, enforced in the statement). A refusal names which of the three
+causes applied: no such rule set, already published, or the publisher wrote it.
+
+A published version is never edited. If a rule is wrong, draft a new version and
+publish it with an `effective_from`; the old one stays, which is what lets a
+decision made under it still be explained.
+
+```sql
+-- what is in force right now
+SELECT name, version, status, effective_from, published_by
+FROM platform_rules.rule_set
+WHERE status = 'published'
+ORDER BY name, effective_from DESC;
+```
+
+To answer "why did this come out this way", read the decision log: it stores the
+input, the outcome, the matched rule and the full condition-by-condition trace
+against the exact version that produced it.
+
+```sql
+SELECT rule_set_name, rule_set_version, matched_rule, input, outcome, explanation
+FROM platform_rules.decision_log
+WHERE tenant_id = :tenant AND decision_id = :decision;
+```
+
 ## Deploy and rollback
 
 ```bash

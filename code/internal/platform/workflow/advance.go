@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/ppusapati/health/code/internal/platform/rpcerr"
 	"github.com/ppusapati/health/code/internal/platform/sqlcgen"
 )
@@ -33,25 +34,50 @@ func (e *Engine) Tick(ctx context.Context, batchSize int32) (advanced int, err e
 		return 0, err
 	}
 
-	var instances []Instance
+	// Two passes, and the split is load-bearing.
+	//
+	// The first pass only builds a candidate list. It cannot also do the work,
+	// because the row locks it takes are released when its transaction commits
+	// — so a second replica would claim the same instances and run the same
+	// steps. The optimistic version predicate would reject the loser's write,
+	// but by then the step body has already executed, and a side effect is not
+	// something a rolled-back transaction takes back.
+	//
+	// The second pass therefore re-locks each instance individually and holds
+	// that lock across the step. A candidate another replica already has is
+	// skipped rather than waited for.
+	var candidates []uuid.UUID
 	if err := e.tx.WithinTx(ctx, func(ctx context.Context) error {
 		rows, err := e.queries(ctx).ClaimRunnableInstances(ctx, batchSize)
 		if err != nil {
 			return err
 		}
 		for _, row := range rows {
-			instances = append(instances, instanceFromRow(row))
+			candidates = append(candidates, row.InstanceID)
 		}
 		return nil
 	}); err != nil {
 		return 0, err
 	}
 
-	for _, instance := range instances {
+	for _, id := range candidates {
 		// Each instance advances in its own transaction: one failing workflow
 		// must not roll back the progress of every other workflow in the batch.
+		var ran bool
 		stepErr := e.tx.WithinTx(ctx, func(ctx context.Context) error {
-			return e.advanceOne(ctx, instance, now)
+			row, err := e.queries(ctx).LockWorkflowInstance(ctx, id)
+			if errors.Is(err, pgx.ErrNoRows) {
+				// Another replica holds it, or it left the runnable set
+				// between the two passes. Either way it is not ours.
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			ran = true
+			// The freshly locked row, not the candidate snapshot: the instance
+			// may have moved on since the first pass read it.
+			return e.advanceOne(ctx, instanceFromRow(row), now)
 		})
 		if stepErr != nil {
 			// A concurrency conflict simply means another replica got there
@@ -61,7 +87,9 @@ func (e *Engine) Tick(ctx context.Context, batchSize int32) (advanced int, err e
 			}
 			return advanced, stepErr
 		}
-		advanced++
+		if ran {
+			advanced++
+		}
 	}
 	return advanced, nil
 }

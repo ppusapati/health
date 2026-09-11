@@ -17,7 +17,7 @@ this document records is which P0 items have working, tested implementations.
 | P0-04 | PostgreSQL / sqlc | Implemented | 10 migrations, sqlc queries, per-test database harness, expand/contract rules enforced by `tools/migrations` |
 | P0-05 | Identity / auth context | Implemented | Session context, RBAC+ABAC, audit, joiner/mover/leaver with session revocation, step-up, risk scoring, federation and workload identity, plus the production OIDC verifier (ADR-008 closed) |
 | P0-06 | Event backbone | Implemented | Outbox, inbox dedup, publisher, envelope, plus PostgreSQL-backed fan-out delivery with leases, backoff and dead-lettering, wired into the composition root (ADR-005 closed) |
-| P0-07 | Workflow / rules PoC | Implemented | Durable engine + deterministic rules harness; ADR-006/007 evidence produced |
+| P0-07 | Workflow / rules engines | Implemented | Durable engine with per-instance version migration, multi-replica safety and an operator surface; deterministic rules with four-eyes publication, effective dating and a replayable decision log. ADR-006 and ADR-007 closed |
 | P0-08 | SvelteKit shell | Implemented | AppShell, context banner, generated client, facility screen, error/permission states |
 | P0-09 | Flutter shell | **Partial** | Generated Dart clients, Connect transport, session, offline queue, shell UI. Keystore and durable queue bindings outstanding |
 | P0-10 | Observability | **Partial** | Tracing, correlation propagation, PHI-safe logging. Collector export not wired |
@@ -40,23 +40,24 @@ this document records is which P0 items have working, tested implementations.
 | A8 | Kubernetes deploy, secret rotation, backup/restore smoke | **Partial** | Manifests render and schema-validate; invariants tested in `tools/infra` including encryption-at-rest key references and TLS_MODE per overlay; image builds. Rotation and DR drills are written as runbooks but **have not been executed** — no cluster deploy has happened |
 | A9 | Svelte and Flutter consume the same contracts | **Pass** | Both generated from `proto/`; `connect_client_test.dart` asserts the procedure path matches the proto package |
 | A10 | Fitness tests block forbidden imports and cross-schema writes | **Pass** | `tools/fitness` |
-| A11 | Broker and workflow/rules ADRs closed after PoC | **Partial** | ADR-005 closed with benchmark evidence and a working transport ([ADR-005](../adr/0005-event-broker.md)). Workflow and rules PoCs produce the evidence ADR-006/007 require; those decisions are outstanding |
+| A11 | Broker and workflow/rules ADRs closed after PoC | **Pass** | All three closed with the evidence the register asks for: [ADR-005](../adr/0005-event-broker.md) (benchmark + working transport), [ADR-006](../adr/0006-durable-workflow-engine.md) (reference long-running workflow + version upgrade test + multi-replica test), [ADR-007](../adr/0007-rules-engine.md) (decision-table reference implementation + replay). Each names its reopening triggers; ADR-006 is closed for Waves 1–6 and reopens unconditionally at Wave 7, which owns SRS-BPM-* |
 | A12 | Edge/OT trust-zone pattern approved | **Partial** | Edge prototype demonstrates the store-and-forward and enrollment pattern; OT DMZ and SCADA gateway not built, and the pattern has not been through security review |
 
 ## Open seams
 
-Each blocking ADR has a one-interface seam so Wave-1 work can proceed:
+Every blocking ADR had a one-interface seam so Wave-1 work could proceed
+without binding to a vendor. All four are now closed, and the seams stay — they
+are what the reopening triggers in each ADR act through.
 
 | ADR | Seam | Location | State |
 |---|---|---|---|
-| ADR-005 event broker | `store.Broker` | `internal/platform/store/publisher.go` | **Closed** — `store.PgBroker` implements it; the seam stays for the migration triggers in [ADR-005](../adr/0005-event-broker.md) |
-| ADR-006 workflow engine | `workflow.Definition` / `workflow.Step` | `internal/platform/workflow/definition.go` | Open |
-| ADR-007 rules engine | `rules.Table` | `internal/platform/rules/rules.go` | Open |
+| ADR-005 event broker | `store.Broker` | `internal/platform/store/publisher.go` | **Closed** — `store.PgBroker` implements it |
+| ADR-006 workflow engine | `workflow.Definition` / `workflow.Step` | `internal/platform/workflow/definition.go` | **Closed for Waves 1–6**; reopens at Wave 7 |
+| ADR-007 rules engine | `rules.Table` | `internal/platform/rules/rules.go` | **Closed** |
 | ADR-008 identity provider | `transport.TokenVerifier` | `internal/platform/transport/interceptor.go` | **Closed** — `oidc.Verifier` implements it |
 
-Both closures were one new implementation of one interface plus a composition-
-root change, which is the evidence that the seams were drawn in the right
-place: no downstream code moved for either.
+No downstream code moved for any closure, which is the evidence that the seams
+were drawn in the right place.
 
 ## Audit
 
@@ -104,7 +105,7 @@ matters and is not a formality:
 
 | Stack | Count | Command |
 |---|---|---|
-| Go | 661 tests across 39 packages | `make test` |
+| Go | 682 tests across 39 packages | `make test` |
 | Web (unit) | 85 tests across 8 files | `cd apps/web && npm test` |
 | Web (browser) | accessibility and cross-browser smoke, 3 browser profiles | `make web-a11y`, `make web-browsers` |
 | Flutter | 44 tests | `make mobile-test` |
@@ -152,6 +153,6 @@ approval, entitlements, jobs, projections — are built and tested, so a clinica
 context consumes them rather than inventing its own. Event delivery is wired
 end to end, so a Wave-1 module registers a consumer rather than building one.
 
-The workflow and rules engines (ADR-006, ADR-007) remain the open decisions.
-Both are consumed through seams, and no Wave-1 clinical slice depends on either
-before the scheduling and orders work reaches them.
+No blocking ADR remains open. The workflow and rules engines are decided for
+Waves 1–6 and each names what reopens it, so a Wave-1 slice that reaches for
+either consumes a finished implementation rather than a placeholder.

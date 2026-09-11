@@ -1,9 +1,13 @@
-// Package rules is the Wave-0 deterministic rules evaluator.
+// Package rules is the governed decision-table engine (ADR-007).
 //
-// SCOPE: this is the proof of concept ADR-007 asks for — a decision-table
-// reference implementation demonstrating determinism, versioning, simulation,
-// explainability and replay. It does not claim the Wave-7 requirement families
-// SRS-RUL-DEF or SRS-RUL-RUN.
+// SCOPE: ADR-007 is closed against this implementation. It does not claim the
+// Wave-7 requirement families SRS-RUL-DEF or SRS-RUL-RUN.
+//
+// Two halves. Table.Evaluate is a pure function, which is what makes
+// determinism provable rather than asserted. store.go is everything that makes
+// it trustworthy in production — four-eyes publication, immutable effective-
+// dated versions, and a decision log carrying the trace — because determinism
+// in a library nobody governs is a property of a file, not of the system.
 //
 // The design constraint that matters is determinism. A rule evaluation that
 // can produce different answers for the same input and version makes every

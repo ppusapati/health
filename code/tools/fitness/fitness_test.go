@@ -225,11 +225,17 @@ func TestFIT02_InlineSQLIsConfinedToOwningAdapter(t *testing.T) {
 // FIT-02: the generated sqlc query surface is the only way into the database,
 // so restricting who may import it is the boundary that actually bites today.
 func TestFIT02_GeneratedQueriesImportedOnlyByAdapters(t *testing.T) {
+	// Each entry owns a schema and is the only way into it. The platform
+	// packages are on this list for the same reason the module adapters are:
+	// workflow owns platform_workflow.*, rules owns platform_rules.*, store
+	// owns platform_data.*. A package that does not own tables has no business
+	// here, which is what the list is for.
 	allowed := []string{
 		"internal/organization/adapters/postgres",
 		"internal/identity_access/adapters/postgres",
 		"internal/platform/store",
 		"internal/platform/workflow",
+		"internal/platform/rules",
 		"internal/edge/cloudstore",
 		"internal/security/adapters/postgres",
 	}

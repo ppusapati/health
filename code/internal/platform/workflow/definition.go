@@ -1,15 +1,16 @@
-// Package workflow is the Wave-0 durable workflow evaluation harness.
+// Package workflow is the durable workflow engine (ADR-006).
 //
-// SCOPE: this is the proof of concept ADR-006 asks for. It exists to produce
-// the evidence that ADR requires — a long-running reference workflow exercising
-// versioning, durable timers, human tasks, retry with backoff, idempotent
-// signals and compensation — so the engine selection can be made against
-// observed behaviour rather than a feature matrix.
+// SCOPE: ADR-006 is closed against this implementation for Waves 1-6 and
+// reopens unconditionally at Wave 7, which owns SRS-BPM-DEF, SRS-BPM-RUN and
+// SRS-BPM-TASK. No requirement from those families is claimed here.
 //
-// It does NOT claim the Wave-7 families SRS-BPM-DEF, SRS-BPM-RUN or
-// SRS-BPM-TASK. When the engine is chosen, the durable store here is expected
-// to be replaced; what should survive is the Definition/Step contract and the
-// guarantees the tests pin down.
+// The tradeoff the ADR records, restated where a caller will read it: there is
+// no workflow-as-code durability. Temporal replays your function; this engine
+// re-enters a named step. So a step must be idempotent, and anything the
+// workflow needs to remember belongs in State rather than in a local variable.
+//
+// What survives a future replacement is the Definition/Step contract and the
+// guarantees the tests pin down, not the tables underneath.
 //
 // Two rules from the Domain, Data, API, Event & Security Architecture
 // Specification §9 shape everything here:
@@ -126,6 +127,19 @@ type Definition struct {
 	Name    string
 	Version int
 	Steps   []Step
+}
+
+// StepIndex finds a step by name.
+//
+// Name, not position, is a workflow step's identity across versions: v2 may
+// insert a step ahead of it, and the same index would then be a different step.
+func (d Definition) StepIndex(name string) (int, bool) {
+	for i, step := range d.Steps {
+		if step.Name == name {
+			return i, true
+		}
+	}
+	return 0, false
 }
 
 // ErrInvalidDefinition reports a definition the engine cannot run.

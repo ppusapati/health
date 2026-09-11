@@ -83,6 +83,36 @@ func (q *Queries) GetEffectiveRuleSet(ctx context.Context, arg GetEffectiveRuleS
 	return i, err
 }
 
+const getRuleSetByID = `-- name: GetRuleSetByID :one
+SELECT rule_set_id, tenant_id, name, version, status, effective_from, effective_to,
+       definition, created_at, created_by, published_at, published_by
+FROM platform_rules.rule_set
+WHERE rule_set_id = $1
+`
+
+// Used only to explain a refused publication: the predicate on PublishRuleSet
+// returns zero rows for three different reasons, and an operator needs to know
+// which one they hit.
+func (q *Queries) GetRuleSetByID(ctx context.Context, ruleSetID uuid.UUID) (PlatformRulesRuleSet, error) {
+	row := q.db.QueryRow(ctx, getRuleSetByID, ruleSetID)
+	var i PlatformRulesRuleSet
+	err := row.Scan(
+		&i.RuleSetID,
+		&i.TenantID,
+		&i.Name,
+		&i.Version,
+		&i.Status,
+		&i.EffectiveFrom,
+		&i.EffectiveTo,
+		&i.Definition,
+		&i.CreatedAt,
+		&i.CreatedBy,
+		&i.PublishedAt,
+		&i.PublishedBy,
+	)
+	return i, err
+}
+
 const getRuleSetVersion = `-- name: GetRuleSetVersion :one
 SELECT rule_set_id, tenant_id, name, version, status, effective_from, effective_to,
        definition, created_at, created_by, published_at, published_by
@@ -199,20 +229,37 @@ func (q *Queries) InsertRuleSet(ctx context.Context, arg InsertRuleSetParams) er
 
 const publishRuleSet = `-- name: PublishRuleSet :execrows
 UPDATE platform_rules.rule_set
-SET status = 'published', published_at = $1, published_by = $2
-WHERE rule_set_id = $3 AND status = 'draft'
+SET status = 'published',
+    effective_from = $1,
+    published_at = $2,
+    published_by = $3
+WHERE rule_set_id = $4
+  AND status = 'draft'
+  AND created_by <> $3
 `
 
 type PublishRuleSetParams struct {
-	PublishedAt pgtype.Timestamptz
-	PublishedBy string
-	RuleSetID   uuid.UUID
+	EffectiveFrom pgtype.Timestamptz
+	PublishedAt   pgtype.Timestamptz
+	PublishedBy   string
+	RuleSetID     uuid.UUID
 }
 
 // Only a draft may be published, and publication stamps who did it. A
 // published set is never edited: a change is a new version.
+//
+// created_by <> published_by enforces four eyes in the statement, the same way
+// the master-data approval does. A rule set decides who gets what care and at
+// what price; one person must not be able to both write and enact that.
+// Expressed here rather than in Go so a future caller cannot reach the table
+// without the check.
 func (q *Queries) PublishRuleSet(ctx context.Context, arg PublishRuleSetParams) (int64, error) {
-	result, err := q.db.Exec(ctx, publishRuleSet, arg.PublishedAt, arg.PublishedBy, arg.RuleSetID)
+	result, err := q.db.Exec(ctx, publishRuleSet,
+		arg.EffectiveFrom,
+		arg.PublishedAt,
+		arg.PublishedBy,
+		arg.RuleSetID,
+	)
 	if err != nil {
 		return 0, err
 	}

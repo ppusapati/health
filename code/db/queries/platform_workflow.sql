@@ -130,3 +130,73 @@ ORDER BY due_at, task_id;
 UPDATE platform_workflow.human_task
 SET status = 'expired', updated_at = @updated_at
 WHERE status = 'open' AND due_at <= @now;
+
+-- name: MigrateWorkflowInstance :execrows
+-- Moves a running instance onto a different definition version.
+--
+-- Under the same optimistic-concurrency predicate as every other instance
+-- write: an operator migrating an instance while the engine is advancing it
+-- must lose, not race.
+--
+-- The step index is supplied by the caller, which resolved it by step NAME in
+-- the target definition. Carrying the old index across would resume the
+-- instance at whatever step now happens to sit at that position.
+UPDATE platform_workflow.instance
+SET definition_version = @definition_version,
+    step_index         = @step_index,
+    attempts           = 0,
+    last_error         = '',
+    updated_at         = @updated_at,
+    version            = version + 1
+WHERE instance_id = @instance_id
+  AND tenant_id = @tenant_id
+  AND version = @expected_version;
+
+-- name: ListWorkflowInstances :many
+-- Operator visibility: what is running, and in what state.
+--
+-- sqlc.narg on status so one query answers both "everything for this tenant"
+-- and "everything stuck awaiting a signal".
+SELECT instance_id, tenant_id, definition_name, definition_version, correlation_key,
+       status, current_step, step_index, attempts, state, last_error,
+       created_at, updated_at, version
+FROM platform_workflow.instance
+WHERE tenant_id = @tenant_id
+  AND (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status')::text)
+ORDER BY updated_at DESC, instance_id
+LIMIT @page_limit;
+
+-- name: ListStalledWorkflowInstances :many
+-- Instances that should be moving and are not.
+--
+-- Deliberately cross-tenant: this is the query an operator runs at 3am to find
+-- out whether the engine is advancing anything at all, and scoping it to one
+-- tenant would hide a total outage behind a healthy-looking tenant.
+SELECT instance_id, tenant_id, definition_name, definition_version, correlation_key,
+       status, current_step, step_index, attempts, state, last_error,
+       created_at, updated_at, version
+FROM platform_workflow.instance
+WHERE status IN ('running', 'compensating')
+  AND updated_at < @stalled_before
+ORDER BY updated_at, instance_id
+LIMIT @page_limit;
+
+-- name: LockWorkflowInstance :one
+-- Takes the row lock for the duration of a step.
+--
+-- This is what makes several engine replicas safe. Claiming a batch and then
+-- advancing each instance in a later transaction releases the lock before the
+-- step body runs, so two replicas execute the same step — the optimistic
+-- version predicate then rejects the second write, but the side effect has
+-- already happened, which is the half that cannot be rolled back.
+--
+-- SKIP LOCKED rather than a wait: if another replica holds this instance,
+-- there is nothing useful to wait for, and blocking would serialise the whole
+-- engine behind one slow step.
+SELECT instance_id, tenant_id, definition_name, definition_version, correlation_key,
+       status, current_step, step_index, attempts, state, last_error,
+       created_at, updated_at, version
+FROM platform_workflow.instance
+WHERE instance_id = @instance_id
+  AND status IN ('running', 'compensating')
+FOR UPDATE SKIP LOCKED;

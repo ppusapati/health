@@ -1,29 +1,29 @@
 -- 0004 Workflow and rules evaluation harness (P0-07).
 --
--- SCOPE WARNING
--- =============
--- This is the Wave-0 *proof of concept* for ADR-006 (durable workflow engine)
--- and ADR-007 (rules engine), both of which are still open. It exists to
--- produce the evidence those ADRs require — a long-running reference workflow
--- with versioning, timers, retries and compensation, and a decision table with
--- simulation and replay.
+-- SCOPE
+-- =====
+-- ADR-006 and ADR-007 are now closed against these tables: ADR-006 for Waves
+-- 1-6, ADR-007 outright. They began life as the proof of concept those ADRs
+-- required and are now the running implementation, so the tables below carry
+-- real workflow instances and real published rule sets.
 --
--- It deliberately does NOT claim the Wave-7 requirement families SRS-BPM-DEF,
--- SRS-BPM-RUN, SRS-BPM-TASK, SRS-RUL-DEF or SRS-RUL-RUN. Those own the
--- canonical schemas enterprise_platform_bpm_* and enterprise_platform_rul_*,
--- and Wave 7 may replace everything here with the selected product
--- (Wave-0 spec §13).
+-- They still deliberately do NOT claim the Wave-7 requirement families
+-- SRS-BPM-DEF, SRS-BPM-RUN, SRS-BPM-TASK, SRS-RUL-DEF or SRS-RUL-RUN. Those own
+-- the canonical schemas enterprise_platform_bpm_* and enterprise_platform_rul_*,
+-- and Wave 7 re-runs the ADR-006 evaluation with six waves of real workflows as
+-- its input (Wave-0 spec §13, ADR-006 reopening trigger 5).
 --
--- What survives the replacement is the Go contract in internal/platform/workflow
+-- What survives a replacement is the Go contract in internal/platform/workflow
 -- and internal/platform/rules, not these tables.
 --
--- Trace: ADR-006 and ADR-007 evidence (P0-07). No Wave-7 SRS-BPM-* or
---        SRS-RUL-* requirement is claimed here.
+-- Trace: ADR-006 and ADR-007. No Wave-7 SRS-BPM-* or SRS-RUL-* requirement is
+--        claimed here.
 --
--- Rollback: drops the workflow and rules tables. A running instance's history
---   goes with them; the reference workflow is an evaluation harness, so this
---   is acceptable here and would not be once real processes run on it.
--- Reconciliation: none. New tables, and the harness has no previous version.
+-- Rollback: drops the workflow and rules tables. A running instance loses its
+--   history and a published rule set loses the versions that justify past
+--   decisions, so this is a restore-from-backup situation rather than a
+--   down-migration anywhere real.
+-- Reconciliation: none for the forward direction; these tables are new.
 
 CREATE SCHEMA IF NOT EXISTS platform_workflow;
 CREATE SCHEMA IF NOT EXISTS platform_rules;

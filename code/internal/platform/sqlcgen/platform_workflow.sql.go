@@ -436,6 +436,62 @@ func (q *Queries) ListOpenHumanTasks(ctx context.Context, tenantID uuid.UUID) ([
 	return items, nil
 }
 
+const listStalledWorkflowInstances = `-- name: ListStalledWorkflowInstances :many
+SELECT instance_id, tenant_id, definition_name, definition_version, correlation_key,
+       status, current_step, step_index, attempts, state, last_error,
+       created_at, updated_at, version
+FROM platform_workflow.instance
+WHERE status IN ('running', 'compensating')
+  AND updated_at < $1
+ORDER BY updated_at, instance_id
+LIMIT $2
+`
+
+type ListStalledWorkflowInstancesParams struct {
+	StalledBefore pgtype.Timestamptz
+	PageLimit     int32
+}
+
+// Instances that should be moving and are not.
+//
+// Deliberately cross-tenant: this is the query an operator runs at 3am to find
+// out whether the engine is advancing anything at all, and scoping it to one
+// tenant would hide a total outage behind a healthy-looking tenant.
+func (q *Queries) ListStalledWorkflowInstances(ctx context.Context, arg ListStalledWorkflowInstancesParams) ([]PlatformWorkflowInstance, error) {
+	rows, err := q.db.Query(ctx, listStalledWorkflowInstances, arg.StalledBefore, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PlatformWorkflowInstance{}
+	for rows.Next() {
+		var i PlatformWorkflowInstance
+		if err := rows.Scan(
+			&i.InstanceID,
+			&i.TenantID,
+			&i.DefinitionName,
+			&i.DefinitionVersion,
+			&i.CorrelationKey,
+			&i.Status,
+			&i.CurrentStep,
+			&i.StepIndex,
+			&i.Attempts,
+			&i.State,
+			&i.LastError,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Version,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listWorkflowHistory = `-- name: ListWorkflowHistory :many
 SELECT history_id, instance_id, tenant_id, sequence, event_type, step, attempt,
        detail, occurred_at
@@ -479,6 +535,105 @@ func (q *Queries) ListWorkflowHistory(ctx context.Context, arg ListWorkflowHisto
 	return items, nil
 }
 
+const listWorkflowInstances = `-- name: ListWorkflowInstances :many
+SELECT instance_id, tenant_id, definition_name, definition_version, correlation_key,
+       status, current_step, step_index, attempts, state, last_error,
+       created_at, updated_at, version
+FROM platform_workflow.instance
+WHERE tenant_id = $1
+  AND ($2::text IS NULL OR status = $2::text)
+ORDER BY updated_at DESC, instance_id
+LIMIT $3
+`
+
+type ListWorkflowInstancesParams struct {
+	TenantID  uuid.UUID
+	Status    *string
+	PageLimit int32
+}
+
+// Operator visibility: what is running, and in what state.
+//
+// sqlc.narg on status so one query answers both "everything for this tenant"
+// and "everything stuck awaiting a signal".
+func (q *Queries) ListWorkflowInstances(ctx context.Context, arg ListWorkflowInstancesParams) ([]PlatformWorkflowInstance, error) {
+	rows, err := q.db.Query(ctx, listWorkflowInstances, arg.TenantID, arg.Status, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PlatformWorkflowInstance{}
+	for rows.Next() {
+		var i PlatformWorkflowInstance
+		if err := rows.Scan(
+			&i.InstanceID,
+			&i.TenantID,
+			&i.DefinitionName,
+			&i.DefinitionVersion,
+			&i.CorrelationKey,
+			&i.Status,
+			&i.CurrentStep,
+			&i.StepIndex,
+			&i.Attempts,
+			&i.State,
+			&i.LastError,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Version,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockWorkflowInstance = `-- name: LockWorkflowInstance :one
+SELECT instance_id, tenant_id, definition_name, definition_version, correlation_key,
+       status, current_step, step_index, attempts, state, last_error,
+       created_at, updated_at, version
+FROM platform_workflow.instance
+WHERE instance_id = $1
+  AND status IN ('running', 'compensating')
+FOR UPDATE SKIP LOCKED
+`
+
+// Takes the row lock for the duration of a step.
+//
+// This is what makes several engine replicas safe. Claiming a batch and then
+// advancing each instance in a later transaction releases the lock before the
+// step body runs, so two replicas execute the same step — the optimistic
+// version predicate then rejects the second write, but the side effect has
+// already happened, which is the half that cannot be rolled back.
+//
+// SKIP LOCKED rather than a wait: if another replica holds this instance,
+// there is nothing useful to wait for, and blocking would serialise the whole
+// engine behind one slow step.
+func (q *Queries) LockWorkflowInstance(ctx context.Context, instanceID uuid.UUID) (PlatformWorkflowInstance, error) {
+	row := q.db.QueryRow(ctx, lockWorkflowInstance, instanceID)
+	var i PlatformWorkflowInstance
+	err := row.Scan(
+		&i.InstanceID,
+		&i.TenantID,
+		&i.DefinitionName,
+		&i.DefinitionVersion,
+		&i.CorrelationKey,
+		&i.Status,
+		&i.CurrentStep,
+		&i.StepIndex,
+		&i.Attempts,
+		&i.State,
+		&i.LastError,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Version,
+	)
+	return i, err
+}
+
 const markTimerFired = `-- name: MarkTimerFired :exec
 UPDATE platform_workflow.timer SET fired_at = $1 WHERE timer_id = $2
 `
@@ -491,6 +646,52 @@ type MarkTimerFiredParams struct {
 func (q *Queries) MarkTimerFired(ctx context.Context, arg MarkTimerFiredParams) error {
 	_, err := q.db.Exec(ctx, markTimerFired, arg.FiredAt, arg.TimerID)
 	return err
+}
+
+const migrateWorkflowInstance = `-- name: MigrateWorkflowInstance :execrows
+UPDATE platform_workflow.instance
+SET definition_version = $1,
+    step_index         = $2,
+    attempts           = 0,
+    last_error         = '',
+    updated_at         = $3,
+    version            = version + 1
+WHERE instance_id = $4
+  AND tenant_id = $5
+  AND version = $6
+`
+
+type MigrateWorkflowInstanceParams struct {
+	DefinitionVersion int32
+	StepIndex         int32
+	UpdatedAt         pgtype.Timestamptz
+	InstanceID        uuid.UUID
+	TenantID          uuid.UUID
+	ExpectedVersion   int64
+}
+
+// Moves a running instance onto a different definition version.
+//
+// Under the same optimistic-concurrency predicate as every other instance
+// write: an operator migrating an instance while the engine is advancing it
+// must lose, not race.
+//
+// The step index is supplied by the caller, which resolved it by step NAME in
+// the target definition. Carrying the old index across would resume the
+// instance at whatever step now happens to sit at that position.
+func (q *Queries) MigrateWorkflowInstance(ctx context.Context, arg MigrateWorkflowInstanceParams) (int64, error) {
+	result, err := q.db.Exec(ctx, migrateWorkflowInstance,
+		arg.DefinitionVersion,
+		arg.StepIndex,
+		arg.UpdatedAt,
+		arg.InstanceID,
+		arg.TenantID,
+		arg.ExpectedVersion,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const nextHistorySequence = `-- name: NextHistorySequence :one
