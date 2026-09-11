@@ -6,6 +6,12 @@
 -- Owner" column of the Master Engineering Registry.
 --
 -- Trace: SRS-DAT-001, SRS-PLT-019.
+--
+-- Rollback: 0001_schemas.down.sql drops the schemas. Safe only while they are
+--   empty; once any context owns tables the drop is refused without CASCADE,
+--   which is the correct behaviour rather than an inconvenience.
+-- Reconciliation: none. Creating a schema changes no row, so there is nothing
+--   the previous application version can have written that needs reconciling.
 
 CREATE SCHEMA IF NOT EXISTS organization;
 CREATE SCHEMA IF NOT EXISTS identity_access;

@@ -3,6 +3,14 @@
 --
 -- Trace: SRS-SEC-004, SRS-SEC-008, SRS-SEC-009, SRS-SEC-010, SRS-SEC-012,
 --        SRS-DAT-007, SRS-DAT-009, SRS-NFR-012.
+--
+-- Rollback: drops the security tables, the hash chain included. That destroys
+--   the tamper evidence rather than merely the data, so it is a backup-restore
+--   operation in any environment that has recorded a real event.
+-- Reconciliation: none forward. After a restore, run chain verification before
+--   appending: a restored chain that fails VerifyChain must be investigated,
+--   not extended, because extending it would anchor new events to a broken
+--   prefix.
 
 CREATE SCHEMA IF NOT EXISTS security_platform;
 

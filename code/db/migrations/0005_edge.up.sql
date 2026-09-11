@@ -8,6 +8,12 @@
 --        Blueprint §12 (hospital edge and OT trust zones).
 -- Scope : Wave-0 prototype. SRS-ONB-DEV (device/analyser/SCADA commissioning)
 --         is Wave 9 and is not claimed here.
+--
+-- Rollback: drops the enrollment registry. Every edge node then fails
+--   authentication at ingest, which is the safe direction — nodes queue
+--   locally and forward on recovery rather than sending unauthenticated.
+-- Reconciliation: re-enrol each node. Their local queues survive the outage,
+--   and ingest is idempotent on (node, operation id), so nothing replays twice.
 
 CREATE SCHEMA IF NOT EXISTS platform_edge;
 

@@ -16,6 +16,14 @@
 --
 -- What survives the replacement is the Go contract in internal/platform/workflow
 -- and internal/platform/rules, not these tables.
+--
+-- Trace: ADR-006 and ADR-007 evidence (P0-07). No Wave-7 SRS-BPM-* or
+--        SRS-RUL-* requirement is claimed here.
+--
+-- Rollback: drops the workflow and rules tables. A running instance's history
+--   goes with them; the reference workflow is an evaluation harness, so this
+--   is acceptable here and would not be once real processes run on it.
+-- Reconciliation: none. New tables, and the harness has no previous version.
 
 CREATE SCHEMA IF NOT EXISTS platform_workflow;
 CREATE SCHEMA IF NOT EXISTS platform_rules;

@@ -33,6 +33,7 @@ func (uuidGen) NewID() string { return uuid.NewString() }
 
 type harness struct {
 	svc    *application.Service
+	repo   *secpostgres.Repository
 	clock  *stubClock
 	tenant string
 	pool   *pgxpool.Pool
@@ -47,6 +48,7 @@ func newHarness(t *testing.T) harness {
 
 	return harness{
 		svc:    application.NewService(tx, repo, repo, repo, uuidGen{}, clock),
+		repo:   repo,
 		clock:  clock,
 		tenant: uuid.NewString(),
 		pool:   pool,

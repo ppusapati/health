@@ -38,9 +38,13 @@ type LegalHoldStore interface {
 }
 
 // RetentionStore persists retention classes.
+//
+// Methods are named for their aggregate rather than as bare Insert/Get: one
+// Repository type implements several of these ports, and two ports both
+// declaring Get would force an artificial split of the adapter.
 type RetentionStore interface {
-	Insert(ctx context.Context, scope authctx.TenantScope, c domain.RetentionClass) error
-	Get(ctx context.Context, scope authctx.TenantScope, name string) (domain.RetentionClass, error)
+	InsertClass(ctx context.Context, scope authctx.TenantScope, c domain.RetentionClass) error
+	GetClass(ctx context.Context, scope authctx.TenantScope, name string) (domain.RetentionClass, error)
 }
 
 // PrivacyStore persists notices, purposes and the subject's grants.

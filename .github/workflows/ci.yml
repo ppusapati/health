@@ -92,6 +92,9 @@ jobs:
       # Gate A10: forbidden dependency direction and cross-schema access fail
       # the build rather than the code review.
       - run: make test-fitness
+      # Schema change rules: expand/contract, rollback and reconciliation
+      # notes, and the partitioning register (SRS-DAT-006, 010, 013).
+      - run: make test-migrations
 
   test:
     name: Tests with PostgreSQL

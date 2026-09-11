@@ -4,6 +4,16 @@
 -- first: the clinical effect of a downtime action is reconciled into the
 -- owning context's own tables, and what stays here is the account of what was
 -- done outside the normal controls and whether anybody checked.
+--
+-- Trace: SRS-SEC-014, SRS-IAM-005.
+--
+-- Rollback: drops both tables. An open downtime episode's reconciliation queue
+--   goes with them, which would lose the record of paper actions not yet
+--   entered into the chart — restore from backup rather than rolling back a
+--   facility that is mid-outage.
+-- Reconciliation: none forward. New tables, no previous version writes to them.
+--   The partial unique index on active grants is created with the table, so
+--   there is no window in which a stacked activation could be inserted.
 
 CREATE TABLE security_platform.emergency_grant (
     grant_id      uuid        PRIMARY KEY,

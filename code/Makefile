@@ -102,6 +102,10 @@ manifests-validate: ## Render and schema-validate every overlay
 			kubeconform -strict -summary -schema-location default || exit 1; \
 	done
 
+.PHONY: test-migrations
+test-migrations: ## Schema change invariants (expand/contract, notes, partitioning)
+	go test ./tools/migrations/ -count=1
+
 .PHONY: test-security
 test-security: ## Security registers: risk acceptances, threat model actions, pentest gate
 	go test ./tools/security/ -count=1
@@ -163,4 +167,4 @@ mobile-test: ## Run Flutter unit and widget tests
 	cd apps/mobile && flutter test
 
 .PHONY: ci
-ci: lint test-fitness test-infra test-security test ## Everything CI runs
+ci: lint test-fitness test-infra test-security test-migrations test ## Everything CI runs

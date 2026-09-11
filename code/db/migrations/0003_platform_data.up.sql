@@ -9,6 +9,17 @@
 --
 -- Audit is append-oriented and deliberately has no UPDATE/DELETE path in the
 -- application (Domain/Data spec §12, SRS-SEC-004, SRS-NFR-011).
+--
+-- Trace: SRS-API-008, SRS-SEC-004, SRS-NFR-011, SRS-DAT-005, SRS-PLT-018.
+--
+-- Rollback: drops the outbox, inbox and audit tables. Losing the outbox mid-
+--   rollout drops events that were committed but not yet published, and losing
+--   audit is a compliance event in its own right — restore from backup instead
+--   of running the down migration anywhere real.
+-- Reconciliation: none for the forward direction; these tables are new. If a
+--   rollback ever happens, the reconciliation is to replay from the backup's
+--   outbox rather than to re-derive events from aggregate state, which cannot
+--   reconstruct the original ordering.
 
 CREATE TABLE platform_data.outbox_event (
     event_id        uuid        PRIMARY KEY,

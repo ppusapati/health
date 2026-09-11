@@ -557,3 +557,115 @@ func TestClientHeadersAreNarrowedNotAssigned(t *testing.T) {
 		}
 	}
 }
+
+// No blob content in the relational schema (SRS-DAT-007).
+//
+// A scanned consent form or a DICOM study in a bytea column takes the
+// database's whole operational profile with it: backups grow from minutes to
+// hours, replication lag becomes a function of how many radiographs were taken
+// today, and a restore drill nobody can finish stops being run. The rule is
+// easy to state and easy to break with one convenient column, so it is a test.
+func TestNoBlobContentInRelationalSchema(t *testing.T) {
+	// bytea is legitimate for small fixed-size cryptographic material — a
+	// nonce, a digest, a signature. It is not legitimate for content. The
+	// distinction cannot be drawn from the type, so it is drawn from the
+	// column name, and an allowlist carries the exceptions with their reasons.
+	allowedByteaColumns := map[string]string{}
+
+	byteaColumn := regexp.MustCompile(`(?mi)^\s*(\w+)\s+bytea\b`)
+
+	for _, path := range migrationFiles(t) {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		for _, match := range byteaColumn.FindAllStringSubmatch(stripSQLComments(string(raw)), -1) {
+			column := match[1]
+			if _, ok := allowedByteaColumns[column]; ok {
+				continue
+			}
+			t.Errorf("%s: column %q is bytea. Object content belongs in the object "+
+				"store with its digest in PostgreSQL (SRS-DAT-007); if this is small "+
+				"cryptographic material, add it to allowedByteaColumns with a reason",
+				filepath.Base(path), column)
+		}
+	}
+}
+
+// Timestamps must be timestamptz, never timestamp (SRS-DAT-004).
+//
+// `timestamp without time zone` stores a wall-clock reading with no offset, so
+// the instant it denotes depends on the session's TimeZone setting at read
+// time. Two replicas configured differently disagree about when a dose was
+// given, and nothing in the data says which is right.
+func TestTimestampColumnsCarryAZone(t *testing.T) {
+	// Negative lookahead is unavailable in RE2, so match the type and then
+	// exclude the qualified spellings explicitly.
+	timestampColumn := regexp.MustCompile(`(?mi)^\s*(\w+)\s+(timestamp\w*)`)
+
+	for _, path := range migrationFiles(t) {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		for _, match := range timestampColumn.FindAllStringSubmatch(stripSQLComments(string(raw)), -1) {
+			column, columnType := match[1], strings.ToLower(match[2])
+			if columnType == "timestamptz" {
+				continue
+			}
+			t.Errorf("%s: column %q is %s. Use timestamptz: a timestamp without a "+
+				"zone denotes a different instant depending on the reading session's "+
+				"TimeZone, and nothing in the data says which was meant (SRS-DAT-004)",
+				filepath.Base(path), column, columnType)
+		}
+	}
+}
+
+func migrationFiles(t *testing.T) []string {
+	t.Helper()
+	paths, err := filepath.Glob(filepath.Join(repoRoot(t), "db", "migrations", "*.up.sql"))
+	if err != nil {
+		t.Fatalf("glob migrations: %v", err)
+	}
+	if len(paths) == 0 {
+		t.Fatal("no migrations found; these schema rules would pass vacuously")
+	}
+	return paths
+}
+
+// stripSQLComments prevents a comment from tripping a schema rule, so nobody
+// has to phrase an explanation around a linter.
+func stripSQLComments(sql string) string {
+	var b strings.Builder
+	for _, line := range strings.Split(sql, "\n") {
+		if idx := strings.Index(line, "--"); idx >= 0 {
+			line = line[:idx]
+		}
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+// TestSchemaRuleDetectorsWork proves the two rules above can fail. Both
+// currently pass over a schema that happens to comply, and a rule that has
+// never failed is a rule nobody has checked.
+func TestSchemaRuleDetectorsWork(t *testing.T) {
+	byteaColumn := regexp.MustCompile(`(?mi)^\s*(\w+)\s+bytea\b`)
+	if !byteaColumn.MatchString("    scan_content    bytea       NOT NULL,") {
+		t.Error("the bytea detector does not fire on a content column")
+	}
+	if byteaColumn.MatchString("    body_uri        text        NOT NULL,") {
+		t.Error("the bytea detector fires on a text column")
+	}
+
+	timestampColumn := regexp.MustCompile(`(?mi)^\s*(\w+)\s+(timestamp\w*)`)
+	naive := timestampColumn.FindStringSubmatch("    occurred_at     timestamp   NOT NULL,")
+	if naive == nil || strings.ToLower(naive[2]) == "timestamptz" {
+		t.Error("the timestamp detector does not fire on a zone-less column")
+	}
+	zoned := timestampColumn.FindStringSubmatch("    occurred_at     timestamptz NOT NULL,")
+	if zoned == nil || strings.ToLower(zoned[2]) != "timestamptz" {
+		t.Error("the timestamp detector misclassifies timestamptz")
+	}
+}

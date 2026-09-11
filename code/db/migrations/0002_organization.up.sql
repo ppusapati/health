@@ -9,6 +9,13 @@
 --
 -- Trace: SRS-PLT-001, SRS-PLT-002, SRS-PLT-004, SRS-PLT-007, SRS-PLT-015,
 --        SRS-PLT-020, SRS-DAT-005.
+--
+-- Rollback: drops both tables. Destructive — tenant and facility master data
+--   is not recoverable from anywhere else, so a rollback in an environment
+--   with real tenants means restoring from backup, not running the down
+--   migration.
+-- Reconciliation: none. These tables are new, so no previous version writes
+--   to them during the rollout window.
 
 CREATE TABLE organization.tenant (
     tenant_id           uuid        PRIMARY KEY,

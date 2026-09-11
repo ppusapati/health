@@ -1,0 +1,34 @@
+# Partitioned tables (SRS-DAT-010).
+#
+# Partitioning is easy to add, very hard to undo, and almost always added too
+# early on a guess about volume — usually costing more in planning time and
+# operational complexity than it saves. SRS-DAT-010 therefore permits it only
+# on a measured or forecast workload, with a documented key and a retention
+# plan, and tools/migrations fails the build if a migration partitions a table
+# that is not registered here.
+#
+# Nothing is partitioned in Wave 0, and that is the correct state: no table has
+# production volume to measure yet. The candidates are known and named below so
+# the decision is made with numbers when the numbers exist, not with intuition
+# now.
+
+tables: []
+
+# Watch list — tables expected to need partitioning, and the measurement that
+# would justify it. Not enforced; these are notes for whoever revisits this.
+#
+#   platform_data.audit_event
+#     Candidate key: occurred_at (RANGE, monthly). Every mutating call writes a
+#     row, so volume tracks total request rate. Revisit at ~50M rows or when
+#     the retention sweep no longer finishes inside its window.
+#
+#   security_platform.security_event
+#     Lower volume than audit, but never deleted — the chain must stay whole.
+#     Partitioning here is about the sweep and the index size, not deletion,
+#     and the hash chain constrains the key: a partition boundary must not
+#     break sequence ordering within a tenant.
+#
+#   platform_data.outbox_event
+#     High churn but short-lived; the published rows are deleted. A partition
+#     per day would turn that deletion into a DROP, which is the real argument.
+#     Revisit if the delete sweep becomes the dominant write cost.

@@ -45,7 +45,7 @@ jobs:
       # Runs first: the register is what every other job in this workflow
       # defers to, so a malformed or expired entry should be reported as
       # itself rather than as a mysterious scanner failure.
-      - run: go test ./tools/security/ -count=1
+      - run: make test-security
         working-directory: code
 
   secrets:
