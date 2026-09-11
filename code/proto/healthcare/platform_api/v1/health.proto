@@ -1,0 +1,40 @@
+// API platform service surface.
+//
+// Trace: SRS-NFR-006 (health/readiness exposure), SRS-API-014 (trace context
+// propagation), SRS-SRE-DEP (release provenance).
+syntax = "proto3";
+
+package healthcare.platform_api.v1;
+
+option go_package = "github.com/ppusapati/health/code/gen/go/healthcare/platform_api/v1;platformapiv1";
+
+service HealthService {
+  // Process is up. Never touches dependencies.
+  rpc CheckLiveness(CheckLivenessRequest) returns (CheckLivenessResponse) {}
+  // Process can serve traffic. Verifies required dependencies.
+  rpc CheckReadiness(CheckReadinessRequest) returns (CheckReadinessResponse) {}
+  // Build/release provenance for support and incident response.
+  rpc GetBuildInfo(GetBuildInfoRequest) returns (GetBuildInfoResponse) {}
+}
+
+message CheckLivenessRequest {}
+
+message CheckLivenessResponse {
+  bool alive = 1;
+}
+
+message CheckReadinessRequest {}
+
+message CheckReadinessResponse {
+  bool ready = 1;
+  // Per-dependency readiness, e.g. {"postgres": true}.
+  map<string, bool> dependencies = 2;
+}
+
+message GetBuildInfoRequest {}
+
+message GetBuildInfoResponse {
+  string version = 1;
+  string commit = 2;
+  string built_at = 3;
+}

@@ -1,0 +1,65 @@
+// Identity & access bounded context.
+//
+// Owning context : identity.access
+// Owning service : IdentityService
+// Trace          : SRS-IAM-003 (permissions by bounded-context action),
+//                  SRS-IAM-004 (ABAC decision inputs), SRS-IAM-005 (break-glass),
+//                  SRS-IAM-011 (session visibility), SRS-IAM-013 (no privilege
+//                  escalation through user-supplied tenant/facility IDs).
+syntax = "proto3";
+
+package healthcare.identity_access.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ppusapati/health/code/gen/go/healthcare/identity_access/v1;identityaccessv1";
+
+// Purpose of use constrains what an authenticated subject may do with data it
+// is otherwise entitled to see (Domain/Data spec §10.2).
+enum PurposeOfUse {
+  PURPOSE_OF_USE_UNSPECIFIED = 0;
+  PURPOSE_OF_USE_TREATMENT = 1;
+  PURPOSE_OF_USE_PAYMENT = 2;
+  PURPOSE_OF_USE_OPERATIONS = 3;
+  PURPOSE_OF_USE_SUPPORT = 4;
+  PURPOSE_OF_USE_RESEARCH = 5;
+}
+
+// The resolved authorization context for the current caller. Returned so the
+// UI can render appropriately — never so the UI can decide (SRS-IAM-003).
+message SessionContext {
+  string subject_id = 1;
+  string tenant_id = 2;
+  string active_facility_id = 3;
+  repeated string roles = 4;
+  // Flattened effective permissions, e.g. "organization.facility.create".
+  repeated string permissions = 5;
+  PurposeOfUse purpose_of_use = 6;
+  bool break_glass_active = 7;
+  google.protobuf.Timestamp expires_at = 8;
+}
+
+service IdentityService {
+  rpc GetSessionContext(GetSessionContextRequest) returns (GetSessionContextResponse) {}
+  // Server-side authorization probe. Mirrors the same policy engine the
+  // application layer uses, so UI and server can never diverge.
+  rpc EvaluateAccess(EvaluateAccessRequest) returns (EvaluateAccessResponse) {}
+}
+
+message GetSessionContextRequest {}
+
+message GetSessionContextResponse {
+  SessionContext session = 1;
+}
+
+message EvaluateAccessRequest {
+  string permission = 1;
+  // Optional facility the action would target.
+  string facility_id = 2;
+}
+
+message EvaluateAccessResponse {
+  bool allowed = 1;
+  // Stable reason code when denied, e.g. "PERMISSION_NOT_GRANTED".
+  string reason = 2;
+}

@@ -350,49 +350,43 @@ Total   3,132
 
 ---
 
-# Recommended Documentation Structure
+# Repository Structure
 
 ```text
-docs/
+repo/
 │
-├── governance/
-│   ├── Master Index & Traceability Specification
-│   └── Master Engineering Registry
+├── docs/
+│   ├── governance/
+│   │   ├── Master Index & Traceability Specification
+│   │   └── Master Engineering Registry
+│   │
+│   ├── DPR/
+│   │   └── Expanded Master DPR
+│   │
+│   ├── SRS/
+│   │   ├── Master SRS Phase 1
+│   │   ├── ...
+│   │   └── Master SRS Phase 8
+│   │
+│   ├── architecture/
+│   │   ├── Engineering Architecture Blueprint
+│   │   ├── Domain, Data, API, Event & Security Architecture
+│   │   ├── UX Architecture & Design System
+│   │   └── ADR Closure Register
+│   │
+│   ├── waves/
+│   │   ├── Wave 0–9 Detailed Engineering Specifications
+│   │   └── Wave 1 Executable Feature Backlog
+│   │
+│   ├── delivery/
+│   │   └── Development Backlog & Release Plan
+│   │
+│   └── testing/
+│       ├── Requirements Verification, Validation & Testing Master Plan
+│       └── Master RTM / Test Matrix
 │
-├── dpr/
-│   └── Expanded Master DPR
-│
-├── srs/
-│   ├── Master SRS Phase 1
-│   ├── ...
-│   └── Master SRS Phase 8
-│
-├── architecture/
-│   ├── Engineering Architecture Blueprint
-│   ├── Domain, Data, API, Event & Security Architecture
-│   ├── UX Architecture & Design System
-│   └── ADR Closure Register
-│
-├── waves/
-│   ├── wave_00_platform_foundation/
-│   ├── wave_01_core_hospital/
-│   ├── wave_02_hospital_operations/
-│   ├── wave_03_diagnostics/
-│   ├── wave_04_pharmacy_pharma/
-│   ├── wave_05_insurance_patient/
-│   ├── wave_06_specialties/
-│   ├── wave_07_enterprise_platform/
-│   ├── wave_08_enterprise_business/
-│   └── wave_09_saas_control/
-│
-├── delivery/
-│   └── Development Backlog & Release Plan
-│
-├── testing/
-│   ├── Requirements Verification, Validation & Testing Master Plan
-│   └── Master RTM / Test Matrix
-│
-└── code
+└── code/
+    └── Implementation monorepo
 ```
 
 ---
@@ -651,6 +645,39 @@ Typical implementation sequence:
 9. Implement vertical slice.
 10. Produce verification evidence.
 11. Release through controlled gates.
+
+---
+
+# Implementation
+
+The monorepo lives in this directory. See:
+
+- [`docs/engineering/getting-started.md`](docs/engineering/getting-started.md) — build, run, test, and how to add a bounded context
+- [`docs/engineering/wave-0-status.md`](docs/engineering/wave-0-status.md) — P0 item and architecture-gate status
+- [`docs/adr/`](docs/adr/) — implementation ADRs, subordinate to the programme ADR Closure Register
+
+```text
+code/
+├── proto/          Canonical protobuf contracts (buf)
+├── gen/            Generated Go clients — build artifacts, never edited
+├── internal/
+│   ├── platform/   Shared primitives: auth context, policy, errors, outbox, audit, tracing, persistence
+│   ├── organization/   Bounded context: tenant, facility
+│   ├── identity_access/ Bounded context: roles, permissions, session
+│   └── app/        Composition root
+├── db/
+│   ├── migrations/ Ordered SQL, one file per context
+│   └── queries/    sqlc sources
+├── apps/web/       SvelteKit workspace
+├── cmd/core/       core-hospital deployable
+└── tools/fitness/  Architecture fitness tests
+```
+
+Quick start:
+
+```bash
+make tools && make db-start && make generate && make ci
+```
 
 ---
 

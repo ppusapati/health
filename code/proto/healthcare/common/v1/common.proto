@@ -1,0 +1,41 @@
+// Canonical cross-context primitives.
+//
+// Trace: SRS-API-004 (structured domain error codes independent of display
+// message), SRS-API-003 (request/correlation metadata + idempotency key),
+// SRS-WEB-005 (server-side pagination with stable cursor).
+syntax = "proto3";
+
+package healthcare.common.v1;
+
+option go_package = "github.com/ppusapati/health/code/gen/go/healthcare/common/v1;commonv1";
+
+// Stable, machine-readable failure detail carried alongside the Connect status.
+// The display message is a client concern; `code` is the contract.
+message ErrorDetail {
+  // Stable domain error code, e.g. "ORG_FACILITY_CODE_TAKEN".
+  string code = 1;
+  // Field-level violations for INVALID_ARGUMENT.
+  repeated FieldViolation field_violations = 2;
+  // Whether a bounded retry of the identical request is safe.
+  bool retryable = 3;
+  // Correlation ID the caller can quote to support.
+  string correlation_id = 4;
+}
+
+message FieldViolation {
+  // Dotted path to the offending field, e.g. "facility.code".
+  string field = 1;
+  // Stable reason code, not prose.
+  string reason = 2;
+}
+
+// Cursor pagination. Page numbers are deliberately not offered: the underlying
+// datasets are unstable under concurrent writes.
+message PageRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message PageResponse {
+  string next_page_token = 1;
+}

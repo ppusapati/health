@@ -1,0 +1,138 @@
+// Organization bounded context: tenant, legal entity, facility hierarchy.
+//
+// Owning context : organization  (Master Engineering Registry)
+// Owning service : OrganizationService
+// Trace          : SRS-PLT-001, SRS-PLT-002, SRS-PLT-004, SRS-PLT-006,
+//                  SRS-PLT-007, SRS-PLT-015, SRS-PLT-020
+syntax = "proto3";
+
+package healthcare.organization.v1;
+
+import "google/protobuf/timestamp.proto";
+import "healthcare/common/v1/common.proto";
+
+option go_package = "github.com/ppusapati/health/code/gen/go/healthcare/organization/v1;organizationv1";
+
+// Tenant lifecycle. SRS-PLT-020 requires suspension and read-only states to be
+// first-class rather than a derived flag.
+enum TenantStatus {
+  TENANT_STATUS_UNSPECIFIED = 0;
+  TENANT_STATUS_PROVISIONING = 1;
+  TENANT_STATUS_ACTIVE = 2;
+  TENANT_STATUS_SUSPENDED = 3;
+  TENANT_STATUS_OFFBOARDING = 4;
+  TENANT_STATUS_TERMINATED = 5;
+}
+
+// SRS-PLT-015: referenced masters are retired, never hard-deleted.
+enum FacilityStatus {
+  FACILITY_STATUS_UNSPECIFIED = 0;
+  FACILITY_STATUS_ACTIVE = 1;
+  FACILITY_STATUS_INACTIVE = 2;
+  FACILITY_STATUS_RETIRED = 3;
+}
+
+enum FacilityType {
+  FACILITY_TYPE_UNSPECIFIED = 0;
+  FACILITY_TYPE_HOSPITAL = 1;
+  FACILITY_TYPE_CLINIC = 2;
+  FACILITY_TYPE_LABORATORY = 3;
+  FACILITY_TYPE_PHARMACY = 4;
+  FACILITY_TYPE_COLLECTION_CENTRE = 5;
+  FACILITY_TYPE_WAREHOUSE = 6;
+}
+
+// SRS-PLT-001. tenant_id is opaque and immutable; display name is not a key.
+message Tenant {
+  string tenant_id = 1;
+  string display_name = 2;
+  // ISO 3166-1 alpha-2 of the governing jurisdiction.
+  string legal_jurisdiction = 3;
+  // BCP-47, e.g. "en-IN".
+  string default_locale = 4;
+  // IANA zone, e.g. "Asia/Kolkata".
+  string time_zone = 5;
+  TenantStatus status = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+  // Optimistic concurrency token.
+  int64 version = 9;
+}
+
+// SRS-PLT-002 / SRS-PLT-004 / SRS-PLT-007.
+message Facility {
+  string facility_id = 1;
+  string tenant_id = 2;
+  // Tenant-scoped unique business code. Renaming display_name must not break
+  // references, so code and name are distinct (SRS-PLT-007).
+  string code = 3;
+  string display_name = 4;
+  FacilityType type = 5;
+  FacilityStatus status = 6;
+  string time_zone = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp updated_at = 9;
+  int64 version = 10;
+}
+
+service OrganizationService {
+  // SRS-PLT-001. Platform-operator scope; emits organization.tenant_provisioned.
+  rpc CreateTenant(CreateTenantRequest) returns (CreateTenantResponse) {}
+  rpc GetTenant(GetTenantRequest) returns (GetTenantResponse) {}
+
+  // SRS-PLT-004. Tenant-admin scope; emits organization.facility_created.
+  rpc CreateFacility(CreateFacilityRequest) returns (CreateFacilityResponse) {}
+  rpc GetFacility(GetFacilityRequest) returns (GetFacilityResponse) {}
+  rpc ListFacilities(ListFacilitiesRequest) returns (ListFacilitiesResponse) {}
+}
+
+message CreateTenantRequest {
+  string display_name = 1;
+  string legal_jurisdiction = 2;
+  string default_locale = 3;
+  string time_zone = 4;
+}
+
+message CreateTenantResponse {
+  Tenant tenant = 1;
+}
+
+message GetTenantRequest {
+  string tenant_id = 1;
+}
+
+message GetTenantResponse {
+  Tenant tenant = 1;
+}
+
+message CreateFacilityRequest {
+  // Note: tenant scope comes from the authenticated transport metadata, never
+  // from the request body (SRS-IAM-013, Domain/Data spec §6 "Metadata").
+  string code = 1;
+  string display_name = 2;
+  FacilityType type = 3;
+  string time_zone = 4;
+}
+
+message CreateFacilityResponse {
+  Facility facility = 1;
+}
+
+message GetFacilityRequest {
+  string facility_id = 1;
+}
+
+message GetFacilityResponse {
+  Facility facility = 1;
+}
+
+message ListFacilitiesRequest {
+  healthcare.common.v1.PageRequest page = 1;
+  // Optional status filter; unspecified returns active and inactive.
+  FacilityStatus status = 2;
+}
+
+message ListFacilitiesResponse {
+  repeated Facility facilities = 1;
+  healthcare.common.v1.PageResponse page = 2;
+}
