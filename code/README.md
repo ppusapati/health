@@ -355,25 +355,25 @@ Total   3,132
 ```text
 docs/
 │
-├── 00_governance/
+├── governance/
 │   ├── Master Index & Traceability Specification
 │   └── Master Engineering Registry
 │
-├── 01_dpr/
+├── dpr/
 │   └── Expanded Master DPR
 │
-├── 02_srs/
+├── srs/
 │   ├── Master SRS Phase 1
 │   ├── ...
 │   └── Master SRS Phase 8
 │
-├── 03_architecture/
+├── architecture/
 │   ├── Engineering Architecture Blueprint
 │   ├── Domain, Data, API, Event & Security Architecture
 │   ├── UX Architecture & Design System
 │   └── ADR Closure Register
 │
-├── 04_waves/
+├── waves/
 │   ├── wave_00_platform_foundation/
 │   ├── wave_01_core_hospital/
 │   ├── wave_02_hospital_operations/
@@ -385,21 +385,14 @@ docs/
 │   ├── wave_08_enterprise_business/
 │   └── wave_09_saas_control/
 │
-├── 05_delivery/
+├── delivery/
 │   └── Development Backlog & Release Plan
 │
-├── 06_testing/
+├── testing/
 │   ├── Requirements Verification, Validation & Testing Master Plan
 │   └── Master RTM / Test Matrix
 │
-└── 07_implementation/
-    ├── api/
-    ├── database/
-    ├── events/
-    ├── ux/
-    ├── test_cases/
-    ├── runbooks/
-    └── release_evidence/
+└── code
 ```
 
 ---
