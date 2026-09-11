@@ -112,6 +112,55 @@ func (p *Publisher) PublishBatch(ctx context.Context, now time.Time) (int, error
 	return published, err
 }
 
+// DefaultPublishInterval is the ceiling on publish latency when nothing
+// prompts a drain. The publisher is not notified — it is the thing doing the
+// notifying — so this is a real poll, and the interval is the delay between an
+// aggregate committing and its event reaching a consumer.
+const DefaultPublishInterval = 250 * time.Millisecond
+
+// Run drains the outbox until the context is cancelled.
+//
+// Drains to empty before waiting again, for the same reason the consumer
+// workers do: one batch per tick would make a burst of 10,000 events take
+// 100 ticks to clear, so the backlog would still be draining long after the
+// load that caused it had gone.
+//
+// A failed cycle is logged and retried on the next tick rather than returned.
+// The outbox is durable, so nothing is lost by waiting, and a publisher that
+// exits on the first transient database error takes the events with it.
+func (p *Publisher) Run(ctx context.Context, interval time.Duration) error {
+	if interval <= 0 {
+		interval = DefaultPublishInterval
+	}
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		for {
+			published, err := p.PublishBatch(ctx, time.Now().UTC())
+			if err != nil {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				slog.ErrorContext(ctx, "outbox drain failed", slog.String("error", err.Error()))
+				break
+			}
+			// A short batch means the backlog is clear. Looping again would
+			// be a wasted query per cycle.
+			if published < int(p.batchSize) {
+				break
+			}
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
+	}
+}
+
 // PendingCount reports the outbox backlog. This is a domain SLI, not a
 // CPU metric: a rising backlog means facts are not reaching consumers
 // (SRS-NFR-006).

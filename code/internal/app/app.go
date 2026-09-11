@@ -20,6 +20,7 @@ import (
 	orgpostgres "github.com/ppusapati/health/code/internal/organization/adapters/postgres"
 	orgapp "github.com/ppusapati/health/code/internal/organization/application"
 	orgtransport "github.com/ppusapati/health/code/internal/organization/transport"
+	"github.com/ppusapati/health/code/internal/platform/eventbus"
 	"github.com/ppusapati/health/code/internal/platform/pgtx"
 	"github.com/ppusapati/health/code/internal/platform/store"
 	platformtransport "github.com/ppusapati/health/code/internal/platform/transport"
@@ -71,6 +72,18 @@ type Deps struct {
 	// revocation store exists yet — ADR-008 is open, so the development
 	// verifier has nothing to revoke against.
 	Revoker platformtransport.SessionRevoker
+
+	// Consumers are the event subscriptions this process drives (ADR-005).
+	//
+	// Empty is a valid deployment: a process that serves requests and
+	// publishes but consumes nothing. It is also the Wave-0 default, because
+	// consumers belong to the modules that need them and Wave 1 is where those
+	// arrive.
+	Consumers []eventbus.Registration
+
+	// PublishInterval is how often the outbox is drained. Zero takes the
+	// default.
+	PublishInterval time.Duration
 }
 
 // Server holds the assembled HTTP handler and the services behind it.
@@ -79,6 +92,18 @@ type Server struct {
 	Organization *orgapp.Service
 	Store        *store.Store
 	RateLimiter  *platformtransport.RateLimiter
+
+	// Publisher drains the outbox; Events drives the consumers. Both are nil
+	// only if New failed to build them, which it reports through Err.
+	Publisher *store.Publisher
+	Events    *eventbus.Runtime
+
+	// Err carries a wiring failure. New does not return an error because every
+	// other dependency here is infallible, and a Server that cannot run its
+	// consumers must not quietly serve requests — RunBackground surfaces it.
+	Err error
+
+	publishInterval time.Duration
 }
 
 // New wires the whole stack and returns the ready-to-serve handler.
@@ -94,6 +119,18 @@ func New(deps Deps) *Server {
 
 	repo := orgpostgres.New(txManager)
 	platformStore := store.New(txManager)
+
+	// Event delivery (ADR-005). The runtime is built before the broker because
+	// the broker notifies it: publishing an event wakes exactly the consumers
+	// that asked for that type, which is what keeps steady-state delivery
+	// latency at milliseconds rather than at the poll interval.
+	events, eventsErr := eventbus.NewRuntime(platformStore, deps.Consumers...)
+	var publisher *store.Publisher
+	if eventsErr == nil {
+		publisher = store.NewPublisher(platformStore,
+			store.NewPgBroker(platformStore, events.Notify, nil),
+			store.DefaultBatchSize)
+	}
 
 	orgService := orgapp.NewService(
 		txManager,
@@ -165,9 +202,45 @@ func New(deps Deps) *Server {
 	handler := platformtransport.NewSecurityHeaders(deps.SecurityHeaders, mux)
 
 	return &Server{
-		Handler:      handler,
-		Organization: orgService,
-		Store:        platformStore,
-		RateLimiter:  rateLimiter,
+		Handler:         handler,
+		Organization:    orgService,
+		Store:           platformStore,
+		RateLimiter:     rateLimiter,
+		Publisher:       publisher,
+		Events:          events,
+		Err:             eventsErr,
+		publishInterval: deps.PublishInterval,
 	}
+}
+
+// RunBackground drives the outbox publisher and the event consumers until the
+// context is cancelled.
+//
+// Separate from serving HTTP on purpose. A process can serve requests without
+// consuming (the usual API replica), consume without serving (a worker
+// deployment), or do both (a single-binary install) — and the deployment
+// decides which, not this package.
+//
+// Returns the context error on a clean shutdown, so a caller can distinguish
+// "we were asked to stop" from "a consumer died".
+func (s *Server) RunBackground(ctx context.Context) error {
+	if s.Err != nil {
+		return s.Err
+	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	errs := make(chan error, 2)
+	go func() { errs <- s.Publisher.Run(ctx, s.publishInterval) }()
+	go func() { errs <- s.Events.Run(ctx) }()
+
+	// The first exit stops the other: a publisher without consumers builds a
+	// backlog, and consumers without a publisher have nothing to consume.
+	// Running on with half the pipeline is the shape of an outage nobody
+	// notices for an hour.
+	first := <-errs
+	cancel()
+	<-errs
+	return first
 }

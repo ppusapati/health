@@ -9,6 +9,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -113,7 +114,7 @@ func run() error {
 		ReadHeaderTimeout: readHeaderTimeout,
 	}
 
-	errCh := make(chan error, 1)
+	errCh := make(chan error, 2)
 	go func() {
 		slog.Info("core service listening",
 			slog.String("addr", addr),
@@ -124,12 +125,30 @@ func run() error {
 		}
 	}()
 
+	// The outbox publisher and the event consumers run in the same process as
+	// the API (ADR-005). A failure here is fatal rather than logged: events
+	// that are written but never published are invisible — the writes keep
+	// succeeding, the API keeps answering, and only the consumers' silence
+	// says anything is wrong.
+	backgroundCtx, stopBackground := context.WithCancel(ctx)
+	defer stopBackground()
+	go func() {
+		if err := server.RunBackground(backgroundCtx); err != nil && !errors.Is(err, context.Canceled) {
+			errCh <- fmt.Errorf("event delivery stopped: %w", err)
+		}
+	}()
+
 	select {
 	case err := <-errCh:
 		return err
 	case <-ctx.Done():
 		slog.Info("shutdown signal received")
 	}
+
+	// Stop consuming before draining HTTP, so a handler that publishes during
+	// shutdown still has an outbox to publish into — the row is durable either
+	// way, and the next process to start drains it.
+	stopBackground()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()

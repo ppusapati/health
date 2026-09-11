@@ -56,8 +56,65 @@ lost — the rows are durable — but projections are stale.
 1. Check `attempts` and `last_error` on the oldest unpublished rows.
 2. If one event is poisoned, the publisher skips it and continues; the row stays
    unpublished and is retried. Fix the consumer or the payload.
-3. The broker itself is not yet selected (ADR-005). Until then the publisher
-   runs against whatever `Broker` implementation the deployment wires in.
+3. A backlog that stays non-zero for more than five minutes under normal load is
+   migration trigger 2 in [ADR-005](../../adr/0005-event-broker.md), not a
+   tuning task. Record it.
+
+```sql
+SELECT event_type, count(*), min(occurred_at)
+FROM platform_data.outbox_event
+WHERE published_at IS NULL
+GROUP BY 1 ORDER BY 3;
+```
+
+### A consumer is not receiving events
+
+Delivery is fanned out on write (ADR-005): every subscription gets its own row
+in `platform_data.event_delivery`, so one stuck consumer cannot stop the
+others. Which means "consumer X is behind" is always about consumer X.
+
+```sql
+SELECT s.consumer, d.state, count(*), min(d.occurred_at) AS oldest
+FROM platform_data.event_delivery d
+JOIN platform_data.subscription s USING (subscription_id)
+GROUP BY 1, 2 ORDER BY 1, 2;
+```
+
+| What you see | What it means |
+|---|---|
+| No rows for that consumer at all | The subscription was never registered, or its `event_types` filter excludes what you expected. Check `SELECT * FROM platform_data.subscription`. |
+| `pending` with `visible_at` in the future | The consumer is failing and backing off. `last_error` says why. |
+| `in_flight` with `leased_until` in the past | The worker holding it died. Another worker reclaims it on its next poll; no action. |
+| `in_flight` with `leased_until` in the future, not moving | The handler is blocked. The lease is also the handler's deadline, so it will be released — look at what the handler is waiting on. |
+| `dead_lettered` | Gave up after `max_attempts`. See below. |
+
+A consumer whose subscription is disabled (`enabled = false`) receives nothing
+and accumulates nothing: fan-out skips it. Re-enabling does **not** backfill.
+
+### Dead-lettered deliveries
+
+A delivery that fails `max_attempts` times (5 by default) is dead-lettered
+rather than retried forever. Nothing is lost — the event body is still in the
+outbox — but that consumer will never see it again unless it is replayed.
+
+```sql
+SELECT d.delivery_id, s.consumer, d.event_id, d.attempts, d.last_error
+FROM platform_data.event_delivery d
+JOIN platform_data.subscription s USING (subscription_id)
+WHERE d.state = 'dead_lettered'
+ORDER BY d.occurred_at;
+```
+
+Fix the cause first. Replaying into a consumer that still cannot handle the
+message spends another five attempts arriving back here.
+
+Replay is `Store.ReplayDeadLetter(deliveryID)`, which resets the delivery to
+pending with its attempt count cleared. Replay one and confirm it is
+acknowledged before replaying the rest.
+
+**Do not** delete a dead-lettered row to make an alert stop. The row is the
+only record that a consumer missed a fact, and its absence reads as "nothing
+went wrong".
 
 ## Deploy and rollback
 

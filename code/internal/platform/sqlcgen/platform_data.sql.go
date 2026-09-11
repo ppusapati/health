@@ -12,6 +12,110 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const ackDelivery = `-- name: AckDelivery :execrows
+UPDATE platform_data.event_delivery
+SET state = 'delivered', leased_until = NULL, leased_by = '',
+    last_error = '', updated_at = $1
+WHERE delivery_id = $2 AND state = 'in_flight'
+`
+
+type AckDeliveryParams struct {
+	Now        pgtype.Timestamptz
+	DeliveryID uuid.UUID
+}
+
+func (q *Queries) AckDelivery(ctx context.Context, arg AckDeliveryParams) (int64, error) {
+	result, err := q.db.Exec(ctx, ackDelivery, arg.Now, arg.DeliveryID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const claimDeliveries = `-- name: ClaimDeliveries :many
+UPDATE platform_data.event_delivery d
+SET state = 'in_flight',
+    attempts = d.attempts + 1,
+    leased_until = $1,
+    leased_by = $2,
+    updated_at = $3
+FROM (
+    SELECT c.delivery_id
+    FROM platform_data.event_delivery c
+    WHERE c.subscription_id = $4
+      AND c.state IN ('pending', 'in_flight')
+      AND c.visible_at <= $3
+      AND (c.state = 'pending' OR c.leased_until IS NULL OR c.leased_until <= $3)
+    ORDER BY c.occurred_at, c.delivery_id
+    LIMIT $5
+    FOR UPDATE SKIP LOCKED
+) claimed
+WHERE d.delivery_id = claimed.delivery_id
+RETURNING d.delivery_id, d.subscription_id, d.event_id, d.tenant_id,
+          d.event_type, d.occurred_at, d.attempts, d.state
+`
+
+type ClaimDeliveriesParams struct {
+	LeasedUntil    pgtype.Timestamptz
+	LeasedBy       string
+	Now            pgtype.Timestamptz
+	SubscriptionID uuid.UUID
+	BatchSize      int32
+}
+
+type ClaimDeliveriesRow struct {
+	DeliveryID     uuid.UUID
+	SubscriptionID uuid.UUID
+	EventID        uuid.UUID
+	TenantID       uuid.UUID
+	EventType      string
+	OccurredAt     pgtype.Timestamptz
+	Attempts       int32
+	State          string
+}
+
+// FOR UPDATE SKIP LOCKED lets many consumer replicas drain one subscription
+// concurrently without double-claiming and without blocking one another.
+//
+// The predicate reclaims an expired lease as well as pending work, so a
+// consumer that crashed mid-message does not strand it: the lease lapses and
+// the next poll picks it up. That is also why every consumer must be
+// idempotent — the crashed one may have finished the side effect before dying.
+func (q *Queries) ClaimDeliveries(ctx context.Context, arg ClaimDeliveriesParams) ([]ClaimDeliveriesRow, error) {
+	rows, err := q.db.Query(ctx, claimDeliveries,
+		arg.LeasedUntil,
+		arg.LeasedBy,
+		arg.Now,
+		arg.SubscriptionID,
+		arg.BatchSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ClaimDeliveriesRow{}
+	for rows.Next() {
+		var i ClaimDeliveriesRow
+		if err := rows.Scan(
+			&i.DeliveryID,
+			&i.SubscriptionID,
+			&i.EventID,
+			&i.TenantID,
+			&i.EventType,
+			&i.OccurredAt,
+			&i.Attempts,
+			&i.State,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const claimUnpublishedEvents = `-- name: ClaimUnpublishedEvents :many
 SELECT event_id, event_type, schema_version, occurred_at, tenant_id, source,
        aggregate_type, aggregate_id, correlation_id, causation_id, actor, payload
@@ -72,6 +176,18 @@ func (q *Queries) ClaimUnpublishedEvents(ctx context.Context, pageLimit int32) (
 	return items, nil
 }
 
+const countPendingDeliveries = `-- name: CountPendingDeliveries :one
+SELECT count(*) FROM platform_data.event_delivery
+WHERE subscription_id = $1 AND state IN ('pending', 'in_flight')
+`
+
+func (q *Queries) CountPendingDeliveries(ctx context.Context, subscriptionID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countPendingDeliveries, subscriptionID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countUnpublishedEvents = `-- name: CountUnpublishedEvents :one
 SELECT count(*) FROM platform_data.outbox_event WHERE published_at IS NULL
 `
@@ -81,6 +197,108 @@ func (q *Queries) CountUnpublishedEvents(ctx context.Context) (int64, error) {
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const fanOutEvent = `-- name: FanOutEvent :execrows
+INSERT INTO platform_data.event_delivery (
+    delivery_id, subscription_id, event_id, tenant_id, event_type, occurred_at,
+    state, visible_at, created_at, updated_at
+)
+SELECT
+    -- A random id is enough. Idempotency comes from the unique index on
+    -- (subscription_id, event_id) below, not from the delivery id being
+    -- derivable — deriving it was a second mechanism for the same guarantee.
+    gen_random_uuid(),
+    s.subscription_id, $1, $2, $3, $4,
+    'pending', $4, $5, $5
+FROM platform_data.subscription s
+WHERE s.enabled
+  AND (cardinality(s.event_types) = 0 OR $3 = ANY (s.event_types))
+  AND (s.tenant_id IS NULL OR s.tenant_id = $2)
+ON CONFLICT (subscription_id, event_id) DO NOTHING
+`
+
+type FanOutEventParams struct {
+	EventID    uuid.UUID
+	TenantID   uuid.UUID
+	EventType  string
+	OccurredAt pgtype.Timestamptz
+	Now        pgtype.Timestamptz
+}
+
+// Creates one delivery per interested subscription, in one statement.
+//
+// ON CONFLICT DO NOTHING against the (subscription, event) unique index is what
+// makes the fan-out idempotent: a publisher that crashes part-way and re-runs
+// produces the same rows rather than duplicates. Filtering happens here rather
+// than in the application so a subscription can never be missed by a caller
+// that forgot to check its filters.
+func (q *Queries) FanOutEvent(ctx context.Context, arg FanOutEventParams) (int64, error) {
+	result, err := q.db.Exec(ctx, fanOutEvent,
+		arg.EventID,
+		arg.TenantID,
+		arg.EventType,
+		arg.OccurredAt,
+		arg.Now,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getOutboxEvent = `-- name: GetOutboxEvent :one
+SELECT event_id, event_type, schema_version, occurred_at, published_at,
+       tenant_id, source, aggregate_type, aggregate_id, correlation_id,
+       causation_id, actor, payload, attempts, last_error
+FROM platform_data.outbox_event
+WHERE event_id = $1
+`
+
+func (q *Queries) GetOutboxEvent(ctx context.Context, eventID uuid.UUID) (PlatformDataOutboxEvent, error) {
+	row := q.db.QueryRow(ctx, getOutboxEvent, eventID)
+	var i PlatformDataOutboxEvent
+	err := row.Scan(
+		&i.EventID,
+		&i.EventType,
+		&i.SchemaVersion,
+		&i.OccurredAt,
+		&i.PublishedAt,
+		&i.TenantID,
+		&i.Source,
+		&i.AggregateType,
+		&i.AggregateID,
+		&i.CorrelationID,
+		&i.CausationID,
+		&i.Actor,
+		&i.Payload,
+		&i.Attempts,
+		&i.LastError,
+	)
+	return i, err
+}
+
+const getSubscriptionByConsumer = `-- name: GetSubscriptionByConsumer :one
+SELECT subscription_id, consumer, event_types, tenant_id, enabled, max_attempts,
+       created_at, updated_at
+FROM platform_data.subscription
+WHERE consumer = $1
+`
+
+func (q *Queries) GetSubscriptionByConsumer(ctx context.Context, consumer string) (PlatformDataSubscription, error) {
+	row := q.db.QueryRow(ctx, getSubscriptionByConsumer, consumer)
+	var i PlatformDataSubscription
+	err := row.Scan(
+		&i.SubscriptionID,
+		&i.Consumer,
+		&i.EventTypes,
+		&i.TenantID,
+		&i.Enabled,
+		&i.MaxAttempts,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const insertAuditRecord = `-- name: InsertAuditRecord :exec
@@ -177,6 +395,43 @@ func (q *Queries) InsertOutboxEvent(ctx context.Context, arg InsertOutboxEventPa
 	return err
 }
 
+const insertSubscription = `-- name: InsertSubscription :exec
+
+INSERT INTO platform_data.subscription (
+    subscription_id, consumer, event_types, tenant_id, enabled, max_attempts,
+    created_at, updated_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6,
+    $7, $8
+)
+`
+
+type InsertSubscriptionParams struct {
+	SubscriptionID uuid.UUID
+	Consumer       string
+	EventTypes     []string
+	TenantID       pgtype.UUID
+	Enabled        bool
+	MaxAttempts    int32
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+// Event delivery (ADR-005).
+func (q *Queries) InsertSubscription(ctx context.Context, arg InsertSubscriptionParams) error {
+	_, err := q.db.Exec(ctx, insertSubscription,
+		arg.SubscriptionID,
+		arg.Consumer,
+		arg.EventTypes,
+		arg.TenantID,
+		arg.Enabled,
+		arg.MaxAttempts,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	return err
+}
+
 const listAuditRecordsByTenant = `-- name: ListAuditRecordsByTenant :many
 SELECT audit_id, tenant_id, actor_id, action, resource_type, resource_id,
        outcome, reason, purpose_of_use, break_glass, correlation_id, request_id,
@@ -216,6 +471,102 @@ func (q *Queries) ListAuditRecordsByTenant(ctx context.Context, arg ListAuditRec
 			&i.RequestID,
 			&i.OccurredAt,
 			&i.Context,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDeadLetters = `-- name: ListDeadLetters :many
+SELECT delivery_id, subscription_id, event_id, tenant_id, event_type,
+       occurred_at, attempts, last_error, updated_at
+FROM platform_data.event_delivery
+WHERE state = 'dead_lettered'
+  -- sqlc.narg, not a plain parameter: a plain one types as non-nullable and
+  -- the "all tenants" case becomes unexpressible.
+  AND ($1::uuid IS NULL OR tenant_id = $1::uuid)
+ORDER BY updated_at DESC, delivery_id
+LIMIT $2
+`
+
+type ListDeadLettersParams struct {
+	TenantID pgtype.UUID
+	PageSize int32
+}
+
+type ListDeadLettersRow struct {
+	DeliveryID     uuid.UUID
+	SubscriptionID uuid.UUID
+	EventID        uuid.UUID
+	TenantID       uuid.UUID
+	EventType      string
+	OccurredAt     pgtype.Timestamptz
+	Attempts       int32
+	LastError      string
+	UpdatedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) ListDeadLetters(ctx context.Context, arg ListDeadLettersParams) ([]ListDeadLettersRow, error) {
+	rows, err := q.db.Query(ctx, listDeadLetters, arg.TenantID, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListDeadLettersRow{}
+	for rows.Next() {
+		var i ListDeadLettersRow
+		if err := rows.Scan(
+			&i.DeliveryID,
+			&i.SubscriptionID,
+			&i.EventID,
+			&i.TenantID,
+			&i.EventType,
+			&i.OccurredAt,
+			&i.Attempts,
+			&i.LastError,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEnabledSubscriptions = `-- name: ListEnabledSubscriptions :many
+SELECT subscription_id, consumer, event_types, tenant_id, enabled, max_attempts,
+       created_at, updated_at
+FROM platform_data.subscription
+WHERE enabled
+ORDER BY consumer
+`
+
+func (q *Queries) ListEnabledSubscriptions(ctx context.Context) ([]PlatformDataSubscription, error) {
+	rows, err := q.db.Query(ctx, listEnabledSubscriptions)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PlatformDataSubscription{}
+	for rows.Next() {
+		var i PlatformDataSubscription
+		if err := rows.Scan(
+			&i.SubscriptionID,
+			&i.Consumer,
+			&i.EventTypes,
+			&i.TenantID,
+			&i.Enabled,
+			&i.MaxAttempts,
+			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -299,6 +650,46 @@ func (q *Queries) MarkEventPublished(ctx context.Context, arg MarkEventPublished
 	return err
 }
 
+const nackDelivery = `-- name: NackDelivery :execrows
+UPDATE platform_data.event_delivery d
+SET state = CASE
+        WHEN d.attempts >= s.max_attempts THEN 'dead_lettered'
+        ELSE 'pending'
+    END,
+    visible_at = CASE
+        WHEN d.attempts >= s.max_attempts THEN d.visible_at
+        ELSE $1
+    END,
+    leased_until = NULL, leased_by = '',
+    last_error = $2, updated_at = $3
+FROM platform_data.subscription s
+WHERE d.subscription_id = s.subscription_id
+  AND d.delivery_id = $4 AND d.state = 'in_flight'
+`
+
+type NackDeliveryParams struct {
+	RetryAt    pgtype.Timestamptz
+	LastError  string
+	Now        pgtype.Timestamptz
+	DeliveryID uuid.UUID
+}
+
+// Failure with backoff, or dead-lettering once the subscription's patience runs
+// out. Both outcomes in one statement so a consumer cannot leave a message
+// in_flight by crashing between deciding and writing.
+func (q *Queries) NackDelivery(ctx context.Context, arg NackDeliveryParams) (int64, error) {
+	result, err := q.db.Exec(ctx, nackDelivery,
+		arg.RetryAt,
+		arg.LastError,
+		arg.Now,
+		arg.DeliveryID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const recordPublishFailure = `-- name: RecordPublishFailure :exec
 UPDATE platform_data.outbox_event
 SET attempts = attempts + 1, last_error = $1
@@ -313,6 +704,28 @@ type RecordPublishFailureParams struct {
 func (q *Queries) RecordPublishFailure(ctx context.Context, arg RecordPublishFailureParams) error {
 	_, err := q.db.Exec(ctx, recordPublishFailure, arg.LastError, arg.EventID)
 	return err
+}
+
+const replayDeadLetter = `-- name: ReplayDeadLetter :execrows
+UPDATE platform_data.event_delivery
+SET state = 'pending', attempts = 0, visible_at = $1,
+    leased_until = NULL, leased_by = '', last_error = '', updated_at = $1
+WHERE delivery_id = $2 AND state = 'dead_lettered'
+`
+
+type ReplayDeadLetterParams struct {
+	Now        pgtype.Timestamptz
+	DeliveryID uuid.UUID
+}
+
+// Returns a dead letter to the queue with its attempt count reset, so an
+// operator who fixed the consumer can retry without editing rows by hand.
+func (q *Queries) ReplayDeadLetter(ctx context.Context, arg ReplayDeadLetterParams) (int64, error) {
+	result, err := q.db.Exec(ctx, replayDeadLetter, arg.Now, arg.DeliveryID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const tryConsumeInbox = `-- name: TryConsumeInbox :execrows

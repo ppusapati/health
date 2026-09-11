@@ -14,9 +14,9 @@ this document records is which P0 items have working, tested implementations.
 | P0-01 | Monorepo / bootstrap | Implemented | Structure per Blueprint §16; pinned toolchain; Makefile; CI |
 | P0-02 | Protobuf / ConnectRPC | Implemented | 4 packages, buf lint + breaking checks, Go and TS clients generated |
 | P0-03 | Go service skeleton | Implemented | transport → application → domain → ports → adapters, with txn + outbox helpers |
-| P0-04 | PostgreSQL / sqlc | Implemented | 8 migrations, sqlc queries, per-test database harness, expand/contract rules enforced by `tools/migrations` |
-| P0-05 | Identity / auth context | **Partial** | Session context, RBAC+ABAC, audit, joiner/mover/leaver with session revocation, step-up, risk scoring, federation and workload identity complete. The OIDC *verifier* is blocked on ADR-008 |
-| P0-06 | Event backbone | **Partial** | Outbox, inbox dedup, publisher, envelope complete. Broker blocked on ADR-005 |
+| P0-04 | PostgreSQL / sqlc | Implemented | 10 migrations, sqlc queries, per-test database harness, expand/contract rules enforced by `tools/migrations` |
+| P0-05 | Identity / auth context | Implemented | Session context, RBAC+ABAC, audit, joiner/mover/leaver with session revocation, step-up, risk scoring, federation and workload identity, plus the production OIDC verifier (ADR-008 closed) |
+| P0-06 | Event backbone | Implemented | Outbox, inbox dedup, publisher, envelope, plus PostgreSQL-backed fan-out delivery with leases, backoff and dead-lettering, wired into the composition root (ADR-005 closed) |
 | P0-07 | Workflow / rules PoC | Implemented | Durable engine + deterministic rules harness; ADR-006/007 evidence produced |
 | P0-08 | SvelteKit shell | Implemented | AppShell, context banner, generated client, facility screen, error/permission states |
 | P0-09 | Flutter shell | **Partial** | Generated Dart clients, Connect transport, session, offline queue, shell UI. Keystore and durable queue bindings outstanding |
@@ -32,27 +32,31 @@ this document records is which P0 items have working, tested implementations.
 |---|---|---|---|
 | A1 | Request flows client → RPC → application → domain → sqlc → PostgreSQL with trace and audit | **Pass** | `TestMilestone1_EndToEndTransaction` |
 | A2 | Tenant A cannot read/write Tenant B data | **Pass (API, repository, events, audit)** | `milestone2_isolation_test.go` — cache, search and object store are not yet in the stack |
-| A3 | State + outbox commit and inbox dedup survive retry/crash | **Partial** | `TestOutboxRollsBackWithItsTransaction`, `TestInboxDeduplicatesRedelivery`, workflow retry/compensation suite. Full crash test needs a real broker (ADR-005) |
+| A3 | State + outbox commit and inbox dedup survive retry/crash | **Pass** | `TestOutboxRollsBackWithItsTransaction`, `TestInboxDeduplicatesRedelivery`, workflow retry/compensation suite, plus the delivery suite against the chosen transport (ADR-005): `TestACrashedConsumerReleasesItsMessage`, `TestAnEventSurvivesTheConsumerRestarting`, `TestAFailedDeliveryIsRetried`, poison-message dead-lettering |
 | A4 | Proto breaking-change protection and generated SDKs in CI | **Pass** | `proto-compatibility` and `generated-code` jobs; Go, TypeScript and Dart clients all generated from `proto/` |
-| A5 | OIDC/MFA/session/workload identity in non-production | **Blocked** | ADR-008 |
+| A5 | OIDC/MFA/session/workload identity in non-production | **Pass** | ADR-008 closed: per-tenant OIDC federation verified in-process, ACR-based step-up, revocation watermark, workload identity. `internal/identity_access/adapters/oidc` against a live test provider over TLS |
 | A6 | Trace crosses client/RPC/DB/event without raw PHI | **Pass** | `observability_test.go` |
 | A7 | Migration strategy supports rolling expand/contract | **Pass** | `tools/migrations` refuses a contracting change that does not name the migration that expanded, and a NOT NULL column with no default. Every migration carries Trace, Rollback and Reconciliation notes |
 | A8 | Kubernetes deploy, secret rotation, backup/restore smoke | **Partial** | Manifests render and schema-validate; invariants tested in `tools/infra` including encryption-at-rest key references and TLS_MODE per overlay; image builds. Rotation and DR drills are written as runbooks but **have not been executed** — no cluster deploy has happened |
 | A9 | Svelte and Flutter consume the same contracts | **Pass** | Both generated from `proto/`; `connect_client_test.dart` asserts the procedure path matches the proto package |
 | A10 | Fitness tests block forbidden imports and cross-schema writes | **Pass** | `tools/fitness` |
-| A11 | Broker and workflow/rules ADRs closed after PoC | **Evidence ready, decision outstanding** | Workflow and rules PoCs produce the evidence ADR-006/007 require; broker PoC (ADR-005) still needs a real broker benchmark |
+| A11 | Broker and workflow/rules ADRs closed after PoC | **Partial** | ADR-005 closed with benchmark evidence and a working transport ([ADR-005](../adr/0005-event-broker.md)). Workflow and rules PoCs produce the evidence ADR-006/007 require; those decisions are outstanding |
 | A12 | Edge/OT trust-zone pattern approved | **Partial** | Edge prototype demonstrates the store-and-forward and enrollment pattern; OT DMZ and SCADA gateway not built, and the pattern has not been through security review |
 
 ## Open seams
 
 Each blocking ADR has a one-interface seam so Wave-1 work can proceed:
 
-| ADR | Seam | Location |
-|---|---|---|
-| ADR-005 event broker | `store.Broker` | `internal/platform/store/publisher.go` |
-| ADR-006 workflow engine | `workflow.Definition` / `workflow.Step` | `internal/platform/workflow/definition.go` |
-| ADR-007 rules engine | `rules.Table` | `internal/platform/rules/rules.go` |
-| ADR-008 identity provider | `transport.TokenVerifier` | `internal/platform/transport/interceptor.go` |
+| ADR | Seam | Location | State |
+|---|---|---|---|
+| ADR-005 event broker | `store.Broker` | `internal/platform/store/publisher.go` | **Closed** — `store.PgBroker` implements it; the seam stays for the migration triggers in [ADR-005](../adr/0005-event-broker.md) |
+| ADR-006 workflow engine | `workflow.Definition` / `workflow.Step` | `internal/platform/workflow/definition.go` | Open |
+| ADR-007 rules engine | `rules.Table` | `internal/platform/rules/rules.go` | Open |
+| ADR-008 identity provider | `transport.TokenVerifier` | `internal/platform/transport/interceptor.go` | **Closed** — `oidc.Verifier` implements it |
+
+Both closures were one new implementation of one interface plus a composition-
+root change, which is the evidence that the seams were drawn in the right
+place: no downstream code moved for either.
 
 ## Audit
 
@@ -73,7 +77,7 @@ against the implementation tree:
 | Family | Count | State |
 |---|---|---|
 | SRS-PLT | 20 | Implemented |
-| SRS-IAM | 15 | Implemented; the OIDC verifier itself is a seam (ADR-008) |
+| SRS-IAM | 15 | Implemented, including the production OIDC verifier (ADR-008 closed) |
 | SRS-WEB | 16 | Implemented |
 | SRS-API | 14 | Implemented |
 | SRS-DAT | 14 | Implemented |
@@ -100,7 +104,7 @@ matters and is not a formality:
 
 | Stack | Count | Command |
 |---|---|---|
-| Go | 580 tests across 35 packages | `make test` |
+| Go | 661 tests across 39 packages | `make test` |
 | Web (unit) | 85 tests across 8 files | `cd apps/web && npm test` |
 | Web (browser) | accessibility and cross-browser smoke, 3 browser profiles | `make web-a11y`, `make web-browsers` |
 | Flutter | 44 tests | `make mobile-test` |
@@ -132,8 +136,9 @@ Clinical team can start. Current state:
 - Go architecture template — ready
 - PostgreSQL/sqlc migrations — ready, with expand/contract rules enforced
 - Tenant context — ready
-- Authentication — **seam only** (ADR-008); the lifecycle, revocation, step-up,
-  federation mapping and workload identity around it are built
+- Authentication — ready; per-tenant OIDC federation verified in-process
+  (ADR-008), with lifecycle, revocation, step-up, federation mapping and
+  workload identity around it
 - Authorization baseline — ready, plus module entitlements enforced at the wire
 - Audit framework — ready, plus a tamper-evident security event chain
 - Svelte shell — ready, with accessibility and cross-browser gates in CI
@@ -144,7 +149,9 @@ Wave 1 (EMPI first, per the backlog's vertical-slice sequence) can begin against
 the established patterns. The horizontal capabilities Wave 1 will reach for —
 effective dating, numbering sequences, calendars, labels, maker/checker
 approval, entitlements, jobs, projections — are built and tested, so a clinical
-context consumes them rather than inventing its own. Authentication is the one item where Wave-1 code will
-consume a seam rather than a finished implementation; because everything
-downstream depends on `authctx.Session` and not on the verifier, closing ADR-008
-will not require Wave-1 changes.
+context consumes them rather than inventing its own. Event delivery is wired
+end to end, so a Wave-1 module registers a consumer rather than building one.
+
+The workflow and rules engines (ADR-006, ADR-007) remain the open decisions.
+Both are consumed through seams, and no Wave-1 clinical slice depends on either
+before the scheduling and orders work reaches them.

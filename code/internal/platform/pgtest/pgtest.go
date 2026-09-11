@@ -30,10 +30,13 @@ const EnvDatabaseURL = "TEST_DATABASE_URL"
 // New returns a pool connected to a freshly migrated, uniquely named database.
 // The database is dropped when the test finishes.
 //
+// Takes testing.TB rather than *testing.T so benchmarks get the same harness.
+// A benchmark measuring the database against a fake would measure the fake.
+//
 // If EnvDatabaseURL is unset the test is skipped rather than failed, so `go
 // test ./...` stays usable on a laptop without PostgreSQL while CI runs the
 // full set.
-func New(t *testing.T) *pgxpool.Pool {
+func New(t testing.TB) *pgxpool.Pool {
 	t.Helper()
 
 	adminURL := os.Getenv(EnvDatabaseURL)
@@ -117,7 +120,7 @@ func migrationsDir() string {
 }
 
 // uniqueDatabaseName derives a readable, collision-free name from the test.
-func uniqueDatabaseName(t *testing.T) string {
+func uniqueDatabaseName(t testing.TB) string {
 	safe := strings.Map(func(r rune) rune {
 		switch {
 		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':

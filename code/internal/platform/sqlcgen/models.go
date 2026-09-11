@@ -192,6 +192,23 @@ type PlatformDataAuditRecord struct {
 	Context       []byte
 }
 
+type PlatformDataEventDelivery struct {
+	DeliveryID     uuid.UUID
+	SubscriptionID uuid.UUID
+	EventID        uuid.UUID
+	TenantID       uuid.UUID
+	EventType      string
+	OccurredAt     pgtype.Timestamptz
+	State          string
+	Attempts       int32
+	VisibleAt      pgtype.Timestamptz
+	LeasedUntil    pgtype.Timestamptz
+	LeasedBy       string
+	LastError      string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type PlatformDataInboxMessage struct {
 	Consumer    string
 	EventID     uuid.UUID
@@ -215,6 +232,17 @@ type PlatformDataOutboxEvent struct {
 	Payload       []byte
 	Attempts      int32
 	LastError     *string
+}
+
+type PlatformDataSubscription struct {
+	SubscriptionID uuid.UUID
+	Consumer       string
+	EventTypes     []string
+	TenantID       pgtype.UUID
+	Enabled        bool
+	MaxAttempts    int32
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 type PlatformEdgeEnrollmentToken struct {
