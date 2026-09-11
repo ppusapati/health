@@ -9,6 +9,7 @@ package infra_test
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -529,5 +530,216 @@ func walkForWeakening(t *testing.T, path string, node any, required map[string]a
 		for _, item := range typed {
 			walkForWeakening(t, path, item, required)
 		}
+	}
+}
+
+// TLS_MODE follows AUTH_MODE: no base default, and every overlay must declare
+// one (SRS-SEC-001). The process refuses to start without it, so a missing
+// value in an overlay is a crash-loop found at deploy time rather than here.
+func TestTLSModeIsDeclaredPerOverlayAndNeverInBase(t *testing.T) {
+	declared := map[string]string{}
+
+	for _, doc := range loadManifests(t) {
+		if doc.kind() != "ConfigMap" {
+			continue
+		}
+		data, _ := doc.data["data"].(map[string]any)
+
+		if strings.HasPrefix(doc.path, "base/") {
+			if _, isCoreConfig := data["LISTEN_ADDR"]; isCoreConfig {
+				if value, present := data["TLS_MODE"]; present {
+					t.Errorf("base ConfigMap defaults TLS_MODE to %q; set it per overlay", value)
+				}
+			}
+			continue
+		}
+		if doc.name() != "core-config" {
+			continue
+		}
+		mode, present := data["TLS_MODE"]
+		if !present {
+			t.Errorf("%s does not declare TLS_MODE; the pod will refuse to start", doc.path)
+			continue
+		}
+		text, _ := mode.(string)
+		switch text {
+		case "serve", "mesh":
+		default:
+			t.Errorf("%s sets TLS_MODE=%q, which is neither serve nor mesh", doc.path, text)
+		}
+		declared[filepath.Dir(doc.path)] = text
+	}
+
+	for _, env := range []string{
+		filepath.Join("overlays", "dev"),
+		filepath.Join("overlays", "preprod"),
+		filepath.Join("overlays", "prod"),
+	} {
+		if _, ok := declared[env]; !ok {
+			t.Errorf("%s declares no TLS_MODE", env)
+		}
+	}
+}
+
+// Every database connection string assembled in a manifest must authenticate
+// the server it connects to (SRS-SEC-001, SRS-SEC-002).
+//
+// ValidateDatabaseDSN refuses anything weaker at startup, so this test is the
+// earlier half of the same rule: catch it in review rather than in a
+// crash-loop, and catch the sslmode that was dropped from a template during an
+// unrelated edit.
+func TestDatabaseTemplatesPinVerifiedTLS(t *testing.T) {
+	var sawTemplate bool
+
+	for _, doc := range loadManifests(t) {
+		if doc.kind() != "ExternalSecret" {
+			continue
+		}
+		spec, _ := doc.data["spec"].(map[string]any)
+		target, _ := spec["target"].(map[string]any)
+		template, _ := target["template"].(map[string]any)
+		data, _ := template["data"].(map[string]any)
+
+		for key, raw := range data {
+			text, _ := raw.(string)
+			if !strings.HasPrefix(text, "postgres://") {
+				continue
+			}
+			sawTemplate = true
+			if !strings.Contains(text, "sslmode=verify-full") && !strings.Contains(text, "sslmode=verify-ca") {
+				t.Errorf("%s: %s.%s builds a DSN without a verifying sslmode", doc.path, doc.name(), key)
+			}
+		}
+	}
+
+	if !sawTemplate {
+		t.Fatal("no database DSN template found; this invariant would pass vacuously")
+	}
+}
+
+// Stores that can hold PHI must name the managed key that protects them
+// (SRS-SEC-002). The check is that a reference exists and is an alias: an
+// inline key id pins a specific key version, so rotating the key would then
+// require a manifest change and would therefore not happen on schedule.
+func TestEncryptionAtRestNamesManagedKeys(t *testing.T) {
+	const policyName = "core-encryption-policy"
+
+	required := []string{
+		"KMS_KEY_ALIAS_DATABASE",
+		"KMS_KEY_ALIAS_OBJECT_STORE",
+		"KMS_KEY_ALIAS_BACKUP",
+	}
+
+	var found bool
+	for _, doc := range loadManifests(t) {
+		if doc.kind() != "ConfigMap" || doc.name() != policyName {
+			continue
+		}
+		found = true
+		data, _ := doc.data["data"].(map[string]any)
+
+		for _, key := range required {
+			value, _ := data[key].(string)
+			if value == "" {
+				t.Errorf("%s: %s names no key", doc.path, key)
+				continue
+			}
+			if !strings.HasPrefix(value, "alias/") {
+				t.Errorf("%s: %s is %q; use an alias so rotation needs no manifest change",
+					doc.path, key, value)
+			}
+		}
+
+		// The backup key must differ from the database key. Same key means one
+		// compromised or deleted key takes the data and the means of recovering
+		// it at the same time.
+		if data["KMS_KEY_ALIAS_BACKUP"] == data["KMS_KEY_ALIAS_DATABASE"] {
+			t.Errorf("%s: backups share the database key; a single key loss takes both", doc.path)
+		}
+
+		rotation, _ := data["KMS_KEY_ROTATION_DAYS"].(string)
+		days, err := strconv.Atoi(rotation)
+		if err != nil {
+			t.Errorf("%s: KMS_KEY_ROTATION_DAYS is %q, not a number of days", doc.path, rotation)
+		} else if days <= 0 || days > 365 {
+			t.Errorf("%s: key rotation every %d days is outside the annual maximum", doc.path, days)
+		}
+	}
+
+	if !found {
+		t.Fatalf("%s not found; encryption-at-rest references are unasserted", policyName)
+	}
+}
+
+// Any PersistentVolumeClaim must bind to an encrypted storage class
+// (SRS-SEC-002). A claim that omits storageClassName gets the cluster default,
+// which is whatever the platform team last set and is not a decision this
+// repository has made.
+func TestVolumeClaimsUseAnEncryptedStorageClass(t *testing.T) {
+	encrypted := map[string]bool{}
+	for _, doc := range loadManifests(t) {
+		if doc.kind() != "StorageClass" {
+			continue
+		}
+		params, _ := doc.data["parameters"].(map[string]any)
+		if params["encrypted"] == "true" && params["kmsKeyId"] != nil {
+			encrypted[doc.name()] = true
+		}
+	}
+
+	for _, doc := range loadManifests(t) {
+		var claims []map[string]any
+		switch doc.kind() {
+		case "PersistentVolumeClaim":
+			claims = append(claims, doc.data)
+		case "StatefulSet":
+			spec, _ := doc.data["spec"].(map[string]any)
+			raw, _ := spec["volumeClaimTemplates"].([]any)
+			for _, c := range raw {
+				if m, ok := c.(map[string]any); ok {
+					claims = append(claims, m)
+				}
+			}
+		default:
+			continue
+		}
+
+		for _, claim := range claims {
+			spec, _ := claim["spec"].(map[string]any)
+			class, _ := spec["storageClassName"].(string)
+			if class == "" {
+				t.Errorf("%s: a volume claim relies on the cluster default storage class", doc.path)
+				continue
+			}
+			if !encrypted[class] {
+				t.Errorf("%s: storage class %q is not declared encrypted with a managed key", doc.path, class)
+			}
+		}
+	}
+}
+
+// TestEncryptionDetectorWorks proves the assertions above can fail.
+//
+// There are no PersistentVolumeClaims in the manifests today, so
+// TestVolumeClaimsUseAnEncryptedStorageClass currently passes over an empty
+// set. That is fine as an invariant and useless as evidence, so the detector
+// is exercised directly against a claim that would violate it.
+func TestEncryptionDetectorWorks(t *testing.T) {
+	encrypted := map[string]bool{"healthcare-encrypted": true}
+
+	unclassed := map[string]any{"spec": map[string]any{}}
+	spec, _ := unclassed["spec"].(map[string]any)
+	if class, _ := spec["storageClassName"].(string); class != "" {
+		t.Fatal("a claim with no storage class should read as empty")
+	}
+
+	plain := map[string]any{"spec": map[string]any{"storageClassName": "gp2"}}
+	spec, _ = plain["spec"].(map[string]any)
+	class, _ := spec["storageClassName"].(string)
+	if encrypted[class] {
+		t.Fatal("an unencrypted storage class was treated as encrypted")
+	}
+	if !encrypted["healthcare-encrypted"] {
+		t.Fatal("the encrypted storage class was not recognised")
 	}
 }

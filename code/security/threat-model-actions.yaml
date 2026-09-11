@@ -1,0 +1,89 @@
+# Threat model actions (SRS-SEC-007).
+#
+# The requirement's verification is "threat model actions tracked to closure",
+# so the actions live here rather than as bullet points in the document. Each
+# one has an owner, a due date and a state; tools/security fails the build when
+# an open action is past its due date, which is what "tracked" has to mean if
+# it is to mean anything.
+#
+# Ids are referenced from docs/engineering/threat-model.md. An action cited in
+# the document but missing here fails the build, and so does the reverse.
+
+actions:
+  - id: TM-0003
+    boundary: internet-to-rpc
+    finding: >-
+      The unauthenticated rate-limit bucket is per-process, so an n-replica
+      deployment permits n times the intended unauthenticated request rate.
+    owner: platform-engineering
+    raised_on: 2026-09-11
+    due_on: 2026-12-11
+    state: open
+    disposition: >-
+      Acceptable at Wave-0 replica counts (4 in production). Needs a shared
+      counter — Redis or the broker, once ADR-005 closes — before the service
+      scales beyond that or is exposed to an untrusted network.
+
+  - id: TM-0005
+    boundary: outbox-to-broker
+    finding: >-
+      ADR-005 is open, so the broker's own authorization model — who may
+      publish to and consume from a tenant's topic — is undesigned. The
+      application-side seam is one interface, but a broker that lets any
+      consumer subscribe to any tenant's stream would undo tenant isolation
+      outside the code that enforces it.
+    owner: platform-engineering
+    raised_on: 2026-09-11
+    due_on: 2026-12-11
+    state: open
+    disposition: >-
+      Must close before the first cross-tenant or cross-context consumer
+      exists. Today the only consumer is in-process, so the exposure is
+      theoretical.
+
+  - id: TM-0007
+    boundary: object-store
+    finding: >-
+      Bulk-export approval, step-up and expiring-grant rules exist in the
+      domain but have no adapter, so no export path is reachable from the RPC
+      surface.
+    owner: security-engineering
+    raised_on: 2026-09-11
+    due_on: 2027-01-15
+    state: open
+    disposition: >-
+      Safe today precisely because the path does not exist. The risk is that
+      the adapter is written later by someone who does not know the approval
+      rules are mandatory, so the export application service must be written
+      together with the adapter, never after it.
+
+  - id: TM-0009
+    boundary: telemetry
+    finding: >-
+      PHI is kept out of logs and spans by convention rather than by a check,
+      so a new attribute named after a clinical value would reach the
+      collector.
+    owner: platform-engineering
+    raised_on: 2026-09-11
+    due_on: 2026-11-15
+    state: open
+    disposition: >-
+      Add a detector over log and span attribute keys that fails a test on
+      PHI-shaped names. Cheap to build; the reason it is not yet done is that
+      the attribute surface was still changing during Wave 0.
+
+  - id: TM-0011
+    boundary: deployment-substrate
+    finding: >-
+      A platform operator with cluster and KMS access can read PHI directly
+      from the data stores. Application-level privileged changes produce
+      security events; operator-level access to the stores does not.
+    owner: security-engineering
+    raised_on: 2026-09-11
+    due_on: 2027-01-15
+    state: open
+    disposition: >-
+      Extend the tamper-evident chain to ingest database and object-store
+      audit logs from the cloud provider. Partially mitigated by separation of
+      duties and by emergency-access review, neither of which detects a
+      direct read.

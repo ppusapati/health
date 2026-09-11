@@ -108,3 +108,47 @@ func TestPurposeOfUseMismatchDenied(t *testing.T) {
 		t.Fatalf("allowed=%v reason=%q", d.Allowed, d.Reason)
 	}
 }
+
+// "Deny by default" and "skip the check when the attribute is empty" are in
+// tension. RequireResourceTenant resolves it: a caller that declares the action
+// addresses a resource but supplies no owning tenant is denied, not waved past.
+func TestMissingResourceTenantIsDeniedWhenRequired(t *testing.T) {
+	d := policy.Evaluate(session(), policy.Request{
+		Permission:            "organization.facility.read",
+		RequireResourceTenant: true,
+		ResourceTenantID:      "",
+		TenantMode:            policy.TenantModeReadWrite,
+	})
+	if d.Allowed {
+		t.Fatal("an action declaring a resource, with no owning tenant, was allowed")
+	}
+	if d.Reason != policy.ReasonResourceScopeMissing {
+		t.Fatalf("Reason = %q", d.Reason)
+	}
+}
+
+// A create genuinely has no resource yet, so an empty tenant stays legitimate
+// when the caller does not claim otherwise.
+func TestEmptyResourceTenantStillAllowedForCreates(t *testing.T) {
+	d := policy.Evaluate(session(), policy.Request{
+		Permission: "organization.facility.create",
+		Mutating:   true,
+		TenantMode: policy.TenantModeReadWrite,
+	})
+	if !d.Allowed {
+		t.Fatalf("create denied: %q", d.Reason)
+	}
+}
+
+// Requiring a facility match with no facility named is the same trap.
+func TestMissingFacilityIsDeniedWhenMatchRequired(t *testing.T) {
+	d := policy.Evaluate(session(), policy.Request{
+		Permission:           "organization.facility.read",
+		RequireFacilityMatch: true,
+		ResourceFacilityID:   "",
+		TenantMode:           policy.TenantModeReadWrite,
+	})
+	if d.Allowed || d.Reason != policy.ReasonFacilityScopeMissing {
+		t.Fatalf("allowed=%v reason=%q", d.Allowed, d.Reason)
+	}
+}

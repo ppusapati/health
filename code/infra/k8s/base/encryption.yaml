@@ -1,0 +1,107 @@
+# Encryption at rest and secret sourcing (SRS-SEC-002, SRS-SEC-003).
+#
+# Nothing in this file holds key material. That is the point of it: the only
+# things committed are references — a KMS key alias, an external secret store
+# name, a rotation schedule — and the cluster resolves them at apply time. A
+# repository that contains no secret cannot leak one, and the secret scanner in
+# the Security workflow keeps it that way.
+#
+# The KMS key itself is provisioned outside this repository (cloud IAM boundary)
+# and referenced here by alias. Aliases rather than key ids, so a rotation that
+# produces a new key version does not require a manifest change.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: core-encryption-policy
+  namespace: healthcare
+  labels:
+    app.kubernetes.io/name: core
+  annotations:
+    healthcare.io/requirement: SRS-SEC-002
+data:
+  # Every store that can hold PHI names the key that protects it. Listing them
+  # in one place is what makes "is everything encrypted?" a question with an
+  # answer rather than an audit exercise.
+  KMS_KEY_ALIAS_DATABASE: "alias/healthcare/prod/database"
+  KMS_KEY_ALIAS_OBJECT_STORE: "alias/healthcare/prod/object-store"
+  KMS_KEY_ALIAS_BACKUP: "alias/healthcare/prod/backup"
+  # Backups get their own key. A backup key is held by a different set of
+  # operators and survives the deletion of the database key, so a compromised
+  # database credential cannot render the backups unreadable — or readable.
+  KMS_KEY_ROTATION_DAYS: "90"
+---
+# Secrets arrive from the managed secret store; none is authored here.
+# ExternalSecret is the cluster-side half of SRS-SEC-003: the manifest names
+# the remote key, the operator materialises the Secret, and the value never
+# exists in git or in an image layer.
+apiVersion: external-secrets.io/v1beta1
+kind: SecretStore
+metadata:
+  name: core-secrets
+  namespace: healthcare
+spec:
+  provider:
+    vault:
+      server: https://vault.security.svc:8200
+      path: healthcare
+      version: v2
+      auth:
+        kubernetes:
+          mountPath: kubernetes
+          role: core
+          serviceAccountRef:
+            name: core
+---
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: core-database
+  namespace: healthcare
+  annotations:
+    healthcare.io/requirement: SRS-SEC-002
+spec:
+  # Short refresh, because rotation is only as fast as the slowest consumer
+  # noticing. SRS-SEC-002 asks for a *tested* rotation procedure, and a
+  # fifteen-minute window is what makes the test in docs/engineering/runbooks
+  # finish inside a maintenance slot.
+  refreshInterval: 15m
+  secretStoreRef:
+    name: core-secrets
+    kind: SecretStore
+  target:
+    name: core-database
+    creationPolicy: Owner
+    template:
+      type: Opaque
+      data:
+        # sslmode is pinned in the template rather than trusted to the stored
+        # value: ValidateDatabaseDSN refuses anything weaker at startup, and
+        # this is where the DSN is assembled.
+        url: "postgres://{{ .username }}:{{ .password }}@{{ .host }}:5432/{{ .database }}?sslmode=verify-full"
+  data:
+    - secretKey: username
+      remoteRef: { key: core/database, property: username }
+    - secretKey: password
+      remoteRef: { key: core/database, property: password }
+    - secretKey: host
+      remoteRef: { key: core/database, property: host }
+    - secretKey: database
+      remoteRef: { key: core/database, property: database }
+---
+# Persistent volumes are encrypted by the storage class, not by the claim, so
+# the class is where the key reference belongs. Named here so an overlay cannot
+# quietly bind a workload to an unencrypted default class.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: healthcare-encrypted
+  annotations:
+    healthcare.io/requirement: SRS-SEC-002
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  encrypted: "true"
+  kmsKeyId: alias/healthcare/prod/database
+reclaimPolicy: Retain
+allowVolumeExpansion: true
+volumeBindingMode: WaitForFirstConsumer

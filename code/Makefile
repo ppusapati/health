@@ -102,6 +102,14 @@ manifests-validate: ## Render and schema-validate every overlay
 			kubeconform -strict -summary -schema-location default || exit 1; \
 	done
 
+.PHONY: test-security
+test-security: ## Security registers: risk acceptances, threat model actions, pentest gate
+	go test ./tools/security/ -count=1
+
+.PHONY: release-gate
+release-gate: ## Production release gate, including the penetration test check
+	RELEASE_CHANNEL=production go test ./tools/security/ -count=1 -v
+
 .PHONY: test-infra
 test-infra: ## Deployment manifest invariants (no cluster required)
 	go test ./tools/infra/ -count=1
@@ -155,4 +163,4 @@ mobile-test: ## Run Flutter unit and widget tests
 	cd apps/mobile && flutter test
 
 .PHONY: ci
-ci: lint test-fitness test-infra test ## Everything CI runs
+ci: lint test-fitness test-infra test-security test ## Everything CI runs

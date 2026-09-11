@@ -10,6 +10,7 @@ data:
   LOG_LEVEL: "info"
   OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector.observability:4317"
   OTEL_SERVICE_NAME: "core"
-  # Deliberately absent: AUTH_MODE and DATABASE_URL. AUTH_MODE is set per
-  # overlay so a non-production value cannot reach production by inheriting a
-  # base default, and DATABASE_URL is a secret.
+  # Deliberately absent: AUTH_MODE, TLS_MODE and DATABASE_URL. The first two
+  # are set per overlay so a non-production value cannot reach production by
+  # inheriting a base default, and DATABASE_URL is a secret sourced from the
+  # managed store (see encryption.yaml).

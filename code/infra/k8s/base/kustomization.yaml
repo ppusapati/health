@@ -12,6 +12,7 @@ resources:
   - namespace.yaml
   - serviceaccount.yaml
   - configmap.yaml
+  - encryption.yaml
   - deployment.yaml
   - service.yaml
   - poddisruptionbudget.yaml

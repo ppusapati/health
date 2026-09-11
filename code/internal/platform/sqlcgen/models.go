@@ -205,3 +205,123 @@ type PlatformWorkflowTimer struct {
 	FiredAt    pgtype.Timestamptz
 	CreatedAt  pgtype.Timestamptz
 }
+
+type SecurityPlatformExportDownload struct {
+	DownloadID    uuid.UUID
+	ExportID      uuid.UUID
+	TenantID      uuid.UUID
+	DownloadedBy  string
+	CorrelationID string
+	OccurredAt    pgtype.Timestamptz
+}
+
+type SecurityPlatformExportRequest struct {
+	ExportID        uuid.UUID
+	TenantID        uuid.UUID
+	RequestedBy     string
+	Justification   string
+	DataClass       string
+	Scope           []byte
+	Status          string
+	StepUpReference string
+	ApprovedBy      string
+	ApprovedAt      pgtype.Timestamptz
+	ObjectKey       string
+	ObjectSha256    string
+	Manifest        []byte
+	RowCount        int64
+	Watermark       string
+	GrantExpiresAt  pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	Version         int64
+}
+
+type SecurityPlatformLegalHold struct {
+	HoldID       uuid.UUID
+	TenantID     uuid.UUID
+	ResourceType string
+	ResourceID   string
+	Reason       string
+	PlacedBy     string
+	PlacedAt     pgtype.Timestamptz
+	ReleasedBy   string
+	ReleasedAt   pgtype.Timestamptz
+}
+
+type SecurityPlatformPrivacyNotice struct {
+	NoticeID      uuid.UUID
+	TenantID      uuid.UUID
+	Version       int32
+	Locale        string
+	BodyUri       string
+	EffectiveFrom pgtype.Timestamptz
+	CreatedAt     pgtype.Timestamptz
+}
+
+type SecurityPlatformProcessingPurpose struct {
+	PurposeID    uuid.UUID
+	TenantID     uuid.UUID
+	Code         string
+	Description  string
+	Withdrawable bool
+	LawfulBasis  string
+	CreatedAt    pgtype.Timestamptz
+}
+
+type SecurityPlatformPurposeGrant struct {
+	GrantID       uuid.UUID
+	TenantID      uuid.UUID
+	SubjectRef    string
+	PurposeCode   string
+	NoticeVersion int32
+	Granted       bool
+	RecordedBy    string
+	OccurredAt    pgtype.Timestamptz
+}
+
+type SecurityPlatformRetentionClass struct {
+	RetentionClassID uuid.UUID
+	TenantID         uuid.UUID
+	Name             string
+	DataClass        string
+	RetainDays       *int32
+	ArchiveAfterDays *int32
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+}
+
+type SecurityPlatformSecurityEvent struct {
+	EventID       uuid.UUID
+	TenantID      uuid.UUID
+	Sequence      int64
+	EventClass    string
+	Severity      string
+	ActorID       string
+	ResourceType  string
+	ResourceID    string
+	Outcome       string
+	Detail        []byte
+	CorrelationID string
+	OccurredAt    pgtype.Timestamptz
+	EntryHash     string
+	PreviousHash  string
+}
+
+type SecurityPlatformSubjectRequest struct {
+	RequestID     uuid.UUID
+	TenantID      uuid.UUID
+	SubjectRef    string
+	RequestType   string
+	Status        string
+	ReceivedAt    pgtype.Timestamptz
+	DueAt         pgtype.Timestamptz
+	Reviewer      string
+	Decision      string
+	DecisionBasis string
+	EvidenceRef   string
+	ClosedAt      pgtype.Timestamptz
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+	Version       int64
+}

@@ -10,26 +10,25 @@ import 'package:flutter/material.dart';
 import 'src/api/api_error.dart';
 import 'src/api/connect_client.dart';
 import 'src/api/organization_client.dart';
-import 'src/auth/secure_store.dart';
+import 'src/auth/keystore_secure_store.dart';
 import 'src/auth/session.dart';
 import 'src/config/environment.dart';
 import 'src/gen/healthcare/organization/v1/organization.pb.dart';
+import 'src/offline/file_queue_storage.dart';
 import 'src/offline/operation_queue.dart';
 import 'src/ui/app_shell.dart';
 
 void main() {
   final config = AppConfig.fromEnvironment();
 
-  // The keystore binding is platform-specific and is wired here, at the single
-  // composition point, rather than being reached for from feature code.
-  // InMemorySecureStore stands in until the platform channel lands; it is an
-  // explicit choice, not a silent fallback.
-  final secureStore = InMemorySecureStore();
-
+  // Platform bindings are chosen here, at the single composition point, rather
+  // than being reached for from feature code. Both are the real durable
+  // implementations: an in-memory fallback would appear to work while storing
+  // nothing, which is the worst of both outcomes.
   runApp(HealthApp(
     config: config,
-    session: SessionManager(secureStore),
-    queue: OperationQueue(InMemoryQueueStorage()),
+    session: SessionManager(KeystoreSecureStore()),
+    queue: OperationQueue(FileQueueStorage()),
   ));
 }
 

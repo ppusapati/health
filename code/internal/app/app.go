@@ -47,6 +47,11 @@ type Deps struct {
 	Pool     *pgxpool.Pool
 	Verifier platformtransport.TokenVerifier
 	Build    platformapitransport.BuildInfo
+
+	// RateLimit bounds per-caller request rate (SRS-SEC-005). The zero value
+	// disables limiting, which is why the composition root supplies a default
+	// rather than leaving it unset.
+	RateLimit platformtransport.RateLimitConfig
 }
 
 // Server holds the assembled HTTP handler and the services behind it.
@@ -54,10 +59,15 @@ type Server struct {
 	Handler      http.Handler
 	Organization *orgapp.Service
 	Store        *store.Store
+	RateLimiter  *platformtransport.RateLimiter
 }
 
 // New wires the whole stack and returns the ready-to-serve handler.
 func New(deps Deps) *Server {
+	if deps.RateLimit.RequestsPerSecond == 0 {
+		deps.RateLimit = platformtransport.DefaultRateLimit()
+	}
+
 	txManager := pgtx.NewManager(deps.Pool)
 
 	repo := orgpostgres.New(txManager)
@@ -73,13 +83,22 @@ func New(deps Deps) *Server {
 		systemClock{},
 	)
 
-	// Order matters. Tracing is outermost so a rejected request still produces
-	// a span; the error interceptor then wraps auth, so an authentication
-	// failure is rendered through the same error contract as everything else.
+	// Order matters.
+	//
+	// Tracing is outermost so a rejected request still produces a span. The
+	// peer rate limit comes before authentication, so an unauthenticated flood
+	// is refused without paying for token verification. The error interceptor
+	// wraps auth, so an authentication failure is rendered through the same
+	// error contract as everything else. The subject rate limit comes after
+	// auth, where a caller identity finally exists to key on.
+	rateLimiter := platformtransport.NewRateLimiter(deps.RateLimit, nil)
+
 	interceptors := connect.WithInterceptors(
 		platformtransport.NewTracingInterceptor(),
 		platformtransport.NewErrorInterceptor(),
+		platformtransport.NewPeerRateLimitInterceptor(rateLimiter),
 		platformtransport.NewAuthInterceptor(deps.Verifier),
+		platformtransport.NewSubjectRateLimitInterceptor(rateLimiter),
 	)
 
 	mux := http.NewServeMux()
@@ -96,5 +115,6 @@ func New(deps Deps) *Server {
 		Handler:      mux,
 		Organization: orgService,
 		Store:        platformStore,
+		RateLimiter:  rateLimiter,
 	}
 }

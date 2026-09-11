@@ -38,6 +38,16 @@ type harness struct {
 
 func newHarness(t *testing.T) *harness {
 	t.Helper()
+	// A limit high enough not to interfere with ordinary tests; the rate-limit
+	// tests supply their own.
+	return newHarnessWithRateLimit(t, platformtransport.RateLimitConfig{
+		RequestsPerSecond: 10000, Burst: 10000,
+		UnauthenticatedRequestsPerSecond: 10000, UnauthenticatedBurst: 10000,
+	})
+}
+
+func newHarnessWithRateLimit(t *testing.T, limit platformtransport.RateLimitConfig) *harness {
+	t.Helper()
 
 	pool := pgtest.New(t)
 
@@ -47,9 +57,10 @@ func newHarness(t *testing.T) *harness {
 	}
 
 	built := app.New(app.Deps{
-		Pool:     pool,
-		Verifier: verifier,
-		Build:    platformapitransport.BuildInfo{Version: "test", Commit: "test", BuiltAt: "test"},
+		Pool:      pool,
+		Verifier:  verifier,
+		Build:     platformapitransport.BuildInfo{Version: "test", Commit: "test", BuiltAt: "test"},
+		RateLimit: limit,
 	})
 
 	server := httptest.NewServer(h2c.NewHandler(built.Handler, &http2.Server{}))

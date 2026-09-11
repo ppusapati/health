@@ -269,3 +269,89 @@ func TestRegisterRequiresTenantScope(t *testing.T) {
 		t.Fatal("node registered without tenant scope")
 	}
 }
+
+// credential_fingerprint must be a control, not a decorative column: a caller
+// holding only the node's non-secret identifiers must not be able to forward.
+func TestIngestFromNodeRequiresTheCredential(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	nodeID := uuid.NewString()
+	if _, err := f.store.RegisterNode(ctx, f.scope, nodeID, f.facilityID, "ward-3-edge", at); err != nil {
+		t.Fatalf("RegisterNode: %v", err)
+	}
+	if err := f.store.IssueEnrollmentToken(ctx, f.scope, nodeID, "tok", at.Add(time.Hour), at); err != nil {
+		t.Fatalf("IssueEnrollmentToken: %v", err)
+	}
+	if _, err := f.store.RedeemEnrollmentToken(ctx, "tok", "sha256:real-node-cert", at); err != nil {
+		t.Fatalf("RedeemEnrollmentToken: %v", err)
+	}
+
+	// The genuine credential works and derives the tenant itself.
+	result, err := f.store.IngestFromNode(ctx, "sha256:real-node-cert", uuid.NewString(),
+		"edge.label_printed", json.RawMessage(`{}`), at, at)
+	if err != nil {
+		t.Fatalf("IngestFromNode with the real credential: %v", err)
+	}
+	if result.Outcome != cloudstore.OutcomeApplied {
+		t.Fatalf("outcome = %q", result.Outcome)
+	}
+
+	// Knowing the identifiers is not enough.
+	if _, err := f.store.IngestFromNode(ctx, "sha256:attacker-cert", uuid.NewString(),
+		"edge.label_printed", json.RawMessage(`{}`), at, at); !errors.Is(err, cloudstore.ErrNodeNotAuthenticated) {
+		t.Fatalf("an unknown credential was accepted: %v", err)
+	}
+
+	// An empty credential must not match the enrollment-pending rows, whose
+	// fingerprint column is the empty string.
+	if _, err := f.store.IngestFromNode(ctx, "", uuid.NewString(),
+		"edge.label_printed", json.RawMessage(`{}`), at, at); !errors.Is(err, cloudstore.ErrNodeNotAuthenticated) {
+		t.Fatalf("an empty credential was accepted: %v", err)
+	}
+}
+
+// A revoked node's credential must stop working immediately, even though the
+// row and its fingerprint remain for audit.
+func TestRevokedNodeCredentialStopsAuthenticating(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	node := f.registerAndEnroll(t, "tok")
+
+	// The fingerprint registerAndEnroll used.
+	if _, err := f.store.AuthenticateNode(ctx, "sha256:abc"); err != nil {
+		t.Fatalf("enrolled node failed to authenticate: %v", err)
+	}
+
+	if err := f.store.RevokeNode(ctx, f.scope, node.ID, at); err != nil {
+		t.Fatalf("RevokeNode: %v", err)
+	}
+
+	if _, err := f.store.AuthenticateNode(ctx, "sha256:abc"); !errors.Is(err, cloudstore.ErrNodeNotAuthenticated) {
+		t.Fatalf("a revoked credential still authenticates: %v", err)
+	}
+}
+
+// A node authenticated by credential writes into its own tenant, whatever
+// identifiers accompany the request.
+func TestIngestFromNodeDerivesTenantFromTheCredential(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	node := f.registerAndEnroll(t, "tok")
+
+	operationID := uuid.NewString()
+	if _, err := f.store.IngestFromNode(ctx, "sha256:abc", operationID,
+		"edge.label_printed", json.RawMessage(`{}`), at, at); err != nil {
+		t.Fatalf("IngestFromNode: %v", err)
+	}
+
+	var storedTenant, storedNode string
+	if err := f.pool.QueryRow(ctx,
+		`SELECT tenant_id::text, node_id::text FROM platform_edge.forwarded_operation
+		  WHERE operation_id = $1`, operationID).Scan(&storedTenant, &storedNode); err != nil {
+		t.Fatalf("read row: %v", err)
+	}
+	if storedTenant != f.tenantID || storedNode != node.ID {
+		t.Fatalf("stored (%s, %s), want (%s, %s)", storedTenant, storedNode, f.tenantID, node.ID)
+	}
+}

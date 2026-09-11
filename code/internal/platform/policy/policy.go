@@ -29,8 +29,17 @@ type Request struct {
 	Mutating bool
 
 	// ResourceTenantID is the tenant that owns the target resource. Empty means
-	// the action does not address an existing resource.
+	// the action does not address an existing resource — a create, say.
+	//
+	// Because empty is a legitimate value, a caller that forgets to populate it
+	// for an action that DOES address a resource would skip the cross-tenant
+	// check. Set RequireResourceTenant to make that a denial instead.
 	ResourceTenantID string
+
+	// RequireResourceTenant asserts that this action addresses an existing
+	// resource, so an empty ResourceTenantID is a programming error rather than
+	// a legitimate "no resource yet".
+	RequireResourceTenant bool
 
 	// ResourceFacilityID, with RequireFacilityMatch, constrains the action to
 	// the caller's active facility.
@@ -56,6 +65,12 @@ const (
 	ReasonPermissionNotGranted = "PERMISSION_NOT_GRANTED"
 	ReasonCrossTenantDenied    = "CROSS_TENANT_DENIED"
 	ReasonFacilityScopeDenied  = "FACILITY_SCOPE_DENIED"
+	// ReasonResourceScopeMissing means the caller declared that this action
+	// addresses a resource but supplied no owning tenant. Denying is the only
+	// safe reading: the alternative is skipping the cross-tenant check.
+	ReasonResourceScopeMissing = "RESOURCE_SCOPE_MISSING"
+	// ReasonFacilityScopeMissing is the facility equivalent.
+	ReasonFacilityScopeMissing = "FACILITY_SCOPE_MISSING"
 	ReasonPurposeMismatch      = "PURPOSE_OF_USE_MISMATCH"
 	ReasonTenantReadOnly       = "TENANT_READ_ONLY"
 	ReasonTenantNoAccess       = "TENANT_NO_ACCESS"
@@ -83,13 +98,20 @@ func Evaluate(s authctx.Session, r Request) Decision {
 	// SRS-IAM-013: the resource's tenant must equal the authenticated tenant.
 	// A request body can never widen this, because ResourceTenantID is read
 	// from persisted state, not from the wire.
+	if r.RequireResourceTenant && r.ResourceTenantID == "" {
+		return deny(ReasonResourceScopeMissing)
+	}
 	if r.ResourceTenantID != "" && r.ResourceTenantID != s.TenantID {
 		return deny(ReasonCrossTenantDenied)
 	}
 
-	if r.RequireFacilityMatch && r.ResourceFacilityID != "" &&
-		r.ResourceFacilityID != s.ActiveFacilityID {
-		return deny(ReasonFacilityScopeDenied)
+	if r.RequireFacilityMatch {
+		if r.ResourceFacilityID == "" {
+			return deny(ReasonFacilityScopeMissing)
+		}
+		if r.ResourceFacilityID != s.ActiveFacilityID {
+			return deny(ReasonFacilityScopeDenied)
+		}
 	}
 
 	if r.RequiredPurpose != authctx.PurposeUnspecified && s.Purpose != r.RequiredPurpose {

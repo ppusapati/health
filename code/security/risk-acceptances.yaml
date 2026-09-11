@@ -1,0 +1,33 @@
+# Formal risk acceptance register (SRS-SEC-006).
+#
+# SRS-SEC-006 lets a critical finding through only when it is "formally risk
+# accepted". This file is that formality. An entry here suppresses nothing on
+# its own — the scanner ignore files reference an id from this register, so an
+# ignore without an acceptance is an unexplained ignore and an acceptance
+# without an expiry is not an acceptance.
+#
+# tools/security enforces the shape: every entry needs an owner who can carry
+# the risk, a justification that says why the finding is tolerable here rather
+# than restating it, a compensating control or an explicit "none", and an
+# expiry date. An expired entry fails the build. That is the point: an
+# exception is a decision with a review date, not a permanent hole.
+#
+# Adding an entry is a security decision. The accountable authority named in
+# the registry for SRS-SEC-013 owns the sign-off.
+
+acceptances: []
+# Example of the required shape (keep commented; the validator reads entries,
+# not comments):
+#
+#   - id: RA-0001
+#     finding: CVE-2025-00000
+#     scanner: trivy
+#     severity: high
+#     owner: security-engineering
+#     accepted_on: 2026-09-11
+#     expires_on: 2026-12-11
+#     justification: >-
+#       The vulnerable code path is a TLS server that this image never starts;
+#       the binary listens only on the ConnectRPC port, behind the mesh.
+#     compensating_control: >-
+#       NetworkPolicy denies ingress to the affected port in every overlay.

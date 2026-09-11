@@ -180,3 +180,88 @@ func TestAuditRecordsOnlyAVerifiedPurpose(t *testing.T) {
 const policyPurposeOperations = "operations"
 
 var _ = policy.ReasonFacilityScopeDenied
+
+// SRS-SEC-005: a caller that exceeds its budget is refused with a retryable
+// status, not a permission failure — the client should back off, not
+// re-authenticate.
+func TestRateLimitRefusesAFlood(t *testing.T) {
+	h := newHarnessWithRateLimit(t, platformtransport.RateLimitConfig{
+		RequestsPerSecond: 1, Burst: 3,
+		UnauthenticatedRequestsPerSecond: 10000, UnauthenticatedBurst: 10000,
+	})
+	ctx := context.Background()
+	tenantID := h.provisionTenant(t, "Apollo Group")
+	token := tenantAdminToken(tenantID)
+
+	var refused error
+	for i := 0; i < 20; i++ {
+		_, err := h.org.ListFacilities(ctx, as(token, &organizationv1.ListFacilitiesRequest{}))
+		if err != nil {
+			refused = err
+			break
+		}
+	}
+
+	if refused == nil {
+		t.Fatal("a flood of requests was never refused")
+	}
+	if got := connectCode(refused); got != connect.CodeResourceExhausted {
+		t.Fatalf("code = %v, want resource_exhausted", got)
+	}
+
+	detail := errorDetail(t, refused)
+	if detail == nil || detail.GetCode() != "RATE_LIMIT_EXCEEDED" {
+		t.Fatalf("detail = %v", detail)
+	}
+	if !detail.GetRetryable() {
+		t.Fatal("a rate-limit refusal must be marked retryable")
+	}
+}
+
+// The limit is per caller, so one busy user must not lock out their colleagues.
+func TestRateLimitIsPerCaller(t *testing.T) {
+	// The peer limit is left generous so this test isolates the per-subject
+	// budget: both callers share a peer address in-process.
+	h := newHarnessWithRateLimit(t, platformtransport.RateLimitConfig{
+		RequestsPerSecond: 1, Burst: 2,
+		UnauthenticatedRequestsPerSecond: 10000, UnauthenticatedBurst: 10000,
+	})
+	ctx := context.Background()
+	tenantID := h.provisionTenant(t, "Apollo Group")
+
+	busy := tenantAdminToken(tenantID)
+	for i := 0; i < 10; i++ {
+		if _, err := h.org.ListFacilities(ctx, as(busy, &organizationv1.ListFacilitiesRequest{})); err != nil {
+			break
+		}
+	}
+
+	// A different subject in the same tenant still gets through.
+	if _, err := h.org.ListFacilities(ctx, as(viewerToken(tenantID),
+		&organizationv1.ListFacilitiesRequest{})); err != nil {
+		t.Fatalf("a second caller was locked out by the first: %v", err)
+	}
+}
+
+// The peer stage must refuse an unauthenticated flood without ever reaching
+// token verification — that is the whole reason it sits before auth.
+func TestUnauthenticatedFloodIsRefusedByThePeerStage(t *testing.T) {
+	h := newHarnessWithRateLimit(t, platformtransport.RateLimitConfig{
+		RequestsPerSecond: 10000, Burst: 10000,
+		UnauthenticatedRequestsPerSecond: 1, UnauthenticatedBurst: 2,
+	})
+	ctx := context.Background()
+
+	var refused error
+	for i := 0; i < 20; i++ {
+		_, err := h.org.ListFacilities(ctx, connect.NewRequest(&organizationv1.ListFacilitiesRequest{}))
+		if err != nil && connectCode(err) == connect.CodeResourceExhausted {
+			refused = err
+			break
+		}
+	}
+
+	if refused == nil {
+		t.Fatal("an unauthenticated flood was never rate limited")
+	}
+}

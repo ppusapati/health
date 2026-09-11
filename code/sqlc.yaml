@@ -8,6 +8,7 @@ sql:
       - db/migrations/0003_platform_data.up.sql
       - db/migrations/0004_platform_workflow.up.sql
       - db/migrations/0005_edge.up.sql
+      - db/migrations/0006_security.up.sql
     gen:
       go:
         package: sqlcgen

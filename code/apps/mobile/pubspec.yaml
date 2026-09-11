@@ -18,6 +18,12 @@ dependencies:
   fixnum: ^1.1.1
   http: ^1.2.2
   meta: ^1.15.0
+  # Platform keystore (Android Keystore / iOS Keychain). SRS-IAM-002 forbids
+  # holding a credential anywhere a script on the device can read it.
+  flutter_secure_storage: ^9.2.2
+  # Durable local storage for the offline queue, so queued clinical work
+  # survives a restart (SRS-NFR-013).
+  path_provider: ^2.1.5
 
 dev_dependencies:
   flutter_test:

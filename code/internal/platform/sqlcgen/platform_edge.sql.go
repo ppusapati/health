@@ -112,6 +112,37 @@ func (q *Queries) GetEdgeNode(ctx context.Context, arg GetEdgeNodeParams) (Platf
 	return i, err
 }
 
+const getEdgeNodeByFingerprint = `-- name: GetEdgeNodeByFingerprint :one
+SELECT node_id, tenant_id, facility_id, display_name, status,
+       credential_fingerprint, enrolled_at, last_seen_at, created_at, updated_at, version
+FROM platform_edge.node
+WHERE credential_fingerprint = $1
+  AND credential_fingerprint <> ''
+  AND status = 'enrolled'
+`
+
+// Authenticates a node by the credential it presents, not by the identifiers
+// it claims. node_id and tenant_id are non-secret UUIDs; the fingerprint is
+// the only thing a node must actually possess.
+func (q *Queries) GetEdgeNodeByFingerprint(ctx context.Context, credentialFingerprint string) (PlatformEdgeNode, error) {
+	row := q.db.QueryRow(ctx, getEdgeNodeByFingerprint, credentialFingerprint)
+	var i PlatformEdgeNode
+	err := row.Scan(
+		&i.NodeID,
+		&i.TenantID,
+		&i.FacilityID,
+		&i.DisplayName,
+		&i.Status,
+		&i.CredentialFingerprint,
+		&i.EnrolledAt,
+		&i.LastSeenAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Version,
+	)
+	return i, err
+}
+
 const getEnrollmentTokenNode = `-- name: GetEnrollmentTokenNode :one
 SELECT node_id, tenant_id FROM platform_edge.enrollment_token
 WHERE token_hash = $1

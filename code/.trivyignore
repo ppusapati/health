@@ -1,0 +1,10 @@
+# Scanner suppressions (SRS-SEC-006).
+#
+# Every line here must carry an id from security/risk-acceptances.yaml, in the
+# form:
+#
+#   CVE-2025-00000  # RA-0001
+#
+# tools/security checks that pairing in both directions: a suppression with no
+# live acceptance fails the build, and so does an acceptance past its expiry.
+# An empty file is the correct steady state.

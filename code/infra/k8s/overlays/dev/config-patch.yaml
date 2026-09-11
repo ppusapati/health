@@ -8,3 +8,7 @@ data:
   # base default, so no overlay can inherit this by accident (ADR-W0-003).
   AUTH_MODE: "dev"
   ENVIRONMENT: "development"
+  # TLS_MODE has no base default for the same reason AUTH_MODE has none: the
+  # environment that forgets to set it is the one least likely to notice a
+  # plaintext channel (SRS-SEC-001).
+  TLS_MODE: "mesh"

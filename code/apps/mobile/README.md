@@ -42,19 +42,22 @@ Well-known types are **not** generated into this tree — `package:protobuf` 6.x
 ships them, and a second local copy produces two incompatible `Timestamp`
 types.
 
+## Platform bindings
+
+| Interface | Production binding | Requirement |
+|---|---|---|
+| `SecureStore` | `KeystoreSecureStore` — Android Keystore / iOS Keychain | SRS-IAM-002 |
+| `QueueStorage` | `FileQueueStorage` — atomic writes to application support | SRS-NFR-013 |
+
+Both are wired in `main.dart`. The in-memory implementations remain for tests
+only: falling back to one at runtime would appear to work while storing
+nothing.
+
 ## Outstanding
 
 These are real gaps, not oversights, and are tracked in
 `docs/engineering/wave-0-status.md`:
 
-- **`SecureStore` has no platform binding yet.** The interface is defined and
-  the session uses it, but `main.dart` wires `InMemorySecureStore`. Credentials
-  therefore do not survive a restart and are not in the keystore. This must be
-  bound to the platform keystore before any build reaches a real device —
-  `SRS-IAM-002` is not satisfied until it is.
-- **`QueueStorage` likewise has only an in-memory implementation.** The queue
-  logic and its ordering guarantees are tested, but the durable device-side
-  store is not written, so queued work does not survive a restart.
 - **No device build has been run.** The package analyses cleanly and the unit
   and widget tests pass, but `flutter build apk` / `ipa` has not been executed,
   so the Android and iOS toolchain configuration is unverified.

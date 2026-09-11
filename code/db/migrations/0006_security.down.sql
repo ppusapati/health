@@ -1,0 +1,10 @@
+DROP TABLE IF EXISTS security_platform.subject_request;
+DROP TABLE IF EXISTS security_platform.purpose_grant;
+DROP TABLE IF EXISTS security_platform.processing_purpose;
+DROP TABLE IF EXISTS security_platform.privacy_notice;
+DROP TABLE IF EXISTS security_platform.legal_hold;
+DROP TABLE IF EXISTS security_platform.retention_class;
+DROP TABLE IF EXISTS security_platform.export_download;
+DROP TABLE IF EXISTS security_platform.export_request;
+DROP TABLE IF EXISTS security_platform.security_event;
+DROP SCHEMA IF EXISTS security_platform CASCADE;

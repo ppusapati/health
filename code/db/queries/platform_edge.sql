@@ -69,6 +69,17 @@ INSERT INTO platform_edge.forwarded_operation (
 )
 ON CONFLICT (node_id, operation_id) DO NOTHING;
 
+-- name: GetEdgeNodeByFingerprint :one
+-- Authenticates a node by the credential it presents, not by the identifiers
+-- it claims. node_id and tenant_id are non-secret UUIDs; the fingerprint is
+-- the only thing a node must actually possess.
+SELECT node_id, tenant_id, facility_id, display_name, status,
+       credential_fingerprint, enrolled_at, last_seen_at, created_at, updated_at, version
+FROM platform_edge.node
+WHERE credential_fingerprint = @credential_fingerprint
+  AND credential_fingerprint <> ''
+  AND status = 'enrolled';
+
 -- name: ListForwardedOperations :many
 SELECT node_id, operation_id, tenant_id, operation_type, payload, occurred_at,
        received_at, outcome, reject_reason

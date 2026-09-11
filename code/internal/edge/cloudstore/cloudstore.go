@@ -208,6 +208,67 @@ type IngestResult struct {
 	Reason  string
 }
 
+// ErrNodeNotAuthenticated reports a credential that matches no enrolled node.
+var ErrNodeNotAuthenticated = errors.New("edge: node credential not recognised")
+
+// AuthenticateNode resolves an enrolled node from the credential it presents.
+//
+// This is the check that makes credential_fingerprint a control rather than a
+// decorative column. node_id and tenant_id are non-secret UUIDs that appear in
+// logs and manifests; possession of the credential is the only thing that
+// distinguishes the real node from anyone who has seen its identifiers.
+//
+// The transport is expected to terminate mTLS and pass the SHA-256 digest of
+// the peer certificate. Passing a value the caller supplied in a request body
+// would defeat the whole purpose.
+func (s *Store) AuthenticateNode(ctx context.Context, credentialFingerprint string) (Node, error) {
+	if credentialFingerprint == "" {
+		return Node{}, ErrNodeNotAuthenticated
+	}
+
+	row, err := s.queries(ctx).GetEdgeNodeByFingerprint(ctx, credentialFingerprint)
+	if errors.Is(err, pgx.ErrNoRows) {
+		// Deliberately indistinguishable from a suspended or revoked node: a
+		// caller probing credentials learns nothing either way.
+		return Node{}, ErrNodeNotAuthenticated
+	}
+	if err != nil {
+		return Node{}, err
+	}
+
+	return Node{
+		ID:          row.NodeID.String(),
+		TenantID:    row.TenantID.String(),
+		FacilityID:  row.FacilityID.String(),
+		DisplayName: row.DisplayName,
+		Status:      row.Status,
+		Version:     row.Version,
+	}, nil
+}
+
+// IngestFromNode accepts an operation from a node authenticated by credential.
+//
+// This is the entry point the edge uplink transport must use. It derives both
+// the node and the tenant from the presented credential, so a node cannot name
+// a tenant it does not belong to — the identifiers in the request are never
+// consulted for authorization.
+func (s *Store) IngestFromNode(ctx context.Context, credentialFingerprint,
+	operationID, operationType string,
+	payload json.RawMessage, occurredAt, now time.Time) (IngestResult, error) {
+
+	node, err := s.AuthenticateNode(ctx, credentialFingerprint)
+	if err != nil {
+		return IngestResult{}, err
+	}
+
+	scope := authctx.NewSession(authctx.Session{
+		SubjectID: "edge-node:" + node.ID,
+		TenantID:  node.TenantID,
+	}).TenantScope()
+
+	return s.Ingest(ctx, scope, node.ID, operationID, operationType, payload, occurredAt, now)
+}
+
 // Ingest accepts one operation forwarded from an edge node.
 //
 // It is idempotent on (node_id, operation_id): a redelivery is recorded as a
@@ -218,11 +279,9 @@ type IngestResult struct {
 // A node reports its identifiers; it does not get to name the tenant it writes
 // into (ADR-W0-001).
 //
-// NOTE: this authenticates the *session* that carries the operation, not the
-// node itself. node.credential_fingerprint is recorded at enrollment but is not
-// yet checked here, because the edge uplink transport does not exist yet. When
-// it lands it must terminate mTLS and bind the peer certificate fingerprint to
-// node_id before this method is reachable from a node.
+// This method authenticates the *session* carrying the operation. A node
+// forwarding on its own behalf must come through IngestFromNode, which
+// authenticates the node's credential first and derives the tenant from it.
 func (s *Store) Ingest(ctx context.Context, scope authctx.TenantScope,
 	nodeID, operationID, operationType string,
 	payload json.RawMessage, occurredAt, now time.Time) (IngestResult, error) {

@@ -26,6 +26,7 @@ var codeFor = map[rpcerr.Category]connect.Code{
 	rpcerr.CategoryAlreadyExists:      connect.CodeAlreadyExists,
 	rpcerr.CategoryFailedPrecondition: connect.CodeFailedPrecondition,
 	rpcerr.CategoryAborted:            connect.CodeAborted,
+	rpcerr.CategoryResourceExhausted:  connect.CodeResourceExhausted,
 	rpcerr.CategoryInternal:           connect.CodeInternal,
 }
 

@@ -131,7 +131,7 @@ func TestFIT01_DomainPackagesArePure(t *testing.T) {
 // would make these tests useless noise.
 var sqlSchemaRef = regexp.MustCompile(
 	`(?i)\b(?:from|join|into|update|delete\s+from|table)\s+` +
-		`(organization|identity_access|platform_data|platform_workflow|platform_rules|platform_edge)\.[a-z_]+`)
+		`(organization|identity_access|platform_data|platform_workflow|platform_rules|platform_edge|security_platform)\.[a-z_]+`)
 
 // schemaOwners maps a schema to the one package path allowed to reach it.
 var schemaOwners = map[string]string{
@@ -141,6 +141,7 @@ var schemaOwners = map[string]string{
 	"platform_workflow": "internal/platform/workflow",
 	"platform_rules":    "internal/platform/rules",
 	"platform_edge":     "internal/edge/cloudstore",
+	"security_platform": "internal/security/adapters/postgres",
 }
 
 // TestSQLSchemaRefDetectorWorks guards the guard.
@@ -159,6 +160,7 @@ func TestSQLSchemaRefDetectorWorks(t *testing.T) {
 		`select 1 from platform_workflow.instance`,
 		`INSERT INTO platform_rules.rule_set (x) VALUES (1)`,
 		`UPDATE platform_edge.node SET status = 'revoked'`,
+		`SELECT 1 FROM security_platform.security_event`,
 	}
 	for _, sample := range shouldMatch {
 		if !sqlSchemaRef.MatchString(sample) {
@@ -220,6 +222,7 @@ func TestFIT02_GeneratedQueriesImportedOnlyByAdapters(t *testing.T) {
 		"internal/platform/store",
 		"internal/platform/workflow",
 		"internal/edge/cloudstore",
+		"internal/security/adapters/postgres",
 	}
 
 	var importers int
@@ -484,8 +487,19 @@ func isDomainFile(rel string) bool {
 // authenticated the request, and the composition root. Everywhere else, a
 // session must arrive through the context.
 func TestOnlyTransportMintsSessions(t *testing.T) {
+	// Two authentication boundaries may mint a session, plus the composition
+	// root. Both boundaries verify a credential and derive identity from it;
+	// neither accepts an identity a caller asserted.
+	//
+	//   internal/platform/transport   — verifies a bearer token
+	//   internal/edge/cloudstore      — verifies a node's certificate
+	//                                   fingerprint in AuthenticateNode
+	//
+	// Adding to this list is a security decision, not a convenience: a package
+	// here can act as any tenant.
 	allowed := []string{
 		"internal/platform/transport",
+		"internal/edge/cloudstore",
 		"internal/app",
 	}
 

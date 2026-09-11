@@ -57,9 +57,23 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	// Transport security is settled before anything opens a socket
+	// (SRS-SEC-001). Both checks are startup failures rather than warnings: a
+	// process that logs "PHI is travelling in clear" and then serves traffic
+	// has told nobody who was going to act on it.
+	tlsMode, err := platformtransport.ParseTLSMode(os.Getenv("TLS_MODE"))
+	if err != nil {
+		return err
+	}
+
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
 		return errors.New("DATABASE_URL is required")
+	}
+	// ALLOW_LOCAL_PLAINTEXT_DB is the developer escape hatch, and it only ever
+	// excuses a loopback address — see ValidateDatabaseDSN.
+	if err := platformtransport.ValidateDatabaseDSN(dsn, os.Getenv("ALLOW_LOCAL_PLAINTEXT_DB") == "true"); err != nil {
+		return err
 	}
 
 	pool, err := pgxpool.New(ctx, dsn)
@@ -90,8 +104,6 @@ func run() error {
 		addr = ":8080"
 	}
 
-	// h2c lets ConnectRPC serve gRPC and gRPC-Web over plaintext HTTP/2 behind
-	// a TLS-terminating ingress, which is how the cluster fronts this service.
 	httpServer := &http.Server{
 		Addr:              addr,
 		Handler:           h2c.NewHandler(server.Handler, &http2.Server{}),
@@ -100,8 +112,11 @@ func run() error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		slog.Info("core service listening", slog.String("addr", addr), slog.String("version", version))
-		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		slog.Info("core service listening",
+			slog.String("addr", addr),
+			slog.String("tls_mode", string(tlsMode)),
+			slog.String("version", version))
+		if err := serve(httpServer, tlsMode); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err
 		}
 	}()
@@ -116,6 +131,25 @@ func run() error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 	return httpServer.Shutdown(shutdownCtx)
+}
+
+// serve starts the listener under the declared transport mode.
+//
+// TLSModeMesh serves h2c: ConnectRPC needs HTTP/2, the sidecar terminates
+// mTLS, and the NetworkPolicy keeps anything else off the port. TLSModeServe
+// terminates TLS here, under ServerTLSConfig, for topologies with no mesh.
+func serve(s *http.Server, mode platformtransport.TLSMode) error {
+	if mode == platformtransport.TLSModeMesh {
+		return s.ListenAndServe()
+	}
+	certFile, keyFile := os.Getenv("TLS_CERT_FILE"), os.Getenv("TLS_KEY_FILE")
+	if certFile == "" || keyFile == "" {
+		return errors.New("TLS_MODE=serve requires TLS_CERT_FILE and TLS_KEY_FILE")
+	}
+	// The h2c wrapper is harmless here — a TLS listener negotiates h2 through
+	// ALPN and never reaches the prior-knowledge upgrade path.
+	s.TLSConfig = platformtransport.ServerTLSConfig()
+	return s.ListenAndServeTLS(certFile, keyFile)
 }
 
 // buildVerifier selects the identity provider.

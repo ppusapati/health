@@ -1,0 +1,32 @@
+# Secret scanning configuration (SRS-SEC-003).
+#
+# Starts from the upstream rule set rather than hand-rolling patterns: the
+# value of this scanner is the breadth of provider formats it already knows.
+# Local configuration exists only to stop known-safe test material from
+# drowning the real signal.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Fixtures and generated code that contain no real credential"
+
+paths = [
+  # Generated clients and sqlc output are build artifacts; a match there is a
+  # match against the source proto or SQL, which is itself scanned.
+  '''^code/gen/''',
+  '''^code/internal/platform/sqlcgen/''',
+  '''^code/apps/mobile/lib/src/gen/''',
+  '''^code/apps/web/src/lib/gen/''',
+  # Lockfiles carry integrity digests, not secrets.
+  '''package-lock\.json$''',
+  '''pubspec\.lock$''',
+  '''^code/go\.sum$''',
+]
+
+# Test material must look like a credential to be a useful test, so the
+# fixtures name themselves. The marker is deliberately explicit rather than a
+# blanket exemption for *_test.go: a real secret pasted into a test file is
+# still a leaked secret.
+regexes = [
+  '''gitleaks:allow-test-fixture''',
+]

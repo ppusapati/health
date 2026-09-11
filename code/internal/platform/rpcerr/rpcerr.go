@@ -23,6 +23,7 @@ const (
 	CategoryAlreadyExists      Category = "ALREADY_EXISTS"
 	CategoryFailedPrecondition Category = "FAILED_PRECONDITION"
 	CategoryAborted            Category = "ABORTED"
+	CategoryResourceExhausted  Category = "RESOURCE_EXHAUSTED"
 	CategoryInternal           Category = "INTERNAL"
 )
 
@@ -99,6 +100,12 @@ func AlreadyExists(code, message string) *Error {
 // transitions.
 func FailedPrecondition(code, message string) *Error {
 	return &Error{Category: CategoryFailedPrecondition, Code: code, Message: message}
+}
+
+// ResourceExhausted builds a RESOURCE_EXHAUSTED error. Retryable by
+// definition: the caller should back off, unlike a permission failure.
+func ResourceExhausted(code, message string) *Error {
+	return &Error{Category: CategoryResourceExhausted, Code: code, Message: message, Retryable: true}
 }
 
 // Internal builds an INTERNAL error. Retryable is left false: an unexpected

@@ -8,3 +8,7 @@ data:
   # exercises the same authentication path production will.
   AUTH_MODE: "oidc"
   ENVIRONMENT: "preproduction"
+  # TLS_MODE has no base default for the same reason AUTH_MODE has none: the
+  # environment that forgets to set it is the one least likely to notice a
+  # plaintext channel (SRS-SEC-001).
+  TLS_MODE: "mesh"
