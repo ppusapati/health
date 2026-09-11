@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: core-config
+data:
+  LOG_LEVEL: "debug"
+  # The development verifier is enabled here and nowhere else. AUTH_MODE has no
+  # base default, so no overlay can inherit this by accident (ADR-W0-003).
+  AUTH_MODE: "dev"
+  ENVIRONMENT: "development"

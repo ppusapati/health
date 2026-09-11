@@ -1,0 +1,28 @@
+name: health_mobile
+description: Unified Healthcare Platform — Flutter shell (Wave 0, P0-09).
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.13.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # Generated message types come from the canonical protos; this is the runtime
+  # they need. Handwritten wire types are prohibited (SRS-API-001).
+  # protoc_plugin 25 generates imports against protobuf 6.x, which ships the
+  # well-known types itself.
+  protobuf: ^6.0.0
+  # Required by generated code for 64-bit integer fields.
+  fixnum: ^1.1.1
+  http: ^1.2.2
+  meta: ^1.15.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true

@@ -80,3 +80,128 @@ type PlatformDataOutboxEvent struct {
 	Attempts      int32
 	LastError     *string
 }
+
+type PlatformEdgeEnrollmentToken struct {
+	TokenHash  string
+	NodeID     uuid.UUID
+	TenantID   uuid.UUID
+	ExpiresAt  pgtype.Timestamptz
+	ConsumedAt pgtype.Timestamptz
+	CreatedAt  pgtype.Timestamptz
+}
+
+type PlatformEdgeForwardedOperation struct {
+	NodeID        uuid.UUID
+	OperationID   uuid.UUID
+	TenantID      uuid.UUID
+	OperationType string
+	Payload       []byte
+	OccurredAt    pgtype.Timestamptz
+	ReceivedAt    pgtype.Timestamptz
+	Outcome       string
+	RejectReason  string
+}
+
+type PlatformEdgeNode struct {
+	NodeID                uuid.UUID
+	TenantID              uuid.UUID
+	FacilityID            uuid.UUID
+	DisplayName           string
+	Status                string
+	CredentialFingerprint string
+	EnrolledAt            pgtype.Timestamptz
+	LastSeenAt            pgtype.Timestamptz
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	Version               int64
+}
+
+type PlatformRulesDecisionLog struct {
+	DecisionID     uuid.UUID
+	TenantID       uuid.UUID
+	RuleSetName    string
+	RuleSetVersion int32
+	MatchedRule    string
+	Input          []byte
+	Outcome        []byte
+	Explanation    []byte
+	CorrelationID  string
+	OccurredAt     pgtype.Timestamptz
+}
+
+type PlatformRulesRuleSet struct {
+	RuleSetID     uuid.UUID
+	TenantID      pgtype.UUID
+	Name          string
+	Version       int32
+	Status        string
+	EffectiveFrom pgtype.Timestamptz
+	EffectiveTo   pgtype.Timestamptz
+	Definition    []byte
+	CreatedAt     pgtype.Timestamptz
+	CreatedBy     string
+	PublishedAt   pgtype.Timestamptz
+	PublishedBy   string
+}
+
+type PlatformWorkflowHistory struct {
+	HistoryID  int64
+	InstanceID uuid.UUID
+	TenantID   uuid.UUID
+	Sequence   int32
+	EventType  string
+	Step       string
+	Attempt    int32
+	Detail     []byte
+	OccurredAt pgtype.Timestamptz
+}
+
+type PlatformWorkflowHumanTask struct {
+	TaskID       uuid.UUID
+	InstanceID   uuid.UUID
+	TenantID     uuid.UUID
+	Step         string
+	AssignedRole string
+	Status       string
+	DueAt        pgtype.Timestamptz
+	CompletedBy  string
+	Outcome      string
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+}
+
+type PlatformWorkflowInstance struct {
+	InstanceID        uuid.UUID
+	TenantID          uuid.UUID
+	DefinitionName    string
+	DefinitionVersion int32
+	CorrelationKey    string
+	Status            string
+	CurrentStep       string
+	StepIndex         int32
+	Attempts          int32
+	State             []byte
+	LastError         string
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	Version           int64
+}
+
+type PlatformWorkflowSignal struct {
+	InstanceID uuid.UUID
+	SignalKey  string
+	TenantID   uuid.UUID
+	SignalName string
+	Payload    []byte
+	ReceivedAt pgtype.Timestamptz
+}
+
+type PlatformWorkflowTimer struct {
+	TimerID    uuid.UUID
+	InstanceID uuid.UUID
+	TenantID   uuid.UUID
+	Step       string
+	DueAt      pgtype.Timestamptz
+	FiredAt    pgtype.Timestamptz
+	CreatedAt  pgtype.Timestamptz
+}

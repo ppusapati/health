@@ -121,6 +121,52 @@ jobs:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
         run: go test ./... -race -count=1
 
+  manifests:
+    name: Deployment manifests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: code/go.sum
+      # Invariants first: they run without a cluster and name the rule broken.
+      - run: make test-infra
+      - name: Install manifest tooling
+        run: make infra-tools
+      # Then schema-validate the rendered output, which catches mistakes the
+      # invariants do not model, such as a misspelled API version.
+      - run: make manifests-validate
+
+  container:
+    name: Container image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: |
+          docker build -f code/infra/docker/core.Dockerfile \
+            --build-arg VERSION=ci \
+            --build-arg COMMIT=${{ github.sha }} \
+            --build-arg BUILT_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+            -t core:ci code
+
+  mobile:
+    name: Mobile workspace
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+        working-directory: code/apps/mobile
+      - run: flutter analyze
+        working-directory: code/apps/mobile
+      - run: flutter test
+        working-directory: code/apps/mobile
+
   web:
     name: Web workspace
     runs-on: ubuntu-latest

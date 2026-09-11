@@ -13,6 +13,8 @@ BUF_VERSION            := v1.47.2
 PROTOC_GEN_GO_VERSION  := v1.36.6
 PROTOC_GEN_CONNECT_VER := v1.18.1
 SQLC_VERSION           := v1.28.0
+KUSTOMIZE_VERSION      := v5.5.0
+KUBECONFORM_VERSION    := v0.6.7
 
 TEST_DATABASE_URL ?= postgres://postgres@127.0.0.1:55432/postgres?sslmode=disable
 
@@ -27,6 +29,11 @@ tools: ## Install pinned code-generation tools
 	go install google.golang.org/protobuf/cmd/protoc-gen-go@$(PROTOC_GEN_GO_VERSION)
 	go install connectrpc.com/connect/cmd/protoc-gen-connect-go@$(PROTOC_GEN_CONNECT_VER)
 	go install github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
+
+.PHONY: infra-tools
+infra-tools: ## Install pinned manifest tooling
+	go install sigs.k8s.io/kustomize/kustomize/v5@$(KUSTOMIZE_VERSION)
+	go install github.com/yannh/kubeconform/cmd/kubeconform@$(KUBECONFORM_VERSION)
 
 .PHONY: generate
 generate: ## Regenerate protobuf and sqlc code
@@ -77,6 +84,33 @@ test: ## Run the full suite including repository integration tests
 test-fitness: ## Run architecture fitness tests (Gate A10)
 	go test ./tools/fitness/ -v -count=1
 
+.PHONY: manifests
+manifests: ## Render every Kubernetes overlay
+	@for env in dev preprod prod; do \
+		echo "=== $$env ==="; \
+		kustomize build infra/k8s/overlays/$$env; \
+	done
+
+.PHONY: manifests-validate
+manifests-validate: ## Render and schema-validate every overlay
+	@for env in dev preprod prod; do \
+		printf '%-9s ' "$$env"; \
+		kustomize build infra/k8s/overlays/$$env | \
+			kubeconform -strict -summary -schema-location default || exit 1; \
+	done
+
+.PHONY: test-infra
+test-infra: ## Deployment manifest invariants (no cluster required)
+	go test ./tools/infra/ -count=1
+
+.PHONY: docker-build
+docker-build: ## Build the core container image
+	docker build -f infra/docker/core.Dockerfile \
+		--build-arg VERSION=$$(git describe --tags --always --dirty) \
+		--build-arg COMMIT=$$(git rev-parse HEAD) \
+		--build-arg BUILT_AT=$$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+		-t ghcr.io/ppusapati/health/core:local .
+
 .PHONY: build
 build: ## Build the core deployable
 	go build -o bin/core ./cmd/core
@@ -105,5 +139,17 @@ web-check: ## Type-check the web workspace
 web-test: ## Run web workspace tests
 	cd apps/web && npm test
 
+.PHONY: mobile-get
+mobile-get: ## Install Flutter workspace dependencies
+	cd apps/mobile && flutter pub get
+
+.PHONY: mobile-analyze
+mobile-analyze: ## Analyze the Flutter workspace
+	cd apps/mobile && flutter analyze
+
+.PHONY: mobile-test
+mobile-test: ## Run Flutter unit and widget tests
+	cd apps/mobile && flutter test
+
 .PHONY: ci
-ci: lint test-fitness test ## Everything CI runs
+ci: lint test-fitness test-infra test ## Everything CI runs

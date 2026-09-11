@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: core-config
+data:
+  LOG_LEVEL: "info"
+  # Pre-production runs the real identity provider, so release verification
+  # exercises the same authentication path production will.
+  AUTH_MODE: "oidc"
+  ENVIRONMENT: "preproduction"

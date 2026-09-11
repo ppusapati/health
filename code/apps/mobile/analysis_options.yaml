@@ -1,0 +1,19 @@
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    # Generated from the canonical protos and never hand-edited (SRS-API-001).
+    # Holding it to hand-written lint rules produces only noise.
+    - lib/src/gen/**
+    - build/**
+    - android/**
+    - ios/**
+  errors:
+    # An unawaited future in a clinical workflow silently drops the work.
+    unawaited_futures: error
+
+linter:
+  rules:
+    - avoid_print
+    - prefer_final_locals
+    - unawaited_futures

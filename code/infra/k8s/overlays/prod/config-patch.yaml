@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: core-config
+data:
+  LOG_LEVEL: "info"
+  AUTH_MODE: "oidc"
+  ENVIRONMENT: "production"

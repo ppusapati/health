@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: core-config
+  namespace: healthcare
+  labels:
+    app.kubernetes.io/name: core
+data:
+  LISTEN_ADDR: ":8080"
+  LOG_LEVEL: "info"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector.observability:4317"
+  OTEL_SERVICE_NAME: "core"
+  # Deliberately absent: AUTH_MODE and DATABASE_URL. AUTH_MODE is set per
+  # overlay so a non-production value cannot reach production by inheriting a
+  # base default, and DATABASE_URL is a secret.

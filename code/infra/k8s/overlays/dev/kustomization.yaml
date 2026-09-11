@@ -1,0 +1,31 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: healthcare-dev
+
+resources:
+  - ../../base
+
+replicas:
+  - name: core
+    count: 1
+
+patches:
+  # Patches are addressed by explicit target rather than by embedded metadata:
+  # the overlay changes the namespace, so a patch relying on metadata alone
+  # silently fails to match.
+  - target:
+      kind: ConfigMap
+      name: core-config
+    path: config-patch.yaml
+  # Nightly restore verification is a production control; running it in dev
+  # only burns cluster time.
+  - target:
+      kind: CronJob
+      name: core-backup-verify
+    patch: |
+      $patch: delete
+      apiVersion: batch/v1
+      kind: CronJob
+      metadata:
+        name: core-backup-verify

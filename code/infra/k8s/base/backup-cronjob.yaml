@@ -1,0 +1,73 @@
+# Nightly logical backup with an immediate restore verification.
+#
+# SRS-NFR-016 is explicit that a successful backup is not evidence of anything:
+# only a tested restore is. This job therefore dumps, restores into a scratch
+# database and compares row counts, failing loudly if the restore does not
+# reproduce the source.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: core-backup-verify
+  namespace: healthcare
+  labels:
+    app.kubernetes.io/name: core-backup
+  annotations:
+    healthcare.io/owning-team: platform
+    healthcare.io/runbook: https://github.com/ppusapati/health/blob/main/code/docs/engineering/runbooks/backup-restore.md
+spec:
+  schedule: "0 1 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 7
+  failedJobsHistoryLimit: 14
+  startingDeadlineSeconds: 3600
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: Never
+          serviceAccountName: core
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: backup
+              image: postgres:16-alpine
+              command: ["/bin/sh", "/scripts/backup-verify.sh"]
+              env:
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: core-database
+                      key: url
+                - name: BACKUP_DESTINATION
+                  valueFrom:
+                    secretKeyRef:
+                      name: core-backup
+                      key: destination
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  memory: 1Gi
+              volumeMounts:
+                - name: scripts
+                  mountPath: /scripts
+                - name: work
+                  mountPath: /work
+          volumes:
+            - name: scripts
+              configMap:
+                name: backup-scripts
+            - name: work
+              emptyDir: {}

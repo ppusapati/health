@@ -1,0 +1,14 @@
+# Dart client generation for the mobile workspace.
+#
+# Gate A9 requires the Svelte and Flutter shells to consume the same canonical
+# contracts. That is achieved by generating both from proto/ rather than by
+# agreeing on a convention: handwritten wire types are prohibited (SRS-API-001).
+version: v2
+# Well-known types are NOT generated here: the protobuf package ships them, and
+# generating a second copy produces two incompatible Timestamp types.
+inputs:
+  - directory: ../../proto
+clean: true
+plugins:
+  - local: protoc-gen-dart
+    out: lib/src/gen

@@ -130,13 +130,17 @@ func TestFIT01_DomainPackagesArePure(t *testing.T) {
 // name such as "organization.facility.create" is not a query, and matching it
 // would make these tests useless noise.
 var sqlSchemaRef = regexp.MustCompile(
-	`(?i)\b(?:from|join|into|update|delete\s+from|table)\s+(organization|identity_access|platform_data)\.[a-z_]+`)
+	`(?i)\b(?:from|join|into|update|delete\s+from|table)\s+` +
+		`(organization|identity_access|platform_data|platform_workflow|platform_rules|platform_edge)\.[a-z_]+`)
 
 // schemaOwners maps a schema to the one package path allowed to reach it.
 var schemaOwners = map[string]string{
-	"organization":    "internal/organization/adapters/postgres",
-	"identity_access": "internal/identity_access/adapters/postgres",
-	"platform_data":   "internal/platform/store",
+	"organization":      "internal/organization/adapters/postgres",
+	"identity_access":   "internal/identity_access/adapters/postgres",
+	"platform_data":     "internal/platform/store",
+	"platform_workflow": "internal/platform/workflow",
+	"platform_rules":    "internal/platform/rules",
+	"platform_edge":     "internal/edge/cloudstore",
 }
 
 // TestSQLSchemaRefDetectorWorks guards the guard.
@@ -152,6 +156,9 @@ func TestSQLSchemaRefDetectorWorks(t *testing.T) {
 		`UPDATE organization.tenant SET status = 'active'`,
 		`DELETE FROM platform_data.inbox_message`,
 		`JOIN identity_access.user_account u ON u.id = x`,
+		`select 1 from platform_workflow.instance`,
+		`INSERT INTO platform_rules.rule_set (x) VALUES (1)`,
+		`UPDATE platform_edge.node SET status = 'revoked'`,
 	}
 	for _, sample := range shouldMatch {
 		if !sqlSchemaRef.MatchString(sample) {
@@ -211,6 +218,8 @@ func TestFIT02_GeneratedQueriesImportedOnlyByAdapters(t *testing.T) {
 		"internal/organization/adapters/postgres",
 		"internal/identity_access/adapters/postgres",
 		"internal/platform/store",
+		"internal/platform/workflow",
+		"internal/edge/cloudstore",
 	}
 
 	var importers int

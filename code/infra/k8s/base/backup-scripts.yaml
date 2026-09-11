@@ -1,0 +1,57 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backup-scripts
+  namespace: healthcare
+data:
+  backup-verify.sh: |
+    #!/bin/sh
+    # Dump, restore into a scratch database, and prove the restore matches.
+    # Exiting non-zero fails the Job, which is what raises the alert.
+    set -eu
+
+    STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+    DUMP="/work/core-${STAMP}.dump"
+
+    echo "dumping to ${DUMP}"
+    pg_dump --format=custom --no-owner --no-acl --file="${DUMP}" "${DATABASE_URL}"
+
+    # Row counts from the source, to compare against the restored copy.
+    SOURCE_COUNTS="$(psql "${DATABASE_URL}" -tAc "
+      SELECT string_agg(fmt, ',' ORDER BY fmt) FROM (
+        SELECT schemaname || '.' || relname || '=' || n_live_tup AS fmt
+        FROM pg_stat_user_tables
+        WHERE schemaname IN ('organization','identity_access','platform_data')
+      ) s")"
+
+    VERIFY_DB="restore_verify_${STAMP}"
+    ADMIN_URL="$(echo "${DATABASE_URL}" | sed 's#/[^/?]*\(?\|$\)#/postgres\1#')"
+
+    echo "restoring into ${VERIFY_DB}"
+    psql "${ADMIN_URL}" -c "CREATE DATABASE \"${VERIFY_DB}\""
+
+    VERIFY_URL="$(echo "${DATABASE_URL}" | sed "s#/[^/?]*\(?\|$\)#/${VERIFY_DB}\1#")"
+    pg_restore --no-owner --no-acl --dbname="${VERIFY_URL}" "${DUMP}"
+
+    psql "${VERIFY_URL}" -c "ANALYZE"
+    RESTORED_COUNTS="$(psql "${VERIFY_URL}" -tAc "
+      SELECT string_agg(fmt, ',' ORDER BY fmt) FROM (
+        SELECT schemaname || '.' || relname || '=' || n_live_tup AS fmt
+        FROM pg_stat_user_tables
+        WHERE schemaname IN ('organization','identity_access','platform_data')
+      ) s")"
+
+    psql "${ADMIN_URL}" -c "DROP DATABASE IF EXISTS \"${VERIFY_DB}\" WITH (FORCE)"
+
+    if [ "${SOURCE_COUNTS}" != "${RESTORED_COUNTS}" ]; then
+      echo "RESTORE VERIFICATION FAILED"
+      echo "  source:   ${SOURCE_COUNTS}"
+      echo "  restored: ${RESTORED_COUNTS}"
+      exit 1
+    fi
+
+    echo "restore verified; uploading"
+    # Upload only after verification: an unverified dump in the bucket invites
+    # false confidence during an incident.
+    cp "${DUMP}" "${BACKUP_DESTINATION}/core-${STAMP}.dump"
+    echo "backup complete: ${SOURCE_COUNTS}"

@@ -1,0 +1,12 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: core
+  namespace: healthcare
+spec:
+  # Keeps at least one replica serving during voluntary disruption such as a
+  # node drain. With replicas: 2 this permits one pod to move at a time.
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: core
