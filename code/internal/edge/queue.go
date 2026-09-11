@@ -66,13 +66,21 @@ CREATE TABLE IF NOT EXISTS operation (
     status       TEXT NOT NULL,
     attempts     INTEGER NOT NULL DEFAULT 0,
     last_error   TEXT NOT NULL DEFAULT '',
-    created_at   TEXT NOT NULL
+    created_at   TEXT NOT NULL,
+    -- When the cloud acknowledged it. NULL until then, and what retention is
+    -- measured from: an operation queued through a week-long outage was only
+    -- durable elsewhere from the moment it was acknowledged.
+    forwarded_at TEXT
 );
 
 -- The forwarder drains oldest-first so the cloud sees operations in the order
 -- they happened at the bedside.
 CREATE INDEX IF NOT EXISTS operation_pending_idx
     ON operation (status, occurred_at, operation_id);
+
+-- Retention sweeps look for acknowledged rows past their cutoff.
+CREATE INDEX IF NOT EXISTS operation_forwarded_idx
+    ON operation (status, forwarded_at);
 `
 
 // OpenQueue opens or creates the local queue at path.
@@ -172,10 +180,14 @@ func (q *Queue) Pending(ctx context.Context, limit int) ([]Operation, error) {
 }
 
 // MarkForwarded records cloud acknowledgement.
-func (q *Queue) MarkForwarded(ctx context.Context, operationID string) error {
+//
+// forwarded_at is what Purge measures retention from. Using occurred_at would
+// delete an operation an hour after it happened even if a week-long outage
+// meant the cloud only heard about it a minute ago.
+func (q *Queue) MarkForwarded(ctx context.Context, operationID string, at time.Time) error {
 	_, err := q.db.ExecContext(ctx,
-		`UPDATE operation SET status = ?, last_error = '' WHERE operation_id = ?`,
-		string(StatusForwarded), operationID)
+		`UPDATE operation SET status = ?, last_error = '', forwarded_at = ? WHERE operation_id = ?`,
+		string(StatusForwarded), at.UTC().Format(time.RFC3339Nano), operationID)
 	return err
 }
 
@@ -194,6 +206,34 @@ func (q *Queue) RecordFailure(ctx context.Context, operationID, reason string) e
 		`UPDATE operation SET attempts = attempts + 1, last_error = ? WHERE operation_id = ?`,
 		reason, operationID)
 	return err
+}
+
+// DefaultRetention is how long a forwarded operation's payload stays on the
+// edge after the cloud has acknowledged it.
+//
+// Short on purpose. Once the cloud holds the operation, the copy on the ward
+// machine is no longer a durability measure — it is only exposure. An edge box
+// sits in a corridor cupboard and is far easier to walk off with than a rack,
+// and the local queue is not encrypted at rest (see
+// docs/engineering/edge-ot-security-review.md, finding E-1). An hour is long
+// enough for an operator to see what was just sent and short enough that a
+// stolen node yields a shift's work rather than a year's.
+const DefaultRetention = time.Hour
+
+// Purge deletes forwarded operations acknowledged before the cutoff and
+// returns how many rows went.
+//
+// Only forwarded rows. A pending operation has not reached the cloud and
+// deleting it would lose clinical work; a rejected one is what an operator
+// needs to look at, and it is kept until a human deals with it.
+func (q *Queue) Purge(ctx context.Context, before time.Time) (int64, error) {
+	result, err := q.db.ExecContext(ctx,
+		`DELETE FROM operation WHERE status = ? AND forwarded_at IS NOT NULL AND forwarded_at < ?`,
+		string(StatusForwarded), before.UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 // Counts summarises the queue for the local operator display.

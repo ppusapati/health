@@ -19,7 +19,16 @@ android {
         applicationId = "io.healthcare.health_mobile"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        // API 23, not flutter.minSdkVersion.
+        //
+        // flutter_secure_storage's EncryptedSharedPreferences — the option that
+        // puts a credential behind an Android Keystore key rather than in a
+        // readable XML file — requires API 23. Below it the plugin falls back
+        // to plain preferences, and SRS-IAM-002 is silently violated on exactly
+        // the old handsets a ward is most likely to still be using.
+        //
+        // Taking flutter.minSdkVersion would let a Flutter upgrade lower this.
+        minSdk = 23
         targetSdk = flutter.targetSdkVersion
         // Uses the version code from pubspec.yaml. When using split APKs, 1000 * ABI_VERSION
         // is added automatically by Flutter. (https://developer.android.com/studio/build/configure-apk-splits#configure-APK-versions)

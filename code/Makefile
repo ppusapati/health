@@ -94,12 +94,18 @@ manifests: ## Render every Kubernetes overlay
 		kustomize build infra/k8s/overlays/$$env; \
 	done
 
+# Custom resources kubeconform has no schema for. Listed explicitly rather than
+# passing -ignore-missing-schemas, which would also swallow a misspelled core
+# kind — the exact mistake this gate exists to catch. Every entry here is
+# covered by a shape invariant in tools/infra instead.
+CRD_KINDS := ExternalSecret,SecretStore,ClusterPolicy
+
 .PHONY: manifests-validate
 manifests-validate: ## Render and schema-validate every overlay
 	@for env in dev preprod prod; do \
 		printf '%-9s ' "$$env"; \
 		kustomize build infra/k8s/overlays/$$env | \
-			kubeconform -strict -summary -schema-location default || exit 1; \
+			kubeconform -strict -summary -schema-location default -skip $(CRD_KINDS) || exit 1; \
 	done
 
 .PHONY: test-contract

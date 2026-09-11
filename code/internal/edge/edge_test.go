@@ -452,3 +452,184 @@ func TestLabelTextCannotInjectPrinterCommands(t *testing.T) {
 		t.Fatalf("injected command survived escaping:\n%s", payload)
 	}
 }
+
+// Local retention (A12, finding E-1).
+//
+// The edge box is the least physically protected component in the deployment
+// and its queue is not encrypted at rest, so an acknowledged operation left on
+// disk is pure exposure: the cloud already holds it, and the local copy only
+// adds to what a stolen node yields.
+
+func TestForwardedOperationsArePurgedAfterRetention(t *testing.T) {
+	queue := newQueue(t)
+	clock := &fakeClock{now: time.Date(2026, 9, 11, 10, 0, 0, 0, time.UTC)}
+
+	forwarder := edge.NewForwarder(queue, newUplink(), 10).
+		WithRetention(time.Hour).
+		WithClock(clock.Now)
+
+	ctx := context.Background()
+	enqueueAt(t, queue, "op-1", clock.now)
+
+	if _, err := forwarder.Drain(ctx); err != nil {
+		t.Fatalf("Drain: %v", err)
+	}
+	if counts := queueCounts(t, queue); counts.Forwarded != 1 {
+		t.Fatalf("Forwarded = %d, want 1", counts.Forwarded)
+	}
+
+	// Inside the window: still there. An operator checking what was just sent
+	// must be able to see it.
+	clock.advance(30 * time.Minute)
+	if err := forwarder.PurgeExpired(ctx); err != nil {
+		t.Fatalf("PurgeExpired: %v", err)
+	}
+	if counts := queueCounts(t, queue); counts.Forwarded != 1 {
+		t.Fatalf("an operation was purged inside its retention window")
+	}
+
+	clock.advance(45 * time.Minute)
+	if err := forwarder.PurgeExpired(ctx); err != nil {
+		t.Fatalf("PurgeExpired: %v", err)
+	}
+	if counts := queueCounts(t, queue); counts.Forwarded != 0 {
+		t.Fatalf("Forwarded = %d after retention, want 0", counts.Forwarded)
+	}
+}
+
+// Retention must never take work the cloud has not acknowledged. That would be
+// the one failure worse than the exposure it is guarding against.
+func TestRetentionNeverDeletesUnacknowledgedWork(t *testing.T) {
+	queue := newQueue(t)
+	clock := &fakeClock{now: time.Date(2026, 9, 11, 10, 0, 0, 0, time.UTC)}
+
+	link := newUplink()
+	link.up = false
+	forwarder := edge.NewForwarder(queue, link, 10).
+		WithRetention(time.Hour).
+		WithClock(clock.Now)
+
+	ctx := context.Background()
+	enqueueAt(t, queue, "op-stranded", clock.now)
+
+	// The link is down, so nothing is acknowledged.
+	if _, err := forwarder.Drain(ctx); err != nil {
+		t.Fatalf("Drain: %v", err)
+	}
+
+	clock.advance(72 * time.Hour)
+	if err := forwarder.PurgeExpired(ctx); err != nil {
+		t.Fatalf("PurgeExpired: %v", err)
+	}
+
+	counts := queueCounts(t, queue)
+	if counts.Pending != 1 {
+		t.Fatalf("Pending = %d after a three-day outage, want 1 — clinical work was deleted", counts.Pending)
+	}
+}
+
+// Retention is measured from acknowledgement, not from when the operation
+// happened. An operation queued through a week-long outage was only durable
+// elsewhere from the moment the cloud heard about it.
+func TestRetentionIsMeasuredFromAcknowledgement(t *testing.T) {
+	queue := newQueue(t)
+	clock := &fakeClock{now: time.Date(2026, 9, 11, 10, 0, 0, 0, time.UTC)}
+
+	forwarder := edge.NewForwarder(queue, newUplink(), 10).
+		WithRetention(time.Hour).
+		WithClock(clock.Now)
+
+	ctx := context.Background()
+	// Captured a week ago, during the outage.
+	enqueueAt(t, queue, "op-old", clock.now.Add(-7*24*time.Hour))
+
+	if _, err := forwarder.Drain(ctx); err != nil {
+		t.Fatalf("Drain: %v", err)
+	}
+
+	// The link just came back. Measured from occurred_at this is a week
+	// overdue; measured from acknowledgement it is a minute old.
+	if err := forwarder.PurgeExpired(ctx); err != nil {
+		t.Fatalf("PurgeExpired: %v", err)
+	}
+	if counts := queueCounts(t, queue); counts.Forwarded != 1 {
+		t.Fatal("an operation was purged the moment it was acknowledged")
+	}
+}
+
+// A rejected operation is what an operator needs to look at, so it stays until
+// a human deals with it however long that takes.
+func TestRetentionKeepsRejectedOperations(t *testing.T) {
+	queue := newQueue(t)
+	clock := &fakeClock{now: time.Date(2026, 9, 11, 10, 0, 0, 0, time.UTC)}
+
+	link := newUplink()
+	link.reject["op-bad"] = "UNKNOWN_FACILITY"
+	forwarder := edge.NewForwarder(queue, link, 10).
+		WithRetention(time.Hour).
+		WithClock(clock.Now)
+
+	ctx := context.Background()
+	enqueueAt(t, queue, "op-bad", clock.now)
+
+	if _, err := forwarder.Drain(ctx); err != nil {
+		t.Fatalf("Drain: %v", err)
+	}
+
+	clock.advance(72 * time.Hour)
+	if err := forwarder.PurgeExpired(ctx); err != nil {
+		t.Fatalf("PurgeExpired: %v", err)
+	}
+	if counts := queueCounts(t, queue); counts.Rejected != 1 {
+		t.Fatal("a rejected operation was purged before anyone saw it")
+	}
+}
+
+// Zero retention keeps everything. A deployment with a regulatory reason to
+// retain locally must be able to say so, and it must be a deliberate setting
+// rather than a default nobody noticed.
+func TestZeroRetentionDisablesPurging(t *testing.T) {
+	queue := newQueue(t)
+	clock := &fakeClock{now: time.Date(2026, 9, 11, 10, 0, 0, 0, time.UTC)}
+
+	forwarder := edge.NewForwarder(queue, newUplink(), 10).
+		WithRetention(0).
+		WithClock(clock.Now)
+
+	ctx := context.Background()
+	enqueueAt(t, queue, "op-1", clock.now)
+	if _, err := forwarder.Drain(ctx); err != nil {
+		t.Fatalf("Drain: %v", err)
+	}
+
+	clock.advance(365 * 24 * time.Hour)
+	if err := forwarder.PurgeExpired(ctx); err != nil {
+		t.Fatalf("PurgeExpired: %v", err)
+	}
+	if counts := queueCounts(t, queue); counts.Forwarded != 1 {
+		t.Fatal("zero retention purged anyway")
+	}
+}
+
+type fakeClock struct{ now time.Time }
+
+func (c *fakeClock) Now() time.Time          { return c.now }
+func (c *fakeClock) advance(d time.Duration) { c.now = c.now.Add(d) }
+
+func enqueueAt(t *testing.T, queue *edge.Queue, id string, occurredAt time.Time) {
+	t.Helper()
+	operation := op(id, 0)
+	operation.OccurredAt = occurredAt
+	if err := queue.Enqueue(context.Background(), operation); err != nil {
+		t.Fatalf("Enqueue(%s): %v", id, err)
+	}
+}
+
+func queueCounts(t *testing.T, queue *edge.Queue) edge.Counts {
+	t.Helper()
+	counts, err := queue.Counts(context.Background())
+	if err != nil {
+		t.Fatalf("Counts: %v", err)
+	}
+	return counts
+}

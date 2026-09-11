@@ -19,9 +19,9 @@ this document records is which P0 items have working, tested implementations.
 | P0-06 | Event backbone | Implemented | Outbox, inbox dedup, publisher, envelope, plus PostgreSQL-backed fan-out delivery with leases, backoff and dead-lettering, wired into the composition root (ADR-005 closed) |
 | P0-07 | Workflow / rules engines | Implemented | Durable engine with per-instance version migration, multi-replica safety and an operator surface; deterministic rules with four-eyes publication, effective dating and a replayable decision log. ADR-006 and ADR-007 closed |
 | P0-08 | SvelteKit shell | Implemented | AppShell, context banner, generated client, facility screen, error/permission states |
-| P0-09 | Flutter shell | **Partial** | Generated Dart clients, Connect transport, session, offline queue, shell UI. Keystore and durable queue bindings outstanding |
-| P0-10 | Observability | **Partial** | Tracing, correlation propagation, PHI-safe logging. Collector export not wired |
-| P0-11 | DevSecOps | Implemented | Lint, vet, codegen drift, proto compatibility, plus a Security workflow: gitleaks, gosec, govulncheck, npm audit, syft SBOM, trivy image and IaC. Image signing not added |
+| P0-09 | Flutter shell | Implemented | Generated Dart clients, Connect transport, session, offline queue, shell UI. Platform bindings wired at the composition point and verified: Android Keystore via EncryptedSharedPreferences (minSdk pinned to 23, which the option requires), iOS Keychain bound to the device and gated on first unlock, atomic file-backed queue that survives a kill |
+| P0-10 | Observability | Implemented | Tracing, correlation propagation, PHI-safe logging, and OTLP export to the collector the manifests already named. Parent-based ratio sampling, service/version/environment on the resource, flush on shutdown. Tested against a real in-process OTLP receiver |
+| P0-11 | DevSecOps | Implemented | Lint, vet, codegen drift, proto compatibility, plus a Security workflow: gitleaks, gosec, govulncheck, npm audit, syft SBOM, trivy image and IaC. Release workflow signs the image keyless (cosign/Sigstore), attests SLSA provenance and the image SBOM, and verifies its own output; manifests pin every image by digest and a Kyverno policy refuses an unsigned one at admission |
 | P0-12 | Deployment platform | **Partial** | Distroless image, kustomize base + 3 overlays, network policy, PDB, backup-with-restore-verification. No cluster deploy executed |
 | P0-13 | Hospital edge prototype | Implemented | Enrollment, durable store-and-forward, local labelling, idempotent cloud ingest |
 | P0-14 | Architecture fitness tests | Implemented | FIT-01, FIT-02, FIT-03, FIT-06, FIT-08 plus layering rules |
@@ -41,7 +41,7 @@ this document records is which P0 items have working, tested implementations.
 | A9 | Svelte and Flutter consume the same contracts | **Pass** | Both generated from `proto/`; `connect_client_test.dart` asserts the procedure path matches the proto package |
 | A10 | Fitness tests block forbidden imports and cross-schema writes | **Pass** | `tools/fitness` |
 | A11 | Broker and workflow/rules ADRs closed after PoC | **Pass** | All three closed with the evidence the register asks for: [ADR-005](../adr/0005-event-broker.md) (benchmark + working transport), [ADR-006](../adr/0006-durable-workflow-engine.md) (reference long-running workflow + version upgrade test + multi-replica test), [ADR-007](../adr/0007-rules-engine.md) (decision-table reference implementation + replay). Each names its reopening triggers; ADR-006 is closed for Waves 1–6 and reopens unconditionally at Wave 7, which owns SRS-BPM-* |
-| A12 | Edge/OT trust-zone pattern approved | **Partial** | Edge prototype demonstrates the store-and-forward and enrollment pattern; OT DMZ and SCADA gateway not built, and the pattern has not been through security review |
+| A12 | Edge/OT trust-zone pattern approved | **Pass (edge); OT not built** | Security review at [`edge-ot-security-review.md`](edge-ot-security-review.md): the edge pattern is approved with named deployment requirements. Two findings fixed (node authentication is now an unforgeable `PeerFingerprint`; enrollment tokens are minted, bounded and redacted), one mitigated with residual risk accepted (unencrypted local queue, now retention-bounded). The OT/DMZ half is **not reviewed because it is not built** — Wave 7 SCADA and Wave 9 SRS-ONB-DEV own it |
 
 ## Open seams
 
@@ -105,10 +105,10 @@ matters and is not a formality:
 
 | Stack | Count | Command |
 |---|---|---|
-| Go | 682 tests across 39 packages | `make test` |
+| Go | 701 tests across 39 packages | `make test` |
 | Web (unit) | 85 tests across 8 files | `cd apps/web && npm test` |
 | Web (browser) | accessibility and cross-browser smoke, 3 browser profiles | `make web-a11y`, `make web-browsers` |
-| Flutter | 44 tests | `make mobile-test` |
+| Flutter | 54 tests | `make mobile-test` |
 
 Repository tests run against a real PostgreSQL rather than a mock: constraints,
 SQLSTATE codes and transaction semantics are what a mock gets wrong, and
@@ -127,6 +127,19 @@ working rather than a defect:
 | Risk-acceptance expiry (SRS-SEC-006) | Would refuse an expired acceptance; register is empty | `make test-security` |
 | Severity-1 defects (SRS-NFR-015) | Would refuse an open defect; register is empty | `make release-gate` |
 
+## What is still open
+
+Two items, and both need a cluster rather than more code:
+
+| Item | Why it cannot close here |
+|---|---|
+| P0-12 / A8 — cluster deploy, secret rotation, DR drill | Manifests render, schema-validate and have their invariants tested without a cluster, and the image builds. "It runs" is a different claim, and so is "the rotation runbook works" — both require an environment to run in. The runbooks exist; they have not been executed. |
+| SRS-SEC-013, SRS-NFR-005, SRS-SEC-002 | A penetration test, a disaster-recovery drill and a key-rotation drill. Each is an activity, not an artefact; `make release-gate` refuses a production release until the pentest engagement is registered, which is the control working. |
+
+Everything else that was previously **Partial** is now implemented and tested.
+Gate A12 is a partial pass by design rather than by omission: the edge pattern
+is approved, and the OT half is not reviewed because it is not built.
+
 ## Wave-1 readiness
 
 The Development Backlog lists eleven foundations Wave 1 needs before the Core
@@ -143,7 +156,7 @@ Clinical team can start. Current state:
 - Authorization baseline — ready, plus module entitlements enforced at the wire
 - Audit framework — ready, plus a tamper-evident security event chain
 - Svelte shell — ready, with accessibility and cross-browser gates in CI
-- Observability baseline — ready (export target not yet configured)
+- Observability baseline — ready, exporting to the collector
 - Testing/traceability framework — ready
 
 Wave 1 (EMPI first, per the backlog's vertical-slice sequence) can begin against

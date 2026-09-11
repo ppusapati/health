@@ -743,3 +743,151 @@ func TestEncryptionDetectorWorks(t *testing.T) {
 		t.Fatal("the encrypted storage class was not recognised")
 	}
 }
+
+// Supply chain (P0-11, SRS-SEC-006).
+//
+// Signing an image and then deploying it by tag proves nothing: a signature is
+// over a digest, so verifying a tag verifies whatever that tag happened to
+// point at a moment ago. These three invariants hold the chain together, and
+// they run without a cluster because the failure they prevent is a YAML edit.
+
+// imageRefs returns every container image referenced by a workload.
+func (d document) imageRefs() []string {
+	var refs []string
+
+	var walk func(node any)
+	walk = func(node any) {
+		switch typed := node.(type) {
+		case map[string]any:
+			// A container is anything with both a name and an image; that is
+			// true of initContainers and ephemeralContainers too, which is
+			// exactly why the walk is generic rather than a fixed path.
+			if image, ok := typed["image"].(string); ok {
+				if _, named := typed["name"]; named {
+					refs = append(refs, image)
+				}
+			}
+			for _, value := range typed {
+				walk(value)
+			}
+		case []any:
+			for _, value := range typed {
+				walk(value)
+			}
+		}
+	}
+	walk(d.data)
+	return refs
+}
+
+func TestImagesArePinnedByDigest(t *testing.T) {
+	var checked int
+
+	for _, doc := range loadManifests(t) {
+		for _, ref := range doc.imageRefs() {
+			checked++
+
+			if !strings.Contains(ref, "@sha256:") {
+				t.Errorf("%s deploys %q by tag; pin the digest that was signed", doc.path, ref)
+				continue
+			}
+			// A reference may carry both a tag and a digest. The digest wins at
+			// pull time, so this is safe, but it is also misleading in review —
+			// the tag reads as the thing being deployed and is not.
+			if before, _, _ := strings.Cut(ref, "@"); strings.Contains(before, ":") {
+				t.Errorf("%s deploys %q with both a tag and a digest; drop the tag", doc.path, ref)
+			}
+		}
+	}
+
+	if checked == 0 {
+		t.Fatal("no container images found; this invariant would pass vacuously")
+	}
+}
+
+// Every image must come from the registry the release pipeline publishes to.
+// A correctly-pinned digest from somewhere else is still an image nobody in
+// this repository built.
+func TestImagesComeFromTheReleaseRegistry(t *testing.T) {
+	// Postgres tooling in the backup job is the one legitimate third party: it
+	// is an upstream image, and pinning it by digest is the control that
+	// applies. Listed explicitly so adding another needs a deliberate edit.
+	allowedExternal := []string{"postgres@sha256:", "docker.io/library/postgres@sha256:"}
+
+	for _, doc := range loadManifests(t) {
+		for _, ref := range doc.imageRefs() {
+			if strings.HasPrefix(ref, "ghcr.io/ppusapati/health/") {
+				continue
+			}
+			external := false
+			for _, prefix := range allowedExternal {
+				if strings.HasPrefix(ref, prefix) {
+					external = true
+					break
+				}
+			}
+			if !external {
+				t.Errorf("%s deploys %q from outside the release registry", doc.path, ref)
+			}
+		}
+	}
+}
+
+// The cluster-side half. Signing without admission verification is a pipeline
+// gate, and a pipeline gate is bypassed by anyone with kubectl.
+func TestAdmissionVerifiesImageSignatures(t *testing.T) {
+	var policy *document
+
+	for _, doc := range loadManifests(t) {
+		if doc.kind() == "ClusterPolicy" {
+			found := doc
+			policy = &found
+			break
+		}
+	}
+	if policy == nil {
+		t.Fatal("no image-verification ClusterPolicy; signed images are never checked before a pod starts")
+	}
+
+	spec, _ := policy.data["spec"].(map[string]any)
+	if action, _ := spec["validationFailureAction"].(string); action != "Enforce" {
+		t.Errorf("the image policy is %q, not Enforce; it reports violations instead of refusing them", action)
+	}
+
+	rules, _ := spec["rules"].([]any)
+	if len(rules) == 0 {
+		t.Fatal("the image policy has no rules")
+	}
+
+	var sawSignature, sawProvenance bool
+	for _, raw := range rules {
+		rule, _ := raw.(map[string]any)
+		verify, _ := rule["verifyImages"].([]any)
+		for _, entry := range verify {
+			image, _ := entry.(map[string]any)
+
+			if required, ok := image["required"].(bool); !ok || !required {
+				t.Errorf("rule %v does not require verification; an unsigned image would pass", rule["name"])
+			}
+			if _, has := image["attestations"]; has {
+				sawProvenance = true
+				continue
+			}
+			if _, has := image["attestors"]; has {
+				sawSignature = true
+				// Without this, a mutable tag could resolve to one image at
+				// verification and another at pull.
+				if mutate, ok := image["mutateDigest"].(bool); !ok || !mutate {
+					t.Errorf("rule %v verifies a signature without pinning the digest it verified", rule["name"])
+				}
+			}
+		}
+	}
+
+	if !sawSignature {
+		t.Error("the policy never verifies a signature")
+	}
+	if !sawProvenance {
+		t.Error("the policy never verifies build provenance; the signature alone does not say which commit produced the image")
+	}
+}

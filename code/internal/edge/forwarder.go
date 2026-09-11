@@ -38,6 +38,10 @@ type Forwarder struct {
 	// batchSize bounds one drain so a long outage's backlog is worked through
 	// in steady increments rather than one enormous burst on reconnection.
 	batchSize int
+	// retention is how long an acknowledged operation's payload stays on the
+	// ward machine. See Queue.Purge.
+	retention time.Duration
+	now       func() time.Time
 }
 
 // DefaultBatchSize is the default drain size.
@@ -48,7 +52,30 @@ func NewForwarder(queue *Queue, uplink Uplink, batchSize int) *Forwarder {
 	if batchSize <= 0 {
 		batchSize = DefaultBatchSize
 	}
-	return &Forwarder{queue: queue, uplink: uplink, batchSize: batchSize}
+	return &Forwarder{
+		queue: queue, uplink: uplink, batchSize: batchSize,
+		retention: DefaultRetention,
+		now:       func() time.Time { return time.Now().UTC() },
+	}
+}
+
+// WithRetention overrides how long acknowledged operations are kept locally.
+//
+// A site with a regulatory reason to keep more, or a node in a less physically
+// secure place that should keep less, sets it here. Zero or negative disables
+// purging, which is a deliberate choice a deployment has to make rather than a
+// default it can drift into.
+func (f *Forwarder) WithRetention(d time.Duration) *Forwarder {
+	f.retention = d
+	return f
+}
+
+// WithClock injects time, so a retention test need not sleep.
+func (f *Forwarder) WithClock(now func() time.Time) *Forwarder {
+	if now != nil {
+		f.now = now
+	}
+	return f
 }
 
 // DrainResult reports what one drain achieved.
@@ -76,7 +103,7 @@ func (f *Forwarder) Drain(ctx context.Context) (DrainResult, error) {
 
 		switch {
 		case forwardErr == nil:
-			if err := f.queue.MarkForwarded(ctx, op.ID); err != nil {
+			if err := f.queue.MarkForwarded(ctx, op.ID, f.now()); err != nil {
 				return result, err
 			}
 			result.Forwarded++
@@ -115,6 +142,26 @@ func (f *Forwarder) Drain(ctx context.Context) (DrainResult, error) {
 	return result, nil
 }
 
+// PurgeExpired removes acknowledged operations past the retention window.
+//
+// Deleting a payload the cloud already holds is not data loss; leaving it is
+// exposure. The edge box is the least physically protected thing in the
+// deployment and its queue is not encrypted at rest.
+func (f *Forwarder) PurgeExpired(ctx context.Context) error {
+	if f.retention <= 0 {
+		return nil
+	}
+	removed, err := f.queue.Purge(ctx, f.now().Add(-f.retention))
+	if err != nil {
+		return err
+	}
+	if removed > 0 {
+		slog.LogAttrs(ctx, slog.LevelInfo, "edge retention sweep",
+			slog.Int64("removed", removed))
+	}
+	return nil
+}
+
 // Run drains on an interval until the context is cancelled. A real deployment
 // would add jitter so a site-wide reconnection does not stampede the cloud.
 func (f *Forwarder) Run(ctx context.Context, interval time.Duration) error {
@@ -128,6 +175,14 @@ func (f *Forwarder) Run(ctx context.Context, interval time.Duration) error {
 		case <-ticker.C:
 			if _, err := f.Drain(ctx); err != nil {
 				slog.LogAttrs(ctx, slog.LevelError, "edge drain failed",
+					slog.String("error", err.Error()))
+			}
+			// Retention runs on the same tick as the drain rather than on its
+			// own schedule: the rows it removes are the ones the drain just
+			// acknowledged, and a separate timer is one more thing that can be
+			// left unstarted.
+			if err := f.PurgeExpired(ctx); err != nil {
+				slog.LogAttrs(ctx, slog.LevelError, "edge retention sweep failed",
 					slog.String("error", err.Error()))
 			}
 		}

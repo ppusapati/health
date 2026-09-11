@@ -51,15 +51,23 @@ func main() {
 }
 
 func run() error {
-	shutdownTracing := obs.Setup("core")
-	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-		defer cancel()
-		_ = shutdownTracing(ctx)
-	}()
-
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	// Traces go to the collector named by OTEL_EXPORTER_OTLP_ENDPOINT. An
+	// unreachable or misconfigured collector is a startup failure rather than a
+	// warning: the deployment asked for telemetry, and a service that runs
+	// happily with its spans going nowhere is one whose first incident is
+	// investigated without them.
+	shutdownTracing, err := obs.SetupFromEnv(ctx, "core", version)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer cancel()
+		_ = shutdownTracing(shutdownCtx)
+	}()
 
 	// Transport security is settled before anything opens a socket
 	// (SRS-SEC-001). Both checks are startup failures rather than warnings: a

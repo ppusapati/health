@@ -1,0 +1,103 @@
+# Admission-time signature verification (SRS-SEC-006, P0-11).
+#
+# Signing an image proves who built it. It proves nothing about what is running
+# unless something checks the signature before the pod starts, and that check
+# has to happen in the cluster: a pipeline gate is bypassed by anyone with
+# kubectl.
+#
+# So the chain is three links, and all three are needed:
+#
+#   1. The release pipeline signs the image by digest (cosign keyless, Sigstore)
+#      and attaches SLSA build provenance.
+#   2. The manifests reference the image by digest, never by tag — enforced by
+#      tools/infra, because a signature is over a digest and verifying a tag
+#      verifies whatever that tag pointed at a moment ago.
+#   3. This policy refuses a pod whose image is not signed by our own workflow.
+#
+# Requires Kyverno in the cluster. A cluster without it admits everything, which
+# is why the runbook treats installing it as part of standing the environment
+# up rather than as an optional hardening step.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: core-images-must-be-signed
+  annotations:
+    policies.kyverno.io/title: Core images must be signed and provenanced
+    policies.kyverno.io/category: Supply chain
+    policies.kyverno.io/severity: critical
+    policies.kyverno.io/description: >-
+      Refuses any core workload whose image is not signed by this repository's
+      release workflow and does not carry SLSA build provenance for the same
+      digest.
+    app.kubernetes.io/part-of: healthcare
+    healthcare.io/runbook: docs/engineering/runbooks/core.md
+spec:
+  validationFailureAction: Enforce
+  background: false
+  # Signature verification costs a registry round trip, so it runs on admission
+  # only. Background scanning would re-verify every existing pod on a schedule
+  # against an upstream that may be briefly unavailable.
+  webhookTimeoutSeconds: 30
+  rules:
+    - name: verify-core-image-signature
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - healthcare
+      verifyImages:
+        - imageReferences:
+            - "ghcr.io/ppusapati/health/*"
+          # The digest that was verified is the digest that runs. Without this,
+          # a mutating tag could be resolved twice and admit a different image
+          # than the one whose signature passed.
+          mutateDigest: true
+          verifyDigest: true
+          required: true
+          attestors:
+            - count: 1
+              entries:
+                # Keyless. There is no signing key to store, rotate or leak:
+                # the identity is the workflow itself, proven by GitHub's OIDC
+                # token and recorded in the public transparency log.
+                - keyless:
+                    subject: "https://github.com/ppusapati/health/.github/workflows/release.yml@refs/tags/*"
+                    issuer: "https://token.actions.githubusercontent.com"
+                    rekor:
+                      url: https://rekor.sigstore.dev
+    - name: verify-core-image-provenance
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - healthcare
+      verifyImages:
+        - imageReferences:
+            - "ghcr.io/ppusapati/health/*"
+          required: true
+          attestations:
+            # Provenance answers a different question from the signature.
+            # The signature says "our workflow published this"; provenance says
+            # "and here is the commit, the workflow run and the builder that
+            # produced it", which is what an incident review actually needs.
+            - type: https://slsa.dev/provenance/v1
+              attestors:
+                - count: 1
+                  entries:
+                    - keyless:
+                        subject: "https://github.com/ppusapati/health/.github/workflows/release.yml@refs/tags/*"
+                        issuer: "https://token.actions.githubusercontent.com"
+                        rekor:
+                          url: https://rekor.sigstore.dev
+              conditions:
+                - all:
+                    # The provenance must name this repository. A valid
+                    # attestation from somebody else's build is still a valid
+                    # attestation.
+                    - key: "{{ buildDefinition.externalParameters.workflow.repository }}"
+                      operator: Equals
+                      value: "https://github.com/ppusapati/health"

@@ -14,32 +14,46 @@ class KeystoreSecureStore implements SecureStore {
   KeystoreSecureStore({FlutterSecureStorage? storage})
       : _storage = storage ??
             const FlutterSecureStorage(
-              aOptions: AndroidOptions(
-                // EncryptedSharedPreferences puts the entry behind a
-                // Keystore-held key rather than a plain XML file.
-                encryptedSharedPreferences: true,
-              ),
-              iOptions: IOSOptions(
-                // The credential is usable only while the device is unlocked,
-                // and never leaves this device in an iCloud or iTunes backup.
-                accessibility: KeychainAccessibility.first_unlock_this_device,
-              ),
+              aOptions: androidOptions,
+              iOptions: iosOptions,
             );
+
+  /// Android hardening.
+  ///
+  /// EncryptedSharedPreferences puts the entry behind a Keystore-held key
+  /// rather than a plain XML file. Named rather than inlined so a test can
+  /// assert it: this is a one-word difference between a credential in the
+  /// hardware keystore and a credential in a readable file, and it is the kind
+  /// of line that gets flipped to make a build work on an old emulator.
+  ///
+  /// Requires API 23; android/app/build.gradle.kts pins minSdk accordingly.
+  static const androidOptions = AndroidOptions(encryptedSharedPreferences: true);
+
+  /// iOS hardening.
+  ///
+  /// first_unlock_this_device means the credential is usable only after the
+  /// first unlock following a boot, and — the "this device" half — never leaves
+  /// the device in an iCloud or encrypted iTunes backup. A session token
+  /// restored onto a replacement handset from a backup is a session nobody
+  /// authenticated.
+  static const iosOptions = IOSOptions(
+    accessibility: KeychainAccessibility.first_unlock_this_device,
+  );
 
   final FlutterSecureStorage _storage;
 
   /// Namespace prefix, so a future feature cannot collide with the session.
-  static const _prefix = 'health.';
+  static const prefix = 'health.';
 
   @override
-  Future<String?> read(String key) => _storage.read(key: '$_prefix$key');
+  Future<String?> read(String key) => _storage.read(key: '$prefix$key');
 
   @override
   Future<void> write(String key, String value) =>
-      _storage.write(key: '$_prefix$key', value: value);
+      _storage.write(key: '$prefix$key', value: value);
 
   @override
-  Future<void> delete(String key) => _storage.delete(key: '$_prefix$key');
+  Future<void> delete(String key) => _storage.delete(key: '$prefix$key');
 
   @override
   Future<void> clear() async {
@@ -47,7 +61,7 @@ class KeystoreSecureStore implements SecureStore {
     // remove entries another package stored in the same keystore.
     final all = await _storage.readAll();
     for (final key in all.keys) {
-      if (key.startsWith(_prefix)) {
+      if (key.startsWith(prefix)) {
         await _storage.delete(key: key);
       }
     }

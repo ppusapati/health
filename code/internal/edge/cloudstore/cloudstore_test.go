@@ -52,7 +52,14 @@ func newFixture(t *testing.T) fixture {
 	}
 }
 
-func (f fixture) registerAndEnroll(t *testing.T, token string) cloudstore.Node {
+func (f fixture) registerAndEnroll(t *testing.T, token cloudstore.EnrollmentToken) cloudstore.Node {
+	t.Helper()
+	return f.registerAndEnrollAs(t, token, testFingerprint(t, "ward-3-edge"))
+}
+
+func (f fixture) registerAndEnrollAs(t *testing.T, token cloudstore.EnrollmentToken,
+	fingerprint cloudstore.PeerFingerprint) cloudstore.Node {
+
 	t.Helper()
 	ctx := context.Background()
 
@@ -63,7 +70,7 @@ func (f fixture) registerAndEnroll(t *testing.T, token string) cloudstore.Node {
 	if err := f.store.IssueEnrollmentToken(ctx, f.scope, nodeID, token, at.Add(time.Hour), at); err != nil {
 		t.Fatalf("IssueEnrollmentToken: %v", err)
 	}
-	node, err := f.store.RedeemEnrollmentToken(ctx, token, "sha256:abc", at)
+	node, err := f.store.RedeemEnrollmentToken(ctx, token, fingerprint, at)
 	if err != nil {
 		t.Fatalf("RedeemEnrollmentToken: %v", err)
 	}
@@ -72,7 +79,7 @@ func (f fixture) registerAndEnroll(t *testing.T, token string) cloudstore.Node {
 
 func TestEnrollmentLifecycle(t *testing.T) {
 	f := newFixture(t)
-	node := f.registerAndEnroll(t, "one-time-token")
+	node := f.registerAndEnroll(t, testToken(t))
 
 	if node.Status != cloudstore.NodeEnrolled {
 		t.Fatalf("Status = %q, want enrolled", node.Status)
@@ -86,9 +93,11 @@ func TestEnrollmentLifecycle(t *testing.T) {
 // who reads a provisioning log.
 func TestEnrollmentTokenCannotBeReused(t *testing.T) {
 	f := newFixture(t)
-	f.registerAndEnroll(t, "one-time-token")
+	token := testToken(t)
+	f.registerAndEnroll(t, token)
 
-	if _, err := f.store.RedeemEnrollmentToken(context.Background(), "one-time-token", "sha256:def", at); !errors.Is(err, cloudstore.ErrEnrollmentRejected) {
+	if _, err := f.store.RedeemEnrollmentToken(context.Background(), token,
+		testFingerprint(t, "impostor"), at); !errors.Is(err, cloudstore.ErrEnrollmentRejected) {
 		t.Fatalf("token reuse accepted: %v", err)
 	}
 }
@@ -101,11 +110,13 @@ func TestExpiredEnrollmentTokenIsRejected(t *testing.T) {
 	if _, err := f.store.RegisterNode(ctx, f.scope, nodeID, f.facilityID, "ward-4-edge", at); err != nil {
 		t.Fatalf("RegisterNode: %v", err)
 	}
-	if err := f.store.IssueEnrollmentToken(ctx, f.scope, nodeID, "expiring", at.Add(time.Minute), at); err != nil {
+	expiring := testToken(t)
+	if err := f.store.IssueEnrollmentToken(ctx, f.scope, nodeID, expiring, at.Add(time.Minute), at); err != nil {
 		t.Fatalf("IssueEnrollmentToken: %v", err)
 	}
 
-	if _, err := f.store.RedeemEnrollmentToken(ctx, "expiring", "sha256:abc", at.Add(time.Hour)); !errors.Is(err, cloudstore.ErrEnrollmentRejected) {
+	if _, err := f.store.RedeemEnrollmentToken(ctx, expiring, testFingerprint(t, "late"),
+		at.Add(time.Hour)); !errors.Is(err, cloudstore.ErrEnrollmentRejected) {
 		t.Fatalf("expired token accepted: %v", err)
 	}
 }
@@ -113,14 +124,15 @@ func TestExpiredEnrollmentTokenIsRejected(t *testing.T) {
 // Only the hash is stored: a leaked row must not yield a usable credential.
 func TestEnrollmentTokenIsStoredHashed(t *testing.T) {
 	f := newFixture(t)
-	f.registerAndEnroll(t, "secret-token-value")
+	token := testToken(t)
+	f.registerAndEnroll(t, token)
 
 	var stored string
 	if err := f.pool.QueryRow(context.Background(),
 		`SELECT token_hash FROM platform_edge.enrollment_token LIMIT 1`).Scan(&stored); err != nil {
 		t.Fatalf("read token: %v", err)
 	}
-	if stored == "secret-token-value" {
+	if stored == token.Reveal() {
 		t.Fatal("enrollment token stored in clear")
 	}
 	if len(stored) != 64 {
@@ -131,7 +143,7 @@ func TestEnrollmentTokenIsStoredHashed(t *testing.T) {
 // The core reconciliation guarantee: redelivery produces no second effect.
 func TestIngestIsIdempotentOnOperationID(t *testing.T) {
 	f := newFixture(t)
-	node := f.registerAndEnroll(t, "tok")
+	node := f.registerAndEnroll(t, testToken(t))
 	ctx := context.Background()
 
 	operationID := uuid.NewString()
@@ -167,7 +179,7 @@ func TestIngestIsIdempotentOnOperationID(t *testing.T) {
 // A revoked node's backlog must not be able to write after revocation.
 func TestRevokedNodeCannotIngest(t *testing.T) {
 	f := newFixture(t)
-	node := f.registerAndEnroll(t, "tok")
+	node := f.registerAndEnroll(t, testToken(t))
 	ctx := context.Background()
 
 	if err := f.store.RevokeNode(ctx, f.scope, node.ID, at); err != nil {
@@ -212,7 +224,7 @@ func TestPendingNodeCannotIngest(t *testing.T) {
 // One tenant's edge node must not be able to forward into another tenant.
 func TestIngestIsTenantScoped(t *testing.T) {
 	f := newFixture(t)
-	node := f.registerAndEnroll(t, "tok")
+	node := f.registerAndEnroll(t, testToken(t))
 
 	otherScope := authctx.NewSession(authctx.Session{
 		SubjectID: "attacker", TenantID: uuid.NewString(),
@@ -231,7 +243,7 @@ func TestIngestIsTenantScoped(t *testing.T) {
 // the cloud heard about it. Clinical and operational records need the former.
 func TestIngestPreservesEdgeOccurrenceTime(t *testing.T) {
 	f := newFixture(t)
-	node := f.registerAndEnroll(t, "tok")
+	node := f.registerAndEnroll(t, testToken(t))
 	ctx := context.Background()
 
 	occurredAt := at.Add(-3 * time.Hour)
@@ -280,15 +292,17 @@ func TestIngestFromNodeRequiresTheCredential(t *testing.T) {
 	if _, err := f.store.RegisterNode(ctx, f.scope, nodeID, f.facilityID, "ward-3-edge", at); err != nil {
 		t.Fatalf("RegisterNode: %v", err)
 	}
-	if err := f.store.IssueEnrollmentToken(ctx, f.scope, nodeID, "tok", at.Add(time.Hour), at); err != nil {
+	realNode := testFingerprint(t, "real-node")
+	token := testToken(t)
+	if err := f.store.IssueEnrollmentToken(ctx, f.scope, nodeID, token, at.Add(time.Hour), at); err != nil {
 		t.Fatalf("IssueEnrollmentToken: %v", err)
 	}
-	if _, err := f.store.RedeemEnrollmentToken(ctx, "tok", "sha256:real-node-cert", at); err != nil {
+	if _, err := f.store.RedeemEnrollmentToken(ctx, token, realNode, at); err != nil {
 		t.Fatalf("RedeemEnrollmentToken: %v", err)
 	}
 
 	// The genuine credential works and derives the tenant itself.
-	result, err := f.store.IngestFromNode(ctx, "sha256:real-node-cert", uuid.NewString(),
+	result, err := f.store.IngestFromNode(ctx, realNode, uuid.NewString(),
 		"edge.label_printed", json.RawMessage(`{}`), at, at)
 	if err != nil {
 		t.Fatalf("IngestFromNode with the real credential: %v", err)
@@ -297,15 +311,16 @@ func TestIngestFromNodeRequiresTheCredential(t *testing.T) {
 		t.Fatalf("outcome = %q", result.Outcome)
 	}
 
-	// Knowing the identifiers is not enough.
-	if _, err := f.store.IngestFromNode(ctx, "sha256:attacker-cert", uuid.NewString(),
+	// Knowing the identifiers is not enough. A certificate the node did not
+	// enrol with is simply a different node.
+	if _, err := f.store.IngestFromNode(ctx, testFingerprint(t, "attacker"), uuid.NewString(),
 		"edge.label_printed", json.RawMessage(`{}`), at, at); !errors.Is(err, cloudstore.ErrNodeNotAuthenticated) {
 		t.Fatalf("an unknown credential was accepted: %v", err)
 	}
 
-	// An empty credential must not match the enrollment-pending rows, whose
+	// An unset fingerprint must not match the enrollment-pending rows, whose
 	// fingerprint column is the empty string.
-	if _, err := f.store.IngestFromNode(ctx, "", uuid.NewString(),
+	if _, err := f.store.IngestFromNode(ctx, cloudstore.PeerFingerprint{}, uuid.NewString(),
 		"edge.label_printed", json.RawMessage(`{}`), at, at); !errors.Is(err, cloudstore.ErrNodeNotAuthenticated) {
 		t.Fatalf("an empty credential was accepted: %v", err)
 	}
@@ -316,10 +331,10 @@ func TestIngestFromNodeRequiresTheCredential(t *testing.T) {
 func TestRevokedNodeCredentialStopsAuthenticating(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	node := f.registerAndEnroll(t, "tok")
+	fingerprint := testFingerprint(t, "ward-3-edge")
+	node := f.registerAndEnrollAs(t, testToken(t), fingerprint)
 
-	// The fingerprint registerAndEnroll used.
-	if _, err := f.store.AuthenticateNode(ctx, "sha256:abc"); err != nil {
+	if _, err := f.store.AuthenticateNode(ctx, fingerprint); err != nil {
 		t.Fatalf("enrolled node failed to authenticate: %v", err)
 	}
 
@@ -327,7 +342,7 @@ func TestRevokedNodeCredentialStopsAuthenticating(t *testing.T) {
 		t.Fatalf("RevokeNode: %v", err)
 	}
 
-	if _, err := f.store.AuthenticateNode(ctx, "sha256:abc"); !errors.Is(err, cloudstore.ErrNodeNotAuthenticated) {
+	if _, err := f.store.AuthenticateNode(ctx, fingerprint); !errors.Is(err, cloudstore.ErrNodeNotAuthenticated) {
 		t.Fatalf("a revoked credential still authenticates: %v", err)
 	}
 }
@@ -337,10 +352,11 @@ func TestRevokedNodeCredentialStopsAuthenticating(t *testing.T) {
 func TestIngestFromNodeDerivesTenantFromTheCredential(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	node := f.registerAndEnroll(t, "tok")
+	fingerprint := testFingerprint(t, "ward-3-edge")
+	node := f.registerAndEnrollAs(t, testToken(t), fingerprint)
 
 	operationID := uuid.NewString()
-	if _, err := f.store.IngestFromNode(ctx, "sha256:abc", operationID,
+	if _, err := f.store.IngestFromNode(ctx, fingerprint, operationID,
 		"edge.label_printed", json.RawMessage(`{}`), at, at); err != nil {
 		t.Fatalf("IngestFromNode: %v", err)
 	}

@@ -10,8 +10,6 @@ package cloudstore
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"time"
@@ -104,19 +102,31 @@ func (s *Store) RegisterNode(ctx context.Context, scope authctx.TenantScope, nod
 	}, nil
 }
 
-// hashToken hashes an enrollment token for storage.
+// ErrEnrollmentValidityTooLong reports a token that would stay redeemable for
+// longer than a commissioning visit.
+var ErrEnrollmentValidityTooLong = errors.New("edge: enrollment token validity exceeds the maximum")
+
+// IssueEnrollmentToken stores the hash of a one-time token.
 //
 // Only the hash is persisted. A token readable from the database would be a
 // credential for anyone with read access to it, including a backup.
-func hashToken(token string) string {
-	sum := sha256.Sum256([]byte(token))
-	return hex.EncodeToString(sum[:])
-}
-
-// IssueEnrollmentToken stores the hash of a one-time token.
-func (s *Store) IssueEnrollmentToken(ctx context.Context, scope authctx.TenantScope, nodeID, token string, expiresAt, now time.Time) error {
+//
+// Takes an EnrollmentToken rather than a string, so the value is one this
+// package minted from crypto/rand. The stored form is an unsalted SHA-256,
+// which is the correct construction for a high-entropy random value and the
+// wrong one for anything a human chose.
+func (s *Store) IssueEnrollmentToken(ctx context.Context, scope authctx.TenantScope, nodeID string, token EnrollmentToken, expiresAt, now time.Time) error {
 	if scope.IsZero() {
 		return rpcerr.Internal("EDGE_TENANT_SCOPE_MISSING", "tenant scope is required")
+	}
+	if token.IsZero() {
+		return ErrWeakEnrollmentToken
+	}
+	if !expiresAt.After(now) {
+		return ErrEnrollmentRejected
+	}
+	if expiresAt.Sub(now) > MaxEnrollmentValidity {
+		return ErrEnrollmentValidityTooLong
 	}
 	tenantUUID, err := uuid.Parse(scope.TenantID())
 	if err != nil {
@@ -128,7 +138,7 @@ func (s *Store) IssueEnrollmentToken(ctx context.Context, scope authctx.TenantSc
 	}
 
 	return s.queries(ctx).InsertEnrollmentToken(ctx, sqlcgen.InsertEnrollmentTokenParams{
-		TokenHash: hashToken(token),
+		TokenHash: token.hash(),
 		NodeID:    nodeUUID,
 		TenantID:  tenantUUID,
 		ExpiresAt: timestamptz(expiresAt),
@@ -144,7 +154,18 @@ var ErrEnrollmentRejected = errors.New("edge: enrollment rejected")
 // The consume and the enrollment commit together, and the UPDATE only matches
 // an unconsumed, unexpired token. Two nodes racing the same token therefore
 // cannot both enrol: the second UPDATE matches nothing.
-func (s *Store) RedeemEnrollmentToken(ctx context.Context, token, credentialFingerprint string, now time.Time) (Node, error) {
+func (s *Store) RedeemEnrollmentToken(ctx context.Context, token EnrollmentToken,
+	fingerprint PeerFingerprint, now time.Time) (Node, error) {
+
+	if token.IsZero() {
+		return Node{}, ErrEnrollmentRejected
+	}
+	// A node enrolled without a credential could never authenticate again, and
+	// the row would sit in the registry looking enrolled.
+	if fingerprint.IsZero() {
+		return Node{}, ErrNoPeerCertificate
+	}
+
 	var node Node
 
 	err := s.tx.WithinTx(ctx, func(ctx context.Context) error {
@@ -152,7 +173,7 @@ func (s *Store) RedeemEnrollmentToken(ctx context.Context, token, credentialFing
 
 		rows, err := q.ConsumeEnrollmentToken(ctx, sqlcgen.ConsumeEnrollmentTokenParams{
 			ConsumedAt: timestamptz(now),
-			TokenHash:  hashToken(token),
+			TokenHash:  token.hash(),
 			Now:        timestamptz(now),
 		})
 		if err != nil {
@@ -164,7 +185,7 @@ func (s *Store) RedeemEnrollmentToken(ctx context.Context, token, credentialFing
 			return ErrEnrollmentRejected
 		}
 
-		row, err := q.GetEnrollmentTokenNode(ctx, hashToken(token))
+		row, err := q.GetEnrollmentTokenNode(ctx, token.hash())
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrEnrollmentRejected
 		}
@@ -173,7 +194,7 @@ func (s *Store) RedeemEnrollmentToken(ctx context.Context, token, credentialFing
 		}
 
 		enrolled, err := q.EnrollEdgeNode(ctx, sqlcgen.EnrollEdgeNodeParams{
-			CredentialFingerprint: credentialFingerprint,
+			CredentialFingerprint: fingerprint.String(),
 			EnrolledAt:            timestamptz(now),
 			UpdatedAt:             timestamptz(now),
 			NodeID:                row.NodeID,
@@ -218,15 +239,17 @@ var ErrNodeNotAuthenticated = errors.New("edge: node credential not recognised")
 // logs and manifests; possession of the credential is the only thing that
 // distinguishes the real node from anyone who has seen its identifiers.
 //
-// The transport is expected to terminate mTLS and pass the SHA-256 digest of
-// the peer certificate. Passing a value the caller supplied in a request body
-// would defeat the whole purpose.
-func (s *Store) AuthenticateNode(ctx context.Context, credentialFingerprint string) (Node, error) {
-	if credentialFingerprint == "" {
+// The fingerprint can only be constructed from a certificate the peer actually
+// presented (see PeerFingerprint), so a transport that reached for a header or
+// a request field instead would not compile. That mistake would turn node
+// authentication into "tell us who you are", and it is exactly the mistake the
+// non-secret identifiers in the request invite.
+func (s *Store) AuthenticateNode(ctx context.Context, fingerprint PeerFingerprint) (Node, error) {
+	if fingerprint.IsZero() {
 		return Node{}, ErrNodeNotAuthenticated
 	}
 
-	row, err := s.queries(ctx).GetEdgeNodeByFingerprint(ctx, credentialFingerprint)
+	row, err := s.queries(ctx).GetEdgeNodeByFingerprint(ctx, fingerprint.String())
 	if errors.Is(err, pgx.ErrNoRows) {
 		// Deliberately indistinguishable from a suspended or revoked node: a
 		// caller probing credentials learns nothing either way.
@@ -252,11 +275,11 @@ func (s *Store) AuthenticateNode(ctx context.Context, credentialFingerprint stri
 // the node and the tenant from the presented credential, so a node cannot name
 // a tenant it does not belong to — the identifiers in the request are never
 // consulted for authorization.
-func (s *Store) IngestFromNode(ctx context.Context, credentialFingerprint,
+func (s *Store) IngestFromNode(ctx context.Context, fingerprint PeerFingerprint,
 	operationID, operationType string,
 	payload json.RawMessage, occurredAt, now time.Time) (IngestResult, error) {
 
-	node, err := s.AuthenticateNode(ctx, credentialFingerprint)
+	node, err := s.AuthenticateNode(ctx, fingerprint)
 	if err != nil {
 		return IngestResult{}, err
 	}

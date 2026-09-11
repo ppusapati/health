@@ -57,7 +57,23 @@ spec:
               app.kubernetes.io/name: core
       containers:
         - name: core
-          image: ghcr.io/ppusapati/health/core:latest
+          # Pinned by digest, never by tag.
+          #
+          # A tag is a mutable pointer: `:latest` today and `:latest` tomorrow
+          # can be different images, so "the image we signed and scanned" and
+          # "the image that is running" are not the same statement. A digest is
+          # the image. This is also what makes signature verification mean
+          # anything — a signature is over a digest, and verifying a signature
+          # for a tag verifies whatever that tag happened to point at when the
+          # admission controller looked.
+          #
+          # The release pipeline substitutes the digest it built and signed
+          # (.github/workflows/release.yml). The placeholder below is not a
+          # deployable image on purpose: an overlay that has not been through
+          # the release pipeline should fail to pull rather than quietly run
+          # something else.
+          image: ghcr.io/ppusapati/health/core@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          # A digest cannot change, so there is nothing to re-pull.
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
