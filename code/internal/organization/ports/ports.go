@@ -70,3 +70,56 @@ type IDGenerator interface {
 type Clock interface {
 	Now() time.Time
 }
+
+// OrgUnitRepository persists organisational units (SRS-PLT-005).
+type OrgUnitRepository interface {
+	InsertOrgUnit(ctx context.Context, scope authctx.TenantScope, u domain.OrgUnit) error
+	GetOrgUnit(ctx context.Context, scope authctx.TenantScope, unitID string) (domain.OrgUnit, error)
+	ListOrgUnits(ctx context.Context, scope authctx.TenantScope, unitType domain.UnitType,
+		afterCode string, pageSize int32) ([]domain.OrgUnit, error)
+}
+
+// MasterDataChangeRepository persists proposed changes (SRS-PLT-008).
+type MasterDataChangeRepository interface {
+	// InsertChange returns FAILED_PRECONDITION when a change is already
+	// pending for the entity. The check belongs to a partial unique index, not
+	// to a prior read, so two concurrent proposals cannot both be accepted.
+	InsertChange(ctx context.Context, scope authctx.TenantScope, c domain.MasterDataChange) error
+	GetChange(ctx context.Context, scope authctx.TenantScope, changeID string) (domain.MasterDataChange, error)
+	// DecideChange refuses a decision by the proposer in the statement itself,
+	// so four eyes holds even against a caller that bypassed the domain.
+	DecideChange(ctx context.Context, scope authctx.TenantScope, c domain.MasterDataChange) error
+}
+
+// EntitlementRepository persists module entitlements (SRS-PLT-011).
+type EntitlementRepository interface {
+	InsertEntitlement(ctx context.Context, scope authctx.TenantScope, e domain.Entitlement) error
+	// EntitlementsForModule returns rows in both scopes — tenant-wide and the
+	// caller's facility — so the domain applies specificity rather than the
+	// query guessing at it.
+	EntitlementsForModule(ctx context.Context, scope authctx.TenantScope,
+		module, facilityID string) ([]domain.Entitlement, error)
+}
+
+// NumberIssuer allocates document numbers (SRS-PLT-014).
+type NumberIssuer interface {
+	EnsureSequence(ctx context.Context, scope authctx.TenantScope, s domain.NumberSequence) error
+	// IssueNumber is atomic and collision-free under concurrency; the property
+	// belongs to the statement, which takes a row lock, not to any caller-side
+	// coordination.
+	IssueNumber(ctx context.Context, scope authctx.TenantScope, numberScope domain.NumberScope,
+		facilityID, periodKey string, now time.Time) (string, error)
+}
+
+// CalendarRepository persists facility calendars (SRS-PLT-016).
+type CalendarRepository interface {
+	InsertCalendarEntry(ctx context.Context, scope authctx.TenantScope, e domain.CalendarEntry) error
+	CalendarEntriesOn(ctx context.Context, scope authctx.TenantScope,
+		facilityID string, date time.Time) ([]domain.CalendarEntry, error)
+}
+
+// LabelRepository persists multilingual display labels (SRS-PLT-017).
+type LabelRepository interface {
+	PutLabel(ctx context.Context, scope authctx.TenantScope, l domain.DisplayLabel) error
+	LabelsFor(ctx context.Context, scope authctx.TenantScope, codeSystem, code string) ([]domain.DisplayLabel, error)
+}

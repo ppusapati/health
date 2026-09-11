@@ -12,6 +12,42 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const decideMasterDataChange = `-- name: DecideMasterDataChange :execrows
+UPDATE organization.master_data_change
+SET status = $1, decided_by = $2, decided_at = $3,
+    decision_note = $4, updated_at = $3, version = version + 1
+WHERE tenant_id = $5 AND change_id = $6
+  AND status = 'pending_approval'
+  AND proposed_by <> $2
+`
+
+type DecideMasterDataChangeParams struct {
+	Status       string
+	DecidedBy    string
+	DecidedAt    pgtype.Timestamptz
+	DecisionNote string
+	TenantID     uuid.UUID
+	ChangeID     uuid.UUID
+}
+
+// The subject_id <> proposed_by predicate enforces four eyes in the statement,
+// so a caller that reached the store directly still cannot approve its own
+// proposal (SRS-PLT-008).
+func (q *Queries) DecideMasterDataChange(ctx context.Context, arg DecideMasterDataChangeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, decideMasterDataChange,
+		arg.Status,
+		arg.DecidedBy,
+		arg.DecidedAt,
+		arg.DecisionNote,
+		arg.TenantID,
+		arg.ChangeID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const facilityCodeExists = `-- name: FacilityCodeExists :one
 SELECT EXISTS (
     SELECT 1 FROM organization.facility
@@ -77,6 +113,113 @@ func (q *Queries) GetFacilityByID(ctx context.Context, arg GetFacilityByIDParams
 	return i, err
 }
 
+const getMasterDataChange = `-- name: GetMasterDataChange :one
+SELECT change_id, tenant_id, entity_type, entity_id, proposed, base_version,
+       status, effective_from, justification, proposed_by, proposed_at,
+       decided_by, decided_at, decision_note, created_at, updated_at, version
+FROM organization.master_data_change
+WHERE tenant_id = $1 AND change_id = $2
+`
+
+type GetMasterDataChangeParams struct {
+	TenantID uuid.UUID
+	ChangeID uuid.UUID
+}
+
+func (q *Queries) GetMasterDataChange(ctx context.Context, arg GetMasterDataChangeParams) (OrganizationMasterDataChange, error) {
+	row := q.db.QueryRow(ctx, getMasterDataChange, arg.TenantID, arg.ChangeID)
+	var i OrganizationMasterDataChange
+	err := row.Scan(
+		&i.ChangeID,
+		&i.TenantID,
+		&i.EntityType,
+		&i.EntityID,
+		&i.Proposed,
+		&i.BaseVersion,
+		&i.Status,
+		&i.EffectiveFrom,
+		&i.Justification,
+		&i.ProposedBy,
+		&i.ProposedAt,
+		&i.DecidedBy,
+		&i.DecidedAt,
+		&i.DecisionNote,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Version,
+	)
+	return i, err
+}
+
+const getOrgUnit = `-- name: GetOrgUnit :one
+SELECT unit_id, tenant_id, facility_id, unit_type, code, display_name,
+       parent_unit_id, effective_from, effective_until,
+       accepts_activity_when_inactive, created_at, updated_at, version
+FROM organization.org_unit
+WHERE tenant_id = $1 AND unit_id = $2
+`
+
+type GetOrgUnitParams struct {
+	TenantID uuid.UUID
+	UnitID   uuid.UUID
+}
+
+func (q *Queries) GetOrgUnit(ctx context.Context, arg GetOrgUnitParams) (OrganizationOrgUnit, error) {
+	row := q.db.QueryRow(ctx, getOrgUnit, arg.TenantID, arg.UnitID)
+	var i OrganizationOrgUnit
+	err := row.Scan(
+		&i.UnitID,
+		&i.TenantID,
+		&i.FacilityID,
+		&i.UnitType,
+		&i.Code,
+		&i.DisplayName,
+		&i.ParentUnitID,
+		&i.EffectiveFrom,
+		&i.EffectiveUntil,
+		&i.AcceptsActivityWhenInactive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Version,
+	)
+	return i, err
+}
+
+const getOrgUnitByCode = `-- name: GetOrgUnitByCode :one
+SELECT unit_id, tenant_id, facility_id, unit_type, code, display_name,
+       parent_unit_id, effective_from, effective_until,
+       accepts_activity_when_inactive, created_at, updated_at, version
+FROM organization.org_unit
+WHERE tenant_id = $1 AND unit_type = $2 AND code = $3
+`
+
+type GetOrgUnitByCodeParams struct {
+	TenantID uuid.UUID
+	UnitType string
+	Code     string
+}
+
+func (q *Queries) GetOrgUnitByCode(ctx context.Context, arg GetOrgUnitByCodeParams) (OrganizationOrgUnit, error) {
+	row := q.db.QueryRow(ctx, getOrgUnitByCode, arg.TenantID, arg.UnitType, arg.Code)
+	var i OrganizationOrgUnit
+	err := row.Scan(
+		&i.UnitID,
+		&i.TenantID,
+		&i.FacilityID,
+		&i.UnitType,
+		&i.Code,
+		&i.DisplayName,
+		&i.ParentUnitID,
+		&i.EffectiveFrom,
+		&i.EffectiveUntil,
+		&i.AcceptsActivityWhenInactive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Version,
+	)
+	return i, err
+}
+
 const getTenantByID = `-- name: GetTenantByID :one
 SELECT tenant_id, display_name, legal_jurisdiction, default_locale, time_zone,
        status, created_at, updated_at, version
@@ -111,6 +254,88 @@ func (q *Queries) GetTenantByID(ctx context.Context, tenantID uuid.UUID) (GetTen
 		&i.Version,
 	)
 	return i, err
+}
+
+const insertCalendarEntry = `-- name: InsertCalendarEntry :exec
+
+INSERT INTO organization.facility_calendar_entry (
+    entry_id, tenant_id, facility_id, entry_type, starts_on, ends_on,
+    label, override_permitted, created_at, updated_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6,
+    $7, $8, $9, $10
+)
+`
+
+type InsertCalendarEntryParams struct {
+	EntryID           uuid.UUID
+	TenantID          uuid.UUID
+	FacilityID        uuid.UUID
+	EntryType         string
+	StartsOn          pgtype.Date
+	EndsOn            pgtype.Date
+	Label             string
+	OverridePermitted bool
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+}
+
+// Facility calendars (SRS-PLT-016).
+func (q *Queries) InsertCalendarEntry(ctx context.Context, arg InsertCalendarEntryParams) error {
+	_, err := q.db.Exec(ctx, insertCalendarEntry,
+		arg.EntryID,
+		arg.TenantID,
+		arg.FacilityID,
+		arg.EntryType,
+		arg.StartsOn,
+		arg.EndsOn,
+		arg.Label,
+		arg.OverridePermitted,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	return err
+}
+
+const insertEntitlement = `-- name: InsertEntitlement :exec
+
+INSERT INTO organization.entitlement (
+    entitlement_id, tenant_id, facility_id, module, enabled,
+    effective_from, effective_until, granted_by, created_at, updated_at, version
+) VALUES (
+    $1, $2, $3, $4, $5,
+    $6, $7, $8, $9, $10, 1
+)
+`
+
+type InsertEntitlementParams struct {
+	EntitlementID  uuid.UUID
+	TenantID       uuid.UUID
+	FacilityID     pgtype.UUID
+	Module         string
+	Enabled        bool
+	EffectiveFrom  pgtype.Timestamptz
+	EffectiveUntil pgtype.Timestamptz
+	GrantedBy      string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+// Entitlements (SRS-PLT-011).
+func (q *Queries) InsertEntitlement(ctx context.Context, arg InsertEntitlementParams) error {
+	_, err := q.db.Exec(ctx, insertEntitlement,
+		arg.EntitlementID,
+		arg.TenantID,
+		arg.FacilityID,
+		arg.Module,
+		arg.Enabled,
+		arg.EffectiveFrom,
+		arg.EffectiveUntil,
+		arg.GrantedBy,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	return err
 }
 
 const insertFacility = `-- name: InsertFacility :exec
@@ -152,6 +377,102 @@ func (q *Queries) InsertFacility(ctx context.Context, arg InsertFacilityParams) 
 		arg.UpdatedAt,
 		arg.UpdatedBy,
 		arg.Version,
+	)
+	return err
+}
+
+const insertMasterDataChange = `-- name: InsertMasterDataChange :exec
+
+INSERT INTO organization.master_data_change (
+    change_id, tenant_id, entity_type, entity_id, proposed, base_version,
+    status, effective_from, justification, proposed_by, proposed_at,
+    created_at, updated_at, version
+) VALUES (
+    $1, $2, $3, $4, $5, $6,
+    $7, $8, $9, $10, $11,
+    $12, $13, 1
+)
+`
+
+type InsertMasterDataChangeParams struct {
+	ChangeID      uuid.UUID
+	TenantID      uuid.UUID
+	EntityType    string
+	EntityID      uuid.UUID
+	Proposed      []byte
+	BaseVersion   int64
+	Status        string
+	EffectiveFrom pgtype.Timestamptz
+	Justification string
+	ProposedBy    string
+	ProposedAt    pgtype.Timestamptz
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+}
+
+// Versioned master-data changes (SRS-PLT-008).
+func (q *Queries) InsertMasterDataChange(ctx context.Context, arg InsertMasterDataChangeParams) error {
+	_, err := q.db.Exec(ctx, insertMasterDataChange,
+		arg.ChangeID,
+		arg.TenantID,
+		arg.EntityType,
+		arg.EntityID,
+		arg.Proposed,
+		arg.BaseVersion,
+		arg.Status,
+		arg.EffectiveFrom,
+		arg.Justification,
+		arg.ProposedBy,
+		arg.ProposedAt,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	return err
+}
+
+const insertOrgUnit = `-- name: InsertOrgUnit :exec
+
+INSERT INTO organization.org_unit (
+    unit_id, tenant_id, facility_id, unit_type, code, display_name,
+    parent_unit_id, effective_from, effective_until,
+    accepts_activity_when_inactive, created_at, updated_at, version
+) VALUES (
+    $1, $2, $3, $4, $5, $6,
+    $7, $8, $9,
+    $10, $11, $12, 1
+)
+`
+
+type InsertOrgUnitParams struct {
+	UnitID                      uuid.UUID
+	TenantID                    uuid.UUID
+	FacilityID                  pgtype.UUID
+	UnitType                    string
+	Code                        string
+	DisplayName                 string
+	ParentUnitID                pgtype.UUID
+	EffectiveFrom               pgtype.Timestamptz
+	EffectiveUntil              pgtype.Timestamptz
+	AcceptsActivityWhenInactive bool
+	CreatedAt                   pgtype.Timestamptz
+	UpdatedAt                   pgtype.Timestamptz
+}
+
+// Organizational units (SRS-PLT-005).
+func (q *Queries) InsertOrgUnit(ctx context.Context, arg InsertOrgUnitParams) error {
+	_, err := q.db.Exec(ctx, insertOrgUnit,
+		arg.UnitID,
+		arg.TenantID,
+		arg.FacilityID,
+		arg.UnitType,
+		arg.Code,
+		arg.DisplayName,
+		arg.ParentUnitID,
+		arg.EffectiveFrom,
+		arg.EffectiveUntil,
+		arg.AcceptsActivityWhenInactive,
+		arg.CreatedAt,
+		arg.UpdatedAt,
 	)
 	return err
 }
@@ -200,6 +521,227 @@ func (q *Queries) InsertTenant(ctx context.Context, arg InsertTenantParams) erro
 		arg.Version,
 	)
 	return err
+}
+
+const issueFacilityNumber = `-- name: IssueFacilityNumber :one
+UPDATE organization.number_sequence
+SET next_value = next_value + 1, updated_at = $1
+WHERE tenant_id = $2 AND facility_id = $3
+  AND scope = $4 AND period_key = $5
+RETURNING (next_value - 1)::bigint AS issued, prefix, pad_width
+`
+
+type IssueFacilityNumberParams struct {
+	Now        pgtype.Timestamptz
+	TenantID   uuid.UUID
+	FacilityID pgtype.UUID
+	Scope      string
+	PeriodKey  string
+}
+
+type IssueFacilityNumberRow struct {
+	Issued   int64
+	Prefix   string
+	PadWidth int32
+}
+
+func (q *Queries) IssueFacilityNumber(ctx context.Context, arg IssueFacilityNumberParams) (IssueFacilityNumberRow, error) {
+	row := q.db.QueryRow(ctx, issueFacilityNumber,
+		arg.Now,
+		arg.TenantID,
+		arg.FacilityID,
+		arg.Scope,
+		arg.PeriodKey,
+	)
+	var i IssueFacilityNumberRow
+	err := row.Scan(&i.Issued, &i.Prefix, &i.PadWidth)
+	return i, err
+}
+
+const issueTenantNumber = `-- name: IssueTenantNumber :one
+UPDATE organization.number_sequence
+SET next_value = next_value + 1, updated_at = $1
+WHERE tenant_id = $2 AND scope = $3 AND period_key = $4
+  AND facility_id IS NULL
+RETURNING (next_value - 1)::bigint AS issued, prefix, pad_width
+`
+
+type IssueTenantNumberParams struct {
+	Now       pgtype.Timestamptz
+	TenantID  uuid.UUID
+	Scope     string
+	PeriodKey string
+}
+
+type IssueTenantNumberRow struct {
+	Issued   int64
+	Prefix   string
+	PadWidth int32
+}
+
+// The whole of SRS-PLT-014's "atomic and collision-free under concurrency" is
+// this statement. UPDATE ... RETURNING takes a row lock, so concurrent callers
+// serialise on it and each receives a distinct value; and because it is an
+// ordinary transactional write, a rolled-back transaction returns its number
+// rather than burning it — which a PostgreSQL SEQUENCE would not do, and which
+// an invoice number a tax authority expects to be gapless requires.
+// The ::bigint cast is load-bearing: without it sqlc types the expression as
+// int32 and the counter silently wraps at about 2.1 billion, which an MRN
+// sequence for a large group would eventually reach.
+func (q *Queries) IssueTenantNumber(ctx context.Context, arg IssueTenantNumberParams) (IssueTenantNumberRow, error) {
+	row := q.db.QueryRow(ctx, issueTenantNumber,
+		arg.Now,
+		arg.TenantID,
+		arg.Scope,
+		arg.PeriodKey,
+	)
+	var i IssueTenantNumberRow
+	err := row.Scan(&i.Issued, &i.Prefix, &i.PadWidth)
+	return i, err
+}
+
+const listCalendarEntriesOn = `-- name: ListCalendarEntriesOn :many
+SELECT entry_id, tenant_id, facility_id, entry_type, starts_on, ends_on,
+       label, override_permitted, created_at, updated_at
+FROM organization.facility_calendar_entry
+WHERE tenant_id = $1 AND facility_id = $2
+  AND starts_on <= $3 AND ends_on >= $3
+ORDER BY starts_on, entry_id
+`
+
+type ListCalendarEntriesOnParams struct {
+	TenantID   uuid.UUID
+	FacilityID uuid.UUID
+	OnDate     pgtype.Date
+}
+
+// Every entry covering a date, not just the first: a public holiday and a
+// planned closure can overlap, and they may differ on whether an override is
+// permitted. The caller needs both to decide.
+func (q *Queries) ListCalendarEntriesOn(ctx context.Context, arg ListCalendarEntriesOnParams) ([]OrganizationFacilityCalendarEntry, error) {
+	rows, err := q.db.Query(ctx, listCalendarEntriesOn, arg.TenantID, arg.FacilityID, arg.OnDate)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []OrganizationFacilityCalendarEntry{}
+	for rows.Next() {
+		var i OrganizationFacilityCalendarEntry
+		if err := rows.Scan(
+			&i.EntryID,
+			&i.TenantID,
+			&i.FacilityID,
+			&i.EntryType,
+			&i.StartsOn,
+			&i.EndsOn,
+			&i.Label,
+			&i.OverridePermitted,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDisplayLabels = `-- name: ListDisplayLabels :many
+SELECT label_id, tenant_id, code_system, code, locale, display, short_display,
+       created_at, updated_at
+FROM organization.display_label
+WHERE tenant_id = $1 AND code_system = $2 AND code = $3
+ORDER BY locale
+`
+
+type ListDisplayLabelsParams struct {
+	TenantID   uuid.UUID
+	CodeSystem string
+	Code       string
+}
+
+// All locales for a code, so the caller can apply its own fallback chain
+// (en-IN then en, say) without a query per candidate.
+func (q *Queries) ListDisplayLabels(ctx context.Context, arg ListDisplayLabelsParams) ([]OrganizationDisplayLabel, error) {
+	rows, err := q.db.Query(ctx, listDisplayLabels, arg.TenantID, arg.CodeSystem, arg.Code)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []OrganizationDisplayLabel{}
+	for rows.Next() {
+		var i OrganizationDisplayLabel
+		if err := rows.Scan(
+			&i.LabelID,
+			&i.TenantID,
+			&i.CodeSystem,
+			&i.Code,
+			&i.Locale,
+			&i.Display,
+			&i.ShortDisplay,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEntitlementsForModule = `-- name: ListEntitlementsForModule :many
+SELECT entitlement_id, tenant_id, facility_id, module, enabled,
+       effective_from, effective_until, granted_by, created_at, updated_at, version
+FROM organization.entitlement
+WHERE tenant_id = $1 AND module = $2
+  AND (facility_id IS NULL OR facility_id = $3)
+ORDER BY (facility_id IS NOT NULL) DESC, effective_from DESC, entitlement_id
+`
+
+type ListEntitlementsForModuleParams struct {
+	TenantID   uuid.UUID
+	Module     string
+	FacilityID pgtype.UUID
+}
+
+// Both scopes in one query, ordered so the more specific wins: a facility row
+// overrides the tenant-wide one, which is how a single ward pilots a module.
+func (q *Queries) ListEntitlementsForModule(ctx context.Context, arg ListEntitlementsForModuleParams) ([]OrganizationEntitlement, error) {
+	rows, err := q.db.Query(ctx, listEntitlementsForModule, arg.TenantID, arg.Module, arg.FacilityID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []OrganizationEntitlement{}
+	for rows.Next() {
+		var i OrganizationEntitlement
+		if err := rows.Scan(
+			&i.EntitlementID,
+			&i.TenantID,
+			&i.FacilityID,
+			&i.Module,
+			&i.Enabled,
+			&i.EffectiveFrom,
+			&i.EffectiveUntil,
+			&i.GrantedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Version,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listFacilities = `-- name: ListFacilities :many
@@ -275,4 +817,279 @@ func (q *Queries) ListFacilities(ctx context.Context, arg ListFacilitiesParams) 
 		return nil, err
 	}
 	return items, nil
+}
+
+const listOrgUnits = `-- name: ListOrgUnits :many
+SELECT unit_id, tenant_id, facility_id, unit_type, code, display_name,
+       parent_unit_id, effective_from, effective_until,
+       accepts_activity_when_inactive, created_at, updated_at, version
+FROM organization.org_unit
+WHERE tenant_id = $1 AND unit_type = $2
+  AND ($3::text = '' OR code > $3)
+ORDER BY code, unit_id
+LIMIT $4
+`
+
+type ListOrgUnitsParams struct {
+	TenantID  uuid.UUID
+	UnitType  string
+	AfterCode string
+	PageSize  int32
+}
+
+// Keyset pagination on (code, unit_id): no OFFSET, so a page is not skewed by
+// rows inserted while the caller is paging.
+func (q *Queries) ListOrgUnits(ctx context.Context, arg ListOrgUnitsParams) ([]OrganizationOrgUnit, error) {
+	rows, err := q.db.Query(ctx, listOrgUnits,
+		arg.TenantID,
+		arg.UnitType,
+		arg.AfterCode,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []OrganizationOrgUnit{}
+	for rows.Next() {
+		var i OrganizationOrgUnit
+		if err := rows.Scan(
+			&i.UnitID,
+			&i.TenantID,
+			&i.FacilityID,
+			&i.UnitType,
+			&i.Code,
+			&i.DisplayName,
+			&i.ParentUnitID,
+			&i.EffectiveFrom,
+			&i.EffectiveUntil,
+			&i.AcceptsActivityWhenInactive,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Version,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPendingChanges = `-- name: ListPendingChanges :many
+SELECT change_id, tenant_id, entity_type, entity_id, proposed, base_version,
+       status, effective_from, justification, proposed_by, proposed_at,
+       decided_by, decided_at, decision_note, created_at, updated_at, version
+FROM organization.master_data_change
+WHERE tenant_id = $1 AND status = 'pending_approval'
+ORDER BY proposed_at, change_id
+LIMIT $2
+`
+
+type ListPendingChangesParams struct {
+	TenantID uuid.UUID
+	PageSize int32
+}
+
+func (q *Queries) ListPendingChanges(ctx context.Context, arg ListPendingChangesParams) ([]OrganizationMasterDataChange, error) {
+	rows, err := q.db.Query(ctx, listPendingChanges, arg.TenantID, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []OrganizationMasterDataChange{}
+	for rows.Next() {
+		var i OrganizationMasterDataChange
+		if err := rows.Scan(
+			&i.ChangeID,
+			&i.TenantID,
+			&i.EntityType,
+			&i.EntityID,
+			&i.Proposed,
+			&i.BaseVersion,
+			&i.Status,
+			&i.EffectiveFrom,
+			&i.Justification,
+			&i.ProposedBy,
+			&i.ProposedAt,
+			&i.DecidedBy,
+			&i.DecidedAt,
+			&i.DecisionNote,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Version,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTenantEntitlements = `-- name: ListTenantEntitlements :many
+SELECT entitlement_id, tenant_id, facility_id, module, enabled,
+       effective_from, effective_until, granted_by, created_at, updated_at, version
+FROM organization.entitlement
+WHERE tenant_id = $1
+ORDER BY module, (facility_id IS NOT NULL) DESC, effective_from DESC
+`
+
+func (q *Queries) ListTenantEntitlements(ctx context.Context, tenantID uuid.UUID) ([]OrganizationEntitlement, error) {
+	rows, err := q.db.Query(ctx, listTenantEntitlements, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []OrganizationEntitlement{}
+	for rows.Next() {
+		var i OrganizationEntitlement
+		if err := rows.Scan(
+			&i.EntitlementID,
+			&i.TenantID,
+			&i.FacilityID,
+			&i.Module,
+			&i.Enabled,
+			&i.EffectiveFrom,
+			&i.EffectiveUntil,
+			&i.GrantedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Version,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateOrgUnit = `-- name: UpdateOrgUnit :execrows
+UPDATE organization.org_unit
+SET display_name = $1, parent_unit_id = $2,
+    effective_from = $3, effective_until = $4,
+    accepts_activity_when_inactive = $5,
+    updated_at = $6, version = version + 1
+WHERE tenant_id = $7 AND unit_id = $8 AND version = $9
+`
+
+type UpdateOrgUnitParams struct {
+	DisplayName                 string
+	ParentUnitID                pgtype.UUID
+	EffectiveFrom               pgtype.Timestamptz
+	EffectiveUntil              pgtype.Timestamptz
+	AcceptsActivityWhenInactive bool
+	UpdatedAt                   pgtype.Timestamptz
+	TenantID                    uuid.UUID
+	UnitID                      uuid.UUID
+	ExpectedVersion             int64
+}
+
+func (q *Queries) UpdateOrgUnit(ctx context.Context, arg UpdateOrgUnitParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateOrgUnit,
+		arg.DisplayName,
+		arg.ParentUnitID,
+		arg.EffectiveFrom,
+		arg.EffectiveUntil,
+		arg.AcceptsActivityWhenInactive,
+		arg.UpdatedAt,
+		arg.TenantID,
+		arg.UnitID,
+		arg.ExpectedVersion,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const upsertDisplayLabel = `-- name: UpsertDisplayLabel :exec
+
+INSERT INTO organization.display_label (
+    label_id, tenant_id, code_system, code, locale, display, short_display,
+    created_at, updated_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7,
+    $8, $9
+)
+ON CONFLICT (tenant_id, code_system, code, locale) DO UPDATE
+SET display = EXCLUDED.display, short_display = EXCLUDED.short_display,
+    updated_at = EXCLUDED.updated_at
+`
+
+type UpsertDisplayLabelParams struct {
+	LabelID      uuid.UUID
+	TenantID     uuid.UUID
+	CodeSystem   string
+	Code         string
+	Locale       string
+	Display      string
+	ShortDisplay string
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+}
+
+// Display labels (SRS-PLT-017).
+func (q *Queries) UpsertDisplayLabel(ctx context.Context, arg UpsertDisplayLabelParams) error {
+	_, err := q.db.Exec(ctx, upsertDisplayLabel,
+		arg.LabelID,
+		arg.TenantID,
+		arg.CodeSystem,
+		arg.Code,
+		arg.Locale,
+		arg.Display,
+		arg.ShortDisplay,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	return err
+}
+
+const upsertNumberSequence = `-- name: UpsertNumberSequence :exec
+
+INSERT INTO organization.number_sequence (
+    sequence_id, tenant_id, facility_id, scope, prefix, pad_width,
+    next_value, period_key, created_at, updated_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6,
+    $7, $8, $9, $10
+)
+ON CONFLICT DO NOTHING
+`
+
+type UpsertNumberSequenceParams struct {
+	SequenceID uuid.UUID
+	TenantID   uuid.UUID
+	FacilityID pgtype.UUID
+	Scope      string
+	Prefix     string
+	PadWidth   int32
+	NextValue  int64
+	PeriodKey  string
+	CreatedAt  pgtype.Timestamptz
+	UpdatedAt  pgtype.Timestamptz
+}
+
+// Numbering sequences (SRS-PLT-014).
+func (q *Queries) UpsertNumberSequence(ctx context.Context, arg UpsertNumberSequenceParams) error {
+	_, err := q.db.Exec(ctx, upsertNumberSequence,
+		arg.SequenceID,
+		arg.TenantID,
+		arg.FacilityID,
+		arg.Scope,
+		arg.Prefix,
+		arg.PadWidth,
+		arg.NextValue,
+		arg.PeriodKey,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	return err
 }

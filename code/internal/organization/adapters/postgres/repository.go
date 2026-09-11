@@ -41,6 +41,22 @@ func (r *Repository) queries(ctx context.Context) *sqlcgen.Queries {
 	return sqlcgen.New(r.tx.Querier(ctx))
 }
 
+// scopeTenantID extracts the tenant from a verified scope.
+//
+// A zero scope is an internal error rather than a permission denial: the type
+// cannot be constructed without a session, so a zero one reaching here means a
+// caller built it by mistake, not that somebody was refused.
+func scopeTenantID(scope authctx.TenantScope) (uuid.UUID, error) {
+	if scope.IsZero() {
+		return uuid.Nil, rpcerr.Internal("ORG_TENANT_SCOPE_MISSING", "tenant scope is required")
+	}
+	id, err := uuid.Parse(scope.TenantID())
+	if err != nil {
+		return uuid.Nil, rpcerr.Internal("ORG_TENANT_INVALID", "tenant_id must be a UUID").WithCause(err)
+	}
+	return id, nil
+}
+
 func timestamptz(t time.Time) pgtype.Timestamptz {
 	return pgtype.Timestamptz{Time: t.UTC(), Valid: true}
 }

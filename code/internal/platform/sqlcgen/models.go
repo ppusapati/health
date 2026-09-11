@@ -9,6 +9,32 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type OrganizationDisplayLabel struct {
+	LabelID      uuid.UUID
+	TenantID     uuid.UUID
+	CodeSystem   string
+	Code         string
+	Locale       string
+	Display      string
+	ShortDisplay string
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+}
+
+type OrganizationEntitlement struct {
+	EntitlementID  uuid.UUID
+	TenantID       uuid.UUID
+	FacilityID     pgtype.UUID
+	Module         string
+	Enabled        bool
+	EffectiveFrom  pgtype.Timestamptz
+	EffectiveUntil pgtype.Timestamptz
+	GrantedBy      string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	Version        int64
+}
+
 type OrganizationFacility struct {
 	FacilityID  uuid.UUID
 	TenantID    uuid.UUID
@@ -22,6 +48,68 @@ type OrganizationFacility struct {
 	UpdatedAt   pgtype.Timestamptz
 	UpdatedBy   string
 	Version     int64
+}
+
+type OrganizationFacilityCalendarEntry struct {
+	EntryID           uuid.UUID
+	TenantID          uuid.UUID
+	FacilityID        uuid.UUID
+	EntryType         string
+	StartsOn          pgtype.Date
+	EndsOn            pgtype.Date
+	Label             string
+	OverridePermitted bool
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+}
+
+type OrganizationMasterDataChange struct {
+	ChangeID      uuid.UUID
+	TenantID      uuid.UUID
+	EntityType    string
+	EntityID      uuid.UUID
+	Proposed      []byte
+	BaseVersion   int64
+	Status        string
+	EffectiveFrom pgtype.Timestamptz
+	Justification string
+	ProposedBy    string
+	ProposedAt    pgtype.Timestamptz
+	DecidedBy     string
+	DecidedAt     pgtype.Timestamptz
+	DecisionNote  string
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+	Version       int64
+}
+
+type OrganizationNumberSequence struct {
+	SequenceID uuid.UUID
+	TenantID   uuid.UUID
+	Scope      string
+	FacilityID pgtype.UUID
+	Prefix     string
+	PadWidth   int32
+	NextValue  int64
+	PeriodKey  string
+	CreatedAt  pgtype.Timestamptz
+	UpdatedAt  pgtype.Timestamptz
+}
+
+type OrganizationOrgUnit struct {
+	UnitID                      uuid.UUID
+	TenantID                    uuid.UUID
+	FacilityID                  pgtype.UUID
+	UnitType                    string
+	Code                        string
+	DisplayName                 string
+	ParentUnitID                pgtype.UUID
+	EffectiveFrom               pgtype.Timestamptz
+	EffectiveUntil              pgtype.Timestamptz
+	AcceptsActivityWhenInactive bool
+	CreatedAt                   pgtype.Timestamptz
+	UpdatedAt                   pgtype.Timestamptz
+	Version                     int64
 }
 
 // SRS-PLT-001. tenant_id is immutable; display_name is not a key.

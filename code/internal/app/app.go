@@ -90,8 +90,17 @@ func New(deps Deps) *Server {
 	// is refused without paying for token verification. The error interceptor
 	// wraps auth, so an authentication failure is rendered through the same
 	// error contract as everything else. The subject rate limit comes after
-	// auth, where a caller identity finally exists to key on.
+	// auth, where a caller identity finally exists to key on. The entitlement
+	// check is last, because it needs the tenant and active facility that only
+	// a verified session carries — and it is an interceptor rather than a
+	// handler concern so a disabled module is unreachable by direct call
+	// (SRS-PLT-011).
 	rateLimiter := platformtransport.NewRateLimiter(deps.RateLimit, nil)
+
+	entitlements := orgapp.EntitlementChecker{
+		Entitlements: repo,
+		Clock:        systemClock{},
+	}
 
 	interceptors := connect.WithInterceptors(
 		platformtransport.NewTracingInterceptor(),
@@ -99,6 +108,7 @@ func New(deps Deps) *Server {
 		platformtransport.NewPeerRateLimitInterceptor(rateLimiter),
 		platformtransport.NewAuthInterceptor(deps.Verifier),
 		platformtransport.NewSubjectRateLimitInterceptor(rateLimiter),
+		platformtransport.NewEntitlementInterceptor(entitlements, nil),
 	)
 
 	mux := http.NewServeMux()
