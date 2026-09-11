@@ -76,3 +76,42 @@ type IDGenerator interface{ NewID() string }
 
 // Clock supplies the current time.
 type Clock interface{ Now() time.Time }
+
+// EmergencyGrantStore persists break-glass activations (SRS-SEC-014).
+type EmergencyGrantStore interface {
+	// InsertGrant returns domain.ErrGrantAlreadyActive when the subject
+	// already has an open grant. The check belongs to the database's partial
+	// unique index, not to a prior read, or two concurrent activations both
+	// succeed and the TTL bound means nothing.
+	InsertGrant(ctx context.Context, scope authctx.TenantScope, g domain.EmergencyGrant) error
+	GetGrant(ctx context.Context, scope authctx.TenantScope, grantID string) (domain.EmergencyGrant, error)
+	ActiveGrantFor(ctx context.Context, scope authctx.TenantScope, subjectID string) (domain.EmergencyGrant, bool, error)
+	RecordAccess(ctx context.Context, scope authctx.TenantScope, grantID, resourceRef string, now time.Time) error
+	CloseGrant(ctx context.Context, scope authctx.TenantScope, grantID string, at time.Time) error
+	ReviewGrant(ctx context.Context, scope authctx.TenantScope, g domain.EmergencyGrant, now time.Time) error
+	GrantsAwaitingReview(ctx context.Context, scope authctx.TenantScope, limit int32) ([]domain.EmergencyGrant, error)
+}
+
+// DowntimeStore persists outages and the paper actions owed to the record.
+type DowntimeStore interface {
+	InsertEpisode(ctx context.Context, scope authctx.TenantScope, e domain.DowntimeEpisode) error
+	// GetEpisode returns the episode with its actions. The domain's questions
+	// are all about the set, so returning one without the other invites a
+	// caller to answer them with incomplete information.
+	GetEpisode(ctx context.Context, scope authctx.TenantScope, episodeID string) (domain.DowntimeEpisode, error)
+	RecordAction(ctx context.Context, scope authctx.TenantScope, episodeID string, a domain.DowntimeAction) error
+	Restore(ctx context.Context, scope authctx.TenantScope, episodeID string, at time.Time) error
+	ReconcileAction(ctx context.Context, scope authctx.TenantScope, episodeID, actionID, reconciledBy, resourceRef string, at time.Time) error
+	CloseEpisode(ctx context.Context, scope authctx.TenantScope, episodeID, closedBy string, at time.Time) error
+	UnreconciledCount(ctx context.Context, scope authctx.TenantScope, episodeID string) (int64, error)
+}
+
+// GrantSweeper expires activations whose window has closed.
+//
+// Separate from EmergencyGrantStore, and deliberately takes no tenant scope: it
+// runs for the whole deployment, and a per-tenant sweep would leave a quiet
+// tenant's grants open indefinitely. Keeping it off the scoped port is what
+// stops a request handler reaching an untenanted write.
+type GrantSweeper interface {
+	ExpireGrants(ctx context.Context, now time.Time) (int64, error)
+}

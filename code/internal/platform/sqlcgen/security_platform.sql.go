@@ -42,6 +42,59 @@ func (q *Queries) ApproveExportRequest(ctx context.Context, arg ApproveExportReq
 	return result.RowsAffected(), nil
 }
 
+const closeDowntimeEpisode = `-- name: CloseDowntimeEpisode :execrows
+UPDATE security_platform.downtime_episode e
+SET status = 'reconciled', closed_by = $1, closed_at = $2
+WHERE e.tenant_id = $3 AND e.episode_id = $4 AND e.status = 'recovering'
+  AND NOT EXISTS (
+      SELECT 1 FROM security_platform.downtime_action a
+      WHERE a.episode_id = e.episode_id AND a.reconciled_at IS NULL
+  )
+`
+
+type CloseDowntimeEpisodeParams struct {
+	ClosedBy  string
+	ClosedAt  pgtype.Timestamptz
+	TenantID  uuid.UUID
+	EpisodeID uuid.UUID
+}
+
+// The NOT EXISTS clause is the control, not a convenience: an episode closed
+// with unreconciled actions means paper that never reaches the chart. Putting
+// it in the statement means a caller cannot close one by skipping the domain.
+func (q *Queries) CloseDowntimeEpisode(ctx context.Context, arg CloseDowntimeEpisodeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, closeDowntimeEpisode,
+		arg.ClosedBy,
+		arg.ClosedAt,
+		arg.TenantID,
+		arg.EpisodeID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const closeEmergencyGrant = `-- name: CloseEmergencyGrant :execrows
+UPDATE security_platform.emergency_grant
+SET status = 'closed', closed_at = $1
+WHERE tenant_id = $2 AND grant_id = $3 AND status = 'active'
+`
+
+type CloseEmergencyGrantParams struct {
+	ClosedAt pgtype.Timestamptz
+	TenantID uuid.UUID
+	GrantID  uuid.UUID
+}
+
+func (q *Queries) CloseEmergencyGrant(ctx context.Context, arg CloseEmergencyGrantParams) (int64, error) {
+	result, err := q.db.Exec(ctx, closeEmergencyGrant, arg.ClosedAt, arg.TenantID, arg.GrantID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const completeExportRequest = `-- name: CompleteExportRequest :execrows
 UPDATE security_platform.export_request
 SET status = 'completed', object_key = $1, object_sha256 = $2,
@@ -113,6 +166,23 @@ func (q *Queries) CountPurposeGrants(ctx context.Context, arg CountPurposeGrants
 	return count, err
 }
 
+const countUnreconciledActions = `-- name: CountUnreconciledActions :one
+SELECT count(*) FROM security_platform.downtime_action
+WHERE tenant_id = $1 AND episode_id = $2 AND reconciled_at IS NULL
+`
+
+type CountUnreconciledActionsParams struct {
+	TenantID  uuid.UUID
+	EpisodeID uuid.UUID
+}
+
+func (q *Queries) CountUnreconciledActions(ctx context.Context, arg CountUnreconciledActionsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countUnreconciledActions, arg.TenantID, arg.EpisodeID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const decideSubjectRequest = `-- name: DecideSubjectRequest :execrows
 UPDATE security_platform.subject_request
 SET status = $1, reviewer = $2, decision = $3,
@@ -152,6 +222,59 @@ func (q *Queries) DecideSubjectRequest(ctx context.Context, arg DecideSubjectReq
 	return result.RowsAffected(), nil
 }
 
+const expireEmergencyGrants = `-- name: ExpireEmergencyGrants :execrows
+UPDATE security_platform.emergency_grant
+SET status = 'expired', closed_at = expires_at
+WHERE status = 'active' AND expires_at <= $1
+`
+
+// Idempotent by construction: only rows still 'active' are touched, so the
+// at-least-once sweeper cannot move closed_at on a second pass.
+func (q *Queries) ExpireEmergencyGrants(ctx context.Context, now pgtype.Timestamptz) (int64, error) {
+	result, err := q.db.Exec(ctx, expireEmergencyGrants, now)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getActiveEmergencyGrant = `-- name: GetActiveEmergencyGrant :one
+SELECT grant_id, tenant_id, subject_id, facility_id, incident_ref, justification,
+       permissions, status, activated_at, expires_at, closed_at,
+       accessed_resources, reviewed_by, reviewed_at, review_note, correlation_id
+FROM security_platform.emergency_grant
+WHERE tenant_id = $1 AND subject_id = $2 AND status = 'active'
+`
+
+type GetActiveEmergencyGrantParams struct {
+	TenantID  uuid.UUID
+	SubjectID string
+}
+
+func (q *Queries) GetActiveEmergencyGrant(ctx context.Context, arg GetActiveEmergencyGrantParams) (SecurityPlatformEmergencyGrant, error) {
+	row := q.db.QueryRow(ctx, getActiveEmergencyGrant, arg.TenantID, arg.SubjectID)
+	var i SecurityPlatformEmergencyGrant
+	err := row.Scan(
+		&i.GrantID,
+		&i.TenantID,
+		&i.SubjectID,
+		&i.FacilityID,
+		&i.IncidentRef,
+		&i.Justification,
+		&i.Permissions,
+		&i.Status,
+		&i.ActivatedAt,
+		&i.ExpiresAt,
+		&i.ClosedAt,
+		&i.AccessedResources,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.ReviewNote,
+		&i.CorrelationID,
+	)
+	return i, err
+}
+
 const getCurrentPurposeGrant = `-- name: GetCurrentPurposeGrant :one
 SELECT grant_id, tenant_id, subject_ref, purpose_code, notice_version, granted,
        recorded_by, occurred_at
@@ -180,6 +303,75 @@ func (q *Queries) GetCurrentPurposeGrant(ctx context.Context, arg GetCurrentPurp
 		&i.Granted,
 		&i.RecordedBy,
 		&i.OccurredAt,
+	)
+	return i, err
+}
+
+const getDowntimeEpisode = `-- name: GetDowntimeEpisode :one
+SELECT episode_id, tenant_id, facility_id, planned, declared_by, declared_at,
+       reason, restored_at, status, closed_by, closed_at, correlation_id
+FROM security_platform.downtime_episode
+WHERE tenant_id = $1 AND episode_id = $2
+`
+
+type GetDowntimeEpisodeParams struct {
+	TenantID  uuid.UUID
+	EpisodeID uuid.UUID
+}
+
+func (q *Queries) GetDowntimeEpisode(ctx context.Context, arg GetDowntimeEpisodeParams) (SecurityPlatformDowntimeEpisode, error) {
+	row := q.db.QueryRow(ctx, getDowntimeEpisode, arg.TenantID, arg.EpisodeID)
+	var i SecurityPlatformDowntimeEpisode
+	err := row.Scan(
+		&i.EpisodeID,
+		&i.TenantID,
+		&i.FacilityID,
+		&i.Planned,
+		&i.DeclaredBy,
+		&i.DeclaredAt,
+		&i.Reason,
+		&i.RestoredAt,
+		&i.Status,
+		&i.ClosedBy,
+		&i.ClosedAt,
+		&i.CorrelationID,
+	)
+	return i, err
+}
+
+const getEmergencyGrant = `-- name: GetEmergencyGrant :one
+SELECT grant_id, tenant_id, subject_id, facility_id, incident_ref, justification,
+       permissions, status, activated_at, expires_at, closed_at,
+       accessed_resources, reviewed_by, reviewed_at, review_note, correlation_id
+FROM security_platform.emergency_grant
+WHERE tenant_id = $1 AND grant_id = $2
+`
+
+type GetEmergencyGrantParams struct {
+	TenantID uuid.UUID
+	GrantID  uuid.UUID
+}
+
+func (q *Queries) GetEmergencyGrant(ctx context.Context, arg GetEmergencyGrantParams) (SecurityPlatformEmergencyGrant, error) {
+	row := q.db.QueryRow(ctx, getEmergencyGrant, arg.TenantID, arg.GrantID)
+	var i SecurityPlatformEmergencyGrant
+	err := row.Scan(
+		&i.GrantID,
+		&i.TenantID,
+		&i.SubjectID,
+		&i.FacilityID,
+		&i.IncidentRef,
+		&i.Justification,
+		&i.Permissions,
+		&i.Status,
+		&i.ActivatedAt,
+		&i.ExpiresAt,
+		&i.ClosedAt,
+		&i.AccessedResources,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.ReviewNote,
+		&i.CorrelationID,
 	)
 	return i, err
 }
@@ -327,6 +519,134 @@ func (q *Queries) GetSubjectRequest(ctx context.Context, arg GetSubjectRequestPa
 		&i.Version,
 	)
 	return i, err
+}
+
+const insertDowntimeAction = `-- name: InsertDowntimeAction :execrows
+INSERT INTO security_platform.downtime_action (
+    action_id, episode_id, tenant_id, performed_by, performed_at, action_type,
+    subject_ref, summary, paper_form_ref
+) VALUES (
+    $1, $2, $3, $4, $5, $6,
+    $7, $8, $9
+)
+ON CONFLICT (action_id) DO NOTHING
+`
+
+type InsertDowntimeActionParams struct {
+	ActionID     uuid.UUID
+	EpisodeID    uuid.UUID
+	TenantID     uuid.UUID
+	PerformedBy  string
+	PerformedAt  pgtype.Timestamptz
+	ActionType   string
+	SubjectRef   string
+	Summary      string
+	PaperFormRef string
+}
+
+// ON CONFLICT DO NOTHING: a ward terminal that loses its response retries, and
+// duplicating a medication administration would be a clinical incident.
+func (q *Queries) InsertDowntimeAction(ctx context.Context, arg InsertDowntimeActionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertDowntimeAction,
+		arg.ActionID,
+		arg.EpisodeID,
+		arg.TenantID,
+		arg.PerformedBy,
+		arg.PerformedAt,
+		arg.ActionType,
+		arg.SubjectRef,
+		arg.Summary,
+		arg.PaperFormRef,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const insertDowntimeEpisode = `-- name: InsertDowntimeEpisode :exec
+
+INSERT INTO security_platform.downtime_episode (
+    episode_id, tenant_id, facility_id, planned, declared_by, declared_at,
+    reason, status, correlation_id
+) VALUES (
+    $1, $2, $3, $4, $5, $6,
+    $7, $8, $9
+)
+`
+
+type InsertDowntimeEpisodeParams struct {
+	EpisodeID     uuid.UUID
+	TenantID      uuid.UUID
+	FacilityID    string
+	Planned       bool
+	DeclaredBy    string
+	DeclaredAt    pgtype.Timestamptz
+	Reason        string
+	Status        string
+	CorrelationID string
+}
+
+// Downtime episodes (SRS-SEC-014).
+func (q *Queries) InsertDowntimeEpisode(ctx context.Context, arg InsertDowntimeEpisodeParams) error {
+	_, err := q.db.Exec(ctx, insertDowntimeEpisode,
+		arg.EpisodeID,
+		arg.TenantID,
+		arg.FacilityID,
+		arg.Planned,
+		arg.DeclaredBy,
+		arg.DeclaredAt,
+		arg.Reason,
+		arg.Status,
+		arg.CorrelationID,
+	)
+	return err
+}
+
+const insertEmergencyGrant = `-- name: InsertEmergencyGrant :exec
+
+INSERT INTO security_platform.emergency_grant (
+    grant_id, tenant_id, subject_id, facility_id, incident_ref, justification,
+    permissions, status, activated_at, expires_at, correlation_id
+) VALUES (
+    $1, $2, $3, $4, $5, $6,
+    $7, $8, $9, $10, $11
+)
+`
+
+type InsertEmergencyGrantParams struct {
+	GrantID       uuid.UUID
+	TenantID      uuid.UUID
+	SubjectID     string
+	FacilityID    string
+	IncidentRef   string
+	Justification string
+	Permissions   []string
+	Status        string
+	ActivatedAt   pgtype.Timestamptz
+	ExpiresAt     pgtype.Timestamptz
+	CorrelationID string
+}
+
+// Emergency access (SRS-SEC-014).
+// The partial unique index on (tenant_id, subject_id) WHERE status = 'active'
+// is what refuses a second concurrent activation; this insert relies on it
+// rather than on a prior SELECT, which would race.
+func (q *Queries) InsertEmergencyGrant(ctx context.Context, arg InsertEmergencyGrantParams) error {
+	_, err := q.db.Exec(ctx, insertEmergencyGrant,
+		arg.GrantID,
+		arg.TenantID,
+		arg.SubjectID,
+		arg.FacilityID,
+		arg.IncidentRef,
+		arg.Justification,
+		arg.Permissions,
+		arg.Status,
+		arg.ActivatedAt,
+		arg.ExpiresAt,
+		arg.CorrelationID,
+	)
+	return err
 }
 
 const insertExportDownload = `-- name: InsertExportDownload :exec
@@ -632,6 +952,104 @@ func (q *Queries) IsUnderLegalHold(ctx context.Context, arg IsUnderLegalHoldPara
 	return exists, err
 }
 
+const listDowntimeActions = `-- name: ListDowntimeActions :many
+SELECT action_id, episode_id, tenant_id, performed_by, performed_at, action_type,
+       subject_ref, summary, paper_form_ref, reconciled_by, reconciled_at, resource_ref
+FROM security_platform.downtime_action
+WHERE tenant_id = $1 AND episode_id = $2
+ORDER BY performed_at ASC, action_id ASC
+`
+
+type ListDowntimeActionsParams struct {
+	TenantID  uuid.UUID
+	EpisodeID uuid.UUID
+}
+
+func (q *Queries) ListDowntimeActions(ctx context.Context, arg ListDowntimeActionsParams) ([]SecurityPlatformDowntimeAction, error) {
+	rows, err := q.db.Query(ctx, listDowntimeActions, arg.TenantID, arg.EpisodeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SecurityPlatformDowntimeAction{}
+	for rows.Next() {
+		var i SecurityPlatformDowntimeAction
+		if err := rows.Scan(
+			&i.ActionID,
+			&i.EpisodeID,
+			&i.TenantID,
+			&i.PerformedBy,
+			&i.PerformedAt,
+			&i.ActionType,
+			&i.SubjectRef,
+			&i.Summary,
+			&i.PaperFormRef,
+			&i.ReconciledBy,
+			&i.ReconciledAt,
+			&i.ResourceRef,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGrantsAwaitingReview = `-- name: ListGrantsAwaitingReview :many
+SELECT grant_id, tenant_id, subject_id, facility_id, incident_ref, justification,
+       permissions, status, activated_at, expires_at, closed_at,
+       accessed_resources, reviewed_by, reviewed_at, review_note, correlation_id
+FROM security_platform.emergency_grant
+WHERE tenant_id = $1 AND status IN ('closed', 'expired')
+ORDER BY closed_at ASC, grant_id ASC
+LIMIT $2
+`
+
+type ListGrantsAwaitingReviewParams struct {
+	TenantID uuid.UUID
+	PageSize int32
+}
+
+func (q *Queries) ListGrantsAwaitingReview(ctx context.Context, arg ListGrantsAwaitingReviewParams) ([]SecurityPlatformEmergencyGrant, error) {
+	rows, err := q.db.Query(ctx, listGrantsAwaitingReview, arg.TenantID, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SecurityPlatformEmergencyGrant{}
+	for rows.Next() {
+		var i SecurityPlatformEmergencyGrant
+		if err := rows.Scan(
+			&i.GrantID,
+			&i.TenantID,
+			&i.SubjectID,
+			&i.FacilityID,
+			&i.IncidentRef,
+			&i.Justification,
+			&i.Permissions,
+			&i.Status,
+			&i.ActivatedAt,
+			&i.ExpiresAt,
+			&i.ClosedAt,
+			&i.AccessedResources,
+			&i.ReviewedBy,
+			&i.ReviewedAt,
+			&i.ReviewNote,
+			&i.CorrelationID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listHeldResourceIDs = `-- name: ListHeldResourceIDs :many
 SELECT resource_id FROM security_platform.legal_hold
 WHERE tenant_id = $1 AND resource_type = $2 AND released_at IS NULL
@@ -754,6 +1172,71 @@ func (q *Queries) PlaceLegalHold(ctx context.Context, arg PlaceLegalHoldParams) 
 	return result.RowsAffected(), nil
 }
 
+const reconcileDowntimeAction = `-- name: ReconcileDowntimeAction :execrows
+UPDATE security_platform.downtime_action
+SET reconciled_by = $1, reconciled_at = $2,
+    resource_ref = $3
+WHERE tenant_id = $4 AND episode_id = $5 AND action_id = $6
+  AND reconciled_at IS NULL
+`
+
+type ReconcileDowntimeActionParams struct {
+	ReconciledBy string
+	ReconciledAt pgtype.Timestamptz
+	ResourceRef  string
+	TenantID     uuid.UUID
+	EpisodeID    uuid.UUID
+	ActionID     uuid.UUID
+}
+
+func (q *Queries) ReconcileDowntimeAction(ctx context.Context, arg ReconcileDowntimeActionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, reconcileDowntimeAction,
+		arg.ReconciledBy,
+		arg.ReconciledAt,
+		arg.ResourceRef,
+		arg.TenantID,
+		arg.EpisodeID,
+		arg.ActionID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const recordEmergencyAccess = `-- name: RecordEmergencyAccess :execrows
+UPDATE security_platform.emergency_grant
+SET accessed_resources = CASE
+        WHEN $1::text = ANY (accessed_resources) THEN accessed_resources
+        ELSE array_append(accessed_resources, $1::text)
+    END
+WHERE tenant_id = $2 AND grant_id = $3
+  AND status = 'active' AND expires_at > $4
+`
+
+type RecordEmergencyAccessParams struct {
+	ResourceRef string
+	TenantID    uuid.UUID
+	GrantID     uuid.UUID
+	Now         pgtype.Timestamptz
+}
+
+// array_append only when absent, so a repeated read of the same record does not
+// inflate the list the reviewer reads. The expires_at predicate means a grant
+// past its window cannot record access even if the sweeper has not run.
+func (q *Queries) RecordEmergencyAccess(ctx context.Context, arg RecordEmergencyAccessParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordEmergencyAccess,
+		arg.ResourceRef,
+		arg.TenantID,
+		arg.GrantID,
+		arg.Now,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const rejectExportRequest = `-- name: RejectExportRequest :execrows
 UPDATE security_platform.export_request
 SET status = 'rejected', approved_by = $1, approved_at = $2,
@@ -804,6 +1287,65 @@ func (q *Queries) ReleaseLegalHold(ctx context.Context, arg ReleaseLegalHoldPara
 		arg.TenantID,
 		arg.ResourceType,
 		arg.ResourceID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const restoreDowntimeEpisode = `-- name: RestoreDowntimeEpisode :execrows
+UPDATE security_platform.downtime_episode
+SET status = 'recovering', restored_at = $1
+WHERE tenant_id = $2 AND episode_id = $3 AND status = 'open'
+`
+
+type RestoreDowntimeEpisodeParams struct {
+	RestoredAt pgtype.Timestamptz
+	TenantID   uuid.UUID
+	EpisodeID  uuid.UUID
+}
+
+func (q *Queries) RestoreDowntimeEpisode(ctx context.Context, arg RestoreDowntimeEpisodeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, restoreDowntimeEpisode, arg.RestoredAt, arg.TenantID, arg.EpisodeID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const reviewEmergencyGrant = `-- name: ReviewEmergencyGrant :execrows
+UPDATE security_platform.emergency_grant
+SET status = $1, reviewed_by = $2, reviewed_at = $3,
+    review_note = $4
+WHERE tenant_id = $5 AND grant_id = $6
+  AND (status IN ('closed', 'expired') OR (status = 'active' AND expires_at <= $7))
+  AND subject_id <> $2
+`
+
+type ReviewEmergencyGrantParams struct {
+	Status     string
+	ReviewedBy string
+	ReviewedAt pgtype.Timestamptz
+	ReviewNote string
+	TenantID   uuid.UUID
+	GrantID    uuid.UUID
+	Now        pgtype.Timestamptz
+}
+
+// "Ended" is a question about the clock, not about the sweeper: a grant whose
+// window has passed is reviewable even while the row still reads 'active',
+// so a reviewer working promptly after expiry is not told to come back later.
+// Same rule as RecordEmergencyAccess, which refuses on the same predicate.
+func (q *Queries) ReviewEmergencyGrant(ctx context.Context, arg ReviewEmergencyGrantParams) (int64, error) {
+	result, err := q.db.Exec(ctx, reviewEmergencyGrant,
+		arg.Status,
+		arg.ReviewedBy,
+		arg.ReviewedAt,
+		arg.ReviewNote,
+		arg.TenantID,
+		arg.GrantID,
+		arg.Now,
 	)
 	if err != nil {
 		return 0, err

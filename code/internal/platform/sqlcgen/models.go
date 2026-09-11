@@ -206,6 +206,55 @@ type PlatformWorkflowTimer struct {
 	CreatedAt  pgtype.Timestamptz
 }
 
+type SecurityPlatformDowntimeAction struct {
+	ActionID     uuid.UUID
+	EpisodeID    uuid.UUID
+	TenantID     uuid.UUID
+	PerformedBy  string
+	PerformedAt  pgtype.Timestamptz
+	ActionType   string
+	SubjectRef   string
+	Summary      string
+	PaperFormRef string
+	ReconciledBy string
+	ReconciledAt pgtype.Timestamptz
+	ResourceRef  string
+}
+
+type SecurityPlatformDowntimeEpisode struct {
+	EpisodeID     uuid.UUID
+	TenantID      uuid.UUID
+	FacilityID    string
+	Planned       bool
+	DeclaredBy    string
+	DeclaredAt    pgtype.Timestamptz
+	Reason        string
+	RestoredAt    pgtype.Timestamptz
+	Status        string
+	ClosedBy      string
+	ClosedAt      pgtype.Timestamptz
+	CorrelationID string
+}
+
+type SecurityPlatformEmergencyGrant struct {
+	GrantID           uuid.UUID
+	TenantID          uuid.UUID
+	SubjectID         string
+	FacilityID        string
+	IncidentRef       string
+	Justification     string
+	Permissions       []string
+	Status            string
+	ActivatedAt       pgtype.Timestamptz
+	ExpiresAt         pgtype.Timestamptz
+	ClosedAt          pgtype.Timestamptz
+	AccessedResources []string
+	ReviewedBy        string
+	ReviewedAt        pgtype.Timestamptz
+	ReviewNote        string
+	CorrelationID     string
+}
+
 type SecurityPlatformExportDownload struct {
 	DownloadID    uuid.UUID
 	ExportID      uuid.UUID

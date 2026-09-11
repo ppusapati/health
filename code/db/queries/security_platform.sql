@@ -177,3 +177,140 @@ SET status = @status, reviewer = @reviewer, decision = @decision,
     closed_at = @closed_at, updated_at = @updated_at, version = version + 1
 WHERE request_id = @request_id AND tenant_id = @tenant_id
   AND status NOT IN ('fulfilled', 'refused');
+
+-- Emergency access (SRS-SEC-014).
+
+-- name: InsertEmergencyGrant :exec
+-- The partial unique index on (tenant_id, subject_id) WHERE status = 'active'
+-- is what refuses a second concurrent activation; this insert relies on it
+-- rather than on a prior SELECT, which would race.
+INSERT INTO security_platform.emergency_grant (
+    grant_id, tenant_id, subject_id, facility_id, incident_ref, justification,
+    permissions, status, activated_at, expires_at, correlation_id
+) VALUES (
+    @grant_id, @tenant_id, @subject_id, @facility_id, @incident_ref, @justification,
+    @permissions, @status, @activated_at, @expires_at, @correlation_id
+);
+
+-- name: GetEmergencyGrant :one
+SELECT grant_id, tenant_id, subject_id, facility_id, incident_ref, justification,
+       permissions, status, activated_at, expires_at, closed_at,
+       accessed_resources, reviewed_by, reviewed_at, review_note, correlation_id
+FROM security_platform.emergency_grant
+WHERE tenant_id = @tenant_id AND grant_id = @grant_id;
+
+-- name: GetActiveEmergencyGrant :one
+SELECT grant_id, tenant_id, subject_id, facility_id, incident_ref, justification,
+       permissions, status, activated_at, expires_at, closed_at,
+       accessed_resources, reviewed_by, reviewed_at, review_note, correlation_id
+FROM security_platform.emergency_grant
+WHERE tenant_id = @tenant_id AND subject_id = @subject_id AND status = 'active';
+
+-- name: RecordEmergencyAccess :execrows
+-- array_append only when absent, so a repeated read of the same record does not
+-- inflate the list the reviewer reads. The expires_at predicate means a grant
+-- past its window cannot record access even if the sweeper has not run.
+UPDATE security_platform.emergency_grant
+SET accessed_resources = CASE
+        WHEN @resource_ref::text = ANY (accessed_resources) THEN accessed_resources
+        ELSE array_append(accessed_resources, @resource_ref::text)
+    END
+WHERE tenant_id = @tenant_id AND grant_id = @grant_id
+  AND status = 'active' AND expires_at > @now;
+
+-- name: CloseEmergencyGrant :execrows
+UPDATE security_platform.emergency_grant
+SET status = 'closed', closed_at = @closed_at
+WHERE tenant_id = @tenant_id AND grant_id = @grant_id AND status = 'active';
+
+-- name: ExpireEmergencyGrants :execrows
+-- Idempotent by construction: only rows still 'active' are touched, so the
+-- at-least-once sweeper cannot move closed_at on a second pass.
+UPDATE security_platform.emergency_grant
+SET status = 'expired', closed_at = expires_at
+WHERE status = 'active' AND expires_at <= @now;
+
+-- name: ReviewEmergencyGrant :execrows
+-- "Ended" is a question about the clock, not about the sweeper: a grant whose
+-- window has passed is reviewable even while the row still reads 'active',
+-- so a reviewer working promptly after expiry is not told to come back later.
+-- Same rule as RecordEmergencyAccess, which refuses on the same predicate.
+UPDATE security_platform.emergency_grant
+SET status = @status, reviewed_by = @reviewed_by, reviewed_at = @reviewed_at,
+    review_note = @review_note
+WHERE tenant_id = @tenant_id AND grant_id = @grant_id
+  AND (status IN ('closed', 'expired') OR (status = 'active' AND expires_at <= @now))
+  AND subject_id <> @reviewed_by;
+
+-- name: ListGrantsAwaitingReview :many
+SELECT grant_id, tenant_id, subject_id, facility_id, incident_ref, justification,
+       permissions, status, activated_at, expires_at, closed_at,
+       accessed_resources, reviewed_by, reviewed_at, review_note, correlation_id
+FROM security_platform.emergency_grant
+WHERE tenant_id = @tenant_id AND status IN ('closed', 'expired')
+ORDER BY closed_at ASC, grant_id ASC
+LIMIT @page_size;
+
+-- Downtime episodes (SRS-SEC-014).
+
+-- name: InsertDowntimeEpisode :exec
+INSERT INTO security_platform.downtime_episode (
+    episode_id, tenant_id, facility_id, planned, declared_by, declared_at,
+    reason, status, correlation_id
+) VALUES (
+    @episode_id, @tenant_id, @facility_id, @planned, @declared_by, @declared_at,
+    @reason, @status, @correlation_id
+);
+
+-- name: GetDowntimeEpisode :one
+SELECT episode_id, tenant_id, facility_id, planned, declared_by, declared_at,
+       reason, restored_at, status, closed_by, closed_at, correlation_id
+FROM security_platform.downtime_episode
+WHERE tenant_id = @tenant_id AND episode_id = @episode_id;
+
+-- name: RestoreDowntimeEpisode :execrows
+UPDATE security_platform.downtime_episode
+SET status = 'recovering', restored_at = @restored_at
+WHERE tenant_id = @tenant_id AND episode_id = @episode_id AND status = 'open';
+
+-- name: CloseDowntimeEpisode :execrows
+-- The NOT EXISTS clause is the control, not a convenience: an episode closed
+-- with unreconciled actions means paper that never reaches the chart. Putting
+-- it in the statement means a caller cannot close one by skipping the domain.
+UPDATE security_platform.downtime_episode e
+SET status = 'reconciled', closed_by = @closed_by, closed_at = @closed_at
+WHERE e.tenant_id = @tenant_id AND e.episode_id = @episode_id AND e.status = 'recovering'
+  AND NOT EXISTS (
+      SELECT 1 FROM security_platform.downtime_action a
+      WHERE a.episode_id = e.episode_id AND a.reconciled_at IS NULL
+  );
+
+-- name: InsertDowntimeAction :execrows
+-- ON CONFLICT DO NOTHING: a ward terminal that loses its response retries, and
+-- duplicating a medication administration would be a clinical incident.
+INSERT INTO security_platform.downtime_action (
+    action_id, episode_id, tenant_id, performed_by, performed_at, action_type,
+    subject_ref, summary, paper_form_ref
+) VALUES (
+    @action_id, @episode_id, @tenant_id, @performed_by, @performed_at, @action_type,
+    @subject_ref, @summary, @paper_form_ref
+)
+ON CONFLICT (action_id) DO NOTHING;
+
+-- name: ReconcileDowntimeAction :execrows
+UPDATE security_platform.downtime_action
+SET reconciled_by = @reconciled_by, reconciled_at = @reconciled_at,
+    resource_ref = @resource_ref
+WHERE tenant_id = @tenant_id AND episode_id = @episode_id AND action_id = @action_id
+  AND reconciled_at IS NULL;
+
+-- name: ListDowntimeActions :many
+SELECT action_id, episode_id, tenant_id, performed_by, performed_at, action_type,
+       subject_ref, summary, paper_form_ref, reconciled_by, reconciled_at, resource_ref
+FROM security_platform.downtime_action
+WHERE tenant_id = @tenant_id AND episode_id = @episode_id
+ORDER BY performed_at ASC, action_id ASC;
+
+-- name: CountUnreconciledActions :one
+SELECT count(*) FROM security_platform.downtime_action
+WHERE tenant_id = @tenant_id AND episode_id = @episode_id AND reconciled_at IS NULL;
