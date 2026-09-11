@@ -3,6 +3,7 @@ package transport
 
 import (
 	"context"
+	"strings"
 
 	"connectrpc.com/connect"
 	identityv1 "github.com/ppusapati/health/code/gen/go/healthcare/identity_access/v1"
@@ -12,11 +13,39 @@ import (
 	platformtransport "github.com/ppusapati/health/code/internal/platform/transport"
 )
 
+// TenantModeResolver reports a tenant's lifecycle posture.
+//
+// Declared here, by the consumer, and satisfied by the organization context at
+// the composition root. Without it this handler cannot know that a tenant is
+// suspended, and would answer "allowed" for a mutating action the real call
+// refuses (Blueprint §5: contexts collaborate through interfaces, not imports).
+type TenantModeResolver interface {
+	TenantMode(ctx context.Context, tenantID string) (policy.TenantMode, error)
+}
+
 // Handler serves healthcare.identity_access.v1.IdentityService.
-type Handler struct{}
+type Handler struct {
+	tenants TenantModeResolver
+}
 
 // NewHandler constructs the handler.
-func NewHandler() *Handler { return &Handler{} }
+func NewHandler(tenants TenantModeResolver) *Handler { return &Handler{tenants: tenants} }
+
+// mutatingSuffixes name the actions that change state.
+//
+// Derived from the permission name because the request does not say whether the
+// action mutates. The naming convention is enforced by the permission catalogue,
+// and an unrecognised suffix is treated as mutating — the conservative default.
+var readOnlySuffixes = []string{".read", ".list", ".search", ".get"}
+
+func isMutating(permission string) bool {
+	for _, suffix := range readOnlySuffixes {
+		if strings.HasSuffix(permission, suffix) {
+			return false
+		}
+	}
+	return true
+}
 
 var purposeToProto = map[authctx.PurposeOfUse]identityv1.PurposeOfUse{
 	authctx.PurposeTreatment:  identityv1.PurposeOfUse_PURPOSE_OF_USE_TREATMENT,
@@ -67,11 +96,20 @@ func (h *Handler) EvaluateAccess(
 			platformtransport.CorrelationIDFromContext(ctx))
 	}
 
+	// The real tenant posture, not an assumption: a suspended tenant must
+	// produce the same answer here as it does on the call itself.
+	mode, err := h.tenants.TenantMode(ctx, session.TenantID)
+	if err != nil {
+		return nil, platformtransport.ToConnect(err, platformtransport.CorrelationIDFromContext(ctx))
+	}
+
+	permission := req.Msg.GetPermission()
 	decision := policy.Evaluate(session, policy.Request{
-		Permission:           req.Msg.GetPermission(),
+		Permission:           permission,
+		Mutating:             isMutating(permission),
 		ResourceFacilityID:   req.Msg.GetFacilityId(),
 		RequireFacilityMatch: req.Msg.GetFacilityId() != "",
-		TenantMode:           policy.TenantModeReadWrite,
+		TenantMode:           mode,
 	})
 
 	return connect.NewResponse(&identityv1.EvaluateAccessResponse{

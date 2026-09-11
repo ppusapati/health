@@ -54,7 +54,10 @@ proto-lint: ## Lint protobuf definitions
 
 .PHONY: proto-breaking
 proto-breaking: ## Check protobuf backward compatibility against main
-	buf breaking --against '.git#branch=main,subdir=code'
+	# ../.git, not .git: buf resolves the path from this directory and the
+	# repository root is one level up. With the wrong path buf cannot clone, and
+	# the compatibility gate silently never runs.
+	buf breaking --against '../.git#branch=main,subdir=code'
 
 .PHONY: fmt
 fmt: ## Format Go sources

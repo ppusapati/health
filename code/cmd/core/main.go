@@ -72,7 +72,7 @@ func run() error {
 		return err
 	}
 
-	verifier, err := buildVerifier()
+	verifier, err := buildVerifier(os.Getenv("AUTH_MODE"))
 	if err != nil {
 		return err
 	}
@@ -124,8 +124,8 @@ func run() error {
 // development verifier, and it must be requested explicitly. Any other value —
 // including the empty string — is a hard failure rather than a silent fallback
 // to an insecure default.
-func buildVerifier() (platformtransport.TokenVerifier, error) {
-	switch mode := strings.ToLower(os.Getenv("AUTH_MODE")); mode {
+func buildVerifier(mode string) (platformtransport.TokenVerifier, error) {
+	switch mode = strings.ToLower(mode); mode {
 	case "dev":
 		slog.Warn("using development token verifier; not for production (ADR-008 open)")
 		return devauth.New(true)

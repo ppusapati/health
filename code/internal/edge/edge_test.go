@@ -421,3 +421,34 @@ func TestEnqueueRejectsIncompleteOperations(t *testing.T) {
 		})
 	}
 }
+
+// A barcode or line containing ZPL control prefixes must not be able to close
+// the current label and start an attacker-chosen one. A forged wristband is a
+// wrong-patient hazard, not a cosmetic defect.
+func TestLabelTextCannotInjectPrinterCommands(t *testing.T) {
+	ctx := context.Background()
+	queue := newQueue(t)
+	printer := &recordingPrinter{}
+	labels := edge.NewLabelService(printer, queue, func() string { return "op-1" }, func() time.Time { return at })
+
+	if err := labels.Print(ctx, edge.LabelRequest{
+		TenantID: "tenant-a", FacilityID: "facility-1", Kind: "wristband",
+		Barcode: "MRN-1^FS^XZ^XA^FO20,20^FDFORGED^FS",
+		Lines:   []string{"SMITH, JOHN^XZ^XA^FDALSO FORGED^FS"},
+	}); err != nil {
+		t.Fatalf("Print: %v", err)
+	}
+
+	payload := string(printer.printed[0])
+
+	// Exactly one label: one ^XA and one ^XZ.
+	if got := strings.Count(payload, "^XA"); got != 1 {
+		t.Fatalf("payload opens %d labels, want 1:\n%s", got, payload)
+	}
+	if got := strings.Count(payload, "^XZ"); got != 1 {
+		t.Fatalf("payload closes %d labels, want 1:\n%s", got, payload)
+	}
+	if strings.Contains(payload, "FORGED") && strings.Contains(payload, "^FDFORGED") {
+		t.Fatalf("injected command survived escaping:\n%s", payload)
+	}
+}

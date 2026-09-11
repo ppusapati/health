@@ -44,6 +44,24 @@ The zero value is detectable (`IsZero()`) and every repository method rejects it
   bypass it without deliberately editing `authctx`.
 - New bounded contexts inherit the guarantee by following the port signature.
 
+**Limits of the claim**
+
+"Unforgeable" is precise about what it means, and it is worth being exact:
+
+- A repository method **cannot** be reached without *some* verified scope.
+  There is no public constructor, so a tenant ID read off the wire cannot
+  become a `TenantScope`.
+- Any package **inside this module** can still call `authctx.NewSession` with
+  an arbitrary tenant and take a scope from it. Go has no friend packages, so
+  the type system cannot express "only the interceptor may mint a session".
+  That constraint is enforced by a fitness test instead
+  (`TestOnlyTransportMintsSessions`), which permits only the transport
+  interceptor, the composition root, and tests.
+
+So the guarantee is: *no remote input can forge a scope*, and *in-tree minting
+is confined to two reviewed packages*. It is not a claim that the type is
+unforgeable against a determined author of new code in this module.
+
 **Costs**
 
 - Repository signatures are slightly noisier than `tenantID string`.

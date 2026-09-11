@@ -40,6 +40,11 @@ FOR UPDATE SKIP LOCKED;
 -- name: UpdateWorkflowInstance :execrows
 -- Optimistic concurrency: the write applies only if nobody else advanced the
 -- instance since it was read.
+--
+-- The tenant predicate is defence in depth. Every caller reaches this after a
+-- tenant-scoped read, but this is a tenant-owned write and every other one in
+-- the codebase carries the predicate; leaving it off here would make this the
+-- single exception a future caller could get wrong.
 UPDATE platform_workflow.instance
 SET status = @status,
     current_step = @current_step,
@@ -49,7 +54,7 @@ SET status = @status,
     last_error = @last_error,
     updated_at = @updated_at,
     version = version + 1
-WHERE instance_id = @instance_id AND version = @expected_version;
+WHERE instance_id = @instance_id AND tenant_id = @tenant_id AND version = @expected_version;
 
 -- name: InsertWorkflowHistory :exec
 INSERT INTO platform_workflow.history (

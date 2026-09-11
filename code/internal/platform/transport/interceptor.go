@@ -89,13 +89,27 @@ func NewAuthInterceptor(verifier TokenVerifier) connect.UnaryInterceptorFunc {
 			session.CorrelationID = correlationID
 			session.RequestID = requestID
 
-			// The active facility is a client-selected view, so it is narrowed
-			// to what the token already permits rather than trusted outright.
+			// The active facility and purpose-of-use are client-selected views,
+			// so a header may only narrow to something the credential already
+			// grants. Assigning them verbatim would let the caller satisfy the
+			// ABAC facility gate by asserting its own scope, and would let it
+			// write its own purpose into the regulated audit trail.
 			if facility := header.Get(HeaderFacilityID); facility != "" {
+				if !session.PermitsFacility(facility) {
+					return nil, ToConnect(rpcerr.PermissionDenied(
+						"AUTH_FACILITY_NOT_PERMITTED", "facility not permitted"), correlationID)
+				}
 				session.ActiveFacilityID = facility
 			}
 			if purpose := header.Get(HeaderPurposeOfUse); purpose != "" {
-				session.Purpose = authctx.PurposeOfUse(purpose)
+				requested := authctx.PurposeOfUse(purpose)
+				// Checked against the closed set first: an unknown string must
+				// not reach the audit column or a span attribute.
+				if !authctx.IsKnownPurpose(requested) || !session.PermitsPurpose(requested) {
+					return nil, ToConnect(rpcerr.PermissionDenied(
+						"AUTH_PURPOSE_NOT_PERMITTED", "purpose of use not permitted"), correlationID)
+				}
+				session.Purpose = requested
 			}
 
 			span.SetAttributes(obs.SafeAttrs{

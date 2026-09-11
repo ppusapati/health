@@ -36,6 +36,10 @@ The only implementation today is `devauth`, which:
 - refuses to construct unless passed `enabled == true`,
 - accepts **roles**, never permissions — the role catalogue decides what a role
   means, so a forged token is a claim to be interpreted, not a direct grant,
+- carries the facilities and purposes-of-use the credential permits, so the
+  `X-Facility-Id` and `X-Purpose-Of-Use` headers can only *narrow* to something
+  already granted. A token with no facility claim grants no facility scope: the
+  absence of a claim is never an unrestricted grant,
 - returns a uniform `"invalid credentials"` message for every failure mode.
 
 ## Consequences

@@ -54,6 +54,17 @@ Each blocking ADR has a one-interface seam so Wave-1 work can proceed:
 | ADR-007 rules engine | `rules.Table` | `internal/platform/rules/rules.go` |
 | ADR-008 identity provider | `transport.TokenVerifier` | `internal/platform/transport/interceptor.go` |
 
+## Audit
+
+A full implementation audit was run before Wave 1 — security review, requirement
+traceability, gate evidence and test quality. Nine findings, one of them HIGH,
+were fixed in the same pass. See [`wave-0-audit.md`](wave-0-audit.md).
+
+The audit's headline number: **52 of the 109 Wave-0 requirements are traceable
+in code**, with SRS-SEC at 2/14. Wave 0 delivers the platform mechanisms; it
+does not yet deliver the Wave-0 requirement set, and Done-3 (all 109 Verified)
+is not met.
+
 ## Wave-1 readiness
 
 The Development Backlog lists eleven foundations Wave 1 needs before the Core

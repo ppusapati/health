@@ -548,7 +548,7 @@ SET status = $1,
     last_error = $6,
     updated_at = $7,
     version = version + 1
-WHERE instance_id = $8 AND version = $9
+WHERE instance_id = $8 AND tenant_id = $9 AND version = $10
 `
 
 type UpdateWorkflowInstanceParams struct {
@@ -560,11 +560,17 @@ type UpdateWorkflowInstanceParams struct {
 	LastError       string
 	UpdatedAt       pgtype.Timestamptz
 	InstanceID      uuid.UUID
+	TenantID        uuid.UUID
 	ExpectedVersion int64
 }
 
 // Optimistic concurrency: the write applies only if nobody else advanced the
 // instance since it was read.
+//
+// The tenant predicate is defence in depth. Every caller reaches this after a
+// tenant-scoped read, but this is a tenant-owned write and every other one in
+// the codebase carries the predicate; leaving it off here would make this the
+// single exception a future caller could get wrong.
 func (q *Queries) UpdateWorkflowInstance(ctx context.Context, arg UpdateWorkflowInstanceParams) (int64, error) {
 	result, err := q.db.Exec(ctx, updateWorkflowInstance,
 		arg.Status,
@@ -575,6 +581,7 @@ func (q *Queries) UpdateWorkflowInstance(ctx context.Context, arg UpdateWorkflow
 		arg.LastError,
 		arg.UpdatedAt,
 		arg.InstanceID,
+		arg.TenantID,
 		arg.ExpectedVersion,
 	)
 	if err != nil {

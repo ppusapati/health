@@ -26,7 +26,11 @@ var ErrDisabled = errors.New("devauth: development verifier is not enabled")
 
 // Verifier turns a structured development token into a session.
 //
-// Token format: "<tenant_id>:<subject_id>:<role>[,<role>...]".
+// Token format: "<tenant_id>:<subject_id>:<role>[,<role>...][:<facility_id>[,...]]".
+//
+// The optional fourth segment is the facility claim. A token with no facility
+// claim grants no facility scope, so a request that asserts one through
+// X-Facility-Id is refused rather than honoured.
 type Verifier struct{}
 
 // New returns the verifier only when enabled is true.
@@ -42,7 +46,7 @@ func New(enabled bool) (*Verifier, error) {
 // the catalogue decides what those mean.
 func (v *Verifier) Verify(_ context.Context, token string) (authctx.Session, error) {
 	parts := strings.Split(token, ":")
-	if len(parts) != 3 {
+	if len(parts) != 3 && len(parts) != 4 {
 		return authctx.Session{}, rpcerr.Unauthenticated("AUTH_TOKEN_MALFORMED", "invalid credentials")
 	}
 
@@ -73,11 +77,26 @@ func (v *Verifier) Verify(_ context.Context, token string) (authctx.Session, err
 		return authctx.Session{}, rpcerr.Unauthenticated("AUTH_NO_ROLES", "invalid credentials")
 	}
 
+	var facilities []string
+	if len(parts) == 4 {
+		for _, id := range strings.Split(parts[3], ",") {
+			if id = strings.TrimSpace(id); id != "" {
+				facilities = append(facilities, id)
+			}
+		}
+	}
+
 	return authctx.Session{
 		SubjectID:   subjectID,
 		TenantID:    tenantID,
 		Roles:       roleNames,
 		Permissions: domain.PermissionsFor(roles),
 		Purpose:     authctx.PurposeOperations,
+
+		PermittedFacilities: facilities,
+		// Wave 0 has no clinical roles, so operations is the only purpose any
+		// credential may assert. Clinical purposes arrive with the roles that
+		// justify them, and with the identity provider ADR-008 selects.
+		PermittedPurposes: []authctx.PurposeOfUse{authctx.PurposeOperations},
 	}, nil
 }

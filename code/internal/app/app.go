@@ -86,7 +86,7 @@ func New(deps Deps) *Server {
 	mux.Handle(organizationv1connect.NewOrganizationServiceHandler(
 		orgtransport.NewHandler(orgService), interceptors))
 	mux.Handle(identityaccessv1connect.NewIdentityServiceHandler(
-		identitytransport.NewHandler(), interceptors))
+		identitytransport.NewHandler(orgService), interceptors))
 	mux.Handle(platformapiv1connect.NewHealthServiceHandler(
 		platformapitransport.NewHandler(deps.Build, map[string]platformapitransport.Pinger{
 			"postgres": poolPinger{pool: deps.Pool},

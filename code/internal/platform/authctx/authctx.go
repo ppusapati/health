@@ -27,6 +27,19 @@ const (
 	PurposeResearch    PurposeOfUse = "research"
 )
 
+// knownPurposes is the closed set. A purpose outside it is rejected rather
+// than stored: the value ends up in the audit trail and in telemetry.
+var knownPurposes = map[PurposeOfUse]bool{
+	PurposeTreatment:  true,
+	PurposePayment:    true,
+	PurposeOperations: true,
+	PurposeSupport:    true,
+	PurposeResearch:   true,
+}
+
+// IsKnownPurpose reports whether a purpose is a member of the closed set.
+func IsKnownPurpose(p PurposeOfUse) bool { return knownPurposes[p] }
+
 // ErrNoSession is returned when a use case runs without an authenticated
 // caller. Deny-by-default: the absence of a session is never "public".
 var ErrNoSession = errors.New("authctx: no authenticated session in context")
@@ -56,6 +69,18 @@ type Session struct {
 	Purpose          PurposeOfUse
 	BreakGlass       bool
 
+	// PermittedFacilities lists the facilities this credential may act in.
+	//
+	// A client may ask to narrow its active facility through a header, but only
+	// to a facility named here. Empty means the credential grants no facility
+	// scope at all, so any such request is refused — the absence of a claim is
+	// never an unrestricted grant.
+	PermittedFacilities []string
+
+	// PermittedPurposes lists the purposes-of-use this credential may assert.
+	// Same rule: empty grants nothing.
+	PermittedPurposes []PurposeOfUse
+
 	// CorrelationID is stable across RPC, event and workflow hops.
 	CorrelationID string
 	// RequestID is unique to this single request.
@@ -68,6 +93,33 @@ func NewSession(s Session) Session { return s }
 
 // TenantScope mints the unforgeable scope token for repository calls.
 func (s Session) TenantScope() TenantScope { return TenantScope{tenantID: s.TenantID} }
+
+// PermitsFacility reports whether the credential may act in a facility.
+//
+// This is the check that makes the ABAC facility gate real. Without it the
+// caller simply asserts its own facility scope in a header, and
+// policy.ReasonFacilityScopeDenied becomes unreachable.
+func (s Session) PermitsFacility(facilityID string) bool {
+	for _, f := range s.PermittedFacilities {
+		if f == facilityID {
+			return true
+		}
+	}
+	return false
+}
+
+// PermitsPurpose reports whether the credential may assert a purpose-of-use.
+//
+// Purpose lands in the regulated audit trail, so an unchecked header would let
+// a caller label a commercial bulk read as "treatment".
+func (s Session) PermitsPurpose(purpose PurposeOfUse) bool {
+	for _, p := range s.PermittedPurposes {
+		if p == purpose {
+			return true
+		}
+	}
+	return false
+}
 
 // HasPermission reports whether the flattened permission set contains name.
 func (s Session) HasPermission(name string) bool {

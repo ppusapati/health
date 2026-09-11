@@ -474,3 +474,72 @@ func isDomainFile(rel string) bool {
 	slashed := filepath.ToSlash(rel)
 	return strings.Contains(slashed, "/domain/") && !strings.HasSuffix(slashed, "_test.go")
 }
+
+// authctx.NewSession is the only door to a TenantScope, so it is the seam that
+// makes ADR-W0-001's "unforgeable" claim true or false.
+//
+// The type system cannot express "only the interceptor may call this" — Go has
+// no friend packages — so the constraint is enforced here instead. Production
+// code may mint a session in exactly two places: the transport interceptor that
+// authenticated the request, and the composition root. Everywhere else, a
+// session must arrive through the context.
+func TestOnlyTransportMintsSessions(t *testing.T) {
+	allowed := []string{
+		"internal/platform/transport",
+		"internal/app",
+	}
+
+	var callers int
+	for _, f := range loadGoFiles(t) {
+		rel := filepath.ToSlash(f.rel)
+
+		// Tests legitimately stand in for the interceptor.
+		if strings.HasSuffix(rel, "_test.go") {
+			continue
+		}
+
+		source, err := os.ReadFile(f.path)
+		if err != nil {
+			t.Fatalf("read %s: %v", rel, err)
+		}
+		if !strings.Contains(string(source), "authctx.NewSession(") {
+			continue
+		}
+		callers++
+
+		var ok bool
+		for _, prefix := range allowed {
+			if strings.HasPrefix(rel, prefix) {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			t.Errorf("%s mints a session; only %v may", rel, allowed)
+		}
+	}
+
+	if callers == 0 {
+		t.Fatal("nothing calls authctx.NewSession; this rule is no longer testing anything")
+	}
+}
+
+// The facility and purpose headers are client-controlled ABAC inputs. Assigning
+// either straight onto a verified session makes the corresponding policy gate
+// unreachable, so the interceptor must route both through a Permits* check.
+func TestClientHeadersAreNarrowedNotAssigned(t *testing.T) {
+	root := repoRoot(t)
+	path := filepath.Join(root, "internal", "platform", "transport", "interceptor.go")
+
+	source, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read interceptor: %v", err)
+	}
+	text := string(source)
+
+	for _, guard := range []string{"PermitsFacility(", "PermitsPurpose(", "IsKnownPurpose("} {
+		if !strings.Contains(text, guard) {
+			t.Errorf("interceptor.go no longer calls %s; a client header would be trusted verbatim", guard)
+		}
+	}
+}

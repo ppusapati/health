@@ -90,14 +90,23 @@ func validateLabel(req LabelRequest) error {
 	return nil
 }
 
+// zplControl matches the ZPL command prefixes. Left unescaped, a value
+// containing "^FS^XZ^XA" would close the current label and start an
+// attacker-chosen one — printer command injection, with a forged wristband or
+// specimen label as the payload.
+var zplControl = strings.NewReplacer("^", " ", "~", " ", "\n", " ", "\r", " ")
+
+// escapeZPL neutralises control prefixes in caller-supplied text.
+func escapeZPL(s string) string { return zplControl.Replace(s) }
+
 // render produces the device payload. A real deployment emits the printer's
 // own language; the shape is what matters for the prototype.
 func render(req LabelRequest) []byte {
 	var b strings.Builder
 	b.WriteString("^XA\n")
-	b.WriteString("^FO20,20^BCN,80,Y,N,N^FD" + req.Barcode + "^FS\n")
+	b.WriteString("^FO20,20^BCN,80,Y,N,N^FD" + escapeZPL(req.Barcode) + "^FS\n")
 	for i, line := range req.Lines {
-		fmt.Fprintf(&b, "^FO20,%d^A0N,28,28^FD%s^FS\n", 130+i*34, line)
+		fmt.Fprintf(&b, "^FO20,%d^A0N,28,28^FD%s^FS\n", 130+i*34, escapeZPL(line))
 	}
 	b.WriteString("^XZ\n")
 	return []byte(b.String())

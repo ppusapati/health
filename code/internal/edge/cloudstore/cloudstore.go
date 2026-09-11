@@ -213,14 +213,28 @@ type IngestResult struct {
 // It is idempotent on (node_id, operation_id): a redelivery is recorded as a
 // duplicate and produces no second effect. This is what makes the edge's blind
 // retry safe.
-func (s *Store) Ingest(ctx context.Context, nodeID, tenantID, operationID, operationType string,
+//
+// The tenant comes from an authctx.TenantScope, not from the node's own claim.
+// A node reports its identifiers; it does not get to name the tenant it writes
+// into (ADR-W0-001).
+//
+// NOTE: this authenticates the *session* that carries the operation, not the
+// node itself. node.credential_fingerprint is recorded at enrollment but is not
+// yet checked here, because the edge uplink transport does not exist yet. When
+// it lands it must terminate mTLS and bind the peer certificate fingerprint to
+// node_id before this method is reachable from a node.
+func (s *Store) Ingest(ctx context.Context, scope authctx.TenantScope,
+	nodeID, operationID, operationType string,
 	payload json.RawMessage, occurredAt, now time.Time) (IngestResult, error) {
 
+	if scope.IsZero() {
+		return IngestResult{}, rpcerr.Internal("EDGE_TENANT_SCOPE_MISSING", "tenant scope is required")
+	}
 	nodeUUID, err := uuid.Parse(nodeID)
 	if err != nil {
 		return IngestResult{}, rpcerr.Internal("EDGE_NODE_ID_INVALID", "node_id must be a UUID").WithCause(err)
 	}
-	tenantUUID, err := uuid.Parse(tenantID)
+	tenantUUID, err := uuid.Parse(scope.TenantID())
 	if err != nil {
 		return IngestResult{}, rpcerr.Internal("EDGE_TENANT_INVALID", "tenant_id must be a UUID").WithCause(err)
 	}

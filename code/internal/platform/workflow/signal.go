@@ -66,6 +66,22 @@ func (e *Engine) deliverSignal(ctx context.Context, tenantUUID, instanceUUID uui
 	q := e.queries(ctx)
 	now := e.clock.Now()
 
+	// The tenant-scoped instance lookup comes first, before anything is
+	// written. Recording the signal first meant a duplicate signal key aimed at
+	// another tenant's instance took the "duplicate" branch and committed a
+	// history row against it.
+	row, err := q.GetWorkflowInstance(ctx, sqlcgen.GetWorkflowInstanceParams{
+		TenantID:   tenantUUID,
+		InstanceID: instanceUUID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return SignalResult{}, rpcerr.NotFound("WF_INSTANCE_NOT_FOUND", "workflow instance not found")
+	}
+	if err != nil {
+		return SignalResult{}, err
+	}
+	instance := instanceFromRow(row)
+
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		return SignalResult{}, rpcerr.Internal("WF_SIGNAL_ENCODE_FAILED",
@@ -84,20 +100,9 @@ func (e *Engine) deliverSignal(ctx context.Context, tenantUUID, instanceUUID uui
 		return SignalResult{}, err
 	}
 	if rows == 0 {
-		return e.ignoreSignal(ctx, instanceUUID, tenantUUID, "", signalName, ReasonDuplicateSignal, nil, now)
+		return e.ignoreSignal(ctx, instanceUUID, tenantUUID, instance.CurrentStep,
+			signalName, ReasonDuplicateSignal, nil, now)
 	}
-
-	row, err := q.GetWorkflowInstance(ctx, sqlcgen.GetWorkflowInstanceParams{
-		TenantID:   tenantUUID,
-		InstanceID: instanceUUID,
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return SignalResult{}, rpcerr.NotFound("WF_INSTANCE_NOT_FOUND", "workflow instance not found")
-	}
-	if err != nil {
-		return SignalResult{}, err
-	}
-	instance := instanceFromRow(row)
 
 	if instance.Status != StatusAwaitingSignal {
 		return e.ignoreSignal(ctx, instanceUUID, tenantUUID, instance.CurrentStep, signalName,

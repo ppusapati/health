@@ -291,3 +291,128 @@ func TestHistoryRecordsTheWholeExecution(t *testing.T) {
 		}
 	}
 }
+
+// A duplicate signal key aimed at another tenant's instance must write nothing
+// at all — not even a history row. The instance lookup is tenant-scoped and
+// happens before any write for exactly this reason.
+func TestCrossTenantDuplicateSignalWritesNothing(t *testing.T) {
+	rec := &recorder{}
+	f := newFixture(t, awaitDefinition(rec))
+	ctx := context.Background()
+
+	instance, _ := f.engine.Start(ctx, f.tenantID, "await", "corr-1", nil)
+	f.runToQuiescence(t, 5)
+
+	// The owner uses a signal key; the attacker then replays that key.
+	if _, err := f.engine.Signal(ctx, f.tenantID, instance.ID, "sig-1", "go", nil); err != nil {
+		t.Fatalf("owner Signal: %v", err)
+	}
+
+	var before int
+	if err := f.pool.QueryRow(ctx,
+		`SELECT count(*) FROM platform_workflow.history WHERE instance_id = $1`,
+		instance.ID).Scan(&before); err != nil {
+		t.Fatalf("count history: %v", err)
+	}
+
+	otherTenant := uuid.NewString()
+	if _, err := f.engine.Signal(ctx, otherTenant, instance.ID, "sig-1", "go", nil); err == nil {
+		t.Fatal("another tenant's duplicate signal was accepted")
+	}
+
+	var after int
+	if err := f.pool.QueryRow(ctx,
+		`SELECT count(*) FROM platform_workflow.history WHERE instance_id = $1`,
+		instance.ID).Scan(&after); err != nil {
+		t.Fatalf("count history: %v", err)
+	}
+	if after != before {
+		t.Fatalf("a foreign tenant appended %d history rows", after-before)
+	}
+
+	var foreignSignals int
+	if err := f.pool.QueryRow(ctx,
+		`SELECT count(*) FROM platform_workflow.signal WHERE tenant_id = $1`,
+		otherTenant).Scan(&foreignSignals); err != nil {
+		t.Fatalf("count signals: %v", err)
+	}
+	if foreignSignals != 0 {
+		t.Fatalf("a foreign tenant recorded %d signal rows", foreignSignals)
+	}
+}
+
+// The StepTimer kind had no execution test: only the retry-backoff path
+// exercised timers, so the declared step kind was unverified.
+func TestTimerStepWaitsAndThenResumes(t *testing.T) {
+	rec := &recorder{}
+	definition := workflow.Definition{
+		Name:    "delayed",
+		Version: 1,
+		Steps: []workflow.Step{
+			{
+				Name: "first",
+				Kind: workflow.StepService,
+				Action: func(_ context.Context, _ *workflow.State) error {
+					rec.record("first")
+					return nil
+				},
+			},
+			{Name: "cool_off", Kind: workflow.StepTimer, Delay: 30 * time.Minute},
+			{
+				Name: "second",
+				Kind: workflow.StepService,
+				Action: func(_ context.Context, _ *workflow.State) error {
+					rec.record("second")
+					return nil
+				},
+			},
+		},
+	}
+
+	f := newFixture(t, definition)
+	ctx := context.Background()
+
+	instance, err := f.engine.Start(ctx, f.tenantID, "delayed", "corr-1", nil)
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	f.runToQuiescence(t, 10)
+
+	current, _ := f.engine.Get(ctx, f.tenantID, instance.ID)
+	if current.Status != workflow.StatusAwaitingTimer {
+		t.Fatalf("Status = %q, want awaiting_timer", current.Status)
+	}
+	if calls := rec.snapshot(); len(calls) != 1 || calls[0] != "first" {
+		t.Fatalf("steps ran %v; the timer must hold the workflow", calls)
+	}
+
+	// Not yet due: ticking must not release it.
+	f.clock.Advance(10 * time.Minute)
+	f.runToQuiescence(t, 5)
+	if len(rec.snapshot()) != 1 {
+		t.Fatalf("the timer fired early: %v", rec.snapshot())
+	}
+
+	f.clock.Advance(25 * time.Minute)
+	f.runToQuiescence(t, 10)
+
+	final, _ := f.engine.Get(ctx, f.tenantID, instance.ID)
+	if final.Status != workflow.StatusCompleted {
+		t.Fatalf("Status = %q, want completed (last error %q)", final.Status, final.LastError)
+	}
+	if calls := rec.snapshot(); len(calls) != 2 || calls[1] != "second" {
+		t.Fatalf("steps ran %v, want first then second", calls)
+	}
+
+	// The timer row must be marked fired, not left to fire again.
+	var unfired int
+	if err := f.pool.QueryRow(ctx,
+		`SELECT count(*) FROM platform_workflow.timer WHERE instance_id = $1 AND fired_at IS NULL`,
+		instance.ID).Scan(&unfired); err != nil {
+		t.Fatalf("count timers: %v", err)
+	}
+	if unfired != 0 {
+		t.Fatalf("%d timers left unfired", unfired)
+	}
+}

@@ -267,6 +267,10 @@ func (e *Engine) persist(ctx context.Context, in Instance, at time.Time) error {
 	if err != nil {
 		return rpcerr.Internal("WF_ID_INVALID", "instance_id must be a UUID").WithCause(err)
 	}
+	tenantUUID, err := uuid.Parse(in.TenantID)
+	if err != nil {
+		return rpcerr.Internal("WF_TENANT_INVALID", "tenant_id must be a UUID").WithCause(err)
+	}
 
 	encoded, err := json.Marshal(in.State)
 	if err != nil {
@@ -282,6 +286,7 @@ func (e *Engine) persist(ctx context.Context, in Instance, at time.Time) error {
 		LastError:       in.LastError,
 		UpdatedAt:       timestamptz(at),
 		InstanceID:      instanceUUID,
+		TenantID:        tenantUUID,
 		ExpectedVersion: in.Version,
 	})
 	if err != nil {

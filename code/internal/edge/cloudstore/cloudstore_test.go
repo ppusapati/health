@@ -137,7 +137,7 @@ func TestIngestIsIdempotentOnOperationID(t *testing.T) {
 	operationID := uuid.NewString()
 	payload := json.RawMessage(`{"kind":"specimen","barcode":"ACC-1"}`)
 
-	first, err := f.store.Ingest(ctx, node.ID, f.tenantID, operationID, "edge.label_printed", payload, at, at)
+	first, err := f.store.Ingest(ctx, f.scope, node.ID, operationID, "edge.label_printed", payload, at, at)
 	if err != nil {
 		t.Fatalf("first Ingest: %v", err)
 	}
@@ -145,7 +145,7 @@ func TestIngestIsIdempotentOnOperationID(t *testing.T) {
 		t.Fatalf("first outcome = %q", first.Outcome)
 	}
 
-	second, err := f.store.Ingest(ctx, node.ID, f.tenantID, operationID, "edge.label_printed", payload, at, at.Add(time.Minute))
+	second, err := f.store.Ingest(ctx, f.scope, node.ID, operationID, "edge.label_printed", payload, at, at.Add(time.Minute))
 	if err != nil {
 		t.Fatalf("second Ingest: %v", err)
 	}
@@ -174,7 +174,7 @@ func TestRevokedNodeCannotIngest(t *testing.T) {
 		t.Fatalf("RevokeNode: %v", err)
 	}
 
-	result, err := f.store.Ingest(ctx, node.ID, f.tenantID, uuid.NewString(),
+	result, err := f.store.Ingest(ctx, f.scope, node.ID, uuid.NewString(),
 		"edge.label_printed", json.RawMessage(`{}`), at, at)
 	if err != nil {
 		t.Fatalf("Ingest: %v", err)
@@ -199,7 +199,7 @@ func TestPendingNodeCannotIngest(t *testing.T) {
 		t.Fatalf("RegisterNode: %v", err)
 	}
 
-	result, err := f.store.Ingest(ctx, nodeID, f.tenantID, uuid.NewString(),
+	result, err := f.store.Ingest(ctx, f.scope, nodeID, uuid.NewString(),
 		"edge.label_printed", json.RawMessage(`{}`), at, at)
 	if err != nil {
 		t.Fatalf("Ingest: %v", err)
@@ -214,8 +214,11 @@ func TestIngestIsTenantScoped(t *testing.T) {
 	f := newFixture(t)
 	node := f.registerAndEnroll(t, "tok")
 
-	otherTenant := uuid.NewString()
-	_, err := f.store.Ingest(context.Background(), node.ID, otherTenant, uuid.NewString(),
+	otherScope := authctx.NewSession(authctx.Session{
+		SubjectID: "attacker", TenantID: uuid.NewString(),
+	}).TenantScope()
+
+	_, err := f.store.Ingest(context.Background(), otherScope, node.ID, uuid.NewString(),
 		"edge.label_printed", json.RawMessage(`{}`), at, at)
 
 	e, ok := rpcerr.As(err)
@@ -235,7 +238,7 @@ func TestIngestPreservesEdgeOccurrenceTime(t *testing.T) {
 	receivedAt := at
 
 	operationID := uuid.NewString()
-	if _, err := f.store.Ingest(ctx, node.ID, f.tenantID, operationID,
+	if _, err := f.store.Ingest(ctx, f.scope, node.ID, operationID,
 		"edge.label_printed", json.RawMessage(`{}`), occurredAt, receivedAt); err != nil {
 		t.Fatalf("Ingest: %v", err)
 	}

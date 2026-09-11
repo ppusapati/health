@@ -309,6 +309,21 @@ func (s *Service) authorizeRead(ctx context.Context, permission string) (authctx
 	return session, session.TenantScope(), nil
 }
 
+// TenantMode reports a tenant's lifecycle posture.
+//
+// Exposed so other contexts can ask the owning context rather than reading its
+// tables (Domain/Data spec §2.1). A tenant that does not exist has no access.
+func (s *Service) TenantMode(ctx context.Context, tenantID string) (policy.TenantMode, error) {
+	tenant, err := s.tenants.GetByID(ctx, tenantID)
+	if err != nil {
+		if e, ok := rpcerr.As(err); ok && e.Category == rpcerr.CategoryNotFound {
+			return policy.TenantModeNoAccess, nil
+		}
+		return policy.TenantModeNoAccess, err
+	}
+	return tenantMode(tenant), nil
+}
+
 // tenantMode maps tenant lifecycle onto the policy engine's posture.
 func tenantMode(t *domain.Tenant) policy.TenantMode {
 	switch {
