@@ -505,3 +505,68 @@ func TestExpiredWorkloadCredentialIsRefused(t *testing.T) {
 		t.Fatalf("a not-yet-valid credential was accepted: %v", err)
 	}
 }
+
+// A federated account is created *by* the sign-in that resolves it, so the
+// token necessarily predates the account. A watermark set to the moment of
+// resolution would refuse every first sign-in with the very credential that
+// produced it — which is what happened before this was pinned.
+func TestFirstFederatedSignInIsNotRefusedByItsOwnToken(t *testing.T) {
+	f := federation(t)
+	issuedAt := lcNow.Add(-time.Minute)
+
+	account, err := f.Resolve(domain.FederatedClaims{
+		Issuer: "https://login.acme.example", Subject: "auth0|12345",
+		IssuedAt: issuedAt, ExpiresAt: lcNow.Add(time.Hour),
+		Claims: map[string][]string{"groups": {"clinicians"}},
+	}, lcNow)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+
+	if err := account.AuthorizeSession(issuedAt, lcNow); err != nil {
+		t.Fatalf("the credential that created the account was refused by it: %v", err)
+	}
+}
+
+// And a revocation applied afterwards still holds, so the fix above did not
+// disable the mechanism it works within.
+func TestRevocationStillHoldsOnAFederatedAccount(t *testing.T) {
+	f := federation(t)
+	issuedAt := lcNow.Add(-time.Minute)
+
+	account, err := f.Resolve(domain.FederatedClaims{
+		Issuer: "https://login.acme.example", Subject: "auth0|12345",
+		IssuedAt: issuedAt, ExpiresAt: lcNow.Add(time.Hour),
+		Claims: map[string][]string{"groups": {"clinicians"}},
+	}, lcNow)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+
+	account.RevokeSessions(lcNow)
+	if err := account.AuthorizeSession(issuedAt, lcNow.Add(time.Minute)); !errors.Is(err, domain.ErrSessionRevoked) {
+		t.Fatalf("want ErrSessionRevoked after revoking, got %v", err)
+	}
+}
+
+// A federated sign-in with no issued-at has nothing to anchor a watermark to.
+// Zero rather than `now`: an account whose watermark nobody set should revoke
+// nothing, and a store moves it forward the first time somebody actually does.
+func TestAFederatedAccountWithNoIssuedAtRevokesNothing(t *testing.T) {
+	f := federation(t)
+
+	account, err := f.Resolve(domain.FederatedClaims{
+		Issuer: "https://login.acme.example", Subject: "auth0|12345",
+		ExpiresAt: lcNow.Add(time.Hour),
+		Claims:    map[string][]string{"groups": {"clinicians"}},
+	}, lcNow)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if !account.NotValidBefore.IsZero() {
+		t.Fatalf("watermark is %s, want zero", account.NotValidBefore)
+	}
+	if err := account.AuthorizeSession(lcNow.Add(-time.Hour), lcNow); err != nil {
+		t.Fatalf("an unanchored account refused a session: %v", err)
+	}
+}

@@ -11,6 +11,7 @@ sql:
       - db/migrations/0006_security.up.sql
       - db/migrations/0007_emergency_access.up.sql
       - db/migrations/0008_organization_master_data.up.sql
+      - db/migrations/0009_identity_access.up.sql
     gen:
       go:
         package: sqlcgen

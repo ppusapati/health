@@ -9,6 +9,54 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type IdentityAccessAccount struct {
+	AccountID           uuid.UUID
+	TenantID            uuid.UUID
+	SubjectID           string
+	IdentityProvider    string
+	DisplayName         string
+	Status              string
+	Roles               []string
+	PermittedFacilities []string
+	NotValidBefore      pgtype.Timestamptz
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	Version             int64
+}
+
+type IdentityAccessFederation struct {
+	FederationID uuid.UUID
+	TenantID     uuid.UUID
+	Issuer       string
+	Domains      []string
+	RoleMappings []byte
+	DefaultRoles []string
+	Enabled      bool
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+}
+
+type IdentityAccessSigninRisk struct {
+	AssessmentID uuid.UUID
+	TenantID     uuid.UUID
+	SubjectID    string
+	Score        int32
+	Signals      []string
+	Alerted      bool
+	Blocked      bool
+	OccurredAt   pgtype.Timestamptz
+}
+
+type IdentityAccessStepUpProof struct {
+	ProofID    uuid.UUID
+	TenantID   uuid.UUID
+	SubjectID  string
+	Action     string
+	Reference  string
+	Method     string
+	ObtainedAt pgtype.Timestamptz
+}
+
 type OrganizationDisplayLabel struct {
 	LabelID      uuid.UUID
 	TenantID     uuid.UUID

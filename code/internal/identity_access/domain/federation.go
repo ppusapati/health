@@ -212,6 +212,27 @@ func (f Federation) Resolve(claims FederatedClaims, now time.Time) (Account, err
 	// provider already decided they are an employee, and requiring a second
 	// local acceptance step is the duplicate-identity problem in another form.
 	account.Status = AccountActive
+
+	// The revocation watermark starts at the credential that created the
+	// account, not at the moment of resolution.
+	//
+	// NewAccount defaults it to `now`, which is right for a locally invited
+	// account — a credential predating the account is suspicious. For a
+	// federated account it is wrong and self-defeating: the account is created
+	// *by* this sign-in, so the token necessarily predates it by however long
+	// the request took, and every first sign-in would be refused by the very
+	// credential that produced it.
+	//
+	// A store's Upsert keeps the stored watermark for an account that already
+	// exists, so this only ever applies on creation.
+	if !claims.IssuedAt.IsZero() {
+		account.NotValidBefore = claims.IssuedAt.UTC().Add(-time.Nanosecond)
+	} else {
+		// No issued-at to anchor to. Zero rather than `now`: an account whose
+		// watermark nobody set should revoke nothing, and the store will move
+		// it forward the first time somebody actually revokes.
+		account.NotValidBefore = time.Time{}
+	}
 	return account, nil
 }
 

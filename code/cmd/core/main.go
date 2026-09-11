@@ -20,7 +20,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/ppusapati/health/code/internal/app"
 	"github.com/ppusapati/health/code/internal/identity_access/adapters/devauth"
+	oidcadapter "github.com/ppusapati/health/code/internal/identity_access/adapters/oidc"
+	identitypostgres "github.com/ppusapati/health/code/internal/identity_access/adapters/postgres"
 	"github.com/ppusapati/health/code/internal/platform/obs"
+	"github.com/ppusapati/health/code/internal/platform/pgtx"
 	platformtransport "github.com/ppusapati/health/code/internal/platform/transport"
 	platformapitransport "github.com/ppusapati/health/code/internal/platform_api/transport"
 	"golang.org/x/net/http2"
@@ -86,7 +89,7 @@ func run() error {
 		return err
 	}
 
-	verifier, err := buildVerifier(os.Getenv("AUTH_MODE"))
+	verifier, err := buildVerifier(ctx, os.Getenv("AUTH_MODE"), pool)
 	if err != nil {
 		return err
 	}
@@ -154,18 +157,61 @@ func serve(s *http.Server, mode platformtransport.TLSMode) error {
 
 // buildVerifier selects the identity provider.
 //
-// ADR-008 is still open, so the only implementation available today is the
-// development verifier, and it must be requested explicitly. Any other value —
-// including the empty string — is a hard failure rather than a silent fallback
-// to an insecure default.
-func buildVerifier(mode string) (platformtransport.TokenVerifier, error) {
+// ADR-008 is closed: `oidc` is the production verifier and `dev` remains for
+// local development. AUTH_MODE has no default and an unknown value is a hard
+// failure, so there is no insecure mode reachable by configuration drift.
+func buildVerifier(ctx context.Context, mode string, pool *pgxpool.Pool) (platformtransport.TokenVerifier, error) {
 	switch mode = strings.ToLower(mode); mode {
+	case "oidc":
+		return buildOIDCVerifier(ctx, pool)
 	case "dev":
-		slog.Warn("using development token verifier; not for production (ADR-008 open)")
+		slog.Warn("using development token verifier; not for production")
 		return devauth.New(true)
 	case "":
-		return nil, errors.New("AUTH_MODE is required (set AUTH_MODE=dev for local development)")
+		return nil, errors.New("AUTH_MODE is required (oidc, or dev for local development)")
 	default:
 		return nil, errors.New("unsupported AUTH_MODE: " + mode)
 	}
 }
+
+// buildOIDCVerifier assembles the production verifier (ADR-008).
+//
+// Federations are read from the database rather than configured here, because
+// each tenant brings its own identity provider and a deployment serves many:
+// adding a customer must not require a redeploy.
+func buildOIDCVerifier(_ context.Context, pool *pgxpool.Pool) (platformtransport.TokenVerifier, error) {
+	audience := os.Getenv("OIDC_AUDIENCE")
+	if audience == "" {
+		// Without an audience every token any provider ever issued for any
+		// application would be accepted here.
+		return nil, errors.New("OIDC_AUDIENCE is required when AUTH_MODE=oidc")
+	}
+
+	cfg := oidcadapter.Config{Audience: audience}
+
+	// A tenant that requires MFA states the acr/amr values that satisfy it.
+	// Absent means the tenant has not asked, which is their decision rather
+	// than a default this code picks (SRS-IAM-010).
+	if raw := os.Getenv("OIDC_REQUIRED_ACR"); raw != "" {
+		for _, value := range strings.Split(raw, ",") {
+			if trimmed := strings.TrimSpace(value); trimmed != "" {
+				cfg.RequiredACRValues = append(cfg.RequiredACRValues, trimmed)
+			}
+		}
+	}
+	if raw := os.Getenv("OIDC_CLOCK_SKEW"); raw != "" {
+		skew, err := time.ParseDuration(raw)
+		if err != nil {
+			return nil, errors.New("OIDC_CLOCK_SKEW is not a duration: " + raw)
+		}
+		cfg.ClockSkew = skew
+	}
+
+	repo := identitypostgres.New(pgtx.NewManager(pool))
+	return oidcadapter.New(cfg, repo, repo, systemClock{})
+}
+
+// systemClock reads the wall clock.
+type systemClock struct{}
+
+func (systemClock) Now() time.Time { return time.Now().UTC() }

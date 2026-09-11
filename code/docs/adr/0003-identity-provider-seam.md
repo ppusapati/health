@@ -1,6 +1,8 @@
 # ADR-W0-003: Wave 0 ships an identity seam, not an identity vendor
 
-- **Status**: Accepted (provisional — closes with ADR-008)
+- **Status**: Superseded by [ADR-008](0008-enterprise-identity-provider.md)
+- **Note**: The seam held exactly as intended — closing ADR-008 changed the
+  composition root and the `AUTH_MODE` switch, and no downstream code moved.
 - **Date**: 2026-09-11
 - **Defers to**: ADR-008 (enterprise identity provider, *Decision Required*, blocking)
 - **Requirements**: SRS-IAM-001, SRS-IAM-003, SRS-IAM-013
