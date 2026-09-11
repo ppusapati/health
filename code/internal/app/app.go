@@ -60,6 +60,12 @@ type Deps struct {
 	// timeout.
 	ProcedureDeadlines map[string]time.Duration
 
+	// SecurityHeaders is the browser security baseline (SRS-WEB-015). The zero
+	// value sends a CSP with no configured connect sources, which breaks a
+	// split-origin deployment loudly rather than quietly — so the composition
+	// root fills in a default below.
+	SecurityHeaders platformtransport.SecurityHeaderConfig
+
 	// Revoker refuses sessions belonging to disabled or moved users
 	// (SRS-IAM-006). Nil disables the check, which is correct only where no
 	// revocation store exists yet — ADR-008 is open, so the development
@@ -79,6 +85,9 @@ type Server struct {
 func New(deps Deps) *Server {
 	if deps.RateLimit.RequestsPerSecond == 0 {
 		deps.RateLimit = platformtransport.DefaultRateLimit()
+	}
+	if len(deps.SecurityHeaders.ConnectSources) == 0 {
+		deps.SecurityHeaders = platformtransport.DefaultSecurityHeaders()
 	}
 
 	txManager := pgtx.NewManager(deps.Pool)
@@ -149,8 +158,14 @@ func New(deps Deps) *Server {
 			"postgres": poolPinger{pool: deps.Pool},
 		}), interceptors))
 
+	// Security headers wrap the mux rather than sitting in the interceptor
+	// chain, so they reach every response the browser sees — a 404, a
+	// malformed request rejected before routing, anything an interceptor never
+	// runs for (SRS-WEB-015).
+	handler := platformtransport.NewSecurityHeaders(deps.SecurityHeaders, mux)
+
 	return &Server{
-		Handler:      mux,
+		Handler:      handler,
 		Organization: orgService,
 		Store:        platformStore,
 		RateLimiter:  rateLimiter,

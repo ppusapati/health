@@ -6,6 +6,15 @@
 // pressure is invisible in review but obvious to a test.
 //
 // Each test names the FIT rule it enforces.
+//
+// This package is the mechanism SRS-NFR-010 asks for: architecture boundaries
+// enforced through package ownership and CI architecture tests, verified by a
+// forbidden import or a cross-domain database access failing the build. Every
+// rule here is a build failure rather than a review comment, which is the
+// difference the requirement is actually about — a convention that is only
+// written down is a convention that decays.
+//
+// Trace: SRS-NFR-010, SRS-API-012, SRS-DAT-004, SRS-DAT-007.
 package fitness_test
 
 import (
