@@ -14,3 +14,10 @@ apps/mobile/android/local.properties
 apps/mobile/ios/Pods/
 apps/mobile/ios/.symlinks/
 apps/mobile/*.iml
+
+# Playwright output. The report is a build artifact; CI uploads it on failure
+# and nobody should be committing a local run's screenshots.
+apps/web/test-results/
+apps/web/playwright-report/
+apps/web/blob-report/
+apps/web/.playwright/

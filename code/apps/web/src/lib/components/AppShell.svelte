@@ -21,6 +21,14 @@
 </script>
 
 <div class="shell">
+	<!--
+	  Skip link (WCAG 2.2 AA, 2.4.1 bypass blocks). Without it a keyboard or
+	  screen-reader user tabs through the whole context header and sidebar on
+	  every single page — which in a ward, between patients, is dozens of times
+	  a shift. Visually hidden until focused, so it costs sighted users nothing.
+	-->
+	<a class="skip-link" href="#main-content">Skip to main content</a>
+
 	{#if !isProduction}
 		<div class="environment" role="status">
 			{environment.toUpperCase()} environment — not for real patient data
@@ -62,7 +70,7 @@
 			<a href="/">Home</a>
 			<a href="/facilities">Facilities</a>
 		</nav>
-		<main class="content">
+		<main class="content" id="main-content" tabindex="-1">
 			{@render children()}
 		</main>
 	</div>
@@ -75,6 +83,23 @@
 			ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 		color: #1b2333;
 		background: #f6f7f9;
+	}
+	.skip-link {
+		position: absolute;
+		left: -9999px;
+		top: 0;
+		background: #1c5fd6;
+		color: #fff;
+		padding: 0.6rem 1rem;
+		z-index: 10;
+		text-decoration: none;
+	}
+	.skip-link:focus {
+		/* Brought into view rather than merely made visible: a focused element
+		   off-screen is focusable and unreachable, which is worse than absent
+		   because the tab order silently stalls on it. */
+		left: 0.5rem;
+		top: 0.5rem;
 	}
 	.environment {
 		background: #6b4708;

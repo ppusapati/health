@@ -115,8 +115,16 @@ test-security: ## Security registers: risk acceptances, threat model actions, pe
 	go test ./tools/security/ -count=1
 
 .PHONY: release-gate
-release-gate: ## Production release gate, including the penetration test check
+release-gate: ## Production release gate: penetration test and severity-1 defects
 	RELEASE_CHANNEL=production go test ./tools/security/ -count=1 -v
+
+.PHONY: web-a11y
+web-a11y: ## Accessibility gate (WCAG 2.2 AA)
+	cd apps/web && npm run test:a11y
+
+.PHONY: web-browsers
+web-browsers: ## Cross-browser smoke suite (SRS-NFR-014)
+	cd apps/web && npm run test:browsers
 
 .PHONY: test-infra
 test-infra: ## Deployment manifest invariants (no cluster required)

@@ -221,3 +221,36 @@ jobs:
         working-directory: code/apps/web
       - run: npm test
         working-directory: code/apps/web
+
+  browser:
+    name: Accessibility and cross-browser
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: code/apps/web/package-lock.json
+      - run: npm ci
+        working-directory: code/apps/web
+      - name: Install browsers
+        run: npx playwright install --with-deps chromium webkit
+        working-directory: code/apps/web
+      # SRS-WEB-009 and SRS-NFR-007: WCAG 2.2 AA as a gate, not a report. An
+      # accessibility scan whose output nobody is accountable for is how a
+      # product ships at AA on paper and at nothing in practice.
+      - name: Accessibility (WCAG 2.2 AA)
+        run: npm run test:a11y
+        working-directory: code/apps/web
+      # SRS-NFR-014: the published support matrix, exercised rather than
+      # asserted.
+      - name: Cross-browser smoke
+        run: npm run test:browsers
+        working-directory: code/apps/web
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: code/apps/web/playwright-report/
+          retention-days: 7

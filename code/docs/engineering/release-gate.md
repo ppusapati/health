@@ -20,6 +20,11 @@ Run by CI on every change:
 | Threat model actions | `tools/security` | an open action past its due date |
 | Manifest invariants | `tools/infra` | a weakened security control |
 | Architecture fitness | `tools/fitness` | a crossed layer boundary |
+| Schema change rules | `tools/migrations` | an unpaired contracting migration |
+| API contract semantics | `internal/app` (`-run Contract`) | a changed permission or error code |
+| Accessibility (WCAG 2.2 AA) | `apps/web` (`npm run test:a11y`) | any AA violation |
+| Cross-browser smoke | `apps/web` (`npm run test:browsers`) | a failure on any supported engine |
+| Latency and concurrency | `internal/app` | p95 over 400 ms; a race producing duplicates |
 
 Run only for a production release:
 
@@ -27,8 +32,10 @@ Run only for a production release:
 RELEASE_CHANNEL=production go test ./tools/security/ -count=1
 ```
 
-This adds the penetration-test gate. **It fails today, and correctly so:**
-no engagement is registered, and Wave 0 is pre-production.
+This adds two blocking gates: the penetration test (SRS-SEC-013) and the
+severity-1 defect register (SRS-NFR-015). **Both fail today for the pentest
+gate, and correctly so:** no engagement is registered, and Wave 0 is
+pre-production. The defect register is empty, which passes.
 
 ## What a person checks
 
@@ -60,6 +67,23 @@ be automated because they are judgements, not conditions.
 
 5. Confirm the rotation drill is within its quarter
    (`docs/engineering/runbooks/key-rotation.md`).
+
+6. **Confirm the disaster-recovery drill is current** and that any missed
+   target has a remediation reference
+   (`docs/engineering/runbooks/disaster-recovery.md`, SRS-NFR-005). The gate
+   checks the drill happened, not that it passed — a team that must pass to
+   release will stop running the drill in conditions where it might not.
+
+7. **Run the manual accessibility pass** on the workflows changed this release
+   (SRS-WEB-009, SRS-NFR-007). Automated scanning finds roughly a third of WCAG
+   failures: it catches a missing label and cannot tell whether a label is
+   meaningful, whether focus order makes sense without sight of the layout, or
+   whether an error message says what to do. Sample with a screen reader and
+   with keyboard only.
+
+8. **Review the severity-1 defect register** (SRS-NFR-015). The gate refuses an
+   open one; only a person can judge whether something recorded as severity 2
+   should have been severity 1.
 
 ## Accepting a risk
 

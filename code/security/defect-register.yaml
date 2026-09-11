@@ -1,0 +1,43 @@
+# Severity-1 defect register (SRS-NFR-015).
+#
+# "No unresolved severity-1 clinical, security or data-integrity defect at the
+# production gate", verified by "release checklist contains signed
+# disposition". The register is that checklist's data: tools/security refuses a
+# production release while a severity-1 defect is open, and refuses an entry
+# whose disposition is not signed by someone who can carry it.
+#
+# What counts as severity 1 is deliberately narrow. Widening it makes the gate
+# theatre — a list of forty items nobody reads — and narrowing it further makes
+# it useless. The three categories are the ones where the consequence is not
+# recoverable by trying again:
+#
+#   clinical        wrong data shown to, or recorded about, a patient
+#   security        unauthorized access, or a control that does not hold
+#   data-integrity  committed data lost, corrupted, or silently wrong
+#
+# A defect that is merely severe — a broken screen, a slow report, an outage
+# with a workaround — is not severity 1 under this definition, and putting it
+# here to force attention is how the gate stops working.
+
+defects: []
+
+# Shape of an entry, for whoever adds the first one:
+#
+#   - id: DEF-0001
+#     category: clinical | security | data-integrity
+#     summary: >-
+#       One sentence describing what goes wrong, in terms of what a user or a
+#       patient experiences rather than which function is at fault.
+#     discovered_on: 2026-09-11
+#     state: open | fixed | accepted
+#     # For state: fixed
+#     fixed_on: 2026-09-12
+#     evidence: "commit abc1234; regression test TestFoo"
+#     # For state: accepted — only ever a deliberate, time-boxed decision
+#     accepted_by: vp-security
+#     accepted_on: 2026-09-12
+#     expires_on: 2026-10-12
+#     justification: >-
+#       Why the risk is tolerable until the expiry, and what compensates in the
+#       meantime. An acceptance with no compensating control is a decision to
+#       ship the defect, which is sometimes right and must be visible as such.
