@@ -581,7 +581,7 @@ type SchedulingAppointment struct {
 	ResourceID        uuid.UUID
 	OrgUnitID         pgtype.UUID
 	PatientID         uuid.UUID
-	SlotID            uuid.UUID
+	SlotID            pgtype.UUID
 	VisitType         string
 	VisitMode         string
 	StartsAt          pgtype.Timestamptz
@@ -597,6 +597,26 @@ type SchedulingAppointment struct {
 	Occurrence        *int32
 	RescheduleCount   int32
 	JoinUrl           string
+	Token             string
+	ArrivalMode       string
+	CheckedInAt       pgtype.Timestamptz
+	Priority          string
+	PriorityReason    string
+}
+
+type SchedulingAppointmentNotification struct {
+	NotificationID uuid.UUID
+	TenantID       uuid.UUID
+	AppointmentID  pgtype.UUID
+	WaitlistID     pgtype.UUID
+	PatientID      uuid.UUID
+	Kind           string
+	Channel        string
+	Outcome        string
+	Detail         string
+	SendAfter      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 type SchedulingAppointmentPolicyOutcome struct {
@@ -652,6 +672,16 @@ type SchedulingCancellationPolicy struct {
 	TeleconsultRequiresConfirmedIdentity bool
 	CreatedAt                            pgtype.Timestamptz
 	UpdatedAt                            pgtype.Timestamptz
+	NotificationKinds                    []string
+	ReminderHoursBefore                  int32
+}
+
+type SchedulingQueueCounter struct {
+	TenantID   uuid.UUID
+	FacilityID uuid.UUID
+	QueueDate  pgtype.Date
+	NextNumber int32
+	UpdatedAt  pgtype.Timestamptz
 }
 
 type SchedulingResource struct {

@@ -46,9 +46,11 @@ func (r AppointmentRepo) Insert(ctx context.Context, scope authctx.TenantScope,
 	if err != nil {
 		return rpcerr.Invalid("SCH_PATIENT_ID_INVALID", "patient_id must be a UUID")
 	}
-	slotID, err := uuid.Parse(a.SlotID)
+	// Nullable: a walk-in holds no rostered slot, because by definition nobody
+	// set time aside for them (SRS-SCH-010).
+	slotID, err := optionalUUID(a.SlotID)
 	if err != nil {
-		return rpcerr.Internal("SCH_SLOT_ID_INVALID", "slot_id must be a UUID").WithCause(err)
+		return err
 	}
 	orgUnit, err := optionalUUID(a.OrgUnitID)
 	if err != nil {
@@ -78,6 +80,13 @@ func (r AppointmentRepo) Insert(ctx context.Context, scope authctx.TenantScope,
 		RescheduledFromID: rescheduledFrom,
 		SeriesID:          seriesID, Occurrence: occurrence,
 		RescheduleCount: int32(a.RescheduleCount), JoinUrl: a.JoinURL,
+		// A walk-in arrives already checked in, so the queue fields are set on
+		// the insert rather than by a later check-in (SRS-SCH-010). Empty for
+		// an ordinary booking, which is not a queue entry until the patient
+		// turns up.
+		Token: a.Token, ArrivalMode: string(a.ArrivalMode),
+		CheckedInAt: nullableTimestamptzPtr(a.CheckedInAt),
+		Priority:    string(a.Priority), PriorityReason: a.PriorityReason,
 		CreatedAt: timestamptz(a.CreatedAt), UpdatedAt: timestamptz(a.UpdatedAt),
 	}); err != nil {
 		return err
@@ -265,7 +274,8 @@ func appointmentFromRow(row sqlcgen.SchedulingAppointment) *domain.Appointment {
 	a := domain.Appointment{
 		TenantID: row.TenantID.String(), FacilityID: row.FacilityID.String(),
 		ResourceID: row.ResourceID.String(), PatientID: row.PatientID.String(),
-		SlotID:    row.SlotID.String(),
+		Token: row.Token, ArrivalMode: domain.ArrivalMode(row.ArrivalMode),
+		Priority: domain.Priority(row.Priority), PriorityReason: row.PriorityReason,
 		VisitType: domain.VisitType(row.VisitType), VisitMode: domain.VisitMode(row.VisitMode),
 		StartsAt: row.StartsAt.Time.UTC(), EndsAt: row.EndsAt.Time.UTC(),
 		Status:   domain.Status(row.Status),
@@ -279,6 +289,13 @@ func appointmentFromRow(row sqlcgen.SchedulingAppointment) *domain.Appointment {
 	}
 	if row.RescheduledFromID.Valid {
 		a.RescheduledFromID = uuid.UUID(row.RescheduledFromID.Bytes).String()
+	}
+	if row.SlotID.Valid {
+		a.SlotID = uuid.UUID(row.SlotID.Bytes).String()
+	}
+	if row.CheckedInAt.Valid {
+		at := row.CheckedInAt.Time.UTC()
+		a.CheckedInAt = &at
 	}
 	if row.SeriesID.Valid {
 		a.SeriesID = uuid.UUID(row.SeriesID.Bytes).String()

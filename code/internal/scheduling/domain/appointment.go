@@ -158,6 +158,22 @@ type Appointment struct {
 	// in-person appointment: one carrying a link invites a patient to stay home.
 	JoinURL string
 
+	// The queue (SRS-SCH-007 … SRS-SCH-011). All zero until the patient
+	// arrives: a booking is not a queue entry, and a diary full of tokens for
+	// people who have not turned up is a board nobody can read.
+
+	// Token is what the patient is called by. Not the appointment id: that is a
+	// UUID nobody can read out across a noisy waiting room.
+	Token       string
+	ArrivalMode ArrivalMode
+	CheckedInAt *time.Time
+	Priority    Priority
+	// PriorityReason is shown to queue users, not buried in an audit table:
+	// the people waiting can see that somebody went ahead of them, and a board
+	// that shows the move without the reason produces the argument the reason
+	// exists to prevent (SRS-SCH-011).
+	PriorityReason string
+
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	Version   int64

@@ -21,6 +21,7 @@ sql:
       - db/migrations/0016_empi_photo_access_unidentified.up.sql
       - db/migrations/0017_scheduling.up.sql
       - db/migrations/0018_scheduling_lifecycle.up.sql
+      - db/migrations/0019_scheduling_queue.up.sql
     gen:
       go:
         package: sqlcgen

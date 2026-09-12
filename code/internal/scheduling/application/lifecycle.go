@@ -75,13 +75,13 @@ func (s *Service) CancelAppointment(ctx context.Context, in CancelAppointmentInp
 			return err
 		}
 
-		cancellationPolicy, _, err := s.policies.Resolve(ctx, scope, appointment.FacilityID)
+		facilityPolicy, err := s.policies.Resolve(ctx, scope, appointment.FacilityID)
 		if err != nil {
 			return err
 		}
 
 		before := appointment.Version
-		outcome, err := appointment.Cancel(cancellationPolicy, session.SubjectID, in.Reason, now)
+		outcome, err := appointment.Cancel(facilityPolicy.Cancellation, session.SubjectID, in.Reason, now)
 		if err != nil {
 			return scheduleError(err)
 		}
@@ -110,6 +110,10 @@ func (s *Service) CancelAppointment(ctx context.Context, in CancelAppointmentInp
 				"timely":     outcome.Timely,
 				"chargeable": outcome.Chargeable,
 			}); err != nil {
+			return err
+		}
+
+		if err := s.notify(ctx, session, appointment, domain.NotifyCancelled, now); err != nil {
 			return err
 		}
 
@@ -194,19 +198,19 @@ func (s *Service) RescheduleAppointment(ctx context.Context, in RescheduleAppoin
 			})
 		}
 
-		cancellationPolicy, _, err := s.policies.Resolve(ctx, scope, original.FacilityID)
+		facilityPolicy, err := s.policies.Resolve(ctx, scope, original.FacilityID)
 		if err != nil {
 			return err
 		}
-		if cancellationPolicy.MaxReschedules > 0 &&
-			original.RescheduleCount >= cancellationPolicy.MaxReschedules {
+		if facilityPolicy.Cancellation.MaxReschedules > 0 &&
+			original.RescheduleCount >= facilityPolicy.Cancellation.MaxReschedules {
 			// A booking moved eleven times is a patient who is not coming, and
 			// each move cost a slot somebody else could have used.
 			return rpcerr.FailedPrecondition("SCH_RESCHEDULE_LIMIT",
 				"this appointment has been moved as many times as the policy allows")
 		}
 
-		outcome := cancellationPolicy.AssessReschedule(original.StartsAt, now)
+		outcome := facilityPolicy.Cancellation.AssessReschedule(original.StartsAt, now)
 
 		// The new slot first. If it cannot be claimed, the patient keeps the
 		// appointment they had — which is far better than losing it to a move
@@ -269,6 +273,10 @@ func (s *Service) RescheduleAppointment(ctx context.Context, in RescheduleAppoin
 			return err
 		}
 
+		if err := s.notify(ctx, session, moved, domain.NotifyRescheduled, now); err != nil {
+			return err
+		}
+
 		result = RescheduleAppointmentResult{
 			Appointment: moved, PreviousID: original.ID(), Outcome: outcome,
 		}
@@ -285,14 +293,15 @@ func (s *Service) RescheduleAppointment(ctx context.Context, in RescheduleAppoin
 	return result, nil
 }
 
-// SetSchedulingPolicyInput configures cancellation and teleconsult rules.
+// SetSchedulingPolicyInput configures the cancellation, teleconsult and
+// notification rules.
 type SetSchedulingPolicyInput struct {
-	FacilityID   string
-	Cancellation domain.CancellationPolicy
-	Teleconsult  domain.TeleconsultPolicy
+	FacilityID string
+	Policy     domain.SchedulingPolicy
 }
 
-// SetSchedulingPolicy configures the rules in force (SRS-SCH-005, SRS-SCH-015).
+// SetSchedulingPolicy configures the rules in force (SRS-SCH-005, SRS-SCH-012,
+// SRS-SCH-015).
 func (s *Service) SetSchedulingPolicy(ctx context.Context, in SetSchedulingPolicyInput) error {
 	session, err := authctx.FromContext(ctx)
 	if err != nil {
@@ -309,7 +318,7 @@ func (s *Service) SetSchedulingPolicy(ctx context.Context, in SetSchedulingPolic
 		return rpcerr.PermissionDenied("SCH_CONFIGURE_DENIED", decision.Reason)
 	}
 
-	if err := in.Cancellation.Validate(); err != nil {
+	if err := in.Policy.Validate(); err != nil {
 		return scheduleError(err)
 	}
 
@@ -317,8 +326,7 @@ func (s *Service) SetSchedulingPolicy(ctx context.Context, in SetSchedulingPolic
 	now := s.clock.Now()
 
 	return s.uow.WithinTx(ctx, func(ctx context.Context) error {
-		if err := s.policies.Set(ctx, scope, in.FacilityID,
-			in.Cancellation, in.Teleconsult, now); err != nil {
+		if err := s.policies.Set(ctx, scope, in.FacilityID, in.Policy, now); err != nil {
 			return err
 		}
 		return s.appendAudit(ctx, session, audit.Record{

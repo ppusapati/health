@@ -128,3 +128,54 @@ func (p Patients) IdentityConfirmed(ctx context.Context, scope authctx.TenantSco
 	}
 	return patient.Status == empidomain.StatusActive, nil
 }
+
+// Contacts adapts the patient index's communication preferences (SRS-SCH-012).
+//
+// A seam rather than a copy, because SRS-EMPI-013 holds the answer per channel
+// *and* per purpose, and a scheduling copy would be a second record of what a
+// patient agreed to — which is exactly the record somebody would forget to
+// update when the patient changed their mind.
+type Contacts struct {
+	preferences empiports.HistoryRepository
+	clock       func() time.Time
+}
+
+// NewContacts constructs the adapter.
+func NewContacts(preferences empiports.HistoryRepository, now func() time.Time) Contacts {
+	return Contacts{preferences: preferences, clock: now}
+}
+
+var _ ports.PatientContact = Contacts{}
+
+// preferredChannelOrder is the order appointment messages are tried in.
+//
+// SMS first because an appointment reminder is short, timely and read on a
+// phone; post last because a message that arrives after the appointment is not
+// a reminder. Phone is absent deliberately: a call is a person's time, not a
+// channel this context can commit somebody to.
+var preferredChannelOrder = []empidomain.CommunicationChannel{
+	empidomain.ChannelSMS, empidomain.ChannelEmail, empidomain.ChannelPost,
+}
+
+// PreferredChannel returns the channel this patient agreed to for appointment
+// messages.
+//
+// Deny by default. An absent preference means nobody asked, and sending anyway
+// on the grounds that the patient never said no is how an optional
+// communication reaches somebody who did not want it.
+func (c Contacts) PreferredChannel(ctx context.Context, scope authctx.TenantScope,
+	patientID string) (string, bool, error) {
+
+	preferences, err := c.preferences.Preferences(ctx, scope, patientID)
+	if err != nil {
+		return "", false, err
+	}
+
+	at := c.clock()
+	for _, channel := range preferredChannelOrder {
+		if preferences.Permits(channel, empidomain.PurposeAppointmentReminder, at) {
+			return string(channel), true, nil
+		}
+	}
+	return "", false, nil
+}

@@ -483,16 +483,16 @@ pushes it off-record.
 | SRS-SCH-004 | Atomic booking that cannot exceed configured capacity under concurrency | **Implemented** |
 | SRS-SCH-005 | Reschedule/cancel with cutoff policy, reason, fee/refund integration; status history retained | **Implemented** |
 | SRS-SCH-006 | Waitlist with expiring offers and no duplicate confirmed bookings | **Implemented** |
-| SRS-SCH-007 | Check-in with token/queue state, arrival mode | Not started |
-| SRS-SCH-008 | Nine queue states; invalid transitions rejected unless authorised correction | Domain and persistence complete; the queue RPCs arrive with 3C |
-| SRS-SCH-009 | Wait-time estimate from service rate, queue and provider status | Not started |
-| SRS-SCH-010 | Walk-in appointment/queue with reason and prioritisation | Not started |
-| SRS-SCH-011 | Medically justified queue reprioritisation, audited and visible | Not started |
-| SRS-SCH-012 | Configurable booking/reminder/reschedule/cancellation notifications | Not started |
+| SRS-SCH-007 | Check-in with token/queue state, arrival mode | **Implemented** |
+| SRS-SCH-008 | Nine queue states; invalid transitions rejected unless authorised correction | **Implemented** |
+| SRS-SCH-009 | Wait-time estimate from service rate, queue and provider status | **Implemented** |
+| SRS-SCH-010 | Walk-in appointment/queue with reason and prioritisation | **Implemented** |
+| SRS-SCH-011 | Medically justified queue reprioritisation, audited and visible | **Implemented** |
+| SRS-SCH-012 | Configurable booking/reminder/reschedule/cancellation notifications | **Implemented** — scheduling records that a message is owed and what came back; sending belongs to SRS-NTF |
 | SRS-SCH-013 | Recurring appointments and therapy series | **Implemented** |
 | SRS-SCH-014 | Prevent booking an inactive provider/resource/facility, with a domain-specific error | **Implemented** |
 | SRS-SCH-015 | Teleconsult vs in-person rules driving location/link and eligibility | **Implemented** |
-| SRS-SCH-016 | `appointment.booked/rescheduled/cancelled/checked_in/no_show`, idempotent and versioned | Partial — `booked` emitted; the rest arrive with their use cases |
+| SRS-SCH-016 | `appointment.booked/rescheduled/cancelled/checked_in/no_show`, idempotent and versioned | **Implemented** — all five, plus `status_changed` and `reprioritised` |
 
 ### What availability and booking enforce
 
@@ -604,6 +604,73 @@ pushes it off-record.
   constraint refuses it. Minting the link is a port, because it is a credential:
   anybody holding it can join a consultation.
 
+### What the queue enforces
+
+- **Clinical priority is a clinical judgement, never arithmetic.** A five-band
+  scale is what triage systems use and what staff can hold in their heads. A
+  numeric score would invite arithmetic, and arithmetic on clinical urgency is
+  how somebody ends up behind a spreadsheet. The estimate never reorders the
+  queue: SRS-SCH-009 is explicit that it "updates without changing clinical
+  priority", and a queue that rearranged itself to make its own predictions come
+  true would be optimising the wrong thing.
+- **A reason for a move is shown, not filed.** SRS-SCH-011 asks for
+  reprioritisation to be "audited and visible to queue users", and the second
+  half is the one that matters at the desk: the people waiting can see that
+  somebody went ahead of them, and a board that shows the move without the
+  reason produces the argument the reason exists to prevent. So the reason is on
+  the appointment the board renders, as well as in the audit trail.
+- **The queue is ordered by arrival, not by appointment time.** Somebody who
+  turned up on time for a 09:00 slot has been waiting since 09:00, and an order
+  built on booking time would keep putting late arrivals in front of them.
+- **A queue number is a number.** SRS-SCH-007 says "token/queue number", and a
+  waiting room understands that 014 comes after 013; a board showing "K7QX"
+  tells nobody how long they have left. Issued from a per-facility, per-day
+  counter advanced by a guarded upsert — the same row-lock primitive as MRN
+  issuance — so two clerks checking patients in at the same instant cannot both
+  be handed 014. A clinic with its own numbering scheme supplies its own token
+  instead.
+- **The estimate is observed, and says so.** It comes from consultations that
+  actually finished today rather than from the roster: a clinic running twenty
+  minutes behind is running twenty minutes behind whatever the diary says. Below
+  three finished consultations it falls back to the rostered slot length and
+  reports `observed: false`, because one is an anecdote and two is a
+  coincidence. The arithmetic travels with the number — patients ahead, service
+  rate, clinicians working — so a display can say "about forty minutes, based on
+  four ahead and ten minutes each", which a person can judge, rather than "about
+  forty minutes", which they can only believe or disbelieve.
+- **A walk-in is an ordinary appointment.** SRS-SCH-010's criterion is that it
+  is "linked to same encounter creation flow". A parallel lightweight record
+  would be a second thing every downstream context has to know about, and the
+  first one to forget would drop walk-ins from a report. It holds no rostered
+  slot, because by definition nobody set time aside: consuming one somebody else
+  booked would turn an unscheduled arrival into a cancelled appointment for a
+  patient who did nothing wrong.
+- **The correction escape hatch is a permission of its own.** A state machine
+  with no escape hatch gets worked around, and the workaround is worse than the
+  hole: a clerk who marked the wrong patient as a no-show will otherwise cancel
+  the real appointment and book a new one, destroying the chronology the record
+  existed to keep. So corrections are permitted, named as corrections, carry a
+  reason, and need `sch.appointment.correct` — which a clerk working the queue
+  does not hold.
+- **Scheduling records notifications; it does not send them.** Channels,
+  templates, retries, opt-outs and quiet hours belong to a notification service
+  (SRS-NTF); a booking screen waiting on an SMS gateway is a booking screen that
+  times out. What this context does is decide a message is owed, ask the patient
+  index whether the patient agreed to hear about it, and record what came back —
+  which is SRS-SCH-012's acceptance criterion, and the thing that distinguishes
+  a patient who says they were never told from one who was.
+- **An unrecorded consent is a refusal.** SRS-EMPI-013 holds communication
+  preference per channel *and* per purpose, and scheduling reads it through a
+  port rather than keeping a copy that drifts. A patient who has agreed to
+  nothing has their messages recorded as suppressed, with the reason, rather
+  than silently skipped: "we did not tell them, and here is why" is an answer a
+  desk can give; silence is not.
+- **A waitlist offer is a notification about an offer, not about a booking.**
+  There is no appointment yet, and its delivery outcome is the one that matters
+  most — an offer nobody received expires against a patient who never had the
+  chance to answer. So a notification names exactly one subject, an appointment
+  or a waiting-list entry, enforced by a database constraint.
+
 ### Sprint 3 evidence
 
 | Property | Test |
@@ -645,6 +712,32 @@ pushes it off-record.
 | Cancelled releases capacity; no-show does not | `TestOnlyCancellationReleasesCapacity` |
 | A schedule refuses an unusable session | `TestAScheduleRefusesAnUnusableSession` |
 | Effective dates are honoured in both directions | `TestAScheduleAppliesOnlyWithinItsEffectiveWindow` |
+| Checking in issues a queue number and records the arrival mode | `TestCheckingInIssuesAQueueNumber`, `TestCheckingInIssuesATokenAndRecordsArrival` |
+| Queue numbers are unique per facility per day | `TestQueueNumbersAreUniquePerFacilityPerDay` |
+| A check-in above standard priority states why, and nobody checks in twice | `TestANonStandardPriorityNeedsAReasonAtTheDoor`, `TestAPatientCannotCheckInTwice`, `TestCheckingInNeedsAToken` |
+| The queue state machine refuses an impossible jump | `TestTheQueueStateMachineRefusesAnImpossibleJump` |
+| A correction needs its own permission and a reason | `TestACorrectionNeedsItsOwnPermissionAndAReason` |
+| The queue is ordered by priority, then by arrival | `TestTheQueueIsOrderedByPriorityThenArrival`, `TestTheQueueOrdersByPriorityThenArrival` |
+| The queue holds only waiting patients, and the estimate grows down it | `TestTheQueueHoldsOnlyWaitingPatients`, `TestTheWaitEstimateGrowsDownTheQueueAndExplainsItself` |
+| The estimate is observed once enough consultations have finished | `TestTheWaitEstimateIsObservedOnceEnoughConsultationsHaveFinished`, `TestTheServiceRateIsObservedFromWhatActuallyHappened` |
+| Two clinicians halve the wait; an unobserved rate falls back rather than promising no wait | `TestTheWaitEstimateDividesByActiveClinicians`, `TestTheWaitEstimateFallsBackRatherThanReportingNoWait` |
+| An unknown priority sorts last, not first | `TestAnUnknownPrioritySortsLast` |
+| A walk-in becomes an ordinary appointment and joins the same queue | `TestAWalkInBecomesAnOrdinaryAppointment`, `TestAWalkInIsAnOrdinaryAppointment` |
+| A walk-in consumes no rostered slot | `TestAWalkInDoesNotConsumeARosteredSlot` |
+| A walk-in needs a stated reason | `TestAWalkInNeedsAStatedReason` (both layers) |
+| Reprioritising needs a reason and shows it on the board | `TestReprioritisingNeedsAReasonAndShowsItOnTheBoard`, `TestReprioritisingNeedsAReasonAndKeepsIt` |
+| A patient who has not arrived cannot be reprioritised | `TestAPatientWhoHasNotArrivedCannotBeReprioritised`, `TestOnlyACheckedInPatientCanBeReprioritised` |
+| Booking records a confirmation and schedules a reminder | `TestBookingRecordsAConfirmationAndAReminder` |
+| A delivery outcome is recorded and cannot be overwritten late | `TestBookingRecordsAConfirmationAndAReminder`, `TestANotificationRecordsItsOutcome` |
+| A failure or suppression states why | `TestAFailureOrSuppressionNeedsAReason` |
+| A patient who agreed to nothing has messages suppressed visibly | `TestAPatientWhoAgreedToNothingHasTheirMessagesSuppressedVisibly` |
+| A facility that sends nothing records nothing | `TestAFacilityThatSendsNothingRecordsNothing`, `TestAFacilityCanSendNothing` |
+| A reminder that would arrive too late is not scheduled | `TestAReminderIsNotDueWhenItWouldArriveTooLate`, `TestAReminderAtZeroHoursIsNotAReminder` |
+| A notification is about exactly one appointment or one offer | `TestANotificationIsAboutExactlyOneThing` |
+| An unknown stored notification kind is dropped | `TestAnUnknownStoredNotificationKindIsDropped` |
+| Check-in emits an event carrying the token but no demographics | `TestCheckingInEmitsAnEvent` |
+| A no-show does not give the slot back | `TestANoShowDoesNotGiveTheSlotBack` |
+| A queue cannot be reached from another tenant | `TestAQueueCannotBeReachedFromAnotherTenant` |
 
 ### Decisions taken against the backlog
 

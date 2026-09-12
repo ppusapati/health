@@ -170,21 +170,26 @@ INSERT INTO scheduling.appointment (
     appointment_id, tenant_id, facility_id, resource_id, org_unit_id,
     patient_id, slot_id, visit_type, visit_mode, starts_at, ends_at,
     status, booked_by, reason, rescheduled_from_id, created_at, updated_at, version,
-    series_id, occurrence, reschedule_count, join_url
+    series_id, occurrence, reschedule_count, join_url,
+    token, arrival_mode, checked_in_at, priority, priority_reason
 ) VALUES (
     @appointment_id, @tenant_id, @facility_id, @resource_id,
-    sqlc.narg('org_unit_id')::uuid, @patient_id, @slot_id, @visit_type, @visit_mode,
+    sqlc.narg('org_unit_id')::uuid, @patient_id, sqlc.narg('slot_id')::uuid,
+    @visit_type, @visit_mode,
     @starts_at, @ends_at, @status, @booked_by, @reason,
     sqlc.narg('rescheduled_from_id')::uuid, @created_at, @updated_at, 1,
     sqlc.narg('series_id')::uuid, sqlc.narg('occurrence')::integer,
-    @reschedule_count, @join_url
+    @reschedule_count, @join_url,
+    @token, @arrival_mode, sqlc.narg('checked_in_at')::timestamptz,
+    @priority, @priority_reason
 );
 
 -- name: GetAppointment :one
 SELECT appointment_id, tenant_id, facility_id, resource_id, org_unit_id,
        patient_id, slot_id, visit_type, visit_mode, starts_at, ends_at,
        status, booked_by, reason, rescheduled_from_id, created_at, updated_at, version,
-       series_id, occurrence, reschedule_count, join_url
+       series_id, occurrence, reschedule_count, join_url,
+       token, arrival_mode, checked_in_at, priority, priority_reason
 FROM scheduling.appointment
 WHERE tenant_id = @tenant_id AND appointment_id = @appointment_id;
 
@@ -217,7 +222,8 @@ ORDER BY changed_at, history_id;
 SELECT appointment_id, tenant_id, facility_id, resource_id, org_unit_id,
        patient_id, slot_id, visit_type, visit_mode, starts_at, ends_at,
        status, booked_by, reason, rescheduled_from_id, created_at, updated_at, version,
-       series_id, occurrence, reschedule_count, join_url
+       series_id, occurrence, reschedule_count, join_url,
+       token, arrival_mode, checked_in_at, priority, priority_reason
 FROM scheduling.appointment
 WHERE tenant_id = @tenant_id AND patient_id = @patient_id
 ORDER BY starts_at DESC, appointment_id
@@ -230,7 +236,8 @@ LIMIT @page_limit;
 SELECT appointment_id, tenant_id, facility_id, resource_id, org_unit_id,
        patient_id, slot_id, visit_type, visit_mode, starts_at, ends_at,
        status, booked_by, reason, rescheduled_from_id, created_at, updated_at, version,
-       series_id, occurrence, reschedule_count, join_url
+       series_id, occurrence, reschedule_count, join_url,
+       token, arrival_mode, checked_in_at, priority, priority_reason
 FROM scheduling.appointment
 WHERE tenant_id = @tenant_id
   AND facility_id = @facility_id
@@ -245,12 +252,13 @@ INSERT INTO scheduling.cancellation_policy (
     policy_id, tenant_id, facility_id, notice_hours, reschedule_notice_hours,
     max_reschedules, chargeable_when_late, teleconsult_enabled,
     teleconsult_visit_types, teleconsult_requires_confirmed_identity,
-    created_at, updated_at
+    notification_kinds, reminder_hours_before, created_at, updated_at
 ) VALUES (
     @policy_id, @tenant_id, sqlc.narg('facility_id')::uuid, @notice_hours,
     @reschedule_notice_hours, @max_reschedules, @chargeable_when_late,
     @teleconsult_enabled, @teleconsult_visit_types,
-    @teleconsult_requires_confirmed_identity, @created_at, @updated_at
+    @teleconsult_requires_confirmed_identity, @notification_kinds,
+    @reminder_hours_before, @created_at, @updated_at
 )
 ON CONFLICT (tenant_id, COALESCE(facility_id, '00000000-0000-0000-0000-000000000000'::uuid))
 DO UPDATE SET notice_hours = EXCLUDED.notice_hours,
@@ -261,13 +269,16 @@ DO UPDATE SET notice_hours = EXCLUDED.notice_hours,
               teleconsult_visit_types = EXCLUDED.teleconsult_visit_types,
               teleconsult_requires_confirmed_identity =
                   EXCLUDED.teleconsult_requires_confirmed_identity,
+              notification_kinds = EXCLUDED.notification_kinds,
+              reminder_hours_before = EXCLUDED.reminder_hours_before,
               updated_at = EXCLUDED.updated_at;
 
 -- name: GetCancellationPolicy :many
 -- Facility-specific rows first, so the resolver takes the first it sees.
 SELECT notice_hours, reschedule_notice_hours, max_reschedules,
        chargeable_when_late, teleconsult_enabled, teleconsult_visit_types,
-       teleconsult_requires_confirmed_identity, facility_id
+       teleconsult_requires_confirmed_identity,
+       notification_kinds, reminder_hours_before, facility_id
 FROM scheduling.cancellation_policy
 WHERE tenant_id = @tenant_id
   AND (facility_id IS NULL OR facility_id = sqlc.narg('facility_id')::uuid)
@@ -311,7 +322,8 @@ WHERE tenant_id = @tenant_id AND series_id = @series_id;
 SELECT appointment_id, tenant_id, facility_id, resource_id, org_unit_id,
        patient_id, slot_id, visit_type, visit_mode, starts_at, ends_at,
        status, booked_by, reason, rescheduled_from_id, created_at, updated_at, version,
-       series_id, occurrence, reschedule_count, join_url
+       series_id, occurrence, reschedule_count, join_url,
+       token, arrival_mode, checked_in_at, priority, priority_reason
 FROM scheduling.appointment
 WHERE tenant_id = @tenant_id AND series_id = @series_id
 ORDER BY starts_at, appointment_id;
@@ -388,3 +400,126 @@ SET reschedule_count = @reschedule_count, updated_at = @updated_at,
 WHERE tenant_id = @tenant_id
   AND appointment_id = @appointment_id
   AND version = @expected_version;
+
+-- name: SetCheckIn :execrows
+-- Records arrival: the token the patient is called by, how they got here, and
+-- where they sit in the queue (SRS-SCH-007).
+UPDATE scheduling.appointment
+SET status = @status, token = @token, arrival_mode = @arrival_mode,
+    checked_in_at = @checked_in_at, priority = @priority,
+    priority_reason = @priority_reason,
+    updated_at = @updated_at, version = version + 1
+WHERE tenant_id = @tenant_id
+  AND appointment_id = @appointment_id
+  AND version = @expected_version;
+
+-- name: SetPriority :execrows
+-- Moves a patient in the queue, carrying the reason queue users see
+-- (SRS-SCH-011).
+UPDATE scheduling.appointment
+SET priority = @priority, priority_reason = @priority_reason,
+    updated_at = @updated_at, version = version + 1
+WHERE tenant_id = @tenant_id
+  AND appointment_id = @appointment_id
+  AND version = @expected_version;
+
+-- name: ListQueue :many
+-- Everyone checked in at a facility today, in queue order.
+--
+-- Priority first, then arrival. Arrival rather than appointment time on
+-- purpose: somebody who turned up on time for a 09:00 slot has been waiting
+-- since 09:00, and ordering by booking time would keep putting late arrivals in
+-- front of them.
+SELECT appointment_id, tenant_id, facility_id, resource_id, org_unit_id,
+       patient_id, slot_id, visit_type, visit_mode, starts_at, ends_at,
+       status, booked_by, reason, rescheduled_from_id, created_at, updated_at, version,
+       series_id, occurrence, reschedule_count, join_url,
+       token, arrival_mode, checked_in_at, priority, priority_reason
+FROM scheduling.appointment
+WHERE tenant_id = @tenant_id
+  AND facility_id = @facility_id
+  AND checked_in_at IS NOT NULL
+  AND checked_in_at >= @from_at::timestamptz
+  AND checked_in_at < @until_at::timestamptz
+  AND (sqlc.narg('resource_id')::uuid IS NULL OR resource_id = sqlc.narg('resource_id')::uuid)
+ORDER BY checked_in_at, appointment_id
+LIMIT @page_limit;
+
+-- name: InsertNotification :exec
+INSERT INTO scheduling.appointment_notification (
+    notification_id, tenant_id, appointment_id, waitlist_id, patient_id, kind,
+    channel, outcome, detail, send_after, created_at, updated_at
+) VALUES (
+    @notification_id, @tenant_id, sqlc.narg('appointment_id')::uuid,
+    sqlc.narg('waitlist_id')::uuid, @patient_id, @kind, @channel,
+    @outcome, @detail, sqlc.narg('send_after')::timestamptz, @created_at, @updated_at
+);
+
+-- name: GetNotification :one
+SELECT notification_id, tenant_id, appointment_id, waitlist_id, patient_id,
+       kind, channel, outcome, detail, send_after, created_at, updated_at
+FROM scheduling.appointment_notification
+WHERE tenant_id = @tenant_id AND notification_id = @notification_id;
+
+-- name: ResolveNotification :execrows
+-- Records what the channel reported back (SRS-SCH-012).
+--
+-- Guarded on still being pending: a late callback for a message already
+-- resolved must not overwrite the outcome somebody has already read.
+UPDATE scheduling.appointment_notification
+SET outcome = @outcome, detail = @detail, updated_at = @updated_at
+WHERE tenant_id = @tenant_id
+  AND notification_id = @notification_id
+  AND outcome = 'pending';
+
+-- name: ListNotifications :many
+SELECT notification_id, tenant_id, appointment_id, waitlist_id, patient_id,
+       kind, channel, outcome, detail, send_after, created_at, updated_at
+FROM scheduling.appointment_notification
+WHERE tenant_id = @tenant_id
+  AND (appointment_id = sqlc.narg('appointment_id')::uuid
+       OR waitlist_id = sqlc.narg('waitlist_id')::uuid)
+ORDER BY created_at, notification_id;
+
+-- name: ListPendingNotifications :many
+-- The queue of messages due to go out.
+SELECT notification_id, tenant_id, appointment_id, waitlist_id, patient_id,
+       kind, channel, outcome, detail, send_after, created_at, updated_at
+FROM scheduling.appointment_notification
+WHERE tenant_id = @tenant_id
+  AND outcome = 'pending'
+  AND (send_after IS NULL OR send_after <= @now::timestamptz)
+ORDER BY created_at, notification_id
+LIMIT @page_limit;
+
+-- name: NextQueueNumber :one
+-- Issue the next queue number for a facility on a date (SRS-SCH-007).
+--
+-- The upsert is the whole guarantee: ON CONFLICT DO UPDATE takes the row lock,
+-- so two clerks checking patients in at the same instant are serialised and
+-- cannot both be handed 014. A read-then-write would be a race whose symptom is
+-- two people answering the same call.
+INSERT INTO scheduling.queue_counter (
+    tenant_id, facility_id, queue_date, next_number, updated_at
+) VALUES (
+    @tenant_id, @facility_id, @queue_date, 2, @updated_at
+)
+ON CONFLICT (tenant_id, facility_id, queue_date)
+DO UPDATE SET next_number = scheduling.queue_counter.next_number + 1,
+              updated_at = EXCLUDED.updated_at
+RETURNING next_number - 1 AS issued;
+
+-- name: ListStatusHistoryForMany :many
+-- The history of every appointment in a queue, in one round trip.
+--
+-- The wait estimate is computed from consultations that actually finished
+-- (SRS-SCH-009), and that lives in the status history. Fetched in a batch
+-- rather than per appointment because a busy department's queue is fifty rows,
+-- and fifty extra round trips on the screen everybody keeps open is the kind of
+-- thing that only shows up in production.
+SELECT appointment_id, from_status, to_status, changed_at, changed_by,
+       reason, corrected
+FROM scheduling.appointment_status_history
+WHERE tenant_id = @tenant_id
+  AND appointment_id = ANY(@appointment_ids::uuid[])
+ORDER BY changed_at, history_id;

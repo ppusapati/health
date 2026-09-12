@@ -252,7 +252,7 @@ func (s *Service) CancelSeries(ctx context.Context, in CancelSeriesInput) (
 			}
 		}
 
-		cancellationPolicy, _, err := s.policies.Resolve(ctx, scope, pivot.FacilityID)
+		facilityPolicy, err := s.policies.Resolve(ctx, scope, pivot.FacilityID)
 		if err != nil {
 			return err
 		}
@@ -263,7 +263,7 @@ func (s *Service) CancelSeries(ctx context.Context, in CancelSeriesInput) (
 			}
 
 			before := occurrence.Version
-			outcome, err := occurrence.Cancel(cancellationPolicy, session.SubjectID,
+			outcome, err := occurrence.Cancel(facilityPolicy.Cancellation, session.SubjectID,
 				in.Reason, now)
 			if err != nil {
 				return scheduleError(err)
@@ -457,6 +457,10 @@ func (s *Service) OfferWaitlistSlot(ctx context.Context, in OfferWaitlistSlotInp
 			return rpcerr.Internal("SCH_EVENT_ENCODE_FAILED", "could not encode event").WithCause(err)
 		}
 		if err := s.appendEvent(ctx, session, EventWaitlistOffered, entry.ID, payload, now); err != nil {
+			return err
+		}
+
+		if err := s.notifyWaitlistOffer(ctx, session, entry, now); err != nil {
 			return err
 		}
 

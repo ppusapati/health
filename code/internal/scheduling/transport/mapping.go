@@ -178,6 +178,13 @@ func appointmentToProto(a *domain.Appointment) *schedulingv1.Appointment {
 		RescheduledFromId: a.RescheduledFromID, Version: a.Version,
 		SeriesId: a.SeriesID, Occurrence: int32(a.Occurrence),
 		RescheduleCount: int32(a.RescheduleCount), JoinUrl: a.JoinURL,
+		Token:          a.Token,
+		ArrivalMode:    arrivalModeToProto[a.ArrivalMode],
+		Priority:       priorityToProto[a.Priority],
+		PriorityReason: a.PriorityReason,
+	}
+	if a.CheckedInAt != nil {
+		out.CheckedInAt = timestamp(*a.CheckedInAt)
 	}
 	for _, change := range a.History {
 		out.History = append(out.History, &schedulingv1.StatusChange{
@@ -244,11 +251,9 @@ func waitlistsToProto(in []domain.WaitlistEntry) []*schedulingv1.WaitlistEntry {
 	return out
 }
 
-func policyFromProto(p *schedulingv1.SchedulingPolicy) (
-	domain.CancellationPolicy, domain.TeleconsultPolicy) {
-
+func policyFromProto(p *schedulingv1.SchedulingPolicy) domain.SchedulingPolicy {
 	if p == nil {
-		return domain.DefaultCancellationPolicy(), domain.DefaultTeleconsultPolicy()
+		return domain.DefaultSchedulingPolicy()
 	}
 
 	visitTypes := make([]domain.VisitType, 0, len(p.GetTeleconsultVisitTypes()))
@@ -258,22 +263,143 @@ func policyFromProto(p *schedulingv1.SchedulingPolicy) (
 		}
 	}
 
-	return domain.CancellationPolicy{
+	enabled := make(map[domain.NotificationKind]bool, len(p.GetNotificationKinds()))
+	for _, k := range p.GetNotificationKinds() {
+		if mapped, ok := notificationKindFromProto[k]; ok {
+			enabled[mapped] = true
+		}
+	}
+
+	return domain.SchedulingPolicy{
+		Cancellation: domain.CancellationPolicy{
 			NoticeHours:           int(p.GetNoticeHours()),
 			RescheduleNoticeHours: int(p.GetRescheduleNoticeHours()),
 			MaxReschedules:        int(p.GetMaxReschedules()),
 			ChargeableWhenLate:    p.GetChargeableWhenLate(),
-		}, domain.TeleconsultPolicy{
+		},
+		Teleconsult: domain.TeleconsultPolicy{
 			Enabled:                  p.GetTeleconsultEnabled(),
 			AllowedVisitTypes:        visitTypes,
 			RequireConfirmedIdentity: p.GetTeleconsultRequiresConfirmedIdentity(),
-		}
+		},
+		Notification: domain.NotificationPolicy{
+			Enabled:             enabled,
+			ReminderHoursBefore: int(p.GetReminderHoursBefore()),
+		},
+	}
 }
 
 func timestamps(in []time.Time) []*timestamppb.Timestamp {
 	out := make([]*timestamppb.Timestamp, 0, len(in))
 	for _, t := range in {
 		out = append(out, timestamp(t))
+	}
+	return out
+}
+
+// The queue and notifications (SRS-SCH-007 … SRS-SCH-012).
+
+var arrivalModeToProto = map[domain.ArrivalMode]schedulingv1.ArrivalMode{
+	domain.ArrivalWalkIn:     schedulingv1.ArrivalMode_ARRIVAL_MODE_WALK_IN,
+	domain.ArrivalScheduled:  schedulingv1.ArrivalMode_ARRIVAL_MODE_SCHEDULED,
+	domain.ArrivalAmbulance:  schedulingv1.ArrivalMode_ARRIVAL_MODE_AMBULANCE,
+	domain.ArrivalReferral:   schedulingv1.ArrivalMode_ARRIVAL_MODE_REFERRAL,
+	domain.ArrivalTelehealth: schedulingv1.ArrivalMode_ARRIVAL_MODE_TELEHEALTH,
+}
+
+var arrivalModeFromProto = map[schedulingv1.ArrivalMode]domain.ArrivalMode{
+	schedulingv1.ArrivalMode_ARRIVAL_MODE_WALK_IN:    domain.ArrivalWalkIn,
+	schedulingv1.ArrivalMode_ARRIVAL_MODE_SCHEDULED:  domain.ArrivalScheduled,
+	schedulingv1.ArrivalMode_ARRIVAL_MODE_AMBULANCE:  domain.ArrivalAmbulance,
+	schedulingv1.ArrivalMode_ARRIVAL_MODE_REFERRAL:   domain.ArrivalReferral,
+	schedulingv1.ArrivalMode_ARRIVAL_MODE_TELEHEALTH: domain.ArrivalTelehealth,
+}
+
+var priorityToProto = map[domain.Priority]schedulingv1.Priority{
+	domain.PriorityImmediate:  schedulingv1.Priority_PRIORITY_IMMEDIATE,
+	domain.PriorityVeryUrgent: schedulingv1.Priority_PRIORITY_VERY_URGENT,
+	domain.PriorityUrgent:     schedulingv1.Priority_PRIORITY_URGENT,
+	domain.PriorityStandard:   schedulingv1.Priority_PRIORITY_STANDARD,
+	domain.PriorityNonUrgent:  schedulingv1.Priority_PRIORITY_NON_URGENT,
+}
+
+var priorityFromProto = map[schedulingv1.Priority]domain.Priority{
+	schedulingv1.Priority_PRIORITY_IMMEDIATE:   domain.PriorityImmediate,
+	schedulingv1.Priority_PRIORITY_VERY_URGENT: domain.PriorityVeryUrgent,
+	schedulingv1.Priority_PRIORITY_URGENT:      domain.PriorityUrgent,
+	schedulingv1.Priority_PRIORITY_STANDARD:    domain.PriorityStandard,
+	schedulingv1.Priority_PRIORITY_NON_URGENT:  domain.PriorityNonUrgent,
+}
+
+var notificationKindToProto = map[domain.NotificationKind]schedulingv1.NotificationKind{
+	domain.NotifyBooked:        schedulingv1.NotificationKind_NOTIFICATION_KIND_BOOKED,
+	domain.NotifyReminder:      schedulingv1.NotificationKind_NOTIFICATION_KIND_REMINDER,
+	domain.NotifyRescheduled:   schedulingv1.NotificationKind_NOTIFICATION_KIND_RESCHEDULED,
+	domain.NotifyCancelled:     schedulingv1.NotificationKind_NOTIFICATION_KIND_CANCELLED,
+	domain.NotifyWaitlistOffer: schedulingv1.NotificationKind_NOTIFICATION_KIND_WAITLIST_OFFER,
+}
+
+var notificationKindFromProto = map[schedulingv1.NotificationKind]domain.NotificationKind{
+	schedulingv1.NotificationKind_NOTIFICATION_KIND_BOOKED:         domain.NotifyBooked,
+	schedulingv1.NotificationKind_NOTIFICATION_KIND_REMINDER:       domain.NotifyReminder,
+	schedulingv1.NotificationKind_NOTIFICATION_KIND_RESCHEDULED:    domain.NotifyRescheduled,
+	schedulingv1.NotificationKind_NOTIFICATION_KIND_CANCELLED:      domain.NotifyCancelled,
+	schedulingv1.NotificationKind_NOTIFICATION_KIND_WAITLIST_OFFER: domain.NotifyWaitlistOffer,
+}
+
+var deliveryOutcomeToProto = map[domain.DeliveryOutcome]schedulingv1.DeliveryOutcome{
+	domain.DeliveryPending:    schedulingv1.DeliveryOutcome_DELIVERY_OUTCOME_PENDING,
+	domain.DeliverySent:       schedulingv1.DeliveryOutcome_DELIVERY_OUTCOME_SENT,
+	domain.DeliveryDelivered:  schedulingv1.DeliveryOutcome_DELIVERY_OUTCOME_DELIVERED,
+	domain.DeliveryFailed:     schedulingv1.DeliveryOutcome_DELIVERY_OUTCOME_FAILED,
+	domain.DeliverySuppressed: schedulingv1.DeliveryOutcome_DELIVERY_OUTCOME_SUPPRESSED,
+}
+
+var deliveryOutcomeFromProto = map[schedulingv1.DeliveryOutcome]domain.DeliveryOutcome{
+	schedulingv1.DeliveryOutcome_DELIVERY_OUTCOME_PENDING:    domain.DeliveryPending,
+	schedulingv1.DeliveryOutcome_DELIVERY_OUTCOME_SENT:       domain.DeliverySent,
+	schedulingv1.DeliveryOutcome_DELIVERY_OUTCOME_DELIVERED:  domain.DeliveryDelivered,
+	schedulingv1.DeliveryOutcome_DELIVERY_OUTCOME_FAILED:     domain.DeliveryFailed,
+	schedulingv1.DeliveryOutcome_DELIVERY_OUTCOME_SUPPRESSED: domain.DeliverySuppressed,
+}
+
+func queuePositionsToProto(in []domain.QueuePosition) []*schedulingv1.QueuePosition {
+	out := make([]*schedulingv1.QueuePosition, 0, len(in))
+	for _, p := range in {
+		out = append(out, &schedulingv1.QueuePosition{
+			Appointment: appointmentToProto(p.Appointment),
+			Position:    int32(p.Position),
+			// Seconds rather than a duration message: a board renders minutes,
+			// and an estimate carried to the nanosecond would read as a promise.
+			EstimatedWaitSeconds: int64(p.EstimatedWait.Seconds()),
+		})
+	}
+	return out
+}
+
+func queueEstimateToProto(e domain.QueueEstimate) *schedulingv1.QueueEstimate {
+	return &schedulingv1.QueueEstimate{
+		ServiceMinutes:   e.ServiceMinutes,
+		Observed:         e.Observed,
+		ActiveClinicians: int32(e.ActiveClinicians),
+	}
+}
+
+func notificationToProto(n domain.Notification) *schedulingv1.Notification {
+	return &schedulingv1.Notification{
+		NotificationId: n.ID, AppointmentId: n.AppointmentID,
+		WaitlistId: n.WaitlistID, PatientId: n.PatientID,
+		Kind: notificationKindToProto[n.Kind], Channel: n.Channel,
+		Outcome: deliveryOutcomeToProto[n.Outcome], Detail: n.Detail,
+		SendAfter: timestamp(n.SendAfter),
+		CreatedAt: timestamp(n.CreatedAt), UpdatedAt: timestamp(n.UpdatedAt),
+	}
+}
+
+func notificationsToProto(in []domain.Notification) []*schedulingv1.Notification {
+	out := make([]*schedulingv1.Notification, 0, len(in))
+	for _, n := range in {
+		out = append(out, notificationToProto(n))
 	}
 	return out
 }

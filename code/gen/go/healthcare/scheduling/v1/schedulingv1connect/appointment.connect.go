@@ -93,6 +93,27 @@ const (
 	// AppointmentServiceExpireWaitlistOffersProcedure is the fully-qualified name of the
 	// AppointmentService's ExpireWaitlistOffers RPC.
 	AppointmentServiceExpireWaitlistOffersProcedure = "/healthcare.scheduling.v1.AppointmentService/ExpireWaitlistOffers"
+	// AppointmentServiceCheckInProcedure is the fully-qualified name of the AppointmentService's
+	// CheckIn RPC.
+	AppointmentServiceCheckInProcedure = "/healthcare.scheduling.v1.AppointmentService/CheckIn"
+	// AppointmentServiceAdvanceAppointmentProcedure is the fully-qualified name of the
+	// AppointmentService's AdvanceAppointment RPC.
+	AppointmentServiceAdvanceAppointmentProcedure = "/healthcare.scheduling.v1.AppointmentService/AdvanceAppointment"
+	// AppointmentServiceGetQueueProcedure is the fully-qualified name of the AppointmentService's
+	// GetQueue RPC.
+	AppointmentServiceGetQueueProcedure = "/healthcare.scheduling.v1.AppointmentService/GetQueue"
+	// AppointmentServiceRegisterWalkInProcedure is the fully-qualified name of the AppointmentService's
+	// RegisterWalkIn RPC.
+	AppointmentServiceRegisterWalkInProcedure = "/healthcare.scheduling.v1.AppointmentService/RegisterWalkIn"
+	// AppointmentServiceReprioritiseProcedure is the fully-qualified name of the AppointmentService's
+	// Reprioritise RPC.
+	AppointmentServiceReprioritiseProcedure = "/healthcare.scheduling.v1.AppointmentService/Reprioritise"
+	// AppointmentServiceRecordDeliveryOutcomeProcedure is the fully-qualified name of the
+	// AppointmentService's RecordDeliveryOutcome RPC.
+	AppointmentServiceRecordDeliveryOutcomeProcedure = "/healthcare.scheduling.v1.AppointmentService/RecordDeliveryOutcome"
+	// AppointmentServiceListNotificationsProcedure is the fully-qualified name of the
+	// AppointmentService's ListNotifications RPC.
+	AppointmentServiceListNotificationsProcedure = "/healthcare.scheduling.v1.AppointmentService/ListNotifications"
 	// AppointmentServiceGetAppointmentProcedure is the fully-qualified name of the AppointmentService's
 	// GetAppointment RPC.
 	AppointmentServiceGetAppointmentProcedure = "/healthcare.scheduling.v1.AppointmentService/GetAppointment"
@@ -139,6 +160,28 @@ type AppointmentServiceClient interface {
 	DeclineWaitlistOffer(context.Context, *connect.Request[v1.DeclineWaitlistOfferRequest]) (*connect.Response[v1.DeclineWaitlistOfferResponse], error)
 	ListWaitlist(context.Context, *connect.Request[v1.ListWaitlistRequest]) (*connect.Response[v1.ListWaitlistResponse], error)
 	ExpireWaitlistOffers(context.Context, *connect.Request[v1.ExpireWaitlistOffersRequest]) (*connect.Response[v1.ExpireWaitlistOffersResponse], error)
+	// SRS-SCH-007. Arrival with a token and an arrival mode. The token is the
+	// clinic's own where it has a scheme, and the next queue number otherwise.
+	CheckIn(context.Context, *connect.Request[v1.CheckInRequest]) (*connect.Response[v1.CheckInResponse], error)
+	// SRS-SCH-008. The queue states, with invalid transitions refused unless the
+	// caller holds the correction permission and states a reason.
+	AdvanceAppointment(context.Context, *connect.Request[v1.AdvanceAppointmentRequest]) (*connect.Response[v1.AdvanceAppointmentResponse], error)
+	// SRS-SCH-009. Who is waiting, in the order they will be called, with an
+	// estimated wait for each. The estimate never changes the order.
+	GetQueue(context.Context, *connect.Request[v1.GetQueueRequest]) (*connect.Response[v1.GetQueueResponse], error)
+	// SRS-SCH-010. An unscheduled arrival becomes an ordinary appointment, so
+	// every downstream context sees it without knowing about a second kind of
+	// record.
+	RegisterWalkIn(context.Context, *connect.Request[v1.RegisterWalkInRequest]) (*connect.Response[v1.RegisterWalkInResponse], error)
+	// SRS-SCH-011. A move in the queue, with a mandatory reason shown to queue
+	// users rather than buried in an audit table.
+	Reprioritise(context.Context, *connect.Request[v1.ReprioritiseRequest]) (*connect.Response[v1.ReprioritiseResponse], error)
+	// SRS-SCH-012. Scheduling sends nothing; it records that a message is owed
+	// and what came back. A hospital that sends reminders and does not know which
+	// arrived cannot tell a patient who says they were never told from one who
+	// was.
+	RecordDeliveryOutcome(context.Context, *connect.Request[v1.RecordDeliveryOutcomeRequest]) (*connect.Response[v1.RecordDeliveryOutcomeResponse], error)
+	ListNotifications(context.Context, *connect.Request[v1.ListNotificationsRequest]) (*connect.Response[v1.ListNotificationsResponse], error)
 	GetAppointment(context.Context, *connect.Request[v1.GetAppointmentRequest]) (*connect.Response[v1.GetAppointmentResponse], error)
 	ListAppointments(context.Context, *connect.Request[v1.ListAppointmentsRequest]) (*connect.Response[v1.ListAppointmentsResponse], error)
 }
@@ -263,6 +306,48 @@ func NewAppointmentServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			connect.WithSchema(appointmentServiceMethods.ByName("ExpireWaitlistOffers")),
 			connect.WithClientOptions(opts...),
 		),
+		checkIn: connect.NewClient[v1.CheckInRequest, v1.CheckInResponse](
+			httpClient,
+			baseURL+AppointmentServiceCheckInProcedure,
+			connect.WithSchema(appointmentServiceMethods.ByName("CheckIn")),
+			connect.WithClientOptions(opts...),
+		),
+		advanceAppointment: connect.NewClient[v1.AdvanceAppointmentRequest, v1.AdvanceAppointmentResponse](
+			httpClient,
+			baseURL+AppointmentServiceAdvanceAppointmentProcedure,
+			connect.WithSchema(appointmentServiceMethods.ByName("AdvanceAppointment")),
+			connect.WithClientOptions(opts...),
+		),
+		getQueue: connect.NewClient[v1.GetQueueRequest, v1.GetQueueResponse](
+			httpClient,
+			baseURL+AppointmentServiceGetQueueProcedure,
+			connect.WithSchema(appointmentServiceMethods.ByName("GetQueue")),
+			connect.WithClientOptions(opts...),
+		),
+		registerWalkIn: connect.NewClient[v1.RegisterWalkInRequest, v1.RegisterWalkInResponse](
+			httpClient,
+			baseURL+AppointmentServiceRegisterWalkInProcedure,
+			connect.WithSchema(appointmentServiceMethods.ByName("RegisterWalkIn")),
+			connect.WithClientOptions(opts...),
+		),
+		reprioritise: connect.NewClient[v1.ReprioritiseRequest, v1.ReprioritiseResponse](
+			httpClient,
+			baseURL+AppointmentServiceReprioritiseProcedure,
+			connect.WithSchema(appointmentServiceMethods.ByName("Reprioritise")),
+			connect.WithClientOptions(opts...),
+		),
+		recordDeliveryOutcome: connect.NewClient[v1.RecordDeliveryOutcomeRequest, v1.RecordDeliveryOutcomeResponse](
+			httpClient,
+			baseURL+AppointmentServiceRecordDeliveryOutcomeProcedure,
+			connect.WithSchema(appointmentServiceMethods.ByName("RecordDeliveryOutcome")),
+			connect.WithClientOptions(opts...),
+		),
+		listNotifications: connect.NewClient[v1.ListNotificationsRequest, v1.ListNotificationsResponse](
+			httpClient,
+			baseURL+AppointmentServiceListNotificationsProcedure,
+			connect.WithSchema(appointmentServiceMethods.ByName("ListNotifications")),
+			connect.WithClientOptions(opts...),
+		),
 		getAppointment: connect.NewClient[v1.GetAppointmentRequest, v1.GetAppointmentResponse](
 			httpClient,
 			baseURL+AppointmentServiceGetAppointmentProcedure,
@@ -298,6 +383,13 @@ type appointmentServiceClient struct {
 	declineWaitlistOffer  *connect.Client[v1.DeclineWaitlistOfferRequest, v1.DeclineWaitlistOfferResponse]
 	listWaitlist          *connect.Client[v1.ListWaitlistRequest, v1.ListWaitlistResponse]
 	expireWaitlistOffers  *connect.Client[v1.ExpireWaitlistOffersRequest, v1.ExpireWaitlistOffersResponse]
+	checkIn               *connect.Client[v1.CheckInRequest, v1.CheckInResponse]
+	advanceAppointment    *connect.Client[v1.AdvanceAppointmentRequest, v1.AdvanceAppointmentResponse]
+	getQueue              *connect.Client[v1.GetQueueRequest, v1.GetQueueResponse]
+	registerWalkIn        *connect.Client[v1.RegisterWalkInRequest, v1.RegisterWalkInResponse]
+	reprioritise          *connect.Client[v1.ReprioritiseRequest, v1.ReprioritiseResponse]
+	recordDeliveryOutcome *connect.Client[v1.RecordDeliveryOutcomeRequest, v1.RecordDeliveryOutcomeResponse]
+	listNotifications     *connect.Client[v1.ListNotificationsRequest, v1.ListNotificationsResponse]
 	getAppointment        *connect.Client[v1.GetAppointmentRequest, v1.GetAppointmentResponse]
 	listAppointments      *connect.Client[v1.ListAppointmentsRequest, v1.ListAppointmentsResponse]
 }
@@ -392,6 +484,41 @@ func (c *appointmentServiceClient) ExpireWaitlistOffers(ctx context.Context, req
 	return c.expireWaitlistOffers.CallUnary(ctx, req)
 }
 
+// CheckIn calls healthcare.scheduling.v1.AppointmentService.CheckIn.
+func (c *appointmentServiceClient) CheckIn(ctx context.Context, req *connect.Request[v1.CheckInRequest]) (*connect.Response[v1.CheckInResponse], error) {
+	return c.checkIn.CallUnary(ctx, req)
+}
+
+// AdvanceAppointment calls healthcare.scheduling.v1.AppointmentService.AdvanceAppointment.
+func (c *appointmentServiceClient) AdvanceAppointment(ctx context.Context, req *connect.Request[v1.AdvanceAppointmentRequest]) (*connect.Response[v1.AdvanceAppointmentResponse], error) {
+	return c.advanceAppointment.CallUnary(ctx, req)
+}
+
+// GetQueue calls healthcare.scheduling.v1.AppointmentService.GetQueue.
+func (c *appointmentServiceClient) GetQueue(ctx context.Context, req *connect.Request[v1.GetQueueRequest]) (*connect.Response[v1.GetQueueResponse], error) {
+	return c.getQueue.CallUnary(ctx, req)
+}
+
+// RegisterWalkIn calls healthcare.scheduling.v1.AppointmentService.RegisterWalkIn.
+func (c *appointmentServiceClient) RegisterWalkIn(ctx context.Context, req *connect.Request[v1.RegisterWalkInRequest]) (*connect.Response[v1.RegisterWalkInResponse], error) {
+	return c.registerWalkIn.CallUnary(ctx, req)
+}
+
+// Reprioritise calls healthcare.scheduling.v1.AppointmentService.Reprioritise.
+func (c *appointmentServiceClient) Reprioritise(ctx context.Context, req *connect.Request[v1.ReprioritiseRequest]) (*connect.Response[v1.ReprioritiseResponse], error) {
+	return c.reprioritise.CallUnary(ctx, req)
+}
+
+// RecordDeliveryOutcome calls healthcare.scheduling.v1.AppointmentService.RecordDeliveryOutcome.
+func (c *appointmentServiceClient) RecordDeliveryOutcome(ctx context.Context, req *connect.Request[v1.RecordDeliveryOutcomeRequest]) (*connect.Response[v1.RecordDeliveryOutcomeResponse], error) {
+	return c.recordDeliveryOutcome.CallUnary(ctx, req)
+}
+
+// ListNotifications calls healthcare.scheduling.v1.AppointmentService.ListNotifications.
+func (c *appointmentServiceClient) ListNotifications(ctx context.Context, req *connect.Request[v1.ListNotificationsRequest]) (*connect.Response[v1.ListNotificationsResponse], error) {
+	return c.listNotifications.CallUnary(ctx, req)
+}
+
 // GetAppointment calls healthcare.scheduling.v1.AppointmentService.GetAppointment.
 func (c *appointmentServiceClient) GetAppointment(ctx context.Context, req *connect.Request[v1.GetAppointmentRequest]) (*connect.Response[v1.GetAppointmentResponse], error) {
 	return c.getAppointment.CallUnary(ctx, req)
@@ -441,6 +568,28 @@ type AppointmentServiceHandler interface {
 	DeclineWaitlistOffer(context.Context, *connect.Request[v1.DeclineWaitlistOfferRequest]) (*connect.Response[v1.DeclineWaitlistOfferResponse], error)
 	ListWaitlist(context.Context, *connect.Request[v1.ListWaitlistRequest]) (*connect.Response[v1.ListWaitlistResponse], error)
 	ExpireWaitlistOffers(context.Context, *connect.Request[v1.ExpireWaitlistOffersRequest]) (*connect.Response[v1.ExpireWaitlistOffersResponse], error)
+	// SRS-SCH-007. Arrival with a token and an arrival mode. The token is the
+	// clinic's own where it has a scheme, and the next queue number otherwise.
+	CheckIn(context.Context, *connect.Request[v1.CheckInRequest]) (*connect.Response[v1.CheckInResponse], error)
+	// SRS-SCH-008. The queue states, with invalid transitions refused unless the
+	// caller holds the correction permission and states a reason.
+	AdvanceAppointment(context.Context, *connect.Request[v1.AdvanceAppointmentRequest]) (*connect.Response[v1.AdvanceAppointmentResponse], error)
+	// SRS-SCH-009. Who is waiting, in the order they will be called, with an
+	// estimated wait for each. The estimate never changes the order.
+	GetQueue(context.Context, *connect.Request[v1.GetQueueRequest]) (*connect.Response[v1.GetQueueResponse], error)
+	// SRS-SCH-010. An unscheduled arrival becomes an ordinary appointment, so
+	// every downstream context sees it without knowing about a second kind of
+	// record.
+	RegisterWalkIn(context.Context, *connect.Request[v1.RegisterWalkInRequest]) (*connect.Response[v1.RegisterWalkInResponse], error)
+	// SRS-SCH-011. A move in the queue, with a mandatory reason shown to queue
+	// users rather than buried in an audit table.
+	Reprioritise(context.Context, *connect.Request[v1.ReprioritiseRequest]) (*connect.Response[v1.ReprioritiseResponse], error)
+	// SRS-SCH-012. Scheduling sends nothing; it records that a message is owed
+	// and what came back. A hospital that sends reminders and does not know which
+	// arrived cannot tell a patient who says they were never told from one who
+	// was.
+	RecordDeliveryOutcome(context.Context, *connect.Request[v1.RecordDeliveryOutcomeRequest]) (*connect.Response[v1.RecordDeliveryOutcomeResponse], error)
+	ListNotifications(context.Context, *connect.Request[v1.ListNotificationsRequest]) (*connect.Response[v1.ListNotificationsResponse], error)
 	GetAppointment(context.Context, *connect.Request[v1.GetAppointmentRequest]) (*connect.Response[v1.GetAppointmentResponse], error)
 	ListAppointments(context.Context, *connect.Request[v1.ListAppointmentsRequest]) (*connect.Response[v1.ListAppointmentsResponse], error)
 }
@@ -560,6 +709,48 @@ func NewAppointmentServiceHandler(svc AppointmentServiceHandler, opts ...connect
 		connect.WithSchema(appointmentServiceMethods.ByName("ExpireWaitlistOffers")),
 		connect.WithHandlerOptions(opts...),
 	)
+	appointmentServiceCheckInHandler := connect.NewUnaryHandler(
+		AppointmentServiceCheckInProcedure,
+		svc.CheckIn,
+		connect.WithSchema(appointmentServiceMethods.ByName("CheckIn")),
+		connect.WithHandlerOptions(opts...),
+	)
+	appointmentServiceAdvanceAppointmentHandler := connect.NewUnaryHandler(
+		AppointmentServiceAdvanceAppointmentProcedure,
+		svc.AdvanceAppointment,
+		connect.WithSchema(appointmentServiceMethods.ByName("AdvanceAppointment")),
+		connect.WithHandlerOptions(opts...),
+	)
+	appointmentServiceGetQueueHandler := connect.NewUnaryHandler(
+		AppointmentServiceGetQueueProcedure,
+		svc.GetQueue,
+		connect.WithSchema(appointmentServiceMethods.ByName("GetQueue")),
+		connect.WithHandlerOptions(opts...),
+	)
+	appointmentServiceRegisterWalkInHandler := connect.NewUnaryHandler(
+		AppointmentServiceRegisterWalkInProcedure,
+		svc.RegisterWalkIn,
+		connect.WithSchema(appointmentServiceMethods.ByName("RegisterWalkIn")),
+		connect.WithHandlerOptions(opts...),
+	)
+	appointmentServiceReprioritiseHandler := connect.NewUnaryHandler(
+		AppointmentServiceReprioritiseProcedure,
+		svc.Reprioritise,
+		connect.WithSchema(appointmentServiceMethods.ByName("Reprioritise")),
+		connect.WithHandlerOptions(opts...),
+	)
+	appointmentServiceRecordDeliveryOutcomeHandler := connect.NewUnaryHandler(
+		AppointmentServiceRecordDeliveryOutcomeProcedure,
+		svc.RecordDeliveryOutcome,
+		connect.WithSchema(appointmentServiceMethods.ByName("RecordDeliveryOutcome")),
+		connect.WithHandlerOptions(opts...),
+	)
+	appointmentServiceListNotificationsHandler := connect.NewUnaryHandler(
+		AppointmentServiceListNotificationsProcedure,
+		svc.ListNotifications,
+		connect.WithSchema(appointmentServiceMethods.ByName("ListNotifications")),
+		connect.WithHandlerOptions(opts...),
+	)
 	appointmentServiceGetAppointmentHandler := connect.NewUnaryHandler(
 		AppointmentServiceGetAppointmentProcedure,
 		svc.GetAppointment,
@@ -610,6 +801,20 @@ func NewAppointmentServiceHandler(svc AppointmentServiceHandler, opts ...connect
 			appointmentServiceListWaitlistHandler.ServeHTTP(w, r)
 		case AppointmentServiceExpireWaitlistOffersProcedure:
 			appointmentServiceExpireWaitlistOffersHandler.ServeHTTP(w, r)
+		case AppointmentServiceCheckInProcedure:
+			appointmentServiceCheckInHandler.ServeHTTP(w, r)
+		case AppointmentServiceAdvanceAppointmentProcedure:
+			appointmentServiceAdvanceAppointmentHandler.ServeHTTP(w, r)
+		case AppointmentServiceGetQueueProcedure:
+			appointmentServiceGetQueueHandler.ServeHTTP(w, r)
+		case AppointmentServiceRegisterWalkInProcedure:
+			appointmentServiceRegisterWalkInHandler.ServeHTTP(w, r)
+		case AppointmentServiceReprioritiseProcedure:
+			appointmentServiceReprioritiseHandler.ServeHTTP(w, r)
+		case AppointmentServiceRecordDeliveryOutcomeProcedure:
+			appointmentServiceRecordDeliveryOutcomeHandler.ServeHTTP(w, r)
+		case AppointmentServiceListNotificationsProcedure:
+			appointmentServiceListNotificationsHandler.ServeHTTP(w, r)
 		case AppointmentServiceGetAppointmentProcedure:
 			appointmentServiceGetAppointmentHandler.ServeHTTP(w, r)
 		case AppointmentServiceListAppointmentsProcedure:
@@ -693,6 +898,34 @@ func (UnimplementedAppointmentServiceHandler) ListWaitlist(context.Context, *con
 
 func (UnimplementedAppointmentServiceHandler) ExpireWaitlistOffers(context.Context, *connect.Request[v1.ExpireWaitlistOffersRequest]) (*connect.Response[v1.ExpireWaitlistOffersResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.scheduling.v1.AppointmentService.ExpireWaitlistOffers is not implemented"))
+}
+
+func (UnimplementedAppointmentServiceHandler) CheckIn(context.Context, *connect.Request[v1.CheckInRequest]) (*connect.Response[v1.CheckInResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.scheduling.v1.AppointmentService.CheckIn is not implemented"))
+}
+
+func (UnimplementedAppointmentServiceHandler) AdvanceAppointment(context.Context, *connect.Request[v1.AdvanceAppointmentRequest]) (*connect.Response[v1.AdvanceAppointmentResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.scheduling.v1.AppointmentService.AdvanceAppointment is not implemented"))
+}
+
+func (UnimplementedAppointmentServiceHandler) GetQueue(context.Context, *connect.Request[v1.GetQueueRequest]) (*connect.Response[v1.GetQueueResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.scheduling.v1.AppointmentService.GetQueue is not implemented"))
+}
+
+func (UnimplementedAppointmentServiceHandler) RegisterWalkIn(context.Context, *connect.Request[v1.RegisterWalkInRequest]) (*connect.Response[v1.RegisterWalkInResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.scheduling.v1.AppointmentService.RegisterWalkIn is not implemented"))
+}
+
+func (UnimplementedAppointmentServiceHandler) Reprioritise(context.Context, *connect.Request[v1.ReprioritiseRequest]) (*connect.Response[v1.ReprioritiseResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.scheduling.v1.AppointmentService.Reprioritise is not implemented"))
+}
+
+func (UnimplementedAppointmentServiceHandler) RecordDeliveryOutcome(context.Context, *connect.Request[v1.RecordDeliveryOutcomeRequest]) (*connect.Response[v1.RecordDeliveryOutcomeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.scheduling.v1.AppointmentService.RecordDeliveryOutcome is not implemented"))
+}
+
+func (UnimplementedAppointmentServiceHandler) ListNotifications(context.Context, *connect.Request[v1.ListNotificationsRequest]) (*connect.Response[v1.ListNotificationsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.scheduling.v1.AppointmentService.ListNotifications is not implemented"))
 }
 
 func (UnimplementedAppointmentServiceHandler) GetAppointment(context.Context, *connect.Request[v1.GetAppointmentRequest]) (*connect.Response[v1.GetAppointmentResponse], error) {

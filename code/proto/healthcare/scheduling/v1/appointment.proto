@@ -56,6 +56,61 @@ enum VisitMode {
 }
 
 // Why capacity was removed (SRS-SCH-002).
+// How the patient got here (SRS-SCH-007). Recorded because it changes what
+// happens next: somebody brought in by ambulance is not joining the back of the
+// queue, and a remote patient is not in the waiting room at all.
+enum ArrivalMode {
+  ARRIVAL_MODE_UNSPECIFIED = 0;
+  ARRIVAL_MODE_WALK_IN = 1;
+  ARRIVAL_MODE_SCHEDULED = 2;
+  ARRIVAL_MODE_AMBULANCE = 3;
+  ARRIVAL_MODE_REFERRAL = 4;
+  ARRIVAL_MODE_TELEHEALTH = 5;
+}
+
+// Where a patient sits in the queue (SRS-SCH-010, SRS-SCH-011).
+//
+// Deliberately coarse. A five-band scale is what triage systems use and what
+// staff can hold in their heads; a numeric score invites arithmetic, and
+// arithmetic on clinical urgency is how somebody ends up behind a spreadsheet.
+enum Priority {
+  PRIORITY_UNSPECIFIED = 0;
+  // Cannot wait. Resuscitation.
+  PRIORITY_IMMEDIATE = 1;
+  PRIORITY_VERY_URGENT = 2;
+  PRIORITY_URGENT = 3;
+  // The default and most of the list.
+  PRIORITY_STANDARD = 4;
+  PRIORITY_NON_URGENT = 5;
+}
+
+// What a notification is about (SRS-SCH-012).
+enum NotificationKind {
+  NOTIFICATION_KIND_UNSPECIFIED = 0;
+  NOTIFICATION_KIND_BOOKED = 1;
+  NOTIFICATION_KIND_REMINDER = 2;
+  NOTIFICATION_KIND_RESCHEDULED = 3;
+  NOTIFICATION_KIND_CANCELLED = 4;
+  NOTIFICATION_KIND_WAITLIST_OFFER = 5;
+}
+
+// What happened to a message (SRS-SCH-012).
+enum DeliveryOutcome {
+  DELIVERY_OUTCOME_UNSPECIFIED = 0;
+  // Handed to the notification service and not yet resolved.
+  DELIVERY_OUTCOME_PENDING = 1;
+  DELIVERY_OUTCOME_SENT = 2;
+  // Confirmation from the channel, where the channel offers one. Distinct from
+  // sent because "we posted it" and "it arrived" are different claims, and only
+  // one of them answers a patient who says they never heard.
+  DELIVERY_OUTCOME_DELIVERED = 3;
+  DELIVERY_OUTCOME_FAILED = 4;
+  // The patient had not agreed to be contacted this way. Recorded rather than
+  // silently skipped: "we did not tell them, and here is why" is an answer;
+  // silence is not.
+  DELIVERY_OUTCOME_SUPPRESSED = 5;
+}
+
 enum ExceptionKind {
   EXCEPTION_KIND_UNSPECIFIED = 0;
   EXCEPTION_KIND_LEAVE = 1;
@@ -200,6 +255,21 @@ message Appointment {
   // Where a teleconsult happens (SRS-SCH-015). Empty for an in-person
   // appointment: one carrying a link invites a patient to stay home.
   string join_url = 19;
+
+  // The queue (SRS-SCH-007 … SRS-SCH-011). All empty until the patient
+  // arrives: a booking is not a queue entry.
+
+  // What the patient is called by. Not the appointment id: that is a UUID
+  // nobody can read out across a noisy waiting room.
+  string token = 20;
+  ArrivalMode arrival_mode = 21;
+  google.protobuf.Timestamp checked_in_at = 22;
+  Priority priority = 23;
+  // Shown to queue users, not buried in an audit table: the people waiting can
+  // see that somebody went ahead of them, and a board that shows the move
+  // without the reason produces the argument the reason exists to prevent
+  // (SRS-SCH-011).
+  string priority_reason = 24;
 }
 
 message DefineResourceRequest {
@@ -402,6 +472,13 @@ message SchedulingPolicy {
   // Empty means every visit type the roster offers remotely.
   repeated VisitType teleconsult_visit_types = 6;
   bool teleconsult_requires_confirmed_identity = 7;
+  // Which messages this facility sends (SRS-SCH-012). Empty means none, which
+  // is a real configuration: a clinic whose patients have no phones sends
+  // nothing rather than accumulating failures.
+  repeated NotificationKind notification_kinds = 8;
+  // When a reminder goes out. Zero disables reminders even where the kind is
+  // enabled, because "remind them at the appointment time" is not a reminder.
+  int32 reminder_hours_before = 9;
 }
 
 message SetSchedulingPolicyRequest {
@@ -528,6 +605,164 @@ message ExpireWaitlistOffersResponse {
   int64 expired = 1;
 }
 
+message CheckInRequest {
+  string appointment_id = 1;
+  // What the patient will be called by. Left empty the server issues the next
+  // queue number for the facility today, which is what most desks want; a
+  // clinic running its own numbering scheme supplies its own.
+  string token = 2;
+  ArrivalMode arrival_mode = 3;
+  // Unspecified means standard.
+  Priority priority = 4;
+  // Required whenever the priority is not standard: a walk-in put straight to
+  // the front without one is indistinguishable from queue-jumping.
+  string priority_reason = 5;
+}
+
+message CheckInResponse {
+  Appointment appointment = 1;
+}
+
+message AdvanceAppointmentRequest {
+  string appointment_id = 1;
+  AppointmentStatus to = 2;
+  // Required for cancellation and no-show, which can cost the patient money,
+  // and for every correction.
+  string reason = 3;
+  // A transition the machine would otherwise refuse, under the "unless
+  // authorized correction" clause of SRS-SCH-008. Needs its own permission.
+  bool correction = 4;
+}
+
+message AdvanceAppointmentResponse {
+  Appointment appointment = 1;
+}
+
+message ReprioritiseRequest {
+  string appointment_id = 1;
+  Priority priority = 2;
+  // Mandatory, and shown to queue users rather than buried in an audit table
+  // (SRS-SCH-011).
+  string reason = 3;
+}
+
+message ReprioritiseResponse {
+  Appointment appointment = 1;
+}
+
+// One patient's place in a queue.
+message QueuePosition {
+  Appointment appointment = 1;
+  // From 1, in the order patients will actually be called.
+  int32 position = 2;
+  // How long this patient is likely to wait, in seconds. An estimate, and
+  // labelled as one everywhere it appears (SRS-SCH-009).
+  int64 estimated_wait_seconds = 3;
+}
+
+// The arithmetic behind a waiting time (SRS-SCH-009).
+//
+// Returned alongside the queue so a display can say *why* — "about forty
+// minutes, based on four patients ahead and ten minutes each" is something a
+// person can judge; "about forty minutes" is something they can only believe or
+// disbelieve.
+message QueueEstimate {
+  // The observed average this session, falling back to the rostered slot length
+  // when too little has happened to observe anything.
+  double service_minutes = 1;
+  // True when the service rate came from consultations actually completed
+  // today, rather than from the roster. A display should be more tentative
+  // about the second.
+  bool observed = 2;
+  // Two clinicians running a list halve the wait, and an estimate that ignored
+  // them would be wrong by a factor of two on exactly the busiest days.
+  int32 active_clinicians = 3;
+}
+
+message GetQueueRequest {
+  string facility_id = 1;
+  // Narrows to one clinician's queue. Empty means the facility's.
+  string resource_id = 2;
+  // Empty defaults to the current day in UTC, which is the queue a board shows.
+  google.protobuf.Timestamp from = 3;
+  google.protobuf.Timestamp until = 4;
+  int32 page_size = 5;
+}
+
+message GetQueueResponse {
+  repeated QueuePosition positions = 1;
+  QueueEstimate estimate = 2;
+}
+
+message RegisterWalkInRequest {
+  string patient_id = 1;
+  // The clinician or room they will be seen by. Optional: a busy department
+  // triages first and allocates afterwards.
+  string resource_id = 2;
+  // Required when no resource is named.
+  string facility_id = 3;
+  string org_unit_id = 4;
+  string token = 5;
+  // Defaults to walk-in, and worth stating when it is not.
+  ArrivalMode arrival_mode = 6;
+  Priority priority = 7;
+  string priority_reason = 8;
+  // Why they are here. Required: it is the first thing whoever triages the
+  // queue needs (SRS-SCH-010).
+  string reason = 9;
+}
+
+message RegisterWalkInResponse {
+  Appointment appointment = 1;
+}
+
+// One message about one appointment or one waiting-list offer (SRS-SCH-012).
+message Notification {
+  string notification_id = 1;
+  // One of the two is set. A waitlist offer is about an offer rather than about
+  // a booking: there is no appointment yet.
+  string appointment_id = 2;
+  string waitlist_id = 3;
+  string patient_id = 4;
+  NotificationKind kind = 5;
+  // How it was sent — "sms", "email". A string rather than an enum because the
+  // set is the notification service's to know.
+  string channel = 6;
+  DeliveryOutcome outcome = 7;
+  // Explains a failure or a suppression in a sentence somebody at a desk can
+  // act on.
+  string detail = 8;
+  // When the message becomes due. Set for a reminder; unset for anything that
+  // goes immediately.
+  google.protobuf.Timestamp send_after = 9;
+  google.protobuf.Timestamp created_at = 10;
+  google.protobuf.Timestamp updated_at = 11;
+}
+
+message RecordDeliveryOutcomeRequest {
+  string notification_id = 1;
+  DeliveryOutcome outcome = 2;
+  // Required for a failure or a suppression: "failed" alone tells a desk
+  // nothing they can act on.
+  string detail = 3;
+}
+
+message RecordDeliveryOutcomeResponse {
+  Notification notification = 1;
+}
+
+message ListNotificationsRequest {
+  // Either names one subject. Both empty returns the queue of messages still
+  // waiting to go out.
+  string appointment_id = 1;
+  string waitlist_id = 2;
+  int32 page_size = 3;
+}
+
+message ListNotificationsResponse {
+  repeated Notification notifications = 1;
+}
+
 service AppointmentService {
   // SRS-SCH-001. Rosters are configuration: defining when a clinic runs is
   // deliberately not bundled with looking inside the diary at who is coming.
@@ -571,6 +806,34 @@ service AppointmentService {
   rpc DeclineWaitlistOffer(DeclineWaitlistOfferRequest) returns (DeclineWaitlistOfferResponse);
   rpc ListWaitlist(ListWaitlistRequest) returns (ListWaitlistResponse);
   rpc ExpireWaitlistOffers(ExpireWaitlistOffersRequest) returns (ExpireWaitlistOffersResponse);
+
+  // SRS-SCH-007. Arrival with a token and an arrival mode. The token is the
+  // clinic's own where it has a scheme, and the next queue number otherwise.
+  rpc CheckIn(CheckInRequest) returns (CheckInResponse);
+
+  // SRS-SCH-008. The queue states, with invalid transitions refused unless the
+  // caller holds the correction permission and states a reason.
+  rpc AdvanceAppointment(AdvanceAppointmentRequest) returns (AdvanceAppointmentResponse);
+
+  // SRS-SCH-009. Who is waiting, in the order they will be called, with an
+  // estimated wait for each. The estimate never changes the order.
+  rpc GetQueue(GetQueueRequest) returns (GetQueueResponse);
+
+  // SRS-SCH-010. An unscheduled arrival becomes an ordinary appointment, so
+  // every downstream context sees it without knowing about a second kind of
+  // record.
+  rpc RegisterWalkIn(RegisterWalkInRequest) returns (RegisterWalkInResponse);
+
+  // SRS-SCH-011. A move in the queue, with a mandatory reason shown to queue
+  // users rather than buried in an audit table.
+  rpc Reprioritise(ReprioritiseRequest) returns (ReprioritiseResponse);
+
+  // SRS-SCH-012. Scheduling sends nothing; it records that a message is owed
+  // and what came back. A hospital that sends reminders and does not know which
+  // arrived cannot tell a patient who says they were never told from one who
+  // was.
+  rpc RecordDeliveryOutcome(RecordDeliveryOutcomeRequest) returns (RecordDeliveryOutcomeResponse);
+  rpc ListNotifications(ListNotificationsRequest) returns (ListNotificationsResponse);
 
   rpc GetAppointment(GetAppointmentRequest) returns (GetAppointmentResponse);
   rpc ListAppointments(ListAppointmentsRequest) returns (ListAppointmentsResponse);

@@ -25,28 +25,28 @@ var _ ports.PolicyRepository = PolicyRepo{}
 
 // Resolve returns the policy in force.
 func (r PolicyRepo) Resolve(ctx context.Context, scope authctx.TenantScope,
-	facilityID string) (domain.CancellationPolicy, domain.TeleconsultPolicy, error) {
+	facilityID string) (domain.SchedulingPolicy, error) {
 
 	tenantID, err := scopeTenantID(scope)
 	if err != nil {
-		return domain.CancellationPolicy{}, domain.TeleconsultPolicy{}, err
+		return domain.SchedulingPolicy{}, err
 	}
 	facility, err := optionalUUID(facilityID)
 	if err != nil {
-		return domain.CancellationPolicy{}, domain.TeleconsultPolicy{}, err
+		return domain.SchedulingPolicy{}, err
 	}
 
 	rows, err := r.queries(ctx).GetCancellationPolicy(ctx, sqlcgen.GetCancellationPolicyParams{
 		TenantID: tenantID, FacilityID: facility,
 	})
 	if err != nil {
-		return domain.CancellationPolicy{}, domain.TeleconsultPolicy{}, err
+		return domain.SchedulingPolicy{}, err
 	}
 	if len(rows) == 0 {
 		// A tenant that has configured nothing still gets a defensible policy
 		// rather than none: no notice at all would make every cancellation
 		// timely and every attendance report meaningless.
-		return domain.DefaultCancellationPolicy(), domain.DefaultTeleconsultPolicy(), nil
+		return domain.DefaultSchedulingPolicy(), nil
 	}
 
 	// Facility-specific rows sort first, so the first row is the most specific.
@@ -57,22 +57,26 @@ func (r PolicyRepo) Resolve(ctx context.Context, scope authctx.TenantScope,
 		visitTypes = append(visitTypes, domain.VisitType(raw))
 	}
 
-	return domain.CancellationPolicy{
+	return domain.SchedulingPolicy{
+		Cancellation: domain.CancellationPolicy{
 			NoticeHours:           int(row.NoticeHours),
 			RescheduleNoticeHours: int(row.RescheduleNoticeHours),
 			MaxReschedules:        int(row.MaxReschedules),
 			ChargeableWhenLate:    row.ChargeableWhenLate,
-		}, domain.TeleconsultPolicy{
+		},
+		Teleconsult: domain.TeleconsultPolicy{
 			Enabled:                  row.TeleconsultEnabled,
 			AllowedVisitTypes:        visitTypes,
 			RequireConfirmedIdentity: row.TeleconsultRequiresConfirmedIdentity,
-		}, nil
+		},
+		Notification: domain.NotificationPolicyFrom(row.NotificationKinds,
+			int(row.ReminderHoursBefore)),
+	}, nil
 }
 
 // Set writes the policy for a facility, or tenant-wide when facilityID is empty.
 func (r PolicyRepo) Set(ctx context.Context, scope authctx.TenantScope, facilityID string,
-	cancellation domain.CancellationPolicy, teleconsult domain.TeleconsultPolicy,
-	now time.Time) error {
+	p domain.SchedulingPolicy, now time.Time) error {
 
 	tenantID, err := scopeTenantID(scope)
 	if err != nil {
@@ -83,20 +87,22 @@ func (r PolicyRepo) Set(ctx context.Context, scope authctx.TenantScope, facility
 		return err
 	}
 
-	visitTypes := make([]string, 0, len(teleconsult.AllowedVisitTypes))
-	for _, v := range teleconsult.AllowedVisitTypes {
+	visitTypes := make([]string, 0, len(p.Teleconsult.AllowedVisitTypes))
+	for _, v := range p.Teleconsult.AllowedVisitTypes {
 		visitTypes = append(visitTypes, string(v))
 	}
 
 	return r.queries(ctx).UpsertCancellationPolicy(ctx, sqlcgen.UpsertCancellationPolicyParams{
 		PolicyID: uuid.New(), TenantID: tenantID, FacilityID: facility,
-		NoticeHours:                          int32(cancellation.NoticeHours),
-		RescheduleNoticeHours:                int32(cancellation.RescheduleNoticeHours),
-		MaxReschedules:                       int32(cancellation.MaxReschedules),
-		ChargeableWhenLate:                   cancellation.ChargeableWhenLate,
-		TeleconsultEnabled:                   teleconsult.Enabled,
+		NoticeHours:                          int32(p.Cancellation.NoticeHours),
+		RescheduleNoticeHours:                int32(p.Cancellation.RescheduleNoticeHours),
+		MaxReschedules:                       int32(p.Cancellation.MaxReschedules),
+		ChargeableWhenLate:                   p.Cancellation.ChargeableWhenLate,
+		TeleconsultEnabled:                   p.Teleconsult.Enabled,
 		TeleconsultVisitTypes:                visitTypes,
-		TeleconsultRequiresConfirmedIdentity: teleconsult.RequireConfirmedIdentity,
+		TeleconsultRequiresConfirmedIdentity: p.Teleconsult.RequireConfirmedIdentity,
+		NotificationKinds:                    p.Notification.Kinds(),
+		ReminderHoursBefore:                  int32(p.Notification.ReminderHoursBefore),
 		CreatedAt:                            timestamptz(now), UpdatedAt: timestamptz(now),
 	})
 }
@@ -496,3 +502,11 @@ func (r AppointmentRepo) SetRescheduleCount(ctx context.Context, scope authctx.T
 }
 
 var _ ports.RescheduleRecorder = AppointmentRepo{}
+
+// nullableTimestamptzPtr renders a nil time pointer as SQL NULL.
+func nullableTimestamptzPtr(t *time.Time) pgtype.Timestamptz {
+	if t == nil {
+		return pgtype.Timestamptz{}
+	}
+	return timestamptz(*t)
+}

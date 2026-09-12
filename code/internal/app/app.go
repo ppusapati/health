@@ -194,15 +194,19 @@ func New(deps Deps) *Server {
 
 	schedulingRepo := schedulingpostgres.New(txManager)
 	schedulingService := schedulingapp.NewService(schedulingapp.Deps{
-		UnitOfWork:   txManager,
-		Resources:    schedulingpostgres.ResourceRepo{Repository: schedulingRepo},
-		Schedules:    schedulingpostgres.ScheduleRepo{Repository: schedulingRepo},
-		Slots:        schedulingpostgres.SlotRepo{Repository: schedulingRepo},
-		Appointments: schedulingpostgres.AppointmentRepo{Repository: schedulingRepo},
-		Policies:     schedulingpostgres.PolicyRepo{Repository: schedulingRepo},
-		Series:       schedulingpostgres.SeriesRepo{Repository: schedulingRepo},
-		Waitlist:     schedulingpostgres.WaitlistRepo{Repository: schedulingRepo},
-		Meetings:     deps.MeetingProvider,
+		UnitOfWork:    txManager,
+		Resources:     schedulingpostgres.ResourceRepo{Repository: schedulingRepo},
+		Schedules:     schedulingpostgres.ScheduleRepo{Repository: schedulingRepo},
+		Slots:         schedulingpostgres.SlotRepo{Repository: schedulingRepo},
+		Appointments:  schedulingpostgres.AppointmentRepo{Repository: schedulingRepo},
+		Policies:      schedulingpostgres.PolicyRepo{Repository: schedulingRepo},
+		Series:        schedulingpostgres.SeriesRepo{Repository: schedulingRepo},
+		Waitlist:      schedulingpostgres.WaitlistRepo{Repository: schedulingRepo},
+		Queue:         schedulingpostgres.AppointmentRepo{Repository: schedulingRepo},
+		Notifications: schedulingpostgres.NotificationRepo{Repository: schedulingRepo},
+		Contacts: schedulingpostgres.NewContacts(
+			empipostgres.HistoryRepo{Repository: empiRepo}, time.Now),
+		Meetings: deps.MeetingProvider,
 		Calendar: schedulingpostgres.NewCalendar(repo,
 			orgpostgres.FacilityRepo{Repository: repo}),
 		Patients: schedulingpostgres.NewPatients(empipostgres.PatientRepo{Repository: empiRepo}),

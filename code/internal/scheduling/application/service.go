@@ -55,6 +55,11 @@ const (
 	// Not in the requirement's list, and emitted because a queue display that
 	// had to poll would be a queue display that is wrong.
 	EventAppointmentStatusChanged = "appointment.status_changed"
+	// EventAppointmentReprioritised carries a move in the queue (SRS-SCH-011).
+	// Separate from a status change because it reorders a board without
+	// changing anybody's state, and a display that treated the two alike would
+	// redraw the wrong rows.
+	EventAppointmentReprioritised = "appointment.reprioritised"
 )
 
 const (
@@ -64,21 +69,24 @@ const (
 
 // Service is the scheduling use-case façade.
 type Service struct {
-	uow          ports.UnitOfWork
-	resources    ports.ResourceRepository
-	schedules    ports.ScheduleRepository
-	slots        ports.SlotRepository
-	appointments ports.AppointmentRepository
-	policies     ports.PolicyRepository
-	series       ports.SeriesRepository
-	waitlist     ports.WaitlistRepository
-	calendar     ports.FacilityCalendar
-	patients     ports.PatientDirectory
-	meetings     ports.MeetingProvider
-	events       ports.EventAppender
-	audits       ports.AuditAppender
-	ids          ports.IDGenerator
-	clock        ports.Clock
+	uow           ports.UnitOfWork
+	resources     ports.ResourceRepository
+	schedules     ports.ScheduleRepository
+	slots         ports.SlotRepository
+	appointments  ports.AppointmentRepository
+	policies      ports.PolicyRepository
+	series        ports.SeriesRepository
+	waitlist      ports.WaitlistRepository
+	queue         ports.QueueRepository
+	notifications ports.NotificationRepository
+	contacts      ports.PatientContact
+	calendar      ports.FacilityCalendar
+	patients      ports.PatientDirectory
+	meetings      ports.MeetingProvider
+	events        ports.EventAppender
+	audits        ports.AuditAppender
+	ids           ports.IDGenerator
+	clock         ports.Clock
 }
 
 // Deps are the collaborators the service needs.
@@ -91,8 +99,18 @@ type Deps struct {
 	Policies     ports.PolicyRepository
 	Series       ports.SeriesRepository
 	Waitlist     ports.WaitlistRepository
-	Calendar     ports.FacilityCalendar
-	Patients     ports.PatientDirectory
+	Queue        ports.QueueRepository
+	// Notifications records what was sent and what came back (SRS-SCH-012).
+	// Nil records nothing: a deployment whose messages go out through some
+	// other system should not accumulate a half-kept delivery log that reads as
+	// authoritative.
+	Notifications ports.NotificationRepository
+	// Contacts answers how a patient agreed to be reached. Nil denies: an
+	// unrecorded consent is a refusal, so every message is suppressed and the
+	// suppression is visible.
+	Contacts ports.PatientContact
+	Calendar ports.FacilityCalendar
+	Patients ports.PatientDirectory
 	// Meetings mints teleconsult join links. Nil is a valid deployment: a
 	// hospital that runs no video service books teleconsults with no link, and
 	// the absence is visible rather than a broken URL.
@@ -109,6 +127,7 @@ func NewService(d Deps) *Service {
 		uow: d.UnitOfWork, resources: d.Resources, schedules: d.Schedules,
 		slots: d.Slots, appointments: d.Appointments,
 		policies: d.Policies, series: d.Series, waitlist: d.Waitlist,
+		queue: d.Queue, notifications: d.Notifications, contacts: d.Contacts,
 		calendar: d.Calendar, patients: d.Patients, meetings: d.Meetings,
 		events: d.Events, audits: d.Audits, ids: d.IDs, clock: d.Clock,
 	}

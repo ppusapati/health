@@ -251,12 +251,9 @@ func (h *Handler) SetSchedulingPolicy(
 	ctx context.Context,
 	req *connect.Request[schedulingv1.SetSchedulingPolicyRequest],
 ) (*connect.Response[schedulingv1.SetSchedulingPolicyResponse], error) {
-	cancellation, teleconsult := policyFromProto(req.Msg.GetPolicy())
-
 	if err := h.svc.SetSchedulingPolicy(ctx, application.SetSchedulingPolicyInput{
-		FacilityID:   req.Msg.GetFacilityId(),
-		Cancellation: cancellation,
-		Teleconsult:  teleconsult,
+		FacilityID: req.Msg.GetFacilityId(),
+		Policy:     policyFromProto(req.Msg.GetPolicy()),
 	}); err != nil {
 		return nil, fail(ctx, err)
 	}
@@ -412,5 +409,159 @@ func (h *Handler) ExpireWaitlistOffers(
 	}
 	return connect.NewResponse(&schedulingv1.ExpireWaitlistOffersResponse{
 		Expired: expired,
+	}), nil
+}
+
+// The queue and notifications (SRS-SCH-007 … SRS-SCH-012).
+
+// CheckIn implements SRS-SCH-007.
+func (h *Handler) CheckIn(
+	ctx context.Context,
+	req *connect.Request[schedulingv1.CheckInRequest],
+) (*connect.Response[schedulingv1.CheckInResponse], error) {
+	msg := req.Msg
+
+	appointment, err := h.svc.CheckIn(ctx, application.CheckInInput{
+		AppointmentID:  msg.GetAppointmentId(),
+		Token:          msg.GetToken(),
+		ArrivalMode:    arrivalModeFromProto[msg.GetArrivalMode()],
+		Priority:       priorityFromProto[msg.GetPriority()],
+		PriorityReason: msg.GetPriorityReason(),
+	})
+	if err != nil {
+		return nil, fail(ctx, err)
+	}
+	return connect.NewResponse(&schedulingv1.CheckInResponse{
+		Appointment: appointmentToProto(appointment),
+	}), nil
+}
+
+// AdvanceAppointment implements SRS-SCH-008.
+func (h *Handler) AdvanceAppointment(
+	ctx context.Context,
+	req *connect.Request[schedulingv1.AdvanceAppointmentRequest],
+) (*connect.Response[schedulingv1.AdvanceAppointmentResponse], error) {
+	msg := req.Msg
+
+	appointment, err := h.svc.AdvanceAppointment(ctx, application.AdvanceAppointmentInput{
+		AppointmentID: msg.GetAppointmentId(),
+		To:            statusFromProto[msg.GetTo()],
+		Reason:        msg.GetReason(),
+		Correction:    msg.GetCorrection(),
+	})
+	if err != nil {
+		return nil, fail(ctx, err)
+	}
+	return connect.NewResponse(&schedulingv1.AdvanceAppointmentResponse{
+		Appointment: appointmentToProto(appointment),
+	}), nil
+}
+
+// GetQueue implements SRS-SCH-008 and SRS-SCH-009.
+func (h *Handler) GetQueue(
+	ctx context.Context,
+	req *connect.Request[schedulingv1.GetQueueRequest],
+) (*connect.Response[schedulingv1.GetQueueResponse], error) {
+	msg := req.Msg
+
+	view, err := h.svc.GetQueue(ctx, application.GetQueueInput{
+		FacilityID: msg.GetFacilityId(),
+		ResourceID: msg.GetResourceId(),
+		From:       fromTimestamp(msg.GetFrom()),
+		Until:      fromTimestamp(msg.GetUntil()),
+		PageSize:   msg.GetPageSize(),
+	})
+	if err != nil {
+		return nil, fail(ctx, err)
+	}
+	return connect.NewResponse(&schedulingv1.GetQueueResponse{
+		Positions: queuePositionsToProto(view.Positions),
+		Estimate:  queueEstimateToProto(view.Estimate),
+	}), nil
+}
+
+// RegisterWalkIn implements SRS-SCH-010.
+func (h *Handler) RegisterWalkIn(
+	ctx context.Context,
+	req *connect.Request[schedulingv1.RegisterWalkInRequest],
+) (*connect.Response[schedulingv1.RegisterWalkInResponse], error) {
+	msg := req.Msg
+
+	appointment, err := h.svc.RegisterWalkIn(ctx, application.RegisterWalkInInput{
+		PatientID:      msg.GetPatientId(),
+		ResourceID:     msg.GetResourceId(),
+		FacilityID:     msg.GetFacilityId(),
+		OrgUnitID:      msg.GetOrgUnitId(),
+		Token:          msg.GetToken(),
+		ArrivalMode:    arrivalModeFromProto[msg.GetArrivalMode()],
+		Priority:       priorityFromProto[msg.GetPriority()],
+		PriorityReason: msg.GetPriorityReason(),
+		Reason:         msg.GetReason(),
+	})
+	if err != nil {
+		return nil, fail(ctx, err)
+	}
+	return connect.NewResponse(&schedulingv1.RegisterWalkInResponse{
+		Appointment: appointmentToProto(appointment),
+	}), nil
+}
+
+// Reprioritise implements SRS-SCH-011.
+func (h *Handler) Reprioritise(
+	ctx context.Context,
+	req *connect.Request[schedulingv1.ReprioritiseRequest],
+) (*connect.Response[schedulingv1.ReprioritiseResponse], error) {
+	msg := req.Msg
+
+	appointment, err := h.svc.Reprioritise(ctx, application.ReprioritiseInput{
+		AppointmentID: msg.GetAppointmentId(),
+		Priority:      priorityFromProto[msg.GetPriority()],
+		Reason:        msg.GetReason(),
+	})
+	if err != nil {
+		return nil, fail(ctx, err)
+	}
+	return connect.NewResponse(&schedulingv1.ReprioritiseResponse{
+		Appointment: appointmentToProto(appointment),
+	}), nil
+}
+
+// RecordDeliveryOutcome implements SRS-SCH-012.
+func (h *Handler) RecordDeliveryOutcome(
+	ctx context.Context,
+	req *connect.Request[schedulingv1.RecordDeliveryOutcomeRequest],
+) (*connect.Response[schedulingv1.RecordDeliveryOutcomeResponse], error) {
+	msg := req.Msg
+
+	notification, err := h.svc.RecordDeliveryOutcome(ctx, application.RecordDeliveryOutcomeInput{
+		NotificationID: msg.GetNotificationId(),
+		Outcome:        deliveryOutcomeFromProto[msg.GetOutcome()],
+		Detail:         msg.GetDetail(),
+	})
+	if err != nil {
+		return nil, fail(ctx, err)
+	}
+	return connect.NewResponse(&schedulingv1.RecordDeliveryOutcomeResponse{
+		Notification: notificationToProto(notification),
+	}), nil
+}
+
+// ListNotifications implements SRS-SCH-012.
+func (h *Handler) ListNotifications(
+	ctx context.Context,
+	req *connect.Request[schedulingv1.ListNotificationsRequest],
+) (*connect.Response[schedulingv1.ListNotificationsResponse], error) {
+	msg := req.Msg
+
+	notifications, err := h.svc.ListNotifications(ctx, application.ListNotificationsInput{
+		AppointmentID: msg.GetAppointmentId(),
+		WaitlistID:    msg.GetWaitlistId(),
+		PageSize:      msg.GetPageSize(),
+	})
+	if err != nil {
+		return nil, fail(ctx, err)
+	}
+	return connect.NewResponse(&schedulingv1.ListNotificationsResponse{
+		Notifications: notificationsToProto(notifications),
 	}), nil
 }

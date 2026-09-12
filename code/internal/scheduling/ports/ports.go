@@ -170,11 +170,15 @@ type PolicyRepository interface {
 	// Resolve returns the policy in force, facility-specific first and
 	// tenant-wide second, falling back to the domain defaults when a tenant
 	// has configured nothing.
+	//
+	// Returns all three of a facility's scheduling rules together. One call
+	// rather than three, because they live on one row and a caller that read
+	// them separately could act on a cancellation rule from before an edit and
+	// a notification rule from after it.
 	Resolve(ctx context.Context, scope authctx.TenantScope, facilityID string) (
-		domain.CancellationPolicy, domain.TeleconsultPolicy, error)
+		domain.SchedulingPolicy, error)
 	Set(ctx context.Context, scope authctx.TenantScope, facilityID string,
-		cancellation domain.CancellationPolicy, teleconsult domain.TeleconsultPolicy,
-		now time.Time) error
+		p domain.SchedulingPolicy, now time.Time) error
 	// RecordOutcome captures what the policy made of a cancellation or a
 	// reschedule, at the moment of the decision. Append-only: the record a
 	// disputed fee turns on is the one written at the time.
@@ -241,4 +245,54 @@ type MeetingProvider interface {
 	// EndMeeting revokes a link when the appointment is cancelled, so a
 	// cancelled consultation does not leave a door open.
 	EndMeeting(ctx context.Context, scope authctx.TenantScope, appointmentID string) error
+}
+
+// QueueRepository serves check-in and the queue (SRS-SCH-007 … SRS-SCH-011).
+type QueueRepository interface {
+	SetCheckIn(ctx context.Context, scope authctx.TenantScope, a *domain.Appointment,
+		change domain.StatusChange, expectedVersion int64) error
+	SetPriority(ctx context.Context, scope authctx.TenantScope, a *domain.Appointment,
+		expectedVersion int64) error
+	// Queue returns everyone checked in at a facility over a window, in arrival
+	// order. The priority ordering is applied in the domain, so the queue a
+	// board renders and the queue a test asserts are built by the same code.
+	Queue(ctx context.Context, scope authctx.TenantScope, facilityID, resourceID string,
+		from, until time.Time, limit int32) ([]*domain.Appointment, error)
+	// NextQueueNumber issues the next number for a facility on a local date.
+	//
+	// A sequence rather than a random string, because "queue number" is what
+	// SRS-SCH-007 asks for and what a waiting room understands: 014 comes after
+	// 013, and a board showing "K7QX" tells nobody how long they have left.
+	NextQueueNumber(ctx context.Context, scope authctx.TenantScope,
+		facilityID string, day time.Time, at time.Time) (int, error)
+}
+
+// NotificationRepository records what was sent and what came back
+// (SRS-SCH-012).
+type NotificationRepository interface {
+	Insert(ctx context.Context, scope authctx.TenantScope, n domain.Notification) error
+	Get(ctx context.Context, scope authctx.TenantScope, notificationID string) (
+		domain.Notification, error)
+	Resolve(ctx context.Context, scope authctx.TenantScope, n domain.Notification) error
+	ForSubject(ctx context.Context, scope authctx.TenantScope,
+		subject domain.NotificationSubject) ([]domain.Notification, error)
+	Pending(ctx context.Context, scope authctx.TenantScope, now time.Time, limit int32) (
+		[]domain.Notification, error)
+}
+
+// PatientContact answers how a patient has agreed to be contacted.
+//
+// A port onto the patient index, because SRS-EMPI-013 holds communication
+// preference per channel *and* per purpose and this context must not hold a
+// second copy that drifts. Narrow on purpose: scheduling asks whether it may
+// send this kind of message and by what channel, and receives an answer — not
+// the patient's contact details, which belong to a record far fewer people can
+// see.
+type PatientContact interface {
+	// PreferredChannel returns the channel this patient has agreed to for
+	// appointment messages, and false when they have agreed to none. Deny by
+	// default: SRS-EMPI-013 records consent per purpose, and an unrecorded
+	// combination is a refusal rather than a permission.
+	PreferredChannel(ctx context.Context, scope authctx.TenantScope, patientID string) (
+		string, bool, error)
 }

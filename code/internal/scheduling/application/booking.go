@@ -133,6 +133,14 @@ func (s *Service) BookAppointment(ctx context.Context, in BookAppointmentInput) 
 			return err
 		}
 
+		// The confirmation and the reminder are recorded in the same
+		// transaction as the booking (SRS-SCH-012). A patient whose appointment
+		// exists but whose confirmation does not is the case nobody can explain
+		// afterwards.
+		if err := s.notify(ctx, session, appointment, domain.NotifyBooked, now); err != nil {
+			return err
+		}
+
 		booked = appointment
 		return s.appendAudit(ctx, session, audit.Record{
 			TenantID: session.TenantID, Action: PermAppointmentBook,
@@ -368,7 +376,7 @@ func (s *Service) authorizeRead(ctx context.Context, permission, resourceType, r
 func (s *Service) checkTeleconsultEligible(ctx context.Context, scope authctx.TenantScope,
 	slot domain.Slot, patientID string) error {
 
-	_, teleconsultPolicy, err := s.policies.Resolve(ctx, scope, slot.FacilityID)
+	facilityPolicy, err := s.policies.Resolve(ctx, scope, slot.FacilityID)
 	if err != nil {
 		return err
 	}
@@ -378,7 +386,7 @@ func (s *Service) checkTeleconsultEligible(ctx context.Context, scope authctx.Te
 		return err
 	}
 
-	if err := teleconsultPolicy.CheckEligible(slot.VisitType, confirmed); err != nil {
+	if err := facilityPolicy.Teleconsult.CheckEligible(slot.VisitType, confirmed); err != nil {
 		var notEligible domain.ErrTeleconsultNotEligible
 		if errors.As(err, &notEligible) {
 			return rpcerr.FailedPrecondition("SCH_TELECONSULT_NOT_ELIGIBLE", notEligible.Error())
