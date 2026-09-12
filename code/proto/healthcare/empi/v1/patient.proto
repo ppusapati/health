@@ -310,6 +310,89 @@ message ConfirmIdentityResponse {
   Patient patient = 1;
 }
 
+// Where a duplicate pair sits in review (SRS-EMPI-004).
+enum ReviewStatus {
+  REVIEW_STATUS_UNSPECIFIED = 0;
+  REVIEW_STATUS_OPEN = 1;
+  REVIEW_STATUS_MERGED = 2;
+  // Judged to be two different people. Recorded rather than deleted, so the
+  // same pair does not return to the queue every time either record is
+  // touched.
+  REVIEW_STATUS_DISMISSED = 3;
+}
+
+// One pair awaiting or past review.
+//
+// The queue exists because "thresholds route to manual review" needs somewhere
+// to route to. A clerk who acknowledges a probable duplicate and registers
+// anyway has made that call at a busy desk with a patient waiting; the pair
+// still goes to the people whose job it is.
+message DuplicateCandidate {
+  string candidate_id = 1;
+  string patient_a_id = 2;
+  string patient_b_id = 3;
+  double score = 4;
+  MatchOutcome outcome = 5;
+  ReviewStatus status = 6;
+  // What surfaced the pair: a registration, a bulk scan, an operator. It
+  // matters when deciding how much to trust the score.
+  string detected_by = 7;
+  google.protobuf.Timestamp detected_at = 8;
+  string reviewed_by = 9;
+  google.protobuf.Timestamp reviewed_at = 10;
+  // Explains a dismissal, or names the merge that resolved it.
+  string resolution = 11;
+}
+
+message MergePatientsRequest {
+  // The record that keeps its patient id and its MRN. Which one survives is
+  // the reviewer's decision — usually the one carrying the clinical history —
+  // and it is never inferred.
+  string survivor_patient_id = 1;
+  string merged_patient_id = 2;
+  // Required. A merge with no reason cannot be reviewed afterwards, and that
+  // review is the only thing between a mistake and two people's records.
+  string reason = 3;
+  // Closes the review-queue entry this merge came from, when there is one.
+  string candidate_id = 4;
+}
+
+message MergePatientsResponse {
+  Patient survivor = 1;
+  string merged_patient_id = 2;
+  // Names the journal entry an unmerge would reverse.
+  string merge_id = 3;
+}
+
+message UnmergePatientsRequest {
+  string merge_id = 1;
+  string reason = 2;
+}
+
+message UnmergePatientsResponse {
+  Patient survivor = 1;
+  Patient restored = 2;
+}
+
+message ListDuplicateCandidatesRequest {
+  int32 page_size = 1;
+}
+
+message ListDuplicateCandidatesResponse {
+  // Strongest first: the pair most likely to be one person, and the one whose
+  // being wrong costs the most.
+  repeated DuplicateCandidate candidates = 1;
+}
+
+message DismissDuplicateCandidateRequest {
+  string candidate_id = 1;
+  // Required. A dismissal with no reason is indistinguishable from a mis-click,
+  // and the pair never returns to the queue to be reconsidered.
+  string reason = 2;
+}
+
+message DismissDuplicateCandidateResponse {}
+
 // Patient identity (SRS-EMPI).
 service PatientService {
   // SRS-EMPI-001. Issues the MRN from the registering facility's sequence.
@@ -320,4 +403,14 @@ service PatientService {
   rpc UpdateDemographics(UpdateDemographicsRequest) returns (UpdateDemographicsResponse);
   // Moves a candidate to active once a positive identifier has been seen.
   rpc ConfirmIdentity(ConfirmIdentityRequest) returns (ConfirmIdentityResponse);
+
+  // SRS-EMPI-005. Merging is the most destructive operation here: a merge that
+  // should not have happened produces a chart that reads as coherent, and is
+  // found by a reaction rather than by a report. Restricted to authorised HIM.
+  rpc MergePatients(MergePatientsRequest) returns (MergePatientsResponse);
+  // SRS-EMPI-006. Reverses a merge, or refuses with the reason it cannot.
+  rpc UnmergePatients(UnmergePatientsRequest) returns (UnmergePatientsResponse);
+  // SRS-EMPI-004. The manual-review worklist thresholds route to.
+  rpc ListDuplicateCandidates(ListDuplicateCandidatesRequest) returns (ListDuplicateCandidatesResponse);
+  rpc DismissDuplicateCandidate(DismissDuplicateCandidateRequest) returns (DismissDuplicateCandidateResponse);
 }

@@ -20,6 +20,21 @@ type EmpiDemographicPolicy struct {
 	UpdatedAt         pgtype.Timestamptz
 }
 
+type EmpiDuplicateCandidate struct {
+	CandidateID uuid.UUID
+	TenantID    uuid.UUID
+	PatientAID  uuid.UUID
+	PatientBID  uuid.UUID
+	Score       pgtype.Numeric
+	Outcome     string
+	Status      string
+	DetectedBy  string
+	DetectedAt  pgtype.Timestamptz
+	ReviewedBy  string
+	ReviewedAt  pgtype.Timestamptz
+	Resolution  string
+}
+
 type EmpiMatchConfig struct {
 	TenantID          uuid.UUID
 	Weights           []byte
@@ -27,6 +42,23 @@ type EmpiMatchConfig struct {
 	ProbableThreshold pgtype.Numeric
 	UpdatedAt         pgtype.Timestamptz
 	UpdatedBy         string
+}
+
+type EmpiMergeJournal struct {
+	MergeID              uuid.UUID
+	TenantID             uuid.UUID
+	SurvivorID           uuid.UUID
+	MergedID             uuid.UUID
+	MergedPreviousStatus string
+	Reason               string
+	PerformedBy          string
+	PerformedAt          pgtype.Timestamptz
+	MovedIdentifiers     []byte
+	CarriedDeceased      bool
+	Undone               bool
+	UndoneBy             string
+	UndoneAt             pgtype.Timestamptz
+	UndoReason           string
 }
 
 type EmpiPatient struct {

@@ -126,3 +126,70 @@ func (h *Handler) ConfirmIdentity(
 		Patient: patientToProto(patient, nil),
 	}), nil
 }
+
+// MergePatients implements SRS-EMPI-005.
+func (h *Handler) MergePatients(
+	ctx context.Context,
+	req *connect.Request[empiv1.MergePatientsRequest],
+) (*connect.Response[empiv1.MergePatientsResponse], error) {
+	msg := req.Msg
+
+	result, err := h.svc.MergePatients(ctx, application.MergePatientsInput{
+		SurvivorID:  msg.GetSurvivorPatientId(),
+		MergedID:    msg.GetMergedPatientId(),
+		Reason:      msg.GetReason(),
+		CandidateID: msg.GetCandidateId(),
+	})
+	if err != nil {
+		return nil, platformtransport.ToConnect(err, platformtransport.CorrelationIDFromContext(ctx))
+	}
+	return connect.NewResponse(&empiv1.MergePatientsResponse{
+		Survivor:        patientToProto(result.Survivor, result.Identifiers),
+		MergedPatientId: result.MergedID,
+		MergeId:         result.MergeID,
+	}), nil
+}
+
+// UnmergePatients implements SRS-EMPI-006.
+func (h *Handler) UnmergePatients(
+	ctx context.Context,
+	req *connect.Request[empiv1.UnmergePatientsRequest],
+) (*connect.Response[empiv1.UnmergePatientsResponse], error) {
+	result, err := h.svc.UnmergePatients(ctx, application.UnmergePatientsInput{
+		MergeID: req.Msg.GetMergeId(),
+		Reason:  req.Msg.GetReason(),
+	})
+	if err != nil {
+		return nil, platformtransport.ToConnect(err, platformtransport.CorrelationIDFromContext(ctx))
+	}
+	return connect.NewResponse(&empiv1.UnmergePatientsResponse{
+		Survivor: patientToProto(result.Survivor, nil),
+		Restored: patientToProto(result.Restored, nil),
+	}), nil
+}
+
+// ListDuplicateCandidates implements SRS-EMPI-004's review worklist.
+func (h *Handler) ListDuplicateCandidates(
+	ctx context.Context,
+	req *connect.Request[empiv1.ListDuplicateCandidatesRequest],
+) (*connect.Response[empiv1.ListDuplicateCandidatesResponse], error) {
+	candidates, err := h.svc.ListDuplicateCandidates(ctx, req.Msg.GetPageSize())
+	if err != nil {
+		return nil, platformtransport.ToConnect(err, platformtransport.CorrelationIDFromContext(ctx))
+	}
+	return connect.NewResponse(&empiv1.ListDuplicateCandidatesResponse{
+		Candidates: candidatesToProto(candidates),
+	}), nil
+}
+
+// DismissDuplicateCandidate records that a pair is two different people.
+func (h *Handler) DismissDuplicateCandidate(
+	ctx context.Context,
+	req *connect.Request[empiv1.DismissDuplicateCandidateRequest],
+) (*connect.Response[empiv1.DismissDuplicateCandidateResponse], error) {
+	if err := h.svc.DismissDuplicateCandidate(ctx,
+		req.Msg.GetCandidateId(), req.Msg.GetReason()); err != nil {
+		return nil, platformtransport.ToConnect(err, platformtransport.CorrelationIDFromContext(ctx))
+	}
+	return connect.NewResponse(&empiv1.DismissDuplicateCandidateResponse{}), nil
+}

@@ -148,3 +148,39 @@ type IDGenerator interface{ NewID() string }
 
 // Clock supplies the current time.
 type Clock interface{ Now() time.Time }
+
+// MergeRepository persists the merge journal and the duplicate review queue
+// (SRS-EMPI-004/005/006).
+type MergeRepository interface {
+	// RecordMerge writes the journal entry. It is what makes a merge
+	// reversible, so it commits in the same transaction as the merge itself.
+	RecordMerge(ctx context.Context, scope authctx.TenantScope, r domain.MergeRecord) error
+	// MergeByID reads one journal entry.
+	MergeByID(ctx context.Context, scope authctx.TenantScope, mergeID string) (domain.MergeRecord, error)
+	// StandingMerge returns the merge currently holding a record down, if any.
+	StandingMerge(ctx context.Context, scope authctx.TenantScope, mergedPatientID string) (domain.MergeRecord, error)
+	// LaterMergesInto counts merges into a survivor after an instant, which is
+	// what makes reversing an earlier merge unsafe.
+	LaterMergesInto(ctx context.Context, scope authctx.TenantScope,
+		survivorID string, after time.Time) (int, error)
+	MarkUndone(ctx context.Context, scope authctx.TenantScope, r domain.MergeRecord) error
+
+	// MoveIdentifier re-points one identifier at another patient, carrying the
+	// status the caller decided.
+	MoveIdentifier(ctx context.Context, scope authctx.TenantScope,
+		identifierID, toPatientID string, status domain.IdentifierStatus,
+		primary bool, reason string, at time.Time) error
+
+	// SetMergedInto writes the losing record's new status and pointer under
+	// optimistic concurrency.
+	SetMergedInto(ctx context.Context, scope authctx.TenantScope, p *domain.Patient) error
+	// SetDeceased writes or clears a deceased record.
+	SetDeceased(ctx context.Context, scope authctx.TenantScope, p *domain.Patient) error
+
+	// QueueCandidate records a pair for review. Idempotent on the pair, and it
+	// never reopens a decision already taken.
+	QueueCandidate(ctx context.Context, scope authctx.TenantScope, c domain.DuplicateCandidate) error
+	Candidate(ctx context.Context, scope authctx.TenantScope, candidateID string) (domain.DuplicateCandidate, error)
+	OpenCandidates(ctx context.Context, scope authctx.TenantScope, limit int32) ([]domain.DuplicateCandidate, error)
+	CloseCandidate(ctx context.Context, scope authctx.TenantScope, c domain.DuplicateCandidate) error
+}

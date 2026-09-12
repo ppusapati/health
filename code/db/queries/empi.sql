@@ -232,3 +232,131 @@ ON CONFLICT (tenant_id) DO UPDATE SET
     probable_threshold = EXCLUDED.probable_threshold,
     updated_at = EXCLUDED.updated_at,
     updated_by = EXCLUDED.updated_by;
+
+-- Merge journal and duplicate review (SRS-EMPI-004/005/006).
+
+-- name: InsertMergeRecord :exec
+INSERT INTO empi.merge_journal (
+    merge_id, tenant_id, survivor_id, merged_id, merged_previous_status,
+    reason, performed_by, performed_at, moved_identifiers, carried_deceased
+) VALUES (
+    @merge_id, @tenant_id, @survivor_id, @merged_id, @merged_previous_status,
+    @reason, @performed_by, @performed_at, @moved_identifiers, @carried_deceased
+);
+
+-- name: GetMergeRecord :one
+SELECT merge_id, tenant_id, survivor_id, merged_id, merged_previous_status,
+       reason, performed_by, performed_at, moved_identifiers, carried_deceased,
+       undone, undone_by, undone_at, undo_reason
+FROM empi.merge_journal
+WHERE tenant_id = @tenant_id AND merge_id = @merge_id;
+
+-- name: GetStandingMergeForLoser :one
+-- The merge that currently holds this record down, if any.
+SELECT merge_id, tenant_id, survivor_id, merged_id, merged_previous_status,
+       reason, performed_by, performed_at, moved_identifiers, carried_deceased,
+       undone, undone_by, undone_at, undo_reason
+FROM empi.merge_journal
+WHERE tenant_id = @tenant_id AND merged_id = @merged_id AND NOT undone;
+
+-- name: CountLaterMergesIntoSurvivor :one
+-- Whether another merge into this survivor came after the one being reversed.
+--
+-- Reversing an earlier merge while a later one stands would restore
+-- identifiers the later merge has already moved again, and the second merge's
+-- journal would then describe a state that no longer exists.
+SELECT count(*)
+FROM empi.merge_journal
+WHERE tenant_id = @tenant_id
+  AND survivor_id = @survivor_id
+  AND NOT undone
+  AND performed_at > @after;
+
+-- name: MarkMergeUndone :execrows
+UPDATE empi.merge_journal
+SET undone = true, undone_by = @undone_by, undone_at = @undone_at, undo_reason = @undo_reason
+WHERE tenant_id = @tenant_id AND merge_id = @merge_id AND NOT undone;
+
+-- name: MoveIdentifierToPatient :execrows
+-- Re-points one identifier at another patient.
+--
+-- Used by a merge to move the losing record's identifiers to the survivor, and
+-- by an unmerge to put them back. The status travels with the move: a merged
+-- MRN arrives superseded so the survivor's own stays the one on the wristband,
+-- and an unmerge restores whatever the journal says it was.
+UPDATE empi.patient_identifier
+SET patient_id = @patient_id,
+    status = @status,
+    is_primary = @is_primary,
+    reason = @reason,
+    -- Both arms are cast: without them PostgreSQL infers the parameter's type
+    -- from the comparison above and decides unlinked_at is text.
+    unlinked_at = CASE WHEN @status::text = 'active'
+                       THEN NULL::timestamptz
+                       ELSE @unlinked_at::timestamptz END
+WHERE tenant_id = @tenant_id AND identifier_id = @identifier_id;
+
+-- name: SetPatientMergedInto :execrows
+UPDATE empi.patient
+SET status = @status,
+    merged_into_patient_id = sqlc.narg('merged_into_patient_id')::uuid,
+    updated_at = @updated_at,
+    version = version + 1
+WHERE tenant_id = @tenant_id
+  AND patient_id = @patient_id
+  AND version = @expected_version;
+
+-- name: SetPatientDeceased :execrows
+UPDATE empi.patient
+SET deceased_date = sqlc.narg('deceased_date')::date,
+    deceased_precision = @deceased_precision,
+    deceased_source = @deceased_source,
+    deceased_recorded_at = sqlc.narg('deceased_recorded_at')::timestamptz,
+    deceased_recorded_by = @deceased_recorded_by,
+    updated_at = @updated_at,
+    version = version + 1
+WHERE tenant_id = @tenant_id AND patient_id = @patient_id;
+
+-- name: UpsertDuplicateCandidate :exec
+-- Queues a pair for review, or leaves an existing decision alone.
+--
+-- DO NOTHING rather than DO UPDATE on purpose: re-detecting a pair that was
+-- already dismissed must not reopen it. A decision already taken is not a new
+-- question, and reopening it would put the same pair in front of HIM every
+-- time either record is touched.
+INSERT INTO empi.duplicate_candidate (
+    candidate_id, tenant_id, patient_a_id, patient_b_id,
+    score, outcome, status, detected_by, detected_at
+) VALUES (
+    @candidate_id, @tenant_id, @patient_a_id, @patient_b_id,
+    @score, @outcome, 'open', @detected_by, @detected_at
+)
+ON CONFLICT (tenant_id, patient_a_id, patient_b_id) DO NOTHING;
+
+-- name: GetDuplicateCandidate :one
+SELECT candidate_id, tenant_id, patient_a_id, patient_b_id, score, outcome,
+       status, detected_by, detected_at, reviewed_by, reviewed_at, resolution
+FROM empi.duplicate_candidate
+WHERE tenant_id = @tenant_id AND candidate_id = @candidate_id;
+
+-- name: FindDuplicateCandidateByPair :one
+SELECT candidate_id, tenant_id, patient_a_id, patient_b_id, score, outcome,
+       status, detected_by, detected_at, reviewed_by, reviewed_at, resolution
+FROM empi.duplicate_candidate
+WHERE tenant_id = @tenant_id AND patient_a_id = @patient_a_id AND patient_b_id = @patient_b_id;
+
+-- name: ListOpenDuplicateCandidates :many
+-- The review worklist, strongest first: that is the pair most likely to be one
+-- person, and the one whose being wrong costs the most.
+SELECT candidate_id, tenant_id, patient_a_id, patient_b_id, score, outcome,
+       status, detected_by, detected_at, reviewed_by, reviewed_at, resolution
+FROM empi.duplicate_candidate
+WHERE tenant_id = @tenant_id AND status = 'open'
+ORDER BY score DESC, detected_at, candidate_id
+LIMIT @page_limit;
+
+-- name: CloseDuplicateCandidate :execrows
+UPDATE empi.duplicate_candidate
+SET status = @status, reviewed_by = @reviewed_by,
+    reviewed_at = @reviewed_at, resolution = @resolution
+WHERE tenant_id = @tenant_id AND candidate_id = @candidate_id AND status = 'open';

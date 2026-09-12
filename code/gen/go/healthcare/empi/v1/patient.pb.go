@@ -443,6 +443,62 @@ func (MatchOutcome) EnumDescriptor() ([]byte, []int) {
 	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{6}
 }
 
+// Where a duplicate pair sits in review (SRS-EMPI-004).
+type ReviewStatus int32
+
+const (
+	ReviewStatus_REVIEW_STATUS_UNSPECIFIED ReviewStatus = 0
+	ReviewStatus_REVIEW_STATUS_OPEN        ReviewStatus = 1
+	ReviewStatus_REVIEW_STATUS_MERGED      ReviewStatus = 2
+	// Judged to be two different people. Recorded rather than deleted, so the
+	// same pair does not return to the queue every time either record is
+	// touched.
+	ReviewStatus_REVIEW_STATUS_DISMISSED ReviewStatus = 3
+)
+
+// Enum value maps for ReviewStatus.
+var (
+	ReviewStatus_name = map[int32]string{
+		0: "REVIEW_STATUS_UNSPECIFIED",
+		1: "REVIEW_STATUS_OPEN",
+		2: "REVIEW_STATUS_MERGED",
+		3: "REVIEW_STATUS_DISMISSED",
+	}
+	ReviewStatus_value = map[string]int32{
+		"REVIEW_STATUS_UNSPECIFIED": 0,
+		"REVIEW_STATUS_OPEN":        1,
+		"REVIEW_STATUS_MERGED":      2,
+		"REVIEW_STATUS_DISMISSED":   3,
+	}
+)
+
+func (x ReviewStatus) Enum() *ReviewStatus {
+	p := new(ReviewStatus)
+	*p = x
+	return p
+}
+
+func (x ReviewStatus) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ReviewStatus) Descriptor() protoreflect.EnumDescriptor {
+	return file_healthcare_empi_v1_patient_proto_enumTypes[7].Descriptor()
+}
+
+func (ReviewStatus) Type() protoreflect.EnumType {
+	return &file_healthcare_empi_v1_patient_proto_enumTypes[7]
+}
+
+func (x ReviewStatus) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ReviewStatus.Descriptor instead.
+func (ReviewStatus) EnumDescriptor() ([]byte, []int) {
+	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{7}
+}
+
 // A date whose precision is recorded alongside it.
 type PartialDate struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1893,6 +1949,558 @@ func (x *ConfirmIdentityResponse) GetPatient() *Patient {
 	return nil
 }
 
+// One pair awaiting or past review.
+//
+// The queue exists because "thresholds route to manual review" needs somewhere
+// to route to. A clerk who acknowledges a probable duplicate and registers
+// anyway has made that call at a busy desk with a patient waiting; the pair
+// still goes to the people whose job it is.
+type DuplicateCandidate struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	CandidateId string                 `protobuf:"bytes,1,opt,name=candidate_id,json=candidateId,proto3" json:"candidate_id,omitempty"`
+	PatientAId  string                 `protobuf:"bytes,2,opt,name=patient_a_id,json=patientAId,proto3" json:"patient_a_id,omitempty"`
+	PatientBId  string                 `protobuf:"bytes,3,opt,name=patient_b_id,json=patientBId,proto3" json:"patient_b_id,omitempty"`
+	Score       float64                `protobuf:"fixed64,4,opt,name=score,proto3" json:"score,omitempty"`
+	Outcome     MatchOutcome           `protobuf:"varint,5,opt,name=outcome,proto3,enum=healthcare.empi.v1.MatchOutcome" json:"outcome,omitempty"`
+	Status      ReviewStatus           `protobuf:"varint,6,opt,name=status,proto3,enum=healthcare.empi.v1.ReviewStatus" json:"status,omitempty"`
+	// What surfaced the pair: a registration, a bulk scan, an operator. It
+	// matters when deciding how much to trust the score.
+	DetectedBy string                 `protobuf:"bytes,7,opt,name=detected_by,json=detectedBy,proto3" json:"detected_by,omitempty"`
+	DetectedAt *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=detected_at,json=detectedAt,proto3" json:"detected_at,omitempty"`
+	ReviewedBy string                 `protobuf:"bytes,9,opt,name=reviewed_by,json=reviewedBy,proto3" json:"reviewed_by,omitempty"`
+	ReviewedAt *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=reviewed_at,json=reviewedAt,proto3" json:"reviewed_at,omitempty"`
+	// Explains a dismissal, or names the merge that resolved it.
+	Resolution    string `protobuf:"bytes,11,opt,name=resolution,proto3" json:"resolution,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DuplicateCandidate) Reset() {
+	*x = DuplicateCandidate{}
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DuplicateCandidate) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DuplicateCandidate) ProtoMessage() {}
+
+func (x *DuplicateCandidate) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DuplicateCandidate.ProtoReflect.Descriptor instead.
+func (*DuplicateCandidate) Descriptor() ([]byte, []int) {
+	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *DuplicateCandidate) GetCandidateId() string {
+	if x != nil {
+		return x.CandidateId
+	}
+	return ""
+}
+
+func (x *DuplicateCandidate) GetPatientAId() string {
+	if x != nil {
+		return x.PatientAId
+	}
+	return ""
+}
+
+func (x *DuplicateCandidate) GetPatientBId() string {
+	if x != nil {
+		return x.PatientBId
+	}
+	return ""
+}
+
+func (x *DuplicateCandidate) GetScore() float64 {
+	if x != nil {
+		return x.Score
+	}
+	return 0
+}
+
+func (x *DuplicateCandidate) GetOutcome() MatchOutcome {
+	if x != nil {
+		return x.Outcome
+	}
+	return MatchOutcome_MATCH_OUTCOME_UNSPECIFIED
+}
+
+func (x *DuplicateCandidate) GetStatus() ReviewStatus {
+	if x != nil {
+		return x.Status
+	}
+	return ReviewStatus_REVIEW_STATUS_UNSPECIFIED
+}
+
+func (x *DuplicateCandidate) GetDetectedBy() string {
+	if x != nil {
+		return x.DetectedBy
+	}
+	return ""
+}
+
+func (x *DuplicateCandidate) GetDetectedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.DetectedAt
+	}
+	return nil
+}
+
+func (x *DuplicateCandidate) GetReviewedBy() string {
+	if x != nil {
+		return x.ReviewedBy
+	}
+	return ""
+}
+
+func (x *DuplicateCandidate) GetReviewedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ReviewedAt
+	}
+	return nil
+}
+
+func (x *DuplicateCandidate) GetResolution() string {
+	if x != nil {
+		return x.Resolution
+	}
+	return ""
+}
+
+type MergePatientsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The record that keeps its patient id and its MRN. Which one survives is
+	// the reviewer's decision — usually the one carrying the clinical history —
+	// and it is never inferred.
+	SurvivorPatientId string `protobuf:"bytes,1,opt,name=survivor_patient_id,json=survivorPatientId,proto3" json:"survivor_patient_id,omitempty"`
+	MergedPatientId   string `protobuf:"bytes,2,opt,name=merged_patient_id,json=mergedPatientId,proto3" json:"merged_patient_id,omitempty"`
+	// Required. A merge with no reason cannot be reviewed afterwards, and that
+	// review is the only thing between a mistake and two people's records.
+	Reason string `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	// Closes the review-queue entry this merge came from, when there is one.
+	CandidateId   string `protobuf:"bytes,4,opt,name=candidate_id,json=candidateId,proto3" json:"candidate_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MergePatientsRequest) Reset() {
+	*x = MergePatientsRequest{}
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MergePatientsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MergePatientsRequest) ProtoMessage() {}
+
+func (x *MergePatientsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MergePatientsRequest.ProtoReflect.Descriptor instead.
+func (*MergePatientsRequest) Descriptor() ([]byte, []int) {
+	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *MergePatientsRequest) GetSurvivorPatientId() string {
+	if x != nil {
+		return x.SurvivorPatientId
+	}
+	return ""
+}
+
+func (x *MergePatientsRequest) GetMergedPatientId() string {
+	if x != nil {
+		return x.MergedPatientId
+	}
+	return ""
+}
+
+func (x *MergePatientsRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *MergePatientsRequest) GetCandidateId() string {
+	if x != nil {
+		return x.CandidateId
+	}
+	return ""
+}
+
+type MergePatientsResponse struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Survivor        *Patient               `protobuf:"bytes,1,opt,name=survivor,proto3" json:"survivor,omitempty"`
+	MergedPatientId string                 `protobuf:"bytes,2,opt,name=merged_patient_id,json=mergedPatientId,proto3" json:"merged_patient_id,omitempty"`
+	// Names the journal entry an unmerge would reverse.
+	MergeId       string `protobuf:"bytes,3,opt,name=merge_id,json=mergeId,proto3" json:"merge_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MergePatientsResponse) Reset() {
+	*x = MergePatientsResponse{}
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MergePatientsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MergePatientsResponse) ProtoMessage() {}
+
+func (x *MergePatientsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MergePatientsResponse.ProtoReflect.Descriptor instead.
+func (*MergePatientsResponse) Descriptor() ([]byte, []int) {
+	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *MergePatientsResponse) GetSurvivor() *Patient {
+	if x != nil {
+		return x.Survivor
+	}
+	return nil
+}
+
+func (x *MergePatientsResponse) GetMergedPatientId() string {
+	if x != nil {
+		return x.MergedPatientId
+	}
+	return ""
+}
+
+func (x *MergePatientsResponse) GetMergeId() string {
+	if x != nil {
+		return x.MergeId
+	}
+	return ""
+}
+
+type UnmergePatientsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	MergeId       string                 `protobuf:"bytes,1,opt,name=merge_id,json=mergeId,proto3" json:"merge_id,omitempty"`
+	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UnmergePatientsRequest) Reset() {
+	*x = UnmergePatientsRequest{}
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UnmergePatientsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UnmergePatientsRequest) ProtoMessage() {}
+
+func (x *UnmergePatientsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UnmergePatientsRequest.ProtoReflect.Descriptor instead.
+func (*UnmergePatientsRequest) Descriptor() ([]byte, []int) {
+	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *UnmergePatientsRequest) GetMergeId() string {
+	if x != nil {
+		return x.MergeId
+	}
+	return ""
+}
+
+func (x *UnmergePatientsRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type UnmergePatientsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Survivor      *Patient               `protobuf:"bytes,1,opt,name=survivor,proto3" json:"survivor,omitempty"`
+	Restored      *Patient               `protobuf:"bytes,2,opt,name=restored,proto3" json:"restored,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UnmergePatientsResponse) Reset() {
+	*x = UnmergePatientsResponse{}
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UnmergePatientsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UnmergePatientsResponse) ProtoMessage() {}
+
+func (x *UnmergePatientsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UnmergePatientsResponse.ProtoReflect.Descriptor instead.
+func (*UnmergePatientsResponse) Descriptor() ([]byte, []int) {
+	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *UnmergePatientsResponse) GetSurvivor() *Patient {
+	if x != nil {
+		return x.Survivor
+	}
+	return nil
+}
+
+func (x *UnmergePatientsResponse) GetRestored() *Patient {
+	if x != nil {
+		return x.Restored
+	}
+	return nil
+}
+
+type ListDuplicateCandidatesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PageSize      int32                  `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListDuplicateCandidatesRequest) Reset() {
+	*x = ListDuplicateCandidatesRequest{}
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListDuplicateCandidatesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListDuplicateCandidatesRequest) ProtoMessage() {}
+
+func (x *ListDuplicateCandidatesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListDuplicateCandidatesRequest.ProtoReflect.Descriptor instead.
+func (*ListDuplicateCandidatesRequest) Descriptor() ([]byte, []int) {
+	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *ListDuplicateCandidatesRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+type ListDuplicateCandidatesResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Strongest first: the pair most likely to be one person, and the one whose
+	// being wrong costs the most.
+	Candidates    []*DuplicateCandidate `protobuf:"bytes,1,rep,name=candidates,proto3" json:"candidates,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListDuplicateCandidatesResponse) Reset() {
+	*x = ListDuplicateCandidatesResponse{}
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListDuplicateCandidatesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListDuplicateCandidatesResponse) ProtoMessage() {}
+
+func (x *ListDuplicateCandidatesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListDuplicateCandidatesResponse.ProtoReflect.Descriptor instead.
+func (*ListDuplicateCandidatesResponse) Descriptor() ([]byte, []int) {
+	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *ListDuplicateCandidatesResponse) GetCandidates() []*DuplicateCandidate {
+	if x != nil {
+		return x.Candidates
+	}
+	return nil
+}
+
+type DismissDuplicateCandidateRequest struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	CandidateId string                 `protobuf:"bytes,1,opt,name=candidate_id,json=candidateId,proto3" json:"candidate_id,omitempty"`
+	// Required. A dismissal with no reason is indistinguishable from a mis-click,
+	// and the pair never returns to the queue to be reconsidered.
+	Reason        string `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DismissDuplicateCandidateRequest) Reset() {
+	*x = DismissDuplicateCandidateRequest{}
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DismissDuplicateCandidateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DismissDuplicateCandidateRequest) ProtoMessage() {}
+
+func (x *DismissDuplicateCandidateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DismissDuplicateCandidateRequest.ProtoReflect.Descriptor instead.
+func (*DismissDuplicateCandidateRequest) Descriptor() ([]byte, []int) {
+	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *DismissDuplicateCandidateRequest) GetCandidateId() string {
+	if x != nil {
+		return x.CandidateId
+	}
+	return ""
+}
+
+func (x *DismissDuplicateCandidateRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type DismissDuplicateCandidateResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DismissDuplicateCandidateResponse) Reset() {
+	*x = DismissDuplicateCandidateResponse{}
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DismissDuplicateCandidateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DismissDuplicateCandidateResponse) ProtoMessage() {}
+
+func (x *DismissDuplicateCandidateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DismissDuplicateCandidateResponse.ProtoReflect.Descriptor instead.
+func (*DismissDuplicateCandidateResponse) Descriptor() ([]byte, []int) {
+	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{28}
+}
+
 var File_healthcare_empi_v1_patient_proto protoreflect.FileDescriptor
 
 const file_healthcare_empi_v1_patient_proto_rawDesc = "" +
@@ -2019,7 +2627,53 @@ const file_healthcare_empi_v1_patient_proto_rawDesc = "" +
 	"patient_id\x18\x01 \x01(\tR\tpatientId\x12)\n" +
 	"\x10expected_version\x18\x02 \x01(\x03R\x0fexpectedVersion\"P\n" +
 	"\x17ConfirmIdentityResponse\x125\n" +
-	"\apatient\x18\x01 \x01(\v2\x1b.healthcare.empi.v1.PatientR\apatient*\xa0\x01\n" +
+	"\apatient\x18\x01 \x01(\v2\x1b.healthcare.empi.v1.PatientR\apatient\"\xe3\x03\n" +
+	"\x12DuplicateCandidate\x12!\n" +
+	"\fcandidate_id\x18\x01 \x01(\tR\vcandidateId\x12 \n" +
+	"\fpatient_a_id\x18\x02 \x01(\tR\n" +
+	"patientAId\x12 \n" +
+	"\fpatient_b_id\x18\x03 \x01(\tR\n" +
+	"patientBId\x12\x14\n" +
+	"\x05score\x18\x04 \x01(\x01R\x05score\x12:\n" +
+	"\aoutcome\x18\x05 \x01(\x0e2 .healthcare.empi.v1.MatchOutcomeR\aoutcome\x128\n" +
+	"\x06status\x18\x06 \x01(\x0e2 .healthcare.empi.v1.ReviewStatusR\x06status\x12\x1f\n" +
+	"\vdetected_by\x18\a \x01(\tR\n" +
+	"detectedBy\x12;\n" +
+	"\vdetected_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"detectedAt\x12\x1f\n" +
+	"\vreviewed_by\x18\t \x01(\tR\n" +
+	"reviewedBy\x12;\n" +
+	"\vreviewed_at\x18\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"reviewedAt\x12\x1e\n" +
+	"\n" +
+	"resolution\x18\v \x01(\tR\n" +
+	"resolution\"\xad\x01\n" +
+	"\x14MergePatientsRequest\x12.\n" +
+	"\x13survivor_patient_id\x18\x01 \x01(\tR\x11survivorPatientId\x12*\n" +
+	"\x11merged_patient_id\x18\x02 \x01(\tR\x0fmergedPatientId\x12\x16\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\x12!\n" +
+	"\fcandidate_id\x18\x04 \x01(\tR\vcandidateId\"\x97\x01\n" +
+	"\x15MergePatientsResponse\x127\n" +
+	"\bsurvivor\x18\x01 \x01(\v2\x1b.healthcare.empi.v1.PatientR\bsurvivor\x12*\n" +
+	"\x11merged_patient_id\x18\x02 \x01(\tR\x0fmergedPatientId\x12\x19\n" +
+	"\bmerge_id\x18\x03 \x01(\tR\amergeId\"K\n" +
+	"\x16UnmergePatientsRequest\x12\x19\n" +
+	"\bmerge_id\x18\x01 \x01(\tR\amergeId\x12\x16\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\"\x8b\x01\n" +
+	"\x17UnmergePatientsResponse\x127\n" +
+	"\bsurvivor\x18\x01 \x01(\v2\x1b.healthcare.empi.v1.PatientR\bsurvivor\x127\n" +
+	"\brestored\x18\x02 \x01(\v2\x1b.healthcare.empi.v1.PatientR\brestored\"=\n" +
+	"\x1eListDuplicateCandidatesRequest\x12\x1b\n" +
+	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\"i\n" +
+	"\x1fListDuplicateCandidatesResponse\x12F\n" +
+	"\n" +
+	"candidates\x18\x01 \x03(\v2&.healthcare.empi.v1.DuplicateCandidateR\n" +
+	"candidates\"]\n" +
+	" DismissDuplicateCandidateRequest\x12!\n" +
+	"\fcandidate_id\x18\x01 \x01(\tR\vcandidateId\x12\x16\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\"#\n" +
+	"!DismissDuplicateCandidateResponse*\xa0\x01\n" +
 	"\rPatientStatus\x12\x1e\n" +
 	"\x1aPATIENT_STATUS_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18PATIENT_STATUS_CANDIDATE\x10\x01\x12\x19\n" +
@@ -2060,14 +2714,23 @@ const file_healthcare_empi_v1_patient_proto_rawDesc = "" +
 	"\x16MATCH_OUTCOME_DISTINCT\x10\x01\x12\x18\n" +
 	"\x14MATCH_OUTCOME_REVIEW\x10\x02\x12\x1a\n" +
 	"\x16MATCH_OUTCOME_PROBABLE\x10\x03\x12\x1a\n" +
-	"\x16MATCH_OUTCOME_CONFLICT\x10\x042\xa3\x04\n" +
+	"\x16MATCH_OUTCOME_CONFLICT\x10\x04*|\n" +
+	"\fReviewStatus\x12\x1d\n" +
+	"\x19REVIEW_STATUS_UNSPECIFIED\x10\x00\x12\x16\n" +
+	"\x12REVIEW_STATUS_OPEN\x10\x01\x12\x18\n" +
+	"\x14REVIEW_STATUS_MERGED\x10\x02\x12\x1b\n" +
+	"\x17REVIEW_STATUS_DISMISSED\x10\x032\x85\b\n" +
 	"\x0ePatientService\x12j\n" +
 	"\x0fRegisterPatient\x12*.healthcare.empi.v1.RegisterPatientRequest\x1a+.healthcare.empi.v1.RegisterPatientResponse\x12g\n" +
 	"\x0eSearchPatients\x12).healthcare.empi.v1.SearchPatientsRequest\x1a*.healthcare.empi.v1.SearchPatientsResponse\x12[\n" +
 	"\n" +
 	"GetPatient\x12%.healthcare.empi.v1.GetPatientRequest\x1a&.healthcare.empi.v1.GetPatientResponse\x12s\n" +
 	"\x12UpdateDemographics\x12-.healthcare.empi.v1.UpdateDemographicsRequest\x1a..healthcare.empi.v1.UpdateDemographicsResponse\x12j\n" +
-	"\x0fConfirmIdentity\x12*.healthcare.empi.v1.ConfirmIdentityRequest\x1a+.healthcare.empi.v1.ConfirmIdentityResponseBCZAgithub.com/ppusapati/health/code/gen/go/healthcare/empi/v1;empiv1b\x06proto3"
+	"\x0fConfirmIdentity\x12*.healthcare.empi.v1.ConfirmIdentityRequest\x1a+.healthcare.empi.v1.ConfirmIdentityResponse\x12d\n" +
+	"\rMergePatients\x12(.healthcare.empi.v1.MergePatientsRequest\x1a).healthcare.empi.v1.MergePatientsResponse\x12j\n" +
+	"\x0fUnmergePatients\x12*.healthcare.empi.v1.UnmergePatientsRequest\x1a+.healthcare.empi.v1.UnmergePatientsResponse\x12\x82\x01\n" +
+	"\x17ListDuplicateCandidates\x122.healthcare.empi.v1.ListDuplicateCandidatesRequest\x1a3.healthcare.empi.v1.ListDuplicateCandidatesResponse\x12\x88\x01\n" +
+	"\x19DismissDuplicateCandidate\x124.healthcare.empi.v1.DismissDuplicateCandidateRequest\x1a5.healthcare.empi.v1.DismissDuplicateCandidateResponseBCZAgithub.com/ppusapati/health/code/gen/go/healthcare/empi/v1;empiv1b\x06proto3"
 
 var (
 	file_healthcare_empi_v1_patient_proto_rawDescOnce sync.Once
@@ -2081,89 +2744,115 @@ func file_healthcare_empi_v1_patient_proto_rawDescGZIP() []byte {
 	return file_healthcare_empi_v1_patient_proto_rawDescData
 }
 
-var file_healthcare_empi_v1_patient_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
-var file_healthcare_empi_v1_patient_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
+var file_healthcare_empi_v1_patient_proto_enumTypes = make([]protoimpl.EnumInfo, 8)
+var file_healthcare_empi_v1_patient_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
 var file_healthcare_empi_v1_patient_proto_goTypes = []any{
-	(PatientStatus)(0),                 // 0: healthcare.empi.v1.PatientStatus
-	(Sex)(0),                           // 1: healthcare.empi.v1.Sex
-	(DatePrecision)(0),                 // 2: healthcare.empi.v1.DatePrecision
-	(IdentifierType)(0),                // 3: healthcare.empi.v1.IdentifierType
-	(IdentifierStatus)(0),              // 4: healthcare.empi.v1.IdentifierStatus
-	(ContactSystem)(0),                 // 5: healthcare.empi.v1.ContactSystem
-	(MatchOutcome)(0),                  // 6: healthcare.empi.v1.MatchOutcome
-	(*PartialDate)(nil),                // 7: healthcare.empi.v1.PartialDate
-	(*HumanName)(nil),                  // 8: healthcare.empi.v1.HumanName
-	(*ContactPoint)(nil),               // 9: healthcare.empi.v1.ContactPoint
-	(*Address)(nil),                    // 10: healthcare.empi.v1.Address
-	(*Demographics)(nil),               // 11: healthcare.empi.v1.Demographics
-	(*PatientIdentifier)(nil),          // 12: healthcare.empi.v1.PatientIdentifier
-	(*DeceasedRecord)(nil),             // 13: healthcare.empi.v1.DeceasedRecord
-	(*Patient)(nil),                    // 14: healthcare.empi.v1.Patient
-	(*MatchFieldScore)(nil),            // 15: healthcare.empi.v1.MatchFieldScore
-	(*PatientMatch)(nil),               // 16: healthcare.empi.v1.PatientMatch
-	(*RegisterPatientRequest)(nil),     // 17: healthcare.empi.v1.RegisterPatientRequest
-	(*RegisterPatientResponse)(nil),    // 18: healthcare.empi.v1.RegisterPatientResponse
-	(*SearchPatientsRequest)(nil),      // 19: healthcare.empi.v1.SearchPatientsRequest
-	(*SearchPatientsResponse)(nil),     // 20: healthcare.empi.v1.SearchPatientsResponse
-	(*GetPatientRequest)(nil),          // 21: healthcare.empi.v1.GetPatientRequest
-	(*GetPatientResponse)(nil),         // 22: healthcare.empi.v1.GetPatientResponse
-	(*UpdateDemographicsRequest)(nil),  // 23: healthcare.empi.v1.UpdateDemographicsRequest
-	(*UpdateDemographicsResponse)(nil), // 24: healthcare.empi.v1.UpdateDemographicsResponse
-	(*ConfirmIdentityRequest)(nil),     // 25: healthcare.empi.v1.ConfirmIdentityRequest
-	(*ConfirmIdentityResponse)(nil),    // 26: healthcare.empi.v1.ConfirmIdentityResponse
-	(*timestamppb.Timestamp)(nil),      // 27: google.protobuf.Timestamp
+	(PatientStatus)(0),                        // 0: healthcare.empi.v1.PatientStatus
+	(Sex)(0),                                  // 1: healthcare.empi.v1.Sex
+	(DatePrecision)(0),                        // 2: healthcare.empi.v1.DatePrecision
+	(IdentifierType)(0),                       // 3: healthcare.empi.v1.IdentifierType
+	(IdentifierStatus)(0),                     // 4: healthcare.empi.v1.IdentifierStatus
+	(ContactSystem)(0),                        // 5: healthcare.empi.v1.ContactSystem
+	(MatchOutcome)(0),                         // 6: healthcare.empi.v1.MatchOutcome
+	(ReviewStatus)(0),                         // 7: healthcare.empi.v1.ReviewStatus
+	(*PartialDate)(nil),                       // 8: healthcare.empi.v1.PartialDate
+	(*HumanName)(nil),                         // 9: healthcare.empi.v1.HumanName
+	(*ContactPoint)(nil),                      // 10: healthcare.empi.v1.ContactPoint
+	(*Address)(nil),                           // 11: healthcare.empi.v1.Address
+	(*Demographics)(nil),                      // 12: healthcare.empi.v1.Demographics
+	(*PatientIdentifier)(nil),                 // 13: healthcare.empi.v1.PatientIdentifier
+	(*DeceasedRecord)(nil),                    // 14: healthcare.empi.v1.DeceasedRecord
+	(*Patient)(nil),                           // 15: healthcare.empi.v1.Patient
+	(*MatchFieldScore)(nil),                   // 16: healthcare.empi.v1.MatchFieldScore
+	(*PatientMatch)(nil),                      // 17: healthcare.empi.v1.PatientMatch
+	(*RegisterPatientRequest)(nil),            // 18: healthcare.empi.v1.RegisterPatientRequest
+	(*RegisterPatientResponse)(nil),           // 19: healthcare.empi.v1.RegisterPatientResponse
+	(*SearchPatientsRequest)(nil),             // 20: healthcare.empi.v1.SearchPatientsRequest
+	(*SearchPatientsResponse)(nil),            // 21: healthcare.empi.v1.SearchPatientsResponse
+	(*GetPatientRequest)(nil),                 // 22: healthcare.empi.v1.GetPatientRequest
+	(*GetPatientResponse)(nil),                // 23: healthcare.empi.v1.GetPatientResponse
+	(*UpdateDemographicsRequest)(nil),         // 24: healthcare.empi.v1.UpdateDemographicsRequest
+	(*UpdateDemographicsResponse)(nil),        // 25: healthcare.empi.v1.UpdateDemographicsResponse
+	(*ConfirmIdentityRequest)(nil),            // 26: healthcare.empi.v1.ConfirmIdentityRequest
+	(*ConfirmIdentityResponse)(nil),           // 27: healthcare.empi.v1.ConfirmIdentityResponse
+	(*DuplicateCandidate)(nil),                // 28: healthcare.empi.v1.DuplicateCandidate
+	(*MergePatientsRequest)(nil),              // 29: healthcare.empi.v1.MergePatientsRequest
+	(*MergePatientsResponse)(nil),             // 30: healthcare.empi.v1.MergePatientsResponse
+	(*UnmergePatientsRequest)(nil),            // 31: healthcare.empi.v1.UnmergePatientsRequest
+	(*UnmergePatientsResponse)(nil),           // 32: healthcare.empi.v1.UnmergePatientsResponse
+	(*ListDuplicateCandidatesRequest)(nil),    // 33: healthcare.empi.v1.ListDuplicateCandidatesRequest
+	(*ListDuplicateCandidatesResponse)(nil),   // 34: healthcare.empi.v1.ListDuplicateCandidatesResponse
+	(*DismissDuplicateCandidateRequest)(nil),  // 35: healthcare.empi.v1.DismissDuplicateCandidateRequest
+	(*DismissDuplicateCandidateResponse)(nil), // 36: healthcare.empi.v1.DismissDuplicateCandidateResponse
+	(*timestamppb.Timestamp)(nil),             // 37: google.protobuf.Timestamp
 }
 var file_healthcare_empi_v1_patient_proto_depIdxs = []int32{
-	27, // 0: healthcare.empi.v1.PartialDate.date:type_name -> google.protobuf.Timestamp
+	37, // 0: healthcare.empi.v1.PartialDate.date:type_name -> google.protobuf.Timestamp
 	2,  // 1: healthcare.empi.v1.PartialDate.precision:type_name -> healthcare.empi.v1.DatePrecision
 	5,  // 2: healthcare.empi.v1.ContactPoint.system:type_name -> healthcare.empi.v1.ContactSystem
-	8,  // 3: healthcare.empi.v1.Demographics.name:type_name -> healthcare.empi.v1.HumanName
-	7,  // 4: healthcare.empi.v1.Demographics.birth_date:type_name -> healthcare.empi.v1.PartialDate
+	9,  // 3: healthcare.empi.v1.Demographics.name:type_name -> healthcare.empi.v1.HumanName
+	8,  // 4: healthcare.empi.v1.Demographics.birth_date:type_name -> healthcare.empi.v1.PartialDate
 	1,  // 5: healthcare.empi.v1.Demographics.sex:type_name -> healthcare.empi.v1.Sex
-	9,  // 6: healthcare.empi.v1.Demographics.phones:type_name -> healthcare.empi.v1.ContactPoint
-	9,  // 7: healthcare.empi.v1.Demographics.emails:type_name -> healthcare.empi.v1.ContactPoint
-	10, // 8: healthcare.empi.v1.Demographics.addresses:type_name -> healthcare.empi.v1.Address
+	10, // 6: healthcare.empi.v1.Demographics.phones:type_name -> healthcare.empi.v1.ContactPoint
+	10, // 7: healthcare.empi.v1.Demographics.emails:type_name -> healthcare.empi.v1.ContactPoint
+	11, // 8: healthcare.empi.v1.Demographics.addresses:type_name -> healthcare.empi.v1.Address
 	3,  // 9: healthcare.empi.v1.PatientIdentifier.type:type_name -> healthcare.empi.v1.IdentifierType
 	4,  // 10: healthcare.empi.v1.PatientIdentifier.status:type_name -> healthcare.empi.v1.IdentifierStatus
-	27, // 11: healthcare.empi.v1.PatientIdentifier.linked_at:type_name -> google.protobuf.Timestamp
-	27, // 12: healthcare.empi.v1.PatientIdentifier.unlinked_at:type_name -> google.protobuf.Timestamp
-	7,  // 13: healthcare.empi.v1.DeceasedRecord.date:type_name -> healthcare.empi.v1.PartialDate
-	27, // 14: healthcare.empi.v1.DeceasedRecord.recorded_at:type_name -> google.protobuf.Timestamp
+	37, // 11: healthcare.empi.v1.PatientIdentifier.linked_at:type_name -> google.protobuf.Timestamp
+	37, // 12: healthcare.empi.v1.PatientIdentifier.unlinked_at:type_name -> google.protobuf.Timestamp
+	8,  // 13: healthcare.empi.v1.DeceasedRecord.date:type_name -> healthcare.empi.v1.PartialDate
+	37, // 14: healthcare.empi.v1.DeceasedRecord.recorded_at:type_name -> google.protobuf.Timestamp
 	0,  // 15: healthcare.empi.v1.Patient.status:type_name -> healthcare.empi.v1.PatientStatus
-	11, // 16: healthcare.empi.v1.Patient.demographics:type_name -> healthcare.empi.v1.Demographics
-	12, // 17: healthcare.empi.v1.Patient.identifiers:type_name -> healthcare.empi.v1.PatientIdentifier
-	13, // 18: healthcare.empi.v1.Patient.deceased:type_name -> healthcare.empi.v1.DeceasedRecord
-	27, // 19: healthcare.empi.v1.Patient.created_at:type_name -> google.protobuf.Timestamp
-	27, // 20: healthcare.empi.v1.Patient.updated_at:type_name -> google.protobuf.Timestamp
-	14, // 21: healthcare.empi.v1.PatientMatch.patient:type_name -> healthcare.empi.v1.Patient
+	12, // 16: healthcare.empi.v1.Patient.demographics:type_name -> healthcare.empi.v1.Demographics
+	13, // 17: healthcare.empi.v1.Patient.identifiers:type_name -> healthcare.empi.v1.PatientIdentifier
+	14, // 18: healthcare.empi.v1.Patient.deceased:type_name -> healthcare.empi.v1.DeceasedRecord
+	37, // 19: healthcare.empi.v1.Patient.created_at:type_name -> google.protobuf.Timestamp
+	37, // 20: healthcare.empi.v1.Patient.updated_at:type_name -> google.protobuf.Timestamp
+	15, // 21: healthcare.empi.v1.PatientMatch.patient:type_name -> healthcare.empi.v1.Patient
 	6,  // 22: healthcare.empi.v1.PatientMatch.outcome:type_name -> healthcare.empi.v1.MatchOutcome
-	15, // 23: healthcare.empi.v1.PatientMatch.fields:type_name -> healthcare.empi.v1.MatchFieldScore
-	11, // 24: healthcare.empi.v1.RegisterPatientRequest.demographics:type_name -> healthcare.empi.v1.Demographics
-	12, // 25: healthcare.empi.v1.RegisterPatientRequest.identifiers:type_name -> healthcare.empi.v1.PatientIdentifier
-	14, // 26: healthcare.empi.v1.RegisterPatientResponse.patient:type_name -> healthcare.empi.v1.Patient
-	16, // 27: healthcare.empi.v1.RegisterPatientResponse.potential_duplicates:type_name -> healthcare.empi.v1.PatientMatch
-	7,  // 28: healthcare.empi.v1.SearchPatientsRequest.birth_date:type_name -> healthcare.empi.v1.PartialDate
+	16, // 23: healthcare.empi.v1.PatientMatch.fields:type_name -> healthcare.empi.v1.MatchFieldScore
+	12, // 24: healthcare.empi.v1.RegisterPatientRequest.demographics:type_name -> healthcare.empi.v1.Demographics
+	13, // 25: healthcare.empi.v1.RegisterPatientRequest.identifiers:type_name -> healthcare.empi.v1.PatientIdentifier
+	15, // 26: healthcare.empi.v1.RegisterPatientResponse.patient:type_name -> healthcare.empi.v1.Patient
+	17, // 27: healthcare.empi.v1.RegisterPatientResponse.potential_duplicates:type_name -> healthcare.empi.v1.PatientMatch
+	8,  // 28: healthcare.empi.v1.SearchPatientsRequest.birth_date:type_name -> healthcare.empi.v1.PartialDate
 	3,  // 29: healthcare.empi.v1.SearchPatientsRequest.identifier_type:type_name -> healthcare.empi.v1.IdentifierType
-	16, // 30: healthcare.empi.v1.SearchPatientsResponse.matches:type_name -> healthcare.empi.v1.PatientMatch
-	14, // 31: healthcare.empi.v1.GetPatientResponse.patient:type_name -> healthcare.empi.v1.Patient
-	11, // 32: healthcare.empi.v1.UpdateDemographicsRequest.demographics:type_name -> healthcare.empi.v1.Demographics
-	14, // 33: healthcare.empi.v1.UpdateDemographicsResponse.patient:type_name -> healthcare.empi.v1.Patient
-	14, // 34: healthcare.empi.v1.ConfirmIdentityResponse.patient:type_name -> healthcare.empi.v1.Patient
-	17, // 35: healthcare.empi.v1.PatientService.RegisterPatient:input_type -> healthcare.empi.v1.RegisterPatientRequest
-	19, // 36: healthcare.empi.v1.PatientService.SearchPatients:input_type -> healthcare.empi.v1.SearchPatientsRequest
-	21, // 37: healthcare.empi.v1.PatientService.GetPatient:input_type -> healthcare.empi.v1.GetPatientRequest
-	23, // 38: healthcare.empi.v1.PatientService.UpdateDemographics:input_type -> healthcare.empi.v1.UpdateDemographicsRequest
-	25, // 39: healthcare.empi.v1.PatientService.ConfirmIdentity:input_type -> healthcare.empi.v1.ConfirmIdentityRequest
-	18, // 40: healthcare.empi.v1.PatientService.RegisterPatient:output_type -> healthcare.empi.v1.RegisterPatientResponse
-	20, // 41: healthcare.empi.v1.PatientService.SearchPatients:output_type -> healthcare.empi.v1.SearchPatientsResponse
-	22, // 42: healthcare.empi.v1.PatientService.GetPatient:output_type -> healthcare.empi.v1.GetPatientResponse
-	24, // 43: healthcare.empi.v1.PatientService.UpdateDemographics:output_type -> healthcare.empi.v1.UpdateDemographicsResponse
-	26, // 44: healthcare.empi.v1.PatientService.ConfirmIdentity:output_type -> healthcare.empi.v1.ConfirmIdentityResponse
-	40, // [40:45] is the sub-list for method output_type
-	35, // [35:40] is the sub-list for method input_type
-	35, // [35:35] is the sub-list for extension type_name
-	35, // [35:35] is the sub-list for extension extendee
-	0,  // [0:35] is the sub-list for field type_name
+	17, // 30: healthcare.empi.v1.SearchPatientsResponse.matches:type_name -> healthcare.empi.v1.PatientMatch
+	15, // 31: healthcare.empi.v1.GetPatientResponse.patient:type_name -> healthcare.empi.v1.Patient
+	12, // 32: healthcare.empi.v1.UpdateDemographicsRequest.demographics:type_name -> healthcare.empi.v1.Demographics
+	15, // 33: healthcare.empi.v1.UpdateDemographicsResponse.patient:type_name -> healthcare.empi.v1.Patient
+	15, // 34: healthcare.empi.v1.ConfirmIdentityResponse.patient:type_name -> healthcare.empi.v1.Patient
+	6,  // 35: healthcare.empi.v1.DuplicateCandidate.outcome:type_name -> healthcare.empi.v1.MatchOutcome
+	7,  // 36: healthcare.empi.v1.DuplicateCandidate.status:type_name -> healthcare.empi.v1.ReviewStatus
+	37, // 37: healthcare.empi.v1.DuplicateCandidate.detected_at:type_name -> google.protobuf.Timestamp
+	37, // 38: healthcare.empi.v1.DuplicateCandidate.reviewed_at:type_name -> google.protobuf.Timestamp
+	15, // 39: healthcare.empi.v1.MergePatientsResponse.survivor:type_name -> healthcare.empi.v1.Patient
+	15, // 40: healthcare.empi.v1.UnmergePatientsResponse.survivor:type_name -> healthcare.empi.v1.Patient
+	15, // 41: healthcare.empi.v1.UnmergePatientsResponse.restored:type_name -> healthcare.empi.v1.Patient
+	28, // 42: healthcare.empi.v1.ListDuplicateCandidatesResponse.candidates:type_name -> healthcare.empi.v1.DuplicateCandidate
+	18, // 43: healthcare.empi.v1.PatientService.RegisterPatient:input_type -> healthcare.empi.v1.RegisterPatientRequest
+	20, // 44: healthcare.empi.v1.PatientService.SearchPatients:input_type -> healthcare.empi.v1.SearchPatientsRequest
+	22, // 45: healthcare.empi.v1.PatientService.GetPatient:input_type -> healthcare.empi.v1.GetPatientRequest
+	24, // 46: healthcare.empi.v1.PatientService.UpdateDemographics:input_type -> healthcare.empi.v1.UpdateDemographicsRequest
+	26, // 47: healthcare.empi.v1.PatientService.ConfirmIdentity:input_type -> healthcare.empi.v1.ConfirmIdentityRequest
+	29, // 48: healthcare.empi.v1.PatientService.MergePatients:input_type -> healthcare.empi.v1.MergePatientsRequest
+	31, // 49: healthcare.empi.v1.PatientService.UnmergePatients:input_type -> healthcare.empi.v1.UnmergePatientsRequest
+	33, // 50: healthcare.empi.v1.PatientService.ListDuplicateCandidates:input_type -> healthcare.empi.v1.ListDuplicateCandidatesRequest
+	35, // 51: healthcare.empi.v1.PatientService.DismissDuplicateCandidate:input_type -> healthcare.empi.v1.DismissDuplicateCandidateRequest
+	19, // 52: healthcare.empi.v1.PatientService.RegisterPatient:output_type -> healthcare.empi.v1.RegisterPatientResponse
+	21, // 53: healthcare.empi.v1.PatientService.SearchPatients:output_type -> healthcare.empi.v1.SearchPatientsResponse
+	23, // 54: healthcare.empi.v1.PatientService.GetPatient:output_type -> healthcare.empi.v1.GetPatientResponse
+	25, // 55: healthcare.empi.v1.PatientService.UpdateDemographics:output_type -> healthcare.empi.v1.UpdateDemographicsResponse
+	27, // 56: healthcare.empi.v1.PatientService.ConfirmIdentity:output_type -> healthcare.empi.v1.ConfirmIdentityResponse
+	30, // 57: healthcare.empi.v1.PatientService.MergePatients:output_type -> healthcare.empi.v1.MergePatientsResponse
+	32, // 58: healthcare.empi.v1.PatientService.UnmergePatients:output_type -> healthcare.empi.v1.UnmergePatientsResponse
+	34, // 59: healthcare.empi.v1.PatientService.ListDuplicateCandidates:output_type -> healthcare.empi.v1.ListDuplicateCandidatesResponse
+	36, // 60: healthcare.empi.v1.PatientService.DismissDuplicateCandidate:output_type -> healthcare.empi.v1.DismissDuplicateCandidateResponse
+	52, // [52:61] is the sub-list for method output_type
+	43, // [43:52] is the sub-list for method input_type
+	43, // [43:43] is the sub-list for extension type_name
+	43, // [43:43] is the sub-list for extension extendee
+	0,  // [0:43] is the sub-list for field type_name
 }
 
 func init() { file_healthcare_empi_v1_patient_proto_init() }
@@ -2176,8 +2865,8 @@ func file_healthcare_empi_v1_patient_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_healthcare_empi_v1_patient_proto_rawDesc), len(file_healthcare_empi_v1_patient_proto_rawDesc)),
-			NumEnums:      7,
-			NumMessages:   20,
+			NumEnums:      8,
+			NumMessages:   29,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

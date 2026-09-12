@@ -21,6 +21,7 @@ type Service struct {
 	patients    ports.PatientRepository
 	identifiers ports.IdentifierRepository
 	config      ports.ConfigRepository
+	merges      ports.MergeRepository
 	numbers     ports.NumberIssuer
 	tenants     ports.TenantProfile
 	events      ports.EventAppender
@@ -39,6 +40,7 @@ type Deps struct {
 	Patients    ports.PatientRepository
 	Identifiers ports.IdentifierRepository
 	Config      ports.ConfigRepository
+	Merges      ports.MergeRepository
 	Numbers     ports.NumberIssuer
 	Tenants     ports.TenantProfile
 	Events      ports.EventAppender
@@ -51,7 +53,7 @@ type Deps struct {
 func NewService(d Deps) *Service {
 	return &Service{
 		uow: d.UnitOfWork, patients: d.Patients, identifiers: d.Identifiers,
-		config: d.Config, numbers: d.Numbers, tenants: d.Tenants,
+		config: d.Config, merges: d.Merges, numbers: d.Numbers, tenants: d.Tenants,
 		events: d.Events, audits: d.Audits, ids: d.IDs, clock: d.Clock,
 	}
 }
@@ -242,6 +244,14 @@ func (s *Service) RegisterPatient(ctx context.Context, in RegisterPatientInput) 
 			return rpcerr.Internal("EMPI_EVENT_ENCODE_FAILED", "could not encode event").WithCause(err)
 		}
 		if err := s.appendEvent(ctx, session, EventPatientCreated, "patient", patient.ID(), payload, now); err != nil {
+			return err
+		}
+
+		// The clerk said these are different people and their judgement
+		// stands — they can see the patient. But that call was made at a busy
+		// desk with somebody waiting, so the pair goes to HIM. Without this,
+		// nobody ever looks at it again (SRS-EMPI-004).
+		if err := s.queueForReview(ctx, scope, patient.ID(), duplicates, "registration", now); err != nil {
 			return err
 		}
 

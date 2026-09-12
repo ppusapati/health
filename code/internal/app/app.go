@@ -147,6 +147,7 @@ func New(deps Deps) *Server {
 		Patients:    empipostgres.PatientRepo{Repository: empiRepo},
 		Identifiers: empipostgres.IdentifierRepo{Repository: empiRepo},
 		Config:      empipostgres.ConfigRepo{Repository: empiRepo},
+		Merges:      empipostgres.MergeRepo{Repository: empiRepo},
 		Numbers:     empipostgres.NewMRNIssuer(repo),
 		Tenants:     empipostgres.NewTenantJurisdiction(orgpostgres.TenantRepo{Repository: repo}),
 		Events:      platformStore,

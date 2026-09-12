@@ -256,3 +256,32 @@ func matchesToProto(in []application.MatchedPatient) []*empiv1.PatientMatch {
 	}
 	return out
 }
+
+var reviewStatusToProto = map[domain.ReviewStatus]empiv1.ReviewStatus{
+	domain.ReviewOpen:      empiv1.ReviewStatus_REVIEW_STATUS_OPEN,
+	domain.ReviewMerged:    empiv1.ReviewStatus_REVIEW_STATUS_MERGED,
+	domain.ReviewDismissed: empiv1.ReviewStatus_REVIEW_STATUS_DISMISSED,
+}
+
+func candidatesToProto(in []domain.DuplicateCandidate) []*empiv1.DuplicateCandidate {
+	out := make([]*empiv1.DuplicateCandidate, 0, len(in))
+	for _, c := range in {
+		msg := &empiv1.DuplicateCandidate{
+			CandidateId: c.ID,
+			PatientAId:  c.PatientAID,
+			PatientBId:  c.PatientBID,
+			Score:       c.Score,
+			Outcome:     outcomeToProto[c.Outcome],
+			Status:      reviewStatusToProto[c.Status],
+			DetectedBy:  c.DetectedBy,
+			DetectedAt:  timestamppb.New(c.DetectedAt),
+			ReviewedBy:  c.ReviewedBy,
+			Resolution:  c.Resolution,
+		}
+		if c.ReviewedAt != nil {
+			msg.ReviewedAt = timestamppb.New(*c.ReviewedAt)
+		}
+		out = append(out, msg)
+	}
+	return out
+}

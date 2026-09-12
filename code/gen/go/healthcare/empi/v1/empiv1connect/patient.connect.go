@@ -55,6 +55,18 @@ const (
 	// PatientServiceConfirmIdentityProcedure is the fully-qualified name of the PatientService's
 	// ConfirmIdentity RPC.
 	PatientServiceConfirmIdentityProcedure = "/healthcare.empi.v1.PatientService/ConfirmIdentity"
+	// PatientServiceMergePatientsProcedure is the fully-qualified name of the PatientService's
+	// MergePatients RPC.
+	PatientServiceMergePatientsProcedure = "/healthcare.empi.v1.PatientService/MergePatients"
+	// PatientServiceUnmergePatientsProcedure is the fully-qualified name of the PatientService's
+	// UnmergePatients RPC.
+	PatientServiceUnmergePatientsProcedure = "/healthcare.empi.v1.PatientService/UnmergePatients"
+	// PatientServiceListDuplicateCandidatesProcedure is the fully-qualified name of the
+	// PatientService's ListDuplicateCandidates RPC.
+	PatientServiceListDuplicateCandidatesProcedure = "/healthcare.empi.v1.PatientService/ListDuplicateCandidates"
+	// PatientServiceDismissDuplicateCandidateProcedure is the fully-qualified name of the
+	// PatientService's DismissDuplicateCandidate RPC.
+	PatientServiceDismissDuplicateCandidateProcedure = "/healthcare.empi.v1.PatientService/DismissDuplicateCandidate"
 )
 
 // PatientServiceClient is a client for the healthcare.empi.v1.PatientService service.
@@ -67,6 +79,15 @@ type PatientServiceClient interface {
 	UpdateDemographics(context.Context, *connect.Request[v1.UpdateDemographicsRequest]) (*connect.Response[v1.UpdateDemographicsResponse], error)
 	// Moves a candidate to active once a positive identifier has been seen.
 	ConfirmIdentity(context.Context, *connect.Request[v1.ConfirmIdentityRequest]) (*connect.Response[v1.ConfirmIdentityResponse], error)
+	// SRS-EMPI-005. Merging is the most destructive operation here: a merge that
+	// should not have happened produces a chart that reads as coherent, and is
+	// found by a reaction rather than by a report. Restricted to authorised HIM.
+	MergePatients(context.Context, *connect.Request[v1.MergePatientsRequest]) (*connect.Response[v1.MergePatientsResponse], error)
+	// SRS-EMPI-006. Reverses a merge, or refuses with the reason it cannot.
+	UnmergePatients(context.Context, *connect.Request[v1.UnmergePatientsRequest]) (*connect.Response[v1.UnmergePatientsResponse], error)
+	// SRS-EMPI-004. The manual-review worklist thresholds route to.
+	ListDuplicateCandidates(context.Context, *connect.Request[v1.ListDuplicateCandidatesRequest]) (*connect.Response[v1.ListDuplicateCandidatesResponse], error)
+	DismissDuplicateCandidate(context.Context, *connect.Request[v1.DismissDuplicateCandidateRequest]) (*connect.Response[v1.DismissDuplicateCandidateResponse], error)
 }
 
 // NewPatientServiceClient constructs a client for the healthcare.empi.v1.PatientService service. By
@@ -110,16 +131,44 @@ func NewPatientServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(patientServiceMethods.ByName("ConfirmIdentity")),
 			connect.WithClientOptions(opts...),
 		),
+		mergePatients: connect.NewClient[v1.MergePatientsRequest, v1.MergePatientsResponse](
+			httpClient,
+			baseURL+PatientServiceMergePatientsProcedure,
+			connect.WithSchema(patientServiceMethods.ByName("MergePatients")),
+			connect.WithClientOptions(opts...),
+		),
+		unmergePatients: connect.NewClient[v1.UnmergePatientsRequest, v1.UnmergePatientsResponse](
+			httpClient,
+			baseURL+PatientServiceUnmergePatientsProcedure,
+			connect.WithSchema(patientServiceMethods.ByName("UnmergePatients")),
+			connect.WithClientOptions(opts...),
+		),
+		listDuplicateCandidates: connect.NewClient[v1.ListDuplicateCandidatesRequest, v1.ListDuplicateCandidatesResponse](
+			httpClient,
+			baseURL+PatientServiceListDuplicateCandidatesProcedure,
+			connect.WithSchema(patientServiceMethods.ByName("ListDuplicateCandidates")),
+			connect.WithClientOptions(opts...),
+		),
+		dismissDuplicateCandidate: connect.NewClient[v1.DismissDuplicateCandidateRequest, v1.DismissDuplicateCandidateResponse](
+			httpClient,
+			baseURL+PatientServiceDismissDuplicateCandidateProcedure,
+			connect.WithSchema(patientServiceMethods.ByName("DismissDuplicateCandidate")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // patientServiceClient implements PatientServiceClient.
 type patientServiceClient struct {
-	registerPatient    *connect.Client[v1.RegisterPatientRequest, v1.RegisterPatientResponse]
-	searchPatients     *connect.Client[v1.SearchPatientsRequest, v1.SearchPatientsResponse]
-	getPatient         *connect.Client[v1.GetPatientRequest, v1.GetPatientResponse]
-	updateDemographics *connect.Client[v1.UpdateDemographicsRequest, v1.UpdateDemographicsResponse]
-	confirmIdentity    *connect.Client[v1.ConfirmIdentityRequest, v1.ConfirmIdentityResponse]
+	registerPatient           *connect.Client[v1.RegisterPatientRequest, v1.RegisterPatientResponse]
+	searchPatients            *connect.Client[v1.SearchPatientsRequest, v1.SearchPatientsResponse]
+	getPatient                *connect.Client[v1.GetPatientRequest, v1.GetPatientResponse]
+	updateDemographics        *connect.Client[v1.UpdateDemographicsRequest, v1.UpdateDemographicsResponse]
+	confirmIdentity           *connect.Client[v1.ConfirmIdentityRequest, v1.ConfirmIdentityResponse]
+	mergePatients             *connect.Client[v1.MergePatientsRequest, v1.MergePatientsResponse]
+	unmergePatients           *connect.Client[v1.UnmergePatientsRequest, v1.UnmergePatientsResponse]
+	listDuplicateCandidates   *connect.Client[v1.ListDuplicateCandidatesRequest, v1.ListDuplicateCandidatesResponse]
+	dismissDuplicateCandidate *connect.Client[v1.DismissDuplicateCandidateRequest, v1.DismissDuplicateCandidateResponse]
 }
 
 // RegisterPatient calls healthcare.empi.v1.PatientService.RegisterPatient.
@@ -147,6 +196,26 @@ func (c *patientServiceClient) ConfirmIdentity(ctx context.Context, req *connect
 	return c.confirmIdentity.CallUnary(ctx, req)
 }
 
+// MergePatients calls healthcare.empi.v1.PatientService.MergePatients.
+func (c *patientServiceClient) MergePatients(ctx context.Context, req *connect.Request[v1.MergePatientsRequest]) (*connect.Response[v1.MergePatientsResponse], error) {
+	return c.mergePatients.CallUnary(ctx, req)
+}
+
+// UnmergePatients calls healthcare.empi.v1.PatientService.UnmergePatients.
+func (c *patientServiceClient) UnmergePatients(ctx context.Context, req *connect.Request[v1.UnmergePatientsRequest]) (*connect.Response[v1.UnmergePatientsResponse], error) {
+	return c.unmergePatients.CallUnary(ctx, req)
+}
+
+// ListDuplicateCandidates calls healthcare.empi.v1.PatientService.ListDuplicateCandidates.
+func (c *patientServiceClient) ListDuplicateCandidates(ctx context.Context, req *connect.Request[v1.ListDuplicateCandidatesRequest]) (*connect.Response[v1.ListDuplicateCandidatesResponse], error) {
+	return c.listDuplicateCandidates.CallUnary(ctx, req)
+}
+
+// DismissDuplicateCandidate calls healthcare.empi.v1.PatientService.DismissDuplicateCandidate.
+func (c *patientServiceClient) DismissDuplicateCandidate(ctx context.Context, req *connect.Request[v1.DismissDuplicateCandidateRequest]) (*connect.Response[v1.DismissDuplicateCandidateResponse], error) {
+	return c.dismissDuplicateCandidate.CallUnary(ctx, req)
+}
+
 // PatientServiceHandler is an implementation of the healthcare.empi.v1.PatientService service.
 type PatientServiceHandler interface {
 	// SRS-EMPI-001. Issues the MRN from the registering facility's sequence.
@@ -157,6 +226,15 @@ type PatientServiceHandler interface {
 	UpdateDemographics(context.Context, *connect.Request[v1.UpdateDemographicsRequest]) (*connect.Response[v1.UpdateDemographicsResponse], error)
 	// Moves a candidate to active once a positive identifier has been seen.
 	ConfirmIdentity(context.Context, *connect.Request[v1.ConfirmIdentityRequest]) (*connect.Response[v1.ConfirmIdentityResponse], error)
+	// SRS-EMPI-005. Merging is the most destructive operation here: a merge that
+	// should not have happened produces a chart that reads as coherent, and is
+	// found by a reaction rather than by a report. Restricted to authorised HIM.
+	MergePatients(context.Context, *connect.Request[v1.MergePatientsRequest]) (*connect.Response[v1.MergePatientsResponse], error)
+	// SRS-EMPI-006. Reverses a merge, or refuses with the reason it cannot.
+	UnmergePatients(context.Context, *connect.Request[v1.UnmergePatientsRequest]) (*connect.Response[v1.UnmergePatientsResponse], error)
+	// SRS-EMPI-004. The manual-review worklist thresholds route to.
+	ListDuplicateCandidates(context.Context, *connect.Request[v1.ListDuplicateCandidatesRequest]) (*connect.Response[v1.ListDuplicateCandidatesResponse], error)
+	DismissDuplicateCandidate(context.Context, *connect.Request[v1.DismissDuplicateCandidateRequest]) (*connect.Response[v1.DismissDuplicateCandidateResponse], error)
 }
 
 // NewPatientServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -196,6 +274,30 @@ func NewPatientServiceHandler(svc PatientServiceHandler, opts ...connect.Handler
 		connect.WithSchema(patientServiceMethods.ByName("ConfirmIdentity")),
 		connect.WithHandlerOptions(opts...),
 	)
+	patientServiceMergePatientsHandler := connect.NewUnaryHandler(
+		PatientServiceMergePatientsProcedure,
+		svc.MergePatients,
+		connect.WithSchema(patientServiceMethods.ByName("MergePatients")),
+		connect.WithHandlerOptions(opts...),
+	)
+	patientServiceUnmergePatientsHandler := connect.NewUnaryHandler(
+		PatientServiceUnmergePatientsProcedure,
+		svc.UnmergePatients,
+		connect.WithSchema(patientServiceMethods.ByName("UnmergePatients")),
+		connect.WithHandlerOptions(opts...),
+	)
+	patientServiceListDuplicateCandidatesHandler := connect.NewUnaryHandler(
+		PatientServiceListDuplicateCandidatesProcedure,
+		svc.ListDuplicateCandidates,
+		connect.WithSchema(patientServiceMethods.ByName("ListDuplicateCandidates")),
+		connect.WithHandlerOptions(opts...),
+	)
+	patientServiceDismissDuplicateCandidateHandler := connect.NewUnaryHandler(
+		PatientServiceDismissDuplicateCandidateProcedure,
+		svc.DismissDuplicateCandidate,
+		connect.WithSchema(patientServiceMethods.ByName("DismissDuplicateCandidate")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/healthcare.empi.v1.PatientService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case PatientServiceRegisterPatientProcedure:
@@ -208,6 +310,14 @@ func NewPatientServiceHandler(svc PatientServiceHandler, opts ...connect.Handler
 			patientServiceUpdateDemographicsHandler.ServeHTTP(w, r)
 		case PatientServiceConfirmIdentityProcedure:
 			patientServiceConfirmIdentityHandler.ServeHTTP(w, r)
+		case PatientServiceMergePatientsProcedure:
+			patientServiceMergePatientsHandler.ServeHTTP(w, r)
+		case PatientServiceUnmergePatientsProcedure:
+			patientServiceUnmergePatientsHandler.ServeHTTP(w, r)
+		case PatientServiceListDuplicateCandidatesProcedure:
+			patientServiceListDuplicateCandidatesHandler.ServeHTTP(w, r)
+		case PatientServiceDismissDuplicateCandidateProcedure:
+			patientServiceDismissDuplicateCandidateHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -235,4 +345,20 @@ func (UnimplementedPatientServiceHandler) UpdateDemographics(context.Context, *c
 
 func (UnimplementedPatientServiceHandler) ConfirmIdentity(context.Context, *connect.Request[v1.ConfirmIdentityRequest]) (*connect.Response[v1.ConfirmIdentityResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.empi.v1.PatientService.ConfirmIdentity is not implemented"))
+}
+
+func (UnimplementedPatientServiceHandler) MergePatients(context.Context, *connect.Request[v1.MergePatientsRequest]) (*connect.Response[v1.MergePatientsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.empi.v1.PatientService.MergePatients is not implemented"))
+}
+
+func (UnimplementedPatientServiceHandler) UnmergePatients(context.Context, *connect.Request[v1.UnmergePatientsRequest]) (*connect.Response[v1.UnmergePatientsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.empi.v1.PatientService.UnmergePatients is not implemented"))
+}
+
+func (UnimplementedPatientServiceHandler) ListDuplicateCandidates(context.Context, *connect.Request[v1.ListDuplicateCandidatesRequest]) (*connect.Response[v1.ListDuplicateCandidatesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.empi.v1.PatientService.ListDuplicateCandidates is not implemented"))
+}
+
+func (UnimplementedPatientServiceHandler) DismissDuplicateCandidate(context.Context, *connect.Request[v1.DismissDuplicateCandidateRequest]) (*connect.Response[v1.DismissDuplicateCandidateResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.empi.v1.PatientService.DismissDuplicateCandidate is not implemented"))
 }

@@ -14,6 +14,7 @@ sql:
       - db/migrations/0009_identity_access.up.sql
       - db/migrations/0010_event_delivery.up.sql
       - db/migrations/0011_empi.up.sql
+      - db/migrations/0012_empi_merge.up.sql
     gen:
       go:
         package: sqlcgen

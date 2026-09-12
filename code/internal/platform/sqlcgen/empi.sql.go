@@ -12,6 +12,97 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const closeDuplicateCandidate = `-- name: CloseDuplicateCandidate :execrows
+UPDATE empi.duplicate_candidate
+SET status = $1, reviewed_by = $2,
+    reviewed_at = $3, resolution = $4
+WHERE tenant_id = $5 AND candidate_id = $6 AND status = 'open'
+`
+
+type CloseDuplicateCandidateParams struct {
+	Status      string
+	ReviewedBy  string
+	ReviewedAt  pgtype.Timestamptz
+	Resolution  string
+	TenantID    uuid.UUID
+	CandidateID uuid.UUID
+}
+
+func (q *Queries) CloseDuplicateCandidate(ctx context.Context, arg CloseDuplicateCandidateParams) (int64, error) {
+	result, err := q.db.Exec(ctx, closeDuplicateCandidate,
+		arg.Status,
+		arg.ReviewedBy,
+		arg.ReviewedAt,
+		arg.Resolution,
+		arg.TenantID,
+		arg.CandidateID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const countLaterMergesIntoSurvivor = `-- name: CountLaterMergesIntoSurvivor :one
+SELECT count(*)
+FROM empi.merge_journal
+WHERE tenant_id = $1
+  AND survivor_id = $2
+  AND NOT undone
+  AND performed_at > $3
+`
+
+type CountLaterMergesIntoSurvivorParams struct {
+	TenantID   uuid.UUID
+	SurvivorID uuid.UUID
+	After      pgtype.Timestamptz
+}
+
+// Whether another merge into this survivor came after the one being reversed.
+//
+// Reversing an earlier merge while a later one stands would restore
+// identifiers the later merge has already moved again, and the second merge's
+// journal would then describe a state that no longer exists.
+func (q *Queries) CountLaterMergesIntoSurvivor(ctx context.Context, arg CountLaterMergesIntoSurvivorParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countLaterMergesIntoSurvivor, arg.TenantID, arg.SurvivorID, arg.After)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const findDuplicateCandidateByPair = `-- name: FindDuplicateCandidateByPair :one
+SELECT candidate_id, tenant_id, patient_a_id, patient_b_id, score, outcome,
+       status, detected_by, detected_at, reviewed_by, reviewed_at, resolution
+FROM empi.duplicate_candidate
+WHERE tenant_id = $1 AND patient_a_id = $2 AND patient_b_id = $3
+`
+
+type FindDuplicateCandidateByPairParams struct {
+	TenantID   uuid.UUID
+	PatientAID uuid.UUID
+	PatientBID uuid.UUID
+}
+
+func (q *Queries) FindDuplicateCandidateByPair(ctx context.Context, arg FindDuplicateCandidateByPairParams) (EmpiDuplicateCandidate, error) {
+	row := q.db.QueryRow(ctx, findDuplicateCandidateByPair, arg.TenantID, arg.PatientAID, arg.PatientBID)
+	var i EmpiDuplicateCandidate
+	err := row.Scan(
+		&i.CandidateID,
+		&i.TenantID,
+		&i.PatientAID,
+		&i.PatientBID,
+		&i.Score,
+		&i.Outcome,
+		&i.Status,
+		&i.DetectedBy,
+		&i.DetectedAt,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.Resolution,
+	)
+	return i, err
+}
+
 const findIdentifierHolder = `-- name: FindIdentifierHolder :one
 SELECT patient_id
 FROM empi.patient_identifier
@@ -167,6 +258,38 @@ func (q *Queries) GetDemographicPolicy(ctx context.Context, arg GetDemographicPo
 	return i, err
 }
 
+const getDuplicateCandidate = `-- name: GetDuplicateCandidate :one
+SELECT candidate_id, tenant_id, patient_a_id, patient_b_id, score, outcome,
+       status, detected_by, detected_at, reviewed_by, reviewed_at, resolution
+FROM empi.duplicate_candidate
+WHERE tenant_id = $1 AND candidate_id = $2
+`
+
+type GetDuplicateCandidateParams struct {
+	TenantID    uuid.UUID
+	CandidateID uuid.UUID
+}
+
+func (q *Queries) GetDuplicateCandidate(ctx context.Context, arg GetDuplicateCandidateParams) (EmpiDuplicateCandidate, error) {
+	row := q.db.QueryRow(ctx, getDuplicateCandidate, arg.TenantID, arg.CandidateID)
+	var i EmpiDuplicateCandidate
+	err := row.Scan(
+		&i.CandidateID,
+		&i.TenantID,
+		&i.PatientAID,
+		&i.PatientBID,
+		&i.Score,
+		&i.Outcome,
+		&i.Status,
+		&i.DetectedBy,
+		&i.DetectedAt,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.Resolution,
+	)
+	return i, err
+}
+
 const getMatchConfig = `-- name: GetMatchConfig :one
 SELECT tenant_id, weights, review_threshold, probable_threshold, updated_at, updated_by
 FROM empi.match_config
@@ -183,6 +306,41 @@ func (q *Queries) GetMatchConfig(ctx context.Context, tenantID uuid.UUID) (EmpiM
 		&i.ProbableThreshold,
 		&i.UpdatedAt,
 		&i.UpdatedBy,
+	)
+	return i, err
+}
+
+const getMergeRecord = `-- name: GetMergeRecord :one
+SELECT merge_id, tenant_id, survivor_id, merged_id, merged_previous_status,
+       reason, performed_by, performed_at, moved_identifiers, carried_deceased,
+       undone, undone_by, undone_at, undo_reason
+FROM empi.merge_journal
+WHERE tenant_id = $1 AND merge_id = $2
+`
+
+type GetMergeRecordParams struct {
+	TenantID uuid.UUID
+	MergeID  uuid.UUID
+}
+
+func (q *Queries) GetMergeRecord(ctx context.Context, arg GetMergeRecordParams) (EmpiMergeJournal, error) {
+	row := q.db.QueryRow(ctx, getMergeRecord, arg.TenantID, arg.MergeID)
+	var i EmpiMergeJournal
+	err := row.Scan(
+		&i.MergeID,
+		&i.TenantID,
+		&i.SurvivorID,
+		&i.MergedID,
+		&i.MergedPreviousStatus,
+		&i.Reason,
+		&i.PerformedBy,
+		&i.PerformedAt,
+		&i.MovedIdentifiers,
+		&i.CarriedDeceased,
+		&i.Undone,
+		&i.UndoneBy,
+		&i.UndoneAt,
+		&i.UndoReason,
 	)
 	return i, err
 }
@@ -233,6 +391,83 @@ func (q *Queries) GetPatient(ctx context.Context, arg GetPatientParams) (EmpiPat
 		&i.Version,
 	)
 	return i, err
+}
+
+const getStandingMergeForLoser = `-- name: GetStandingMergeForLoser :one
+SELECT merge_id, tenant_id, survivor_id, merged_id, merged_previous_status,
+       reason, performed_by, performed_at, moved_identifiers, carried_deceased,
+       undone, undone_by, undone_at, undo_reason
+FROM empi.merge_journal
+WHERE tenant_id = $1 AND merged_id = $2 AND NOT undone
+`
+
+type GetStandingMergeForLoserParams struct {
+	TenantID uuid.UUID
+	MergedID uuid.UUID
+}
+
+// The merge that currently holds this record down, if any.
+func (q *Queries) GetStandingMergeForLoser(ctx context.Context, arg GetStandingMergeForLoserParams) (EmpiMergeJournal, error) {
+	row := q.db.QueryRow(ctx, getStandingMergeForLoser, arg.TenantID, arg.MergedID)
+	var i EmpiMergeJournal
+	err := row.Scan(
+		&i.MergeID,
+		&i.TenantID,
+		&i.SurvivorID,
+		&i.MergedID,
+		&i.MergedPreviousStatus,
+		&i.Reason,
+		&i.PerformedBy,
+		&i.PerformedAt,
+		&i.MovedIdentifiers,
+		&i.CarriedDeceased,
+		&i.Undone,
+		&i.UndoneBy,
+		&i.UndoneAt,
+		&i.UndoReason,
+	)
+	return i, err
+}
+
+const insertMergeRecord = `-- name: InsertMergeRecord :exec
+
+INSERT INTO empi.merge_journal (
+    merge_id, tenant_id, survivor_id, merged_id, merged_previous_status,
+    reason, performed_by, performed_at, moved_identifiers, carried_deceased
+) VALUES (
+    $1, $2, $3, $4, $5,
+    $6, $7, $8, $9, $10
+)
+`
+
+type InsertMergeRecordParams struct {
+	MergeID              uuid.UUID
+	TenantID             uuid.UUID
+	SurvivorID           uuid.UUID
+	MergedID             uuid.UUID
+	MergedPreviousStatus string
+	Reason               string
+	PerformedBy          string
+	PerformedAt          pgtype.Timestamptz
+	MovedIdentifiers     []byte
+	CarriedDeceased      bool
+}
+
+// Merge journal and duplicate review (SRS-EMPI-004/005/006).
+func (q *Queries) InsertMergeRecord(ctx context.Context, arg InsertMergeRecordParams) error {
+	_, err := q.db.Exec(ctx, insertMergeRecord,
+		arg.MergeID,
+		arg.TenantID,
+		arg.SurvivorID,
+		arg.MergedID,
+		arg.MergedPreviousStatus,
+		arg.Reason,
+		arg.PerformedBy,
+		arg.PerformedAt,
+		arg.MovedIdentifiers,
+		arg.CarriedDeceased,
+	)
+	return err
 }
 
 const insertPatient = `-- name: InsertPatient :exec
@@ -394,6 +629,55 @@ func (q *Queries) ListIdentifiersForPatients(ctx context.Context, arg ListIdenti
 	return items, nil
 }
 
+const listOpenDuplicateCandidates = `-- name: ListOpenDuplicateCandidates :many
+SELECT candidate_id, tenant_id, patient_a_id, patient_b_id, score, outcome,
+       status, detected_by, detected_at, reviewed_by, reviewed_at, resolution
+FROM empi.duplicate_candidate
+WHERE tenant_id = $1 AND status = 'open'
+ORDER BY score DESC, detected_at, candidate_id
+LIMIT $2
+`
+
+type ListOpenDuplicateCandidatesParams struct {
+	TenantID  uuid.UUID
+	PageLimit int32
+}
+
+// The review worklist, strongest first: that is the pair most likely to be one
+// person, and the one whose being wrong costs the most.
+func (q *Queries) ListOpenDuplicateCandidates(ctx context.Context, arg ListOpenDuplicateCandidatesParams) ([]EmpiDuplicateCandidate, error) {
+	rows, err := q.db.Query(ctx, listOpenDuplicateCandidates, arg.TenantID, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []EmpiDuplicateCandidate{}
+	for rows.Next() {
+		var i EmpiDuplicateCandidate
+		if err := rows.Scan(
+			&i.CandidateID,
+			&i.TenantID,
+			&i.PatientAID,
+			&i.PatientBID,
+			&i.Score,
+			&i.Outcome,
+			&i.Status,
+			&i.DetectedBy,
+			&i.DetectedAt,
+			&i.ReviewedBy,
+			&i.ReviewedAt,
+			&i.Resolution,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPatientIdentifiers = `-- name: ListPatientIdentifiers :many
 SELECT identifier_id, tenant_id, patient_id, identifier_type, system, value,
        assigning_authority, status, source, is_primary,
@@ -523,6 +807,80 @@ func (q *Queries) ListPatientsByName(ctx context.Context, arg ListPatientsByName
 	return items, nil
 }
 
+const markMergeUndone = `-- name: MarkMergeUndone :execrows
+UPDATE empi.merge_journal
+SET undone = true, undone_by = $1, undone_at = $2, undo_reason = $3
+WHERE tenant_id = $4 AND merge_id = $5 AND NOT undone
+`
+
+type MarkMergeUndoneParams struct {
+	UndoneBy   string
+	UndoneAt   pgtype.Timestamptz
+	UndoReason string
+	TenantID   uuid.UUID
+	MergeID    uuid.UUID
+}
+
+func (q *Queries) MarkMergeUndone(ctx context.Context, arg MarkMergeUndoneParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markMergeUndone,
+		arg.UndoneBy,
+		arg.UndoneAt,
+		arg.UndoReason,
+		arg.TenantID,
+		arg.MergeID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const moveIdentifierToPatient = `-- name: MoveIdentifierToPatient :execrows
+UPDATE empi.patient_identifier
+SET patient_id = $1,
+    status = $2,
+    is_primary = $3,
+    reason = $4,
+    -- Both arms are cast: without them PostgreSQL infers the parameter's type
+    -- from the comparison above and decides unlinked_at is text.
+    unlinked_at = CASE WHEN $2::text = 'active'
+                       THEN NULL::timestamptz
+                       ELSE $5::timestamptz END
+WHERE tenant_id = $6 AND identifier_id = $7
+`
+
+type MoveIdentifierToPatientParams struct {
+	PatientID    uuid.UUID
+	Status       string
+	IsPrimary    bool
+	Reason       string
+	UnlinkedAt   pgtype.Timestamptz
+	TenantID     uuid.UUID
+	IdentifierID uuid.UUID
+}
+
+// Re-points one identifier at another patient.
+//
+// Used by a merge to move the losing record's identifiers to the survivor, and
+// by an unmerge to put them back. The status travels with the move: a merged
+// MRN arrives superseded so the survivor's own stays the one on the wristband,
+// and an unmerge restores whatever the journal says it was.
+func (q *Queries) MoveIdentifierToPatient(ctx context.Context, arg MoveIdentifierToPatientParams) (int64, error) {
+	result, err := q.db.Exec(ctx, moveIdentifierToPatient,
+		arg.PatientID,
+		arg.Status,
+		arg.IsPrimary,
+		arg.Reason,
+		arg.UnlinkedAt,
+		arg.TenantID,
+		arg.IdentifierID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const searchPatientCandidates = `-- name: SearchPatientCandidates :many
 SELECT patient_id, tenant_id, registered_facility_id, status,
        family_name, given_names, name_prefix, name_suffix,
@@ -617,6 +975,81 @@ func (q *Queries) SearchPatientCandidates(ctx context.Context, arg SearchPatient
 		return nil, err
 	}
 	return items, nil
+}
+
+const setPatientDeceased = `-- name: SetPatientDeceased :execrows
+UPDATE empi.patient
+SET deceased_date = $1::date,
+    deceased_precision = $2,
+    deceased_source = $3,
+    deceased_recorded_at = $4::timestamptz,
+    deceased_recorded_by = $5,
+    updated_at = $6,
+    version = version + 1
+WHERE tenant_id = $7 AND patient_id = $8
+`
+
+type SetPatientDeceasedParams struct {
+	DeceasedDate       pgtype.Date
+	DeceasedPrecision  string
+	DeceasedSource     string
+	DeceasedRecordedAt pgtype.Timestamptz
+	DeceasedRecordedBy string
+	UpdatedAt          pgtype.Timestamptz
+	TenantID           uuid.UUID
+	PatientID          uuid.UUID
+}
+
+func (q *Queries) SetPatientDeceased(ctx context.Context, arg SetPatientDeceasedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setPatientDeceased,
+		arg.DeceasedDate,
+		arg.DeceasedPrecision,
+		arg.DeceasedSource,
+		arg.DeceasedRecordedAt,
+		arg.DeceasedRecordedBy,
+		arg.UpdatedAt,
+		arg.TenantID,
+		arg.PatientID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setPatientMergedInto = `-- name: SetPatientMergedInto :execrows
+UPDATE empi.patient
+SET status = $1,
+    merged_into_patient_id = $2::uuid,
+    updated_at = $3,
+    version = version + 1
+WHERE tenant_id = $4
+  AND patient_id = $5
+  AND version = $6
+`
+
+type SetPatientMergedIntoParams struct {
+	Status              string
+	MergedIntoPatientID pgtype.UUID
+	UpdatedAt           pgtype.Timestamptz
+	TenantID            uuid.UUID
+	PatientID           uuid.UUID
+	ExpectedVersion     int64
+}
+
+func (q *Queries) SetPatientMergedInto(ctx context.Context, arg SetPatientMergedIntoParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setPatientMergedInto,
+		arg.Status,
+		arg.MergedIntoPatientID,
+		arg.UpdatedAt,
+		arg.TenantID,
+		arg.PatientID,
+		arg.ExpectedVersion,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const setPatientStatus = `-- name: SetPatientStatus :execrows
@@ -750,6 +1183,48 @@ func (q *Queries) UpsertDemographicPolicy(ctx context.Context, arg UpsertDemogra
 		arg.AllowUnidentified,
 		arg.CreatedAt,
 		arg.UpdatedAt,
+	)
+	return err
+}
+
+const upsertDuplicateCandidate = `-- name: UpsertDuplicateCandidate :exec
+INSERT INTO empi.duplicate_candidate (
+    candidate_id, tenant_id, patient_a_id, patient_b_id,
+    score, outcome, status, detected_by, detected_at
+) VALUES (
+    $1, $2, $3, $4,
+    $5, $6, 'open', $7, $8
+)
+ON CONFLICT (tenant_id, patient_a_id, patient_b_id) DO NOTHING
+`
+
+type UpsertDuplicateCandidateParams struct {
+	CandidateID uuid.UUID
+	TenantID    uuid.UUID
+	PatientAID  uuid.UUID
+	PatientBID  uuid.UUID
+	Score       pgtype.Numeric
+	Outcome     string
+	DetectedBy  string
+	DetectedAt  pgtype.Timestamptz
+}
+
+// Queues a pair for review, or leaves an existing decision alone.
+//
+// DO NOTHING rather than DO UPDATE on purpose: re-detecting a pair that was
+// already dismissed must not reopen it. A decision already taken is not a new
+// question, and reopening it would put the same pair in front of HIM every
+// time either record is touched.
+func (q *Queries) UpsertDuplicateCandidate(ctx context.Context, arg UpsertDuplicateCandidateParams) error {
+	_, err := q.db.Exec(ctx, upsertDuplicateCandidate,
+		arg.CandidateID,
+		arg.TenantID,
+		arg.PatientAID,
+		arg.PatientBID,
+		arg.Score,
+		arg.Outcome,
+		arg.DetectedBy,
+		arg.DetectedAt,
 	)
 	return err
 }
