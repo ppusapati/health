@@ -6,11 +6,13 @@ import (
 	"errors"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/ppusapati/health/code/internal/empi/domain"
 	"github.com/ppusapati/health/code/internal/empi/ports"
 	"github.com/ppusapati/health/code/internal/platform/audit"
 	"github.com/ppusapati/health/code/internal/platform/authctx"
+	"github.com/ppusapati/health/code/internal/platform/effective"
 	"github.com/ppusapati/health/code/internal/platform/policy"
 	"github.com/ppusapati/health/code/internal/platform/rpcerr"
 )
@@ -22,6 +24,7 @@ type Service struct {
 	identifiers ports.IdentifierRepository
 	config      ports.ConfigRepository
 	merges      ports.MergeRepository
+	history     ports.HistoryRepository
 	numbers     ports.NumberIssuer
 	tenants     ports.TenantProfile
 	events      ports.EventAppender
@@ -41,6 +44,7 @@ type Deps struct {
 	Identifiers ports.IdentifierRepository
 	Config      ports.ConfigRepository
 	Merges      ports.MergeRepository
+	History     ports.HistoryRepository
 	Numbers     ports.NumberIssuer
 	Tenants     ports.TenantProfile
 	Events      ports.EventAppender
@@ -53,7 +57,8 @@ type Deps struct {
 func NewService(d Deps) *Service {
 	return &Service{
 		uow: d.UnitOfWork, patients: d.Patients, identifiers: d.Identifiers,
-		config: d.Config, merges: d.Merges, numbers: d.Numbers, tenants: d.Tenants,
+		config: d.Config, merges: d.Merges, history: d.History,
+		numbers: d.Numbers, tenants: d.Tenants,
 		events: d.Events, audits: d.Audits, ids: d.IDs, clock: d.Clock,
 	}
 }
@@ -106,6 +111,9 @@ type MatchedPatient struct {
 	// Masked reports that protected fields were hidden for this caller, so a
 	// UI can say so rather than showing blanks that read as missing data.
 	Masked bool
+	// MatchedFormerName is set when the search reached this patient through a
+	// name they no longer hold (SRS-EMPI-007). Zero otherwise.
+	MatchedFormerName domain.PatientName
 }
 
 // errDuplicatesPending unwinds the registration transaction when a probable
@@ -247,6 +255,14 @@ func (s *Service) RegisterPatient(ctx context.Context, in RegisterPatientInput) 
 			return err
 		}
 
+		// The first legal name opens the history. Without it, the first rename
+		// would have nothing to close and the name the patient registered under
+		// would never have been recorded as applying to any interval
+		// (SRS-EMPI-007).
+		if err := s.openLegalName(ctx, scope, session, patient, "registration", now); err != nil {
+			return err
+		}
+
 		// The clerk said these are different people and their judgement
 		// stands — they can see the patient. But that call was made at a busy
 		// desk with somebody waiting, so the pair goes to HIM. Without this,
@@ -272,6 +288,22 @@ func (s *Service) RegisterPatient(ctx context.Context, in RegisterPatientInput) 
 
 	result.Patient = patient
 	return result, nil
+}
+
+// openLegalName records the patient's current legal name as a history window.
+//
+// Called on registration and on every name change, so that a result addressed
+// to a previous name still finds this patient rather than becoming a second
+// record.
+func (s *Service) openLegalName(ctx context.Context, scope authctx.TenantScope,
+	session authctx.Session, patient *domain.Patient, source string, now time.Time) error {
+
+	recorded, err := domain.NewPatientName(s.ids.NewID(), patient.ID(), domain.NameLegal,
+		patient.Demographics.Name, effective.Window{From: now}, session.SubjectID, source, now)
+	if err != nil {
+		return registrationError(err)
+	}
+	return s.history.RecordName(ctx, scope, recorded)
 }
 
 // findDuplicates blocks, scores and ranks candidates (SRS-EMPI-003/004).

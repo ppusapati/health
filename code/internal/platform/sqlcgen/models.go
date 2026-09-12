@@ -9,6 +9,19 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type EmpiCommunicationPreference struct {
+	PreferenceID   uuid.UUID
+	TenantID       uuid.UUID
+	PatientID      uuid.UUID
+	Channel        string
+	Purpose        string
+	Allowed        bool
+	EffectiveFrom  pgtype.Timestamptz
+	EffectiveUntil pgtype.Timestamptz
+	RecordedBy     string
+	RecordedAt     pgtype.Timestamptz
+}
+
 type EmpiDemographicPolicy struct {
 	PolicyID          uuid.UUID
 	TenantID          uuid.UUID
@@ -102,6 +115,41 @@ type EmpiPatientIdentifier struct {
 	UnlinkedAt         pgtype.Timestamptz
 	SupersededByID     pgtype.UUID
 	Reason             string
+}
+
+type EmpiPatientName struct {
+	NameID         uuid.UUID
+	TenantID       uuid.UUID
+	PatientID      uuid.UUID
+	Kind           string
+	FamilyName     string
+	GivenNames     []string
+	NamePrefix     string
+	NameSuffix     string
+	EffectiveFrom  pgtype.Timestamptz
+	EffectiveUntil pgtype.Timestamptz
+	RecordedBy     string
+	RecordedAt     pgtype.Timestamptz
+	Source         string
+}
+
+type EmpiRelatedPerson struct {
+	RelationshipID   uuid.UUID
+	TenantID         uuid.UUID
+	PatientID        uuid.UUID
+	RelatedPatientID pgtype.UUID
+	FamilyName       string
+	GivenNames       []string
+	Contact          []byte
+	Relationship     string
+	Authorities      []string
+	EffectiveFrom    pgtype.Timestamptz
+	EffectiveUntil   pgtype.Timestamptz
+	VerifiedBy       string
+	VerifiedAt       pgtype.Timestamptz
+	VerificationNote string
+	RecordedBy       string
+	RecordedAt       pgtype.Timestamptz
 }
 
 type IdentityAccessAccount struct {

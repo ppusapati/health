@@ -193,3 +193,166 @@ func (h *Handler) DismissDuplicateCandidate(
 	}
 	return connect.NewResponse(&empiv1.DismissDuplicateCandidateResponse{}), nil
 }
+
+// RecordName implements SRS-EMPI-007.
+func (h *Handler) RecordName(
+	ctx context.Context,
+	req *connect.Request[empiv1.RecordNameRequest],
+) (*connect.Response[empiv1.RecordNameResponse], error) {
+	msg := req.Msg
+
+	in := application.RecordNameInput{
+		PatientID: msg.GetPatientId(),
+		Kind:      nameKindFromProto[msg.GetKind()],
+		Name:      humanNameFromProto(msg.GetName()),
+		Source:    msg.GetSource(),
+	}
+	if msg.GetEffectiveFrom() != nil {
+		in.EffectiveFrom = msg.GetEffectiveFrom().AsTime().UTC()
+	}
+
+	if err := h.svc.RecordName(ctx, in); err != nil {
+		return nil, platformtransport.ToConnect(err, platformtransport.CorrelationIDFromContext(ctx))
+	}
+	return connect.NewResponse(&empiv1.RecordNameResponse{}), nil
+}
+
+// GetPatientHistory reads the effective-dated record.
+func (h *Handler) GetPatientHistory(
+	ctx context.Context,
+	req *connect.Request[empiv1.GetPatientHistoryRequest],
+) (*connect.Response[empiv1.GetPatientHistoryResponse], error) {
+	history, err := h.svc.GetHistory(ctx, req.Msg.GetPatientId())
+	if err != nil {
+		return nil, platformtransport.ToConnect(err, platformtransport.CorrelationIDFromContext(ctx))
+	}
+	return connect.NewResponse(&empiv1.GetPatientHistoryResponse{
+		Names:       namesToProto(history.Names),
+		Preferences: preferencesToProto(history.Preferences),
+		Related:     relatedToProto(history.Related),
+	}), nil
+}
+
+// RecordCommunicationPreference stores what the patient agreed to.
+func (h *Handler) RecordCommunicationPreference(
+	ctx context.Context,
+	req *connect.Request[empiv1.RecordCommunicationPreferenceRequest],
+) (*connect.Response[empiv1.RecordCommunicationPreferenceResponse], error) {
+	msg := req.Msg
+
+	in := application.RecordPreferenceInput{
+		PatientID: msg.GetPatientId(),
+		Channel:   channelFromProto[msg.GetChannel()],
+		Purpose:   communicationPurposeFromProto[msg.GetPurpose()],
+		Allowed:   msg.GetAllowed(),
+	}
+	if msg.GetEffectiveFrom() != nil {
+		in.EffectiveFrom = msg.GetEffectiveFrom().AsTime().UTC()
+	}
+
+	if err := h.svc.RecordCommunicationPreference(ctx, in); err != nil {
+		return nil, platformtransport.ToConnect(err, platformtransport.CorrelationIDFromContext(ctx))
+	}
+	return connect.NewResponse(&empiv1.RecordCommunicationPreferenceResponse{}), nil
+}
+
+// RecordDeceased implements SRS-EMPI-008.
+func (h *Handler) RecordDeceased(
+	ctx context.Context,
+	req *connect.Request[empiv1.RecordDeceasedRequest],
+) (*connect.Response[empiv1.RecordDeceasedResponse], error) {
+	patient, err := h.svc.RecordDeceased(ctx, application.RecordDeceasedInput{
+		PatientID: req.Msg.GetPatientId(),
+		Date:      partialDateFromProto(req.Msg.GetDate()),
+		Source:    req.Msg.GetSource(),
+	})
+	if err != nil {
+		return nil, platformtransport.ToConnect(err, platformtransport.CorrelationIDFromContext(ctx))
+	}
+	return connect.NewResponse(&empiv1.RecordDeceasedResponse{
+		Patient: patientToProto(patient, nil),
+	}), nil
+}
+
+// ReverseDeceased withdraws a death recorded against the wrong patient.
+func (h *Handler) ReverseDeceased(
+	ctx context.Context,
+	req *connect.Request[empiv1.ReverseDeceasedRequest],
+) (*connect.Response[empiv1.ReverseDeceasedResponse], error) {
+	patient, err := h.svc.ReverseDeceased(ctx, req.Msg.GetPatientId(), req.Msg.GetReason())
+	if err != nil {
+		return nil, platformtransport.ToConnect(err, platformtransport.CorrelationIDFromContext(ctx))
+	}
+	return connect.NewResponse(&empiv1.ReverseDeceasedResponse{
+		Patient: patientToProto(patient, nil),
+	}), nil
+}
+
+// AddRelatedPerson implements SRS-EMPI-009.
+func (h *Handler) AddRelatedPerson(
+	ctx context.Context,
+	req *connect.Request[empiv1.AddRelatedPersonRequest],
+) (*connect.Response[empiv1.AddRelatedPersonResponse], error) {
+	msg := req.Msg
+
+	in := application.AddRelatedPersonInput{
+		PatientID:        msg.GetPatientId(),
+		RelatedPatientID: msg.GetRelatedPatientId(),
+		Name:             humanNameFromProto(msg.GetName()),
+		Contact:          contactsFromProto(msg.GetContact()),
+		Relationship:     relationshipFromProto[msg.GetRelationship()],
+		Authorities:      authoritiesFromProto(msg.GetAuthorities()),
+	}
+	if msg.GetEffectiveFrom() != nil {
+		in.EffectiveFrom = msg.GetEffectiveFrom().AsTime().UTC()
+	}
+	if msg.GetEffectiveUntil() != nil {
+		in.EffectiveUntil = msg.GetEffectiveUntil().AsTime().UTC()
+	}
+
+	related, err := h.svc.AddRelatedPerson(ctx, in)
+	if err != nil {
+		return nil, platformtransport.ToConnect(err, platformtransport.CorrelationIDFromContext(ctx))
+	}
+	return connect.NewResponse(&empiv1.AddRelatedPersonResponse{
+		Related: relatedPersonToProto(related),
+	}), nil
+}
+
+// VerifyRelatedPerson records that somebody checked the claim.
+func (h *Handler) VerifyRelatedPerson(
+	ctx context.Context,
+	req *connect.Request[empiv1.VerifyRelatedPersonRequest],
+) (*connect.Response[empiv1.VerifyRelatedPersonResponse], error) {
+	if err := h.svc.VerifyRelatedPerson(ctx,
+		req.Msg.GetRelationshipId(), req.Msg.GetNote()); err != nil {
+		return nil, platformtransport.ToConnect(err, platformtransport.CorrelationIDFromContext(ctx))
+	}
+	return connect.NewResponse(&empiv1.VerifyRelatedPersonResponse{}), nil
+}
+
+// EndRelatedPerson closes a relationship.
+func (h *Handler) EndRelatedPerson(
+	ctx context.Context,
+	req *connect.Request[empiv1.EndRelatedPersonRequest],
+) (*connect.Response[empiv1.EndRelatedPersonResponse], error) {
+	if err := h.svc.EndRelatedPerson(ctx, req.Msg.GetRelationshipId()); err != nil {
+		return nil, platformtransport.ToConnect(err, platformtransport.CorrelationIDFromContext(ctx))
+	}
+	return connect.NewResponse(&empiv1.EndRelatedPersonResponse{}), nil
+}
+
+// GetCaregiverAuthority answers what one person may do for another, right now.
+func (h *Handler) GetCaregiverAuthority(
+	ctx context.Context,
+	req *connect.Request[empiv1.GetCaregiverAuthorityRequest],
+) (*connect.Response[empiv1.GetCaregiverAuthorityResponse], error) {
+	authorities, err := h.svc.CaregiverAuthority(ctx,
+		req.Msg.GetHolderPatientId(), req.Msg.GetSubjectPatientId())
+	if err != nil {
+		return nil, platformtransport.ToConnect(err, platformtransport.CorrelationIDFromContext(ctx))
+	}
+	return connect.NewResponse(&empiv1.GetCaregiverAuthorityResponse{
+		Authorities: authoritiesToProto(authorities),
+	}), nil
+}

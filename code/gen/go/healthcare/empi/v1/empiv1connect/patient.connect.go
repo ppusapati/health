@@ -67,6 +67,33 @@ const (
 	// PatientServiceDismissDuplicateCandidateProcedure is the fully-qualified name of the
 	// PatientService's DismissDuplicateCandidate RPC.
 	PatientServiceDismissDuplicateCandidateProcedure = "/healthcare.empi.v1.PatientService/DismissDuplicateCandidate"
+	// PatientServiceRecordNameProcedure is the fully-qualified name of the PatientService's RecordName
+	// RPC.
+	PatientServiceRecordNameProcedure = "/healthcare.empi.v1.PatientService/RecordName"
+	// PatientServiceGetPatientHistoryProcedure is the fully-qualified name of the PatientService's
+	// GetPatientHistory RPC.
+	PatientServiceGetPatientHistoryProcedure = "/healthcare.empi.v1.PatientService/GetPatientHistory"
+	// PatientServiceRecordCommunicationPreferenceProcedure is the fully-qualified name of the
+	// PatientService's RecordCommunicationPreference RPC.
+	PatientServiceRecordCommunicationPreferenceProcedure = "/healthcare.empi.v1.PatientService/RecordCommunicationPreference"
+	// PatientServiceRecordDeceasedProcedure is the fully-qualified name of the PatientService's
+	// RecordDeceased RPC.
+	PatientServiceRecordDeceasedProcedure = "/healthcare.empi.v1.PatientService/RecordDeceased"
+	// PatientServiceReverseDeceasedProcedure is the fully-qualified name of the PatientService's
+	// ReverseDeceased RPC.
+	PatientServiceReverseDeceasedProcedure = "/healthcare.empi.v1.PatientService/ReverseDeceased"
+	// PatientServiceAddRelatedPersonProcedure is the fully-qualified name of the PatientService's
+	// AddRelatedPerson RPC.
+	PatientServiceAddRelatedPersonProcedure = "/healthcare.empi.v1.PatientService/AddRelatedPerson"
+	// PatientServiceVerifyRelatedPersonProcedure is the fully-qualified name of the PatientService's
+	// VerifyRelatedPerson RPC.
+	PatientServiceVerifyRelatedPersonProcedure = "/healthcare.empi.v1.PatientService/VerifyRelatedPerson"
+	// PatientServiceEndRelatedPersonProcedure is the fully-qualified name of the PatientService's
+	// EndRelatedPerson RPC.
+	PatientServiceEndRelatedPersonProcedure = "/healthcare.empi.v1.PatientService/EndRelatedPerson"
+	// PatientServiceGetCaregiverAuthorityProcedure is the fully-qualified name of the PatientService's
+	// GetCaregiverAuthority RPC.
+	PatientServiceGetCaregiverAuthorityProcedure = "/healthcare.empi.v1.PatientService/GetCaregiverAuthority"
 )
 
 // PatientServiceClient is a client for the healthcare.empi.v1.PatientService service.
@@ -88,6 +115,21 @@ type PatientServiceClient interface {
 	// SRS-EMPI-004. The manual-review worklist thresholds route to.
 	ListDuplicateCandidates(context.Context, *connect.Request[v1.ListDuplicateCandidatesRequest]) (*connect.Response[v1.ListDuplicateCandidatesResponse], error)
 	DismissDuplicateCandidate(context.Context, *connect.Request[v1.DismissDuplicateCandidateRequest]) (*connect.Response[v1.DismissDuplicateCandidateResponse], error)
+	// SRS-EMPI-007. Names, preferences and relationships, effective-dated.
+	RecordName(context.Context, *connect.Request[v1.RecordNameRequest]) (*connect.Response[v1.RecordNameResponse], error)
+	GetPatientHistory(context.Context, *connect.Request[v1.GetPatientHistoryRequest]) (*connect.Response[v1.GetPatientHistoryResponse], error)
+	RecordCommunicationPreference(context.Context, *connect.Request[v1.RecordCommunicationPreferenceRequest]) (*connect.Response[v1.RecordCommunicationPreferenceResponse], error)
+	// SRS-EMPI-008. Recording a death stops routine scheduling; withdrawing one
+	// exists because a registry feed can match the wrong record, and a system
+	// that cannot undo it leaves somebody unable to book an appointment because
+	// a computer believes they are dead.
+	RecordDeceased(context.Context, *connect.Request[v1.RecordDeceasedRequest]) (*connect.Response[v1.RecordDeceasedResponse], error)
+	ReverseDeceased(context.Context, *connect.Request[v1.ReverseDeceasedRequest]) (*connect.Response[v1.ReverseDeceasedResponse], error)
+	// SRS-EMPI-009. Caregiver relationships, scoped and expiring.
+	AddRelatedPerson(context.Context, *connect.Request[v1.AddRelatedPersonRequest]) (*connect.Response[v1.AddRelatedPersonResponse], error)
+	VerifyRelatedPerson(context.Context, *connect.Request[v1.VerifyRelatedPersonRequest]) (*connect.Response[v1.VerifyRelatedPersonResponse], error)
+	EndRelatedPerson(context.Context, *connect.Request[v1.EndRelatedPersonRequest]) (*connect.Response[v1.EndRelatedPersonResponse], error)
+	GetCaregiverAuthority(context.Context, *connect.Request[v1.GetCaregiverAuthorityRequest]) (*connect.Response[v1.GetCaregiverAuthorityResponse], error)
 }
 
 // NewPatientServiceClient constructs a client for the healthcare.empi.v1.PatientService service. By
@@ -155,20 +197,83 @@ func NewPatientServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(patientServiceMethods.ByName("DismissDuplicateCandidate")),
 			connect.WithClientOptions(opts...),
 		),
+		recordName: connect.NewClient[v1.RecordNameRequest, v1.RecordNameResponse](
+			httpClient,
+			baseURL+PatientServiceRecordNameProcedure,
+			connect.WithSchema(patientServiceMethods.ByName("RecordName")),
+			connect.WithClientOptions(opts...),
+		),
+		getPatientHistory: connect.NewClient[v1.GetPatientHistoryRequest, v1.GetPatientHistoryResponse](
+			httpClient,
+			baseURL+PatientServiceGetPatientHistoryProcedure,
+			connect.WithSchema(patientServiceMethods.ByName("GetPatientHistory")),
+			connect.WithClientOptions(opts...),
+		),
+		recordCommunicationPreference: connect.NewClient[v1.RecordCommunicationPreferenceRequest, v1.RecordCommunicationPreferenceResponse](
+			httpClient,
+			baseURL+PatientServiceRecordCommunicationPreferenceProcedure,
+			connect.WithSchema(patientServiceMethods.ByName("RecordCommunicationPreference")),
+			connect.WithClientOptions(opts...),
+		),
+		recordDeceased: connect.NewClient[v1.RecordDeceasedRequest, v1.RecordDeceasedResponse](
+			httpClient,
+			baseURL+PatientServiceRecordDeceasedProcedure,
+			connect.WithSchema(patientServiceMethods.ByName("RecordDeceased")),
+			connect.WithClientOptions(opts...),
+		),
+		reverseDeceased: connect.NewClient[v1.ReverseDeceasedRequest, v1.ReverseDeceasedResponse](
+			httpClient,
+			baseURL+PatientServiceReverseDeceasedProcedure,
+			connect.WithSchema(patientServiceMethods.ByName("ReverseDeceased")),
+			connect.WithClientOptions(opts...),
+		),
+		addRelatedPerson: connect.NewClient[v1.AddRelatedPersonRequest, v1.AddRelatedPersonResponse](
+			httpClient,
+			baseURL+PatientServiceAddRelatedPersonProcedure,
+			connect.WithSchema(patientServiceMethods.ByName("AddRelatedPerson")),
+			connect.WithClientOptions(opts...),
+		),
+		verifyRelatedPerson: connect.NewClient[v1.VerifyRelatedPersonRequest, v1.VerifyRelatedPersonResponse](
+			httpClient,
+			baseURL+PatientServiceVerifyRelatedPersonProcedure,
+			connect.WithSchema(patientServiceMethods.ByName("VerifyRelatedPerson")),
+			connect.WithClientOptions(opts...),
+		),
+		endRelatedPerson: connect.NewClient[v1.EndRelatedPersonRequest, v1.EndRelatedPersonResponse](
+			httpClient,
+			baseURL+PatientServiceEndRelatedPersonProcedure,
+			connect.WithSchema(patientServiceMethods.ByName("EndRelatedPerson")),
+			connect.WithClientOptions(opts...),
+		),
+		getCaregiverAuthority: connect.NewClient[v1.GetCaregiverAuthorityRequest, v1.GetCaregiverAuthorityResponse](
+			httpClient,
+			baseURL+PatientServiceGetCaregiverAuthorityProcedure,
+			connect.WithSchema(patientServiceMethods.ByName("GetCaregiverAuthority")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // patientServiceClient implements PatientServiceClient.
 type patientServiceClient struct {
-	registerPatient           *connect.Client[v1.RegisterPatientRequest, v1.RegisterPatientResponse]
-	searchPatients            *connect.Client[v1.SearchPatientsRequest, v1.SearchPatientsResponse]
-	getPatient                *connect.Client[v1.GetPatientRequest, v1.GetPatientResponse]
-	updateDemographics        *connect.Client[v1.UpdateDemographicsRequest, v1.UpdateDemographicsResponse]
-	confirmIdentity           *connect.Client[v1.ConfirmIdentityRequest, v1.ConfirmIdentityResponse]
-	mergePatients             *connect.Client[v1.MergePatientsRequest, v1.MergePatientsResponse]
-	unmergePatients           *connect.Client[v1.UnmergePatientsRequest, v1.UnmergePatientsResponse]
-	listDuplicateCandidates   *connect.Client[v1.ListDuplicateCandidatesRequest, v1.ListDuplicateCandidatesResponse]
-	dismissDuplicateCandidate *connect.Client[v1.DismissDuplicateCandidateRequest, v1.DismissDuplicateCandidateResponse]
+	registerPatient               *connect.Client[v1.RegisterPatientRequest, v1.RegisterPatientResponse]
+	searchPatients                *connect.Client[v1.SearchPatientsRequest, v1.SearchPatientsResponse]
+	getPatient                    *connect.Client[v1.GetPatientRequest, v1.GetPatientResponse]
+	updateDemographics            *connect.Client[v1.UpdateDemographicsRequest, v1.UpdateDemographicsResponse]
+	confirmIdentity               *connect.Client[v1.ConfirmIdentityRequest, v1.ConfirmIdentityResponse]
+	mergePatients                 *connect.Client[v1.MergePatientsRequest, v1.MergePatientsResponse]
+	unmergePatients               *connect.Client[v1.UnmergePatientsRequest, v1.UnmergePatientsResponse]
+	listDuplicateCandidates       *connect.Client[v1.ListDuplicateCandidatesRequest, v1.ListDuplicateCandidatesResponse]
+	dismissDuplicateCandidate     *connect.Client[v1.DismissDuplicateCandidateRequest, v1.DismissDuplicateCandidateResponse]
+	recordName                    *connect.Client[v1.RecordNameRequest, v1.RecordNameResponse]
+	getPatientHistory             *connect.Client[v1.GetPatientHistoryRequest, v1.GetPatientHistoryResponse]
+	recordCommunicationPreference *connect.Client[v1.RecordCommunicationPreferenceRequest, v1.RecordCommunicationPreferenceResponse]
+	recordDeceased                *connect.Client[v1.RecordDeceasedRequest, v1.RecordDeceasedResponse]
+	reverseDeceased               *connect.Client[v1.ReverseDeceasedRequest, v1.ReverseDeceasedResponse]
+	addRelatedPerson              *connect.Client[v1.AddRelatedPersonRequest, v1.AddRelatedPersonResponse]
+	verifyRelatedPerson           *connect.Client[v1.VerifyRelatedPersonRequest, v1.VerifyRelatedPersonResponse]
+	endRelatedPerson              *connect.Client[v1.EndRelatedPersonRequest, v1.EndRelatedPersonResponse]
+	getCaregiverAuthority         *connect.Client[v1.GetCaregiverAuthorityRequest, v1.GetCaregiverAuthorityResponse]
 }
 
 // RegisterPatient calls healthcare.empi.v1.PatientService.RegisterPatient.
@@ -216,6 +321,52 @@ func (c *patientServiceClient) DismissDuplicateCandidate(ctx context.Context, re
 	return c.dismissDuplicateCandidate.CallUnary(ctx, req)
 }
 
+// RecordName calls healthcare.empi.v1.PatientService.RecordName.
+func (c *patientServiceClient) RecordName(ctx context.Context, req *connect.Request[v1.RecordNameRequest]) (*connect.Response[v1.RecordNameResponse], error) {
+	return c.recordName.CallUnary(ctx, req)
+}
+
+// GetPatientHistory calls healthcare.empi.v1.PatientService.GetPatientHistory.
+func (c *patientServiceClient) GetPatientHistory(ctx context.Context, req *connect.Request[v1.GetPatientHistoryRequest]) (*connect.Response[v1.GetPatientHistoryResponse], error) {
+	return c.getPatientHistory.CallUnary(ctx, req)
+}
+
+// RecordCommunicationPreference calls
+// healthcare.empi.v1.PatientService.RecordCommunicationPreference.
+func (c *patientServiceClient) RecordCommunicationPreference(ctx context.Context, req *connect.Request[v1.RecordCommunicationPreferenceRequest]) (*connect.Response[v1.RecordCommunicationPreferenceResponse], error) {
+	return c.recordCommunicationPreference.CallUnary(ctx, req)
+}
+
+// RecordDeceased calls healthcare.empi.v1.PatientService.RecordDeceased.
+func (c *patientServiceClient) RecordDeceased(ctx context.Context, req *connect.Request[v1.RecordDeceasedRequest]) (*connect.Response[v1.RecordDeceasedResponse], error) {
+	return c.recordDeceased.CallUnary(ctx, req)
+}
+
+// ReverseDeceased calls healthcare.empi.v1.PatientService.ReverseDeceased.
+func (c *patientServiceClient) ReverseDeceased(ctx context.Context, req *connect.Request[v1.ReverseDeceasedRequest]) (*connect.Response[v1.ReverseDeceasedResponse], error) {
+	return c.reverseDeceased.CallUnary(ctx, req)
+}
+
+// AddRelatedPerson calls healthcare.empi.v1.PatientService.AddRelatedPerson.
+func (c *patientServiceClient) AddRelatedPerson(ctx context.Context, req *connect.Request[v1.AddRelatedPersonRequest]) (*connect.Response[v1.AddRelatedPersonResponse], error) {
+	return c.addRelatedPerson.CallUnary(ctx, req)
+}
+
+// VerifyRelatedPerson calls healthcare.empi.v1.PatientService.VerifyRelatedPerson.
+func (c *patientServiceClient) VerifyRelatedPerson(ctx context.Context, req *connect.Request[v1.VerifyRelatedPersonRequest]) (*connect.Response[v1.VerifyRelatedPersonResponse], error) {
+	return c.verifyRelatedPerson.CallUnary(ctx, req)
+}
+
+// EndRelatedPerson calls healthcare.empi.v1.PatientService.EndRelatedPerson.
+func (c *patientServiceClient) EndRelatedPerson(ctx context.Context, req *connect.Request[v1.EndRelatedPersonRequest]) (*connect.Response[v1.EndRelatedPersonResponse], error) {
+	return c.endRelatedPerson.CallUnary(ctx, req)
+}
+
+// GetCaregiverAuthority calls healthcare.empi.v1.PatientService.GetCaregiverAuthority.
+func (c *patientServiceClient) GetCaregiverAuthority(ctx context.Context, req *connect.Request[v1.GetCaregiverAuthorityRequest]) (*connect.Response[v1.GetCaregiverAuthorityResponse], error) {
+	return c.getCaregiverAuthority.CallUnary(ctx, req)
+}
+
 // PatientServiceHandler is an implementation of the healthcare.empi.v1.PatientService service.
 type PatientServiceHandler interface {
 	// SRS-EMPI-001. Issues the MRN from the registering facility's sequence.
@@ -235,6 +386,21 @@ type PatientServiceHandler interface {
 	// SRS-EMPI-004. The manual-review worklist thresholds route to.
 	ListDuplicateCandidates(context.Context, *connect.Request[v1.ListDuplicateCandidatesRequest]) (*connect.Response[v1.ListDuplicateCandidatesResponse], error)
 	DismissDuplicateCandidate(context.Context, *connect.Request[v1.DismissDuplicateCandidateRequest]) (*connect.Response[v1.DismissDuplicateCandidateResponse], error)
+	// SRS-EMPI-007. Names, preferences and relationships, effective-dated.
+	RecordName(context.Context, *connect.Request[v1.RecordNameRequest]) (*connect.Response[v1.RecordNameResponse], error)
+	GetPatientHistory(context.Context, *connect.Request[v1.GetPatientHistoryRequest]) (*connect.Response[v1.GetPatientHistoryResponse], error)
+	RecordCommunicationPreference(context.Context, *connect.Request[v1.RecordCommunicationPreferenceRequest]) (*connect.Response[v1.RecordCommunicationPreferenceResponse], error)
+	// SRS-EMPI-008. Recording a death stops routine scheduling; withdrawing one
+	// exists because a registry feed can match the wrong record, and a system
+	// that cannot undo it leaves somebody unable to book an appointment because
+	// a computer believes they are dead.
+	RecordDeceased(context.Context, *connect.Request[v1.RecordDeceasedRequest]) (*connect.Response[v1.RecordDeceasedResponse], error)
+	ReverseDeceased(context.Context, *connect.Request[v1.ReverseDeceasedRequest]) (*connect.Response[v1.ReverseDeceasedResponse], error)
+	// SRS-EMPI-009. Caregiver relationships, scoped and expiring.
+	AddRelatedPerson(context.Context, *connect.Request[v1.AddRelatedPersonRequest]) (*connect.Response[v1.AddRelatedPersonResponse], error)
+	VerifyRelatedPerson(context.Context, *connect.Request[v1.VerifyRelatedPersonRequest]) (*connect.Response[v1.VerifyRelatedPersonResponse], error)
+	EndRelatedPerson(context.Context, *connect.Request[v1.EndRelatedPersonRequest]) (*connect.Response[v1.EndRelatedPersonResponse], error)
+	GetCaregiverAuthority(context.Context, *connect.Request[v1.GetCaregiverAuthorityRequest]) (*connect.Response[v1.GetCaregiverAuthorityResponse], error)
 }
 
 // NewPatientServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -298,6 +464,60 @@ func NewPatientServiceHandler(svc PatientServiceHandler, opts ...connect.Handler
 		connect.WithSchema(patientServiceMethods.ByName("DismissDuplicateCandidate")),
 		connect.WithHandlerOptions(opts...),
 	)
+	patientServiceRecordNameHandler := connect.NewUnaryHandler(
+		PatientServiceRecordNameProcedure,
+		svc.RecordName,
+		connect.WithSchema(patientServiceMethods.ByName("RecordName")),
+		connect.WithHandlerOptions(opts...),
+	)
+	patientServiceGetPatientHistoryHandler := connect.NewUnaryHandler(
+		PatientServiceGetPatientHistoryProcedure,
+		svc.GetPatientHistory,
+		connect.WithSchema(patientServiceMethods.ByName("GetPatientHistory")),
+		connect.WithHandlerOptions(opts...),
+	)
+	patientServiceRecordCommunicationPreferenceHandler := connect.NewUnaryHandler(
+		PatientServiceRecordCommunicationPreferenceProcedure,
+		svc.RecordCommunicationPreference,
+		connect.WithSchema(patientServiceMethods.ByName("RecordCommunicationPreference")),
+		connect.WithHandlerOptions(opts...),
+	)
+	patientServiceRecordDeceasedHandler := connect.NewUnaryHandler(
+		PatientServiceRecordDeceasedProcedure,
+		svc.RecordDeceased,
+		connect.WithSchema(patientServiceMethods.ByName("RecordDeceased")),
+		connect.WithHandlerOptions(opts...),
+	)
+	patientServiceReverseDeceasedHandler := connect.NewUnaryHandler(
+		PatientServiceReverseDeceasedProcedure,
+		svc.ReverseDeceased,
+		connect.WithSchema(patientServiceMethods.ByName("ReverseDeceased")),
+		connect.WithHandlerOptions(opts...),
+	)
+	patientServiceAddRelatedPersonHandler := connect.NewUnaryHandler(
+		PatientServiceAddRelatedPersonProcedure,
+		svc.AddRelatedPerson,
+		connect.WithSchema(patientServiceMethods.ByName("AddRelatedPerson")),
+		connect.WithHandlerOptions(opts...),
+	)
+	patientServiceVerifyRelatedPersonHandler := connect.NewUnaryHandler(
+		PatientServiceVerifyRelatedPersonProcedure,
+		svc.VerifyRelatedPerson,
+		connect.WithSchema(patientServiceMethods.ByName("VerifyRelatedPerson")),
+		connect.WithHandlerOptions(opts...),
+	)
+	patientServiceEndRelatedPersonHandler := connect.NewUnaryHandler(
+		PatientServiceEndRelatedPersonProcedure,
+		svc.EndRelatedPerson,
+		connect.WithSchema(patientServiceMethods.ByName("EndRelatedPerson")),
+		connect.WithHandlerOptions(opts...),
+	)
+	patientServiceGetCaregiverAuthorityHandler := connect.NewUnaryHandler(
+		PatientServiceGetCaregiverAuthorityProcedure,
+		svc.GetCaregiverAuthority,
+		connect.WithSchema(patientServiceMethods.ByName("GetCaregiverAuthority")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/healthcare.empi.v1.PatientService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case PatientServiceRegisterPatientProcedure:
@@ -318,6 +538,24 @@ func NewPatientServiceHandler(svc PatientServiceHandler, opts ...connect.Handler
 			patientServiceListDuplicateCandidatesHandler.ServeHTTP(w, r)
 		case PatientServiceDismissDuplicateCandidateProcedure:
 			patientServiceDismissDuplicateCandidateHandler.ServeHTTP(w, r)
+		case PatientServiceRecordNameProcedure:
+			patientServiceRecordNameHandler.ServeHTTP(w, r)
+		case PatientServiceGetPatientHistoryProcedure:
+			patientServiceGetPatientHistoryHandler.ServeHTTP(w, r)
+		case PatientServiceRecordCommunicationPreferenceProcedure:
+			patientServiceRecordCommunicationPreferenceHandler.ServeHTTP(w, r)
+		case PatientServiceRecordDeceasedProcedure:
+			patientServiceRecordDeceasedHandler.ServeHTTP(w, r)
+		case PatientServiceReverseDeceasedProcedure:
+			patientServiceReverseDeceasedHandler.ServeHTTP(w, r)
+		case PatientServiceAddRelatedPersonProcedure:
+			patientServiceAddRelatedPersonHandler.ServeHTTP(w, r)
+		case PatientServiceVerifyRelatedPersonProcedure:
+			patientServiceVerifyRelatedPersonHandler.ServeHTTP(w, r)
+		case PatientServiceEndRelatedPersonProcedure:
+			patientServiceEndRelatedPersonHandler.ServeHTTP(w, r)
+		case PatientServiceGetCaregiverAuthorityProcedure:
+			patientServiceGetCaregiverAuthorityHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -361,4 +599,40 @@ func (UnimplementedPatientServiceHandler) ListDuplicateCandidates(context.Contex
 
 func (UnimplementedPatientServiceHandler) DismissDuplicateCandidate(context.Context, *connect.Request[v1.DismissDuplicateCandidateRequest]) (*connect.Response[v1.DismissDuplicateCandidateResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.empi.v1.PatientService.DismissDuplicateCandidate is not implemented"))
+}
+
+func (UnimplementedPatientServiceHandler) RecordName(context.Context, *connect.Request[v1.RecordNameRequest]) (*connect.Response[v1.RecordNameResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.empi.v1.PatientService.RecordName is not implemented"))
+}
+
+func (UnimplementedPatientServiceHandler) GetPatientHistory(context.Context, *connect.Request[v1.GetPatientHistoryRequest]) (*connect.Response[v1.GetPatientHistoryResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.empi.v1.PatientService.GetPatientHistory is not implemented"))
+}
+
+func (UnimplementedPatientServiceHandler) RecordCommunicationPreference(context.Context, *connect.Request[v1.RecordCommunicationPreferenceRequest]) (*connect.Response[v1.RecordCommunicationPreferenceResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.empi.v1.PatientService.RecordCommunicationPreference is not implemented"))
+}
+
+func (UnimplementedPatientServiceHandler) RecordDeceased(context.Context, *connect.Request[v1.RecordDeceasedRequest]) (*connect.Response[v1.RecordDeceasedResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.empi.v1.PatientService.RecordDeceased is not implemented"))
+}
+
+func (UnimplementedPatientServiceHandler) ReverseDeceased(context.Context, *connect.Request[v1.ReverseDeceasedRequest]) (*connect.Response[v1.ReverseDeceasedResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.empi.v1.PatientService.ReverseDeceased is not implemented"))
+}
+
+func (UnimplementedPatientServiceHandler) AddRelatedPerson(context.Context, *connect.Request[v1.AddRelatedPersonRequest]) (*connect.Response[v1.AddRelatedPersonResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.empi.v1.PatientService.AddRelatedPerson is not implemented"))
+}
+
+func (UnimplementedPatientServiceHandler) VerifyRelatedPerson(context.Context, *connect.Request[v1.VerifyRelatedPersonRequest]) (*connect.Response[v1.VerifyRelatedPersonResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.empi.v1.PatientService.VerifyRelatedPerson is not implemented"))
+}
+
+func (UnimplementedPatientServiceHandler) EndRelatedPerson(context.Context, *connect.Request[v1.EndRelatedPersonRequest]) (*connect.Response[v1.EndRelatedPersonResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.empi.v1.PatientService.EndRelatedPerson is not implemented"))
+}
+
+func (UnimplementedPatientServiceHandler) GetCaregiverAuthority(context.Context, *connect.Request[v1.GetCaregiverAuthorityRequest]) (*connect.Response[v1.GetCaregiverAuthorityResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.empi.v1.PatientService.GetCaregiverAuthority is not implemented"))
 }

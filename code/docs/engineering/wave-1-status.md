@@ -27,9 +27,9 @@ What this records is which requirements have working, tested implementations.
 | SRS-EMPI-004 | Configurable duplicate confidence routing to auto-clear / warning / manual review, no unsafe auto-merge | **Implemented** |
 | SRS-EMPI-005 | Merge only through a reviewed workflow | **Implemented** |
 | SRS-EMPI-006 | Controlled unmerge from the merge journal | **Implemented** |
-| SRS-EMPI-007 | Aliases, prior names, multiple contacts, effective-dated | Not started |
-| SRS-EMPI-008 | Deceased status with date and source, restricting routine scheduling | Aggregate carries it; the scheduling half arrives with SRS-SCH |
-| SRS-EMPI-009 | Guardian/caregiver relationships with authority and expiry | Not started |
+| SRS-EMPI-007 | Aliases, prior names, multiple contacts, effective-dated | **Implemented** |
+| SRS-EMPI-008 | Deceased status with date and source, restricting routine scheduling | **Implemented**; the identity half. Scheduling reads `accepts_routine_scheduling` and decides warn-or-block with SRS-SCH |
+| SRS-EMPI-009 | Guardian/caregiver relationships with authority and expiry | **Implemented** |
 
 ### Decisions taken against the backlog
 
@@ -112,6 +112,48 @@ item; the tests configure it explicitly today.
   storing search terms becomes a second copy of the patient index — searchable
   by everyone with audit access and outside every masking rule.
 
+### What the history, deceased and relationship rules enforce
+
+- **A name is an interval, not a field.** Recording a new legal name closes the
+  previous window rather than overwriting it, and a partial unique index permits
+  exactly one open window per kind. A result addressed to a maiden name needs to
+  know the interval that name applied to, and a patient with two open legal
+  names or none is a record the database refuses to hold.
+
+- **Search reaches names no longer held.** `SearchPatients` matches the current
+  family name *or* any name in the history, and reports which former name
+  matched. Finding the row is not sufficient on its own: a maiden-name hit
+  scored against the married name reads as near-zero similarity, which a clerk
+  correctly interprets as "not this person" — so the score is taken against the
+  name that actually matched and the row names it.
+
+- **A preferred name is not the legal name.** Preferred names and aliases are
+  separate kinds with their own windows. Recording one leaves the legal record
+  and the demographics the matcher reads untouched.
+
+- **Communication preference is deny-by-default and held per purpose.** A
+  patient who agreed to appointment reminders by SMS has not agreed to research
+  contact by SMS. `PreferenceSet.Permits` answers per channel *and* purpose, and
+  an unrecorded combination is a refusal rather than a permission.
+
+- **A death is recorded with its source and withdrawn with a reason.** SRS-EMPI-008
+  requires the source because a registry feed can be wrong about the wrong
+  patient, and reversing it needs to know what claimed it. A withdrawal is a
+  further record, not a deletion: the interval during which the system believed
+  the patient dead is the fact that explains a cancelled appointment.
+
+- **The identity context answers the factual half of scheduling.** `Patient`
+  carries `accepts_routine_scheduling`. Whether a booking attempt warns or
+  blocks is a scheduling decision and belongs to SRS-SCH; putting it here would
+  put a scheduling rule in the identity context.
+
+- **Authority requires verification and expires.** An unverified relationship
+  holds no authority at all, verification records what document was checked, and
+  authority is asked for at a point in time — a guardianship that ended last
+  month does not answer yes today. An emergency contact is a person to telephone,
+  not a person who may consent, so the database itself refuses to store one
+  holding authority.
+
 ### Evidence
 
 | Property | Test |
@@ -137,6 +179,22 @@ item; the tests configure it explicitly today.
 | A dismissal is final and is not reopened by re-detection | `TestDismissingACandidateClosesItForGood` |
 | A death survives a merge and returns on an unmerge | `TestADeceasedRecordSurvivesTheMerge`, `TestUnmergeReturnsAnInheritedDeceasedRecord` |
 | The journal records what moved and what it was | `TestTheMergeJournalRecordsWhatMoved` |
+| Registration opens the name history, so the first rename has something to close | `TestRegistrationOpensTheNameHistory` |
+| A prior name stays searchable, and the result says which name matched | `TestRenamingAPatientKeepsThePriorNameSearchable` |
+| A current-name hit is not mislabelled as a former name | `TestACurrentNameMatchIsNotReportedAsAFormerName` |
+| A preferred name does not overwrite the legal record | `TestAPreferredNameDoesNotChangeTheLegalRecord` |
+| Preferences are held per channel and per purpose | `TestCommunicationPreferencesAreHeldPerPurpose` |
+| Changing a preference closes the previous window rather than editing it | `TestChangingAPreferenceClosesThePreviousOne` |
+| A death stops routine scheduling and needs a named source | `TestRecordingADeathStopsRoutineScheduling`, `TestRecordingADeathNeedsASource` |
+| A misrecorded death is withdrawn with a reason, not deleted | `TestAMisrecordedDeathCanBeWithdrawn`, `TestWithdrawingADeathNeedsAReason` |
+| Caregiver authority is scoped, verified and expires | `TestCaregiverAuthorityIsScopedVerifiedAndExpiring` |
+| Verification records what was checked | `TestVerifyingARelationshipNeedsANote` |
+| An emergency contact cannot be given authority | `TestAnEmergencyContactCannotBeGivenAuthority` |
+| A relationship cannot name a patient in another tenant | `TestARelationshipCannotNameAPatientInAnotherTenant` |
+| History reads are audited | `TestReadingTheHistoryIsAudited` |
+
+Sprint 1 is complete: SRS-EMPI-001 to SRS-EMPI-009 are implemented and
+covered by tests.
 
 ## Wave-0 capabilities Wave 1 consumes
 
@@ -149,6 +207,7 @@ Sprint 1 wrote no new platform capability. It consumed:
 | Numbering sequences (SRS-PLT-014) | MRN issuance, collision-free under concurrency |
 | Module entitlements (SRS-PLT-011) | `empi` is refused at the wire for a tenant that has not bought it |
 | Transactional outbox | `patient.created` and `patient.demographics_updated` |
+| Effective dating (SRS-PLT-013) | Name, preference and relationship windows |
 | Append-only audit | Reads, writes and denials |
 | Architecture fitness tests | FIT-02 and FIT-03 applied to the new context without modification |
 

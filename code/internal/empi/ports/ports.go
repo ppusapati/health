@@ -184,3 +184,33 @@ type MergeRepository interface {
 	OpenCandidates(ctx context.Context, scope authctx.TenantScope, limit int32) ([]domain.DuplicateCandidate, error)
 	CloseCandidate(ctx context.Context, scope authctx.TenantScope, c domain.DuplicateCandidate) error
 }
+
+// HistoryRepository persists effective-dated demographics, communication
+// preferences and related persons (SRS-EMPI-007, SRS-EMPI-009).
+type HistoryRepository interface {
+	// RecordName opens a new name window and closes the previous one of the
+	// same kind. Both happen in the caller's transaction: a close without its
+	// open leaves a patient with no current name, an open without its close
+	// leaves two.
+	RecordName(ctx context.Context, scope authctx.TenantScope, n domain.PatientName) error
+	Names(ctx context.Context, scope authctx.TenantScope, patientID string) (domain.NameHistory, error)
+	// MatchingFormerNames reports, per patient, the closed name that matched a
+	// name search — the reason a patient reached through a maiden name is in
+	// the results at all. Keyed by patient ID; a patient absent from the map
+	// matched on their current name.
+	MatchingFormerNames(ctx context.Context, scope authctx.TenantScope,
+		patientIDs []string, prefix string) (map[string]domain.PatientName, error)
+
+	RecordPreference(ctx context.Context, scope authctx.TenantScope, p domain.CommunicationPreference) error
+	Preferences(ctx context.Context, scope authctx.TenantScope, patientID string) (domain.PreferenceSet, error)
+
+	RecordRelatedPerson(ctx context.Context, scope authctx.TenantScope, p domain.RelatedPerson) error
+	VerifyRelatedPerson(ctx context.Context, scope authctx.TenantScope,
+		relationshipID, by, note string, at time.Time) error
+	EndRelatedPerson(ctx context.Context, scope authctx.TenantScope, relationshipID string, at time.Time) error
+	RelatedPersons(ctx context.Context, scope authctx.TenantScope, patientID string) (domain.RelatedPersonSet, error)
+	// AuthorityHeldBy is the reverse direction: what one person may do for
+	// another, which is the question an authorization check asks.
+	AuthorityHeldBy(ctx context.Context, scope authctx.TenantScope,
+		holderPatientID, subjectPatientID string) (domain.RelatedPersonSet, error)
+}

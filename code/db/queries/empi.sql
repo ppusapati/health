@@ -167,22 +167,38 @@ LIMIT @page_limit;
 -- name: ListPatientsByName :many
 -- Plain name search for the registration desk, cursor-paginated.
 --
+-- Matches the name the patient holds now *or* any name they have held before
+-- (SRS-EMPI-007). Searching only the current name is how a result addressed to
+-- a maiden name finds nobody and becomes a second record.
+--
 -- Keyset on (lower(family_name), patient_id) rather than OFFSET: a clerk
 -- paging through results while registrations are happening would otherwise see
 -- rows shift under them.
-SELECT patient_id, tenant_id, registered_facility_id, status,
-       family_name, given_names, name_prefix, name_suffix,
-       birth_date, birth_date_precision, sex, phones, emails, addresses,
-       merged_into_patient_id,
-       deceased_date, deceased_precision, deceased_source,
-       deceased_recorded_at, deceased_recorded_by,
-       created_at, updated_at, version
-FROM empi.patient
-WHERE tenant_id = @tenant_id
-  AND status <> 'merged'
-  AND lower(family_name) LIKE lower(@family_prefix::text) || '%'
-  AND (lower(family_name), patient_id) > (lower(@after_family::text), @after_id::uuid)
-ORDER BY lower(family_name), patient_id
+SELECT p.patient_id, p.tenant_id, p.registered_facility_id, p.status,
+       p.family_name, p.given_names, p.name_prefix, p.name_suffix,
+       p.birth_date, p.birth_date_precision, p.sex, p.phones, p.emails, p.addresses,
+       p.merged_into_patient_id,
+       p.deceased_date, p.deceased_precision, p.deceased_source,
+       p.deceased_recorded_at, p.deceased_recorded_by,
+       p.created_at, p.updated_at, p.version
+FROM empi.patient p
+WHERE p.tenant_id = @tenant_id
+  AND p.status <> 'merged'
+  AND (
+        lower(p.family_name) LIKE lower(@family_prefix::text) || '%'
+        -- EXISTS rather than a join: a patient who has held three names that
+        -- all match the prefix is still one row, and the keyset below stays a
+        -- total order over empi.patient alone.
+     OR EXISTS (
+          SELECT 1
+          FROM empi.patient_name n
+          WHERE n.tenant_id = p.tenant_id
+            AND n.patient_id = p.patient_id
+            AND lower(n.family_name) LIKE lower(@family_prefix::text) || '%'
+        )
+      )
+  AND (lower(p.family_name), p.patient_id) > (lower(@after_family::text), @after_id::uuid)
+ORDER BY lower(p.family_name), p.patient_id
 LIMIT @page_limit;
 
 -- name: GetDemographicPolicy :one
@@ -360,3 +376,140 @@ UPDATE empi.duplicate_candidate
 SET status = @status, reviewed_by = @reviewed_by,
     reviewed_at = @reviewed_at, resolution = @resolution
 WHERE tenant_id = @tenant_id AND candidate_id = @candidate_id AND status = 'open';
+
+-- Demographic history, preferences and related persons (SRS-EMPI-007/009).
+
+-- name: InsertPatientName :exec
+INSERT INTO empi.patient_name (
+    name_id, tenant_id, patient_id, kind,
+    family_name, given_names, name_prefix, name_suffix,
+    effective_from, effective_until, recorded_by, recorded_at, source
+) VALUES (
+    @name_id, @tenant_id, @patient_id, @kind,
+    @family_name, @given_names, @name_prefix, @name_suffix,
+    @effective_from, sqlc.narg('effective_until')::timestamptz,
+    @recorded_by, @recorded_at, @source
+);
+
+-- name: CloseOpenPatientName :execrows
+-- Ends the current window rather than overwriting the row.
+--
+-- An overwrite would lose the interval the old name applied to, which is the
+-- one fact a misfiled result needs: what this patient was called in March.
+UPDATE empi.patient_name
+SET effective_until = @effective_until
+WHERE tenant_id = @tenant_id
+  AND patient_id = @patient_id
+  AND kind = @kind
+  AND effective_until IS NULL
+  -- A window that would end before it began is a clock problem, not a rename.
+  AND effective_from < @effective_until;
+
+-- name: ListPatientNames :many
+SELECT name_id, tenant_id, patient_id, kind,
+       family_name, given_names, name_prefix, name_suffix,
+       effective_from, effective_until, recorded_by, recorded_at, source
+FROM empi.patient_name
+WHERE tenant_id = @tenant_id AND patient_id = @patient_id
+ORDER BY kind, effective_from DESC, name_id;
+
+-- name: MatchingFormerNames :many
+-- The former names that caused these patients to appear in a name search.
+--
+-- A row reached through a maiden name scores low against the current name, so
+-- without this the clerk sees an apparently irrelevant result and dismisses
+-- it. Naming the name that matched is what makes the row actionable.
+--
+-- Only closed names: a name still in force is the current one, and saying
+-- "matched former name" about it would be wrong.
+SELECT name_id, patient_id, kind, family_name, given_names,
+       name_prefix, name_suffix, effective_from, effective_until,
+       source, recorded_by, recorded_at
+FROM empi.patient_name
+WHERE tenant_id = @tenant_id
+  AND patient_id = ANY (@patient_ids::uuid[])
+  AND effective_until IS NOT NULL
+  AND lower(family_name) LIKE lower(@family_prefix::text) || '%'
+ORDER BY patient_id, effective_until DESC;
+
+-- name: InsertCommunicationPreference :exec
+INSERT INTO empi.communication_preference (
+    preference_id, tenant_id, patient_id, channel, purpose, allowed,
+    effective_from, effective_until, recorded_by, recorded_at
+) VALUES (
+    @preference_id, @tenant_id, @patient_id, @channel, @purpose, @allowed,
+    @effective_from, sqlc.narg('effective_until')::timestamptz, @recorded_by, @recorded_at
+);
+
+-- name: CloseOpenCommunicationPreference :execrows
+UPDATE empi.communication_preference
+SET effective_until = @effective_until
+WHERE tenant_id = @tenant_id
+  AND patient_id = @patient_id
+  AND channel = @channel
+  AND purpose = @purpose
+  AND effective_until IS NULL
+  AND effective_from < @effective_until;
+
+-- name: ListCommunicationPreferences :many
+SELECT preference_id, tenant_id, patient_id, channel, purpose, allowed,
+       effective_from, effective_until, recorded_by, recorded_at
+FROM empi.communication_preference
+WHERE tenant_id = @tenant_id AND patient_id = @patient_id
+ORDER BY channel, purpose, effective_from DESC;
+
+-- name: InsertRelatedPerson :exec
+INSERT INTO empi.related_person (
+    relationship_id, tenant_id, patient_id, related_patient_id,
+    family_name, given_names, contact, relationship, authorities,
+    effective_from, effective_until,
+    verified_by, verified_at, verification_note, recorded_by, recorded_at
+) VALUES (
+    @relationship_id, @tenant_id, @patient_id, sqlc.narg('related_patient_id')::uuid,
+    @family_name, @given_names, @contact, @relationship, @authorities,
+    @effective_from, sqlc.narg('effective_until')::timestamptz,
+    @verified_by, sqlc.narg('verified_at')::timestamptz, @verification_note,
+    @recorded_by, @recorded_at
+);
+
+-- name: VerifyRelatedPerson :execrows
+-- Records that somebody checked the claim, and what they saw.
+--
+-- Only an unverified relationship may be verified: re-verifying would overwrite
+-- the note saying what was originally checked, which is the part that holds up.
+UPDATE empi.related_person
+SET verified_by = @verified_by,
+    verified_at = @verified_at,
+    verification_note = @verification_note
+WHERE tenant_id = @tenant_id
+  AND relationship_id = @relationship_id
+  AND verified_at IS NULL;
+
+-- name: EndRelatedPerson :execrows
+UPDATE empi.related_person
+SET effective_until = @effective_until
+WHERE tenant_id = @tenant_id
+  AND relationship_id = @relationship_id
+  AND effective_until IS NULL
+  AND effective_from < @effective_until;
+
+-- name: ListRelatedPersons :many
+SELECT relationship_id, tenant_id, patient_id, related_patient_id,
+       family_name, given_names, contact, relationship, authorities,
+       effective_from, effective_until,
+       verified_by, verified_at, verification_note, recorded_by, recorded_at
+FROM empi.related_person
+WHERE tenant_id = @tenant_id AND patient_id = @patient_id
+ORDER BY effective_from DESC, relationship_id;
+
+-- name: ListRelationshipsHeldBy :many
+-- What this person may do for other patients: the reverse direction, which is
+-- the question an authorization check asks.
+SELECT relationship_id, tenant_id, patient_id, related_patient_id,
+       family_name, given_names, contact, relationship, authorities,
+       effective_from, effective_until,
+       verified_by, verified_at, verification_note, recorded_by, recorded_at
+FROM empi.related_person
+WHERE tenant_id = @tenant_id
+  AND related_patient_id = @related_patient_id
+  AND patient_id = @patient_id;

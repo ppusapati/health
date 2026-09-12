@@ -499,6 +499,309 @@ func (ReviewStatus) EnumDescriptor() ([]byte, []int) {
 	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{7}
 }
 
+// What a recorded name is for (SRS-EMPI-007).
+type NameKind int32
+
+const (
+	NameKind_NAME_KIND_UNSPECIFIED NameKind = 0
+	// The name on the identity document.
+	NameKind_NAME_KIND_LEGAL NameKind = 1
+	// What the patient asks to be called. Shown on a worklist; never printed on
+	// a legal document, and never a replacement for the one on the paperwork.
+	NameKind_NAME_KIND_PREFERRED NameKind = 2
+	// Another name they are known by — a maiden name, a religious name, a
+	// transliteration.
+	NameKind_NAME_KIND_ALIAS NameKind = 3
+)
+
+// Enum value maps for NameKind.
+var (
+	NameKind_name = map[int32]string{
+		0: "NAME_KIND_UNSPECIFIED",
+		1: "NAME_KIND_LEGAL",
+		2: "NAME_KIND_PREFERRED",
+		3: "NAME_KIND_ALIAS",
+	}
+	NameKind_value = map[string]int32{
+		"NAME_KIND_UNSPECIFIED": 0,
+		"NAME_KIND_LEGAL":       1,
+		"NAME_KIND_PREFERRED":   2,
+		"NAME_KIND_ALIAS":       3,
+	}
+)
+
+func (x NameKind) Enum() *NameKind {
+	p := new(NameKind)
+	*p = x
+	return p
+}
+
+func (x NameKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (NameKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_healthcare_empi_v1_patient_proto_enumTypes[8].Descriptor()
+}
+
+func (NameKind) Type() protoreflect.EnumType {
+	return &file_healthcare_empi_v1_patient_proto_enumTypes[8]
+}
+
+func (x NameKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use NameKind.Descriptor instead.
+func (NameKind) EnumDescriptor() ([]byte, []int) {
+	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{8}
+}
+
+type CommunicationChannel int32
+
+const (
+	CommunicationChannel_COMMUNICATION_CHANNEL_UNSPECIFIED CommunicationChannel = 0
+	CommunicationChannel_COMMUNICATION_CHANNEL_SMS         CommunicationChannel = 1
+	CommunicationChannel_COMMUNICATION_CHANNEL_EMAIL       CommunicationChannel = 2
+	CommunicationChannel_COMMUNICATION_CHANNEL_PHONE       CommunicationChannel = 3
+	CommunicationChannel_COMMUNICATION_CHANNEL_POST        CommunicationChannel = 4
+)
+
+// Enum value maps for CommunicationChannel.
+var (
+	CommunicationChannel_name = map[int32]string{
+		0: "COMMUNICATION_CHANNEL_UNSPECIFIED",
+		1: "COMMUNICATION_CHANNEL_SMS",
+		2: "COMMUNICATION_CHANNEL_EMAIL",
+		3: "COMMUNICATION_CHANNEL_PHONE",
+		4: "COMMUNICATION_CHANNEL_POST",
+	}
+	CommunicationChannel_value = map[string]int32{
+		"COMMUNICATION_CHANNEL_UNSPECIFIED": 0,
+		"COMMUNICATION_CHANNEL_SMS":         1,
+		"COMMUNICATION_CHANNEL_EMAIL":       2,
+		"COMMUNICATION_CHANNEL_PHONE":       3,
+		"COMMUNICATION_CHANNEL_POST":        4,
+	}
+)
+
+func (x CommunicationChannel) Enum() *CommunicationChannel {
+	p := new(CommunicationChannel)
+	*p = x
+	return p
+}
+
+func (x CommunicationChannel) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (CommunicationChannel) Descriptor() protoreflect.EnumDescriptor {
+	return file_healthcare_empi_v1_patient_proto_enumTypes[9].Descriptor()
+}
+
+func (CommunicationChannel) Type() protoreflect.EnumType {
+	return &file_healthcare_empi_v1_patient_proto_enumTypes[9]
+}
+
+func (x CommunicationChannel) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use CommunicationChannel.Descriptor instead.
+func (CommunicationChannel) EnumDescriptor() ([]byte, []int) {
+	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{9}
+}
+
+// What a message is about.
+//
+// Held separately from the channel because the answers differ: a patient who
+// wants appointment reminders by SMS may want nothing else by SMS, and treating
+// "reachable by SMS" as one setting is how a hospital texts somebody their test
+// results.
+type CommunicationPurpose int32
+
+const (
+	CommunicationPurpose_COMMUNICATION_PURPOSE_UNSPECIFIED          CommunicationPurpose = 0
+	CommunicationPurpose_COMMUNICATION_PURPOSE_APPOINTMENT_REMINDER CommunicationPurpose = 1
+	CommunicationPurpose_COMMUNICATION_PURPOSE_RESULTS              CommunicationPurpose = 2
+	CommunicationPurpose_COMMUNICATION_PURPOSE_BILLING              CommunicationPurpose = 3
+	CommunicationPurpose_COMMUNICATION_PURPOSE_HEALTH_PROMOTION     CommunicationPurpose = 4
+)
+
+// Enum value maps for CommunicationPurpose.
+var (
+	CommunicationPurpose_name = map[int32]string{
+		0: "COMMUNICATION_PURPOSE_UNSPECIFIED",
+		1: "COMMUNICATION_PURPOSE_APPOINTMENT_REMINDER",
+		2: "COMMUNICATION_PURPOSE_RESULTS",
+		3: "COMMUNICATION_PURPOSE_BILLING",
+		4: "COMMUNICATION_PURPOSE_HEALTH_PROMOTION",
+	}
+	CommunicationPurpose_value = map[string]int32{
+		"COMMUNICATION_PURPOSE_UNSPECIFIED":          0,
+		"COMMUNICATION_PURPOSE_APPOINTMENT_REMINDER": 1,
+		"COMMUNICATION_PURPOSE_RESULTS":              2,
+		"COMMUNICATION_PURPOSE_BILLING":              3,
+		"COMMUNICATION_PURPOSE_HEALTH_PROMOTION":     4,
+	}
+)
+
+func (x CommunicationPurpose) Enum() *CommunicationPurpose {
+	p := new(CommunicationPurpose)
+	*p = x
+	return p
+}
+
+func (x CommunicationPurpose) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (CommunicationPurpose) Descriptor() protoreflect.EnumDescriptor {
+	return file_healthcare_empi_v1_patient_proto_enumTypes[10].Descriptor()
+}
+
+func (CommunicationPurpose) Type() protoreflect.EnumType {
+	return &file_healthcare_empi_v1_patient_proto_enumTypes[10]
+}
+
+func (x CommunicationPurpose) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use CommunicationPurpose.Descriptor instead.
+func (CommunicationPurpose) EnumDescriptor() ([]byte, []int) {
+	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{10}
+}
+
+type RelationshipType int32
+
+const (
+	RelationshipType_RELATIONSHIP_TYPE_UNSPECIFIED RelationshipType = 0
+	RelationshipType_RELATIONSHIP_TYPE_PARENT      RelationshipType = 1
+	RelationshipType_RELATIONSHIP_TYPE_GUARDIAN    RelationshipType = 2
+	RelationshipType_RELATIONSHIP_TYPE_SPOUSE      RelationshipType = 3
+	RelationshipType_RELATIONSHIP_TYPE_CHILD       RelationshipType = 4
+	RelationshipType_RELATIONSHIP_TYPE_SIBLING     RelationshipType = 5
+	RelationshipType_RELATIONSHIP_TYPE_CAREGIVER   RelationshipType = 6
+	// Somebody to telephone. Carries no authority over the record, which is why
+	// it is a distinct type rather than a caregiver with an empty scope.
+	RelationshipType_RELATIONSHIP_TYPE_EMERGENCY_CONTACT RelationshipType = 7
+)
+
+// Enum value maps for RelationshipType.
+var (
+	RelationshipType_name = map[int32]string{
+		0: "RELATIONSHIP_TYPE_UNSPECIFIED",
+		1: "RELATIONSHIP_TYPE_PARENT",
+		2: "RELATIONSHIP_TYPE_GUARDIAN",
+		3: "RELATIONSHIP_TYPE_SPOUSE",
+		4: "RELATIONSHIP_TYPE_CHILD",
+		5: "RELATIONSHIP_TYPE_SIBLING",
+		6: "RELATIONSHIP_TYPE_CAREGIVER",
+		7: "RELATIONSHIP_TYPE_EMERGENCY_CONTACT",
+	}
+	RelationshipType_value = map[string]int32{
+		"RELATIONSHIP_TYPE_UNSPECIFIED":       0,
+		"RELATIONSHIP_TYPE_PARENT":            1,
+		"RELATIONSHIP_TYPE_GUARDIAN":          2,
+		"RELATIONSHIP_TYPE_SPOUSE":            3,
+		"RELATIONSHIP_TYPE_CHILD":             4,
+		"RELATIONSHIP_TYPE_SIBLING":           5,
+		"RELATIONSHIP_TYPE_CAREGIVER":         6,
+		"RELATIONSHIP_TYPE_EMERGENCY_CONTACT": 7,
+	}
+)
+
+func (x RelationshipType) Enum() *RelationshipType {
+	p := new(RelationshipType)
+	*p = x
+	return p
+}
+
+func (x RelationshipType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (RelationshipType) Descriptor() protoreflect.EnumDescriptor {
+	return file_healthcare_empi_v1_patient_proto_enumTypes[11].Descriptor()
+}
+
+func (RelationshipType) Type() protoreflect.EnumType {
+	return &file_healthcare_empi_v1_patient_proto_enumTypes[11]
+}
+
+func (x RelationshipType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use RelationshipType.Descriptor instead.
+func (RelationshipType) EnumDescriptor() ([]byte, []int) {
+	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{11}
+}
+
+// One thing a related person may do (SRS-EMPI-009).
+//
+// Scoped rather than all-or-nothing: the parent who brings a child to an
+// appointment needs to book it and be told the time, and does not by that fact
+// need the child's psychiatric notes.
+type Authority int32
+
+const (
+	Authority_AUTHORITY_UNSPECIFIED       Authority = 0
+	Authority_AUTHORITY_VIEW_DEMOGRAPHICS Authority = 1
+	Authority_AUTHORITY_BOOK_APPOINTMENTS Authority = 2
+	Authority_AUTHORITY_VIEW_CLINICAL     Authority = 3
+	Authority_AUTHORITY_RECEIVE_RESULTS   Authority = 4
+	Authority_AUTHORITY_CONSENT           Authority = 5
+)
+
+// Enum value maps for Authority.
+var (
+	Authority_name = map[int32]string{
+		0: "AUTHORITY_UNSPECIFIED",
+		1: "AUTHORITY_VIEW_DEMOGRAPHICS",
+		2: "AUTHORITY_BOOK_APPOINTMENTS",
+		3: "AUTHORITY_VIEW_CLINICAL",
+		4: "AUTHORITY_RECEIVE_RESULTS",
+		5: "AUTHORITY_CONSENT",
+	}
+	Authority_value = map[string]int32{
+		"AUTHORITY_UNSPECIFIED":       0,
+		"AUTHORITY_VIEW_DEMOGRAPHICS": 1,
+		"AUTHORITY_BOOK_APPOINTMENTS": 2,
+		"AUTHORITY_VIEW_CLINICAL":     3,
+		"AUTHORITY_RECEIVE_RESULTS":   4,
+		"AUTHORITY_CONSENT":           5,
+	}
+)
+
+func (x Authority) Enum() *Authority {
+	p := new(Authority)
+	*p = x
+	return p
+}
+
+func (x Authority) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Authority) Descriptor() protoreflect.EnumDescriptor {
+	return file_healthcare_empi_v1_patient_proto_enumTypes[12].Descriptor()
+}
+
+func (Authority) Type() protoreflect.EnumType {
+	return &file_healthcare_empi_v1_patient_proto_enumTypes[12]
+}
+
+func (x Authority) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use Authority.Descriptor instead.
+func (Authority) EnumDescriptor() ([]byte, []int) {
+	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{12}
+}
+
 // A date whose precision is recorded alongside it.
 type PartialDate struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1271,9 +1574,14 @@ type PatientMatch struct {
 	Fields     []*MatchFieldScore     `protobuf:"bytes,4,rep,name=fields,proto3" json:"fields,omitempty"`
 	// True when protected fields were masked for this caller. The UI says so
 	// rather than showing blanks that read as missing data.
-	Masked        bool `protobuf:"varint,5,opt,name=masked,proto3" json:"masked,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Masked bool `protobuf:"varint,5,opt,name=masked,proto3" json:"masked,omitempty"`
+	// Set when this patient was reached through a name they no longer hold
+	// (SRS-EMPI-007). A match on a maiden name scores low against the current
+	// name, so without this the row reads as an irrelevant result and is
+	// dismissed — which is the outcome the history exists to prevent.
+	MatchedFormerName *PatientName `protobuf:"bytes,6,opt,name=matched_former_name,json=matchedFormerName,proto3" json:"matched_former_name,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *PatientMatch) Reset() {
@@ -1339,6 +1647,13 @@ func (x *PatientMatch) GetMasked() bool {
 		return x.Masked
 	}
 	return false
+}
+
+func (x *PatientMatch) GetMatchedFormerName() *PatientName {
+	if x != nil {
+		return x.MatchedFormerName
+	}
+	return nil
 }
 
 type RegisterPatientRequest struct {
@@ -2501,6 +2816,1327 @@ func (*DismissDuplicateCandidateResponse) Descriptor() ([]byte, []int) {
 	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{28}
 }
 
+// A half-open interval [from, until). Until unset means open-ended.
+//
+// Half-open because closed intervals make the changeover day ambiguous, and
+// somebody always ends up in both.
+type EffectiveWindow struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	From          *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=from,proto3" json:"from,omitempty"`
+	Until         *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=until,proto3" json:"until,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EffectiveWindow) Reset() {
+	*x = EffectiveWindow{}
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EffectiveWindow) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EffectiveWindow) ProtoMessage() {}
+
+func (x *EffectiveWindow) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EffectiveWindow.ProtoReflect.Descriptor instead.
+func (*EffectiveWindow) Descriptor() ([]byte, []int) {
+	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *EffectiveWindow) GetFrom() *timestamppb.Timestamp {
+	if x != nil {
+		return x.From
+	}
+	return nil
+}
+
+func (x *EffectiveWindow) GetUntil() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Until
+	}
+	return nil
+}
+
+// One name, effective-dated.
+//
+// Names are never overwritten. A patient marries, the surname changes, and six
+// months later a result addressed to the maiden name arrives — a clerk who
+// cannot find that name creates a second record, which is the failure this
+// history prevents.
+type PatientName struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NameId        string                 `protobuf:"bytes,1,opt,name=name_id,json=nameId,proto3" json:"name_id,omitempty"`
+	Kind          NameKind               `protobuf:"varint,2,opt,name=kind,proto3,enum=healthcare.empi.v1.NameKind" json:"kind,omitempty"`
+	Name          *HumanName             `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Window        *EffectiveWindow       `protobuf:"bytes,4,opt,name=window,proto3" json:"window,omitempty"`
+	RecordedBy    string                 `protobuf:"bytes,5,opt,name=recorded_by,json=recordedBy,proto3" json:"recorded_by,omitempty"`
+	RecordedAt    *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=recorded_at,json=recordedAt,proto3" json:"recorded_at,omitempty"`
+	Source        string                 `protobuf:"bytes,7,opt,name=source,proto3" json:"source,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PatientName) Reset() {
+	*x = PatientName{}
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PatientName) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PatientName) ProtoMessage() {}
+
+func (x *PatientName) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PatientName.ProtoReflect.Descriptor instead.
+func (*PatientName) Descriptor() ([]byte, []int) {
+	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *PatientName) GetNameId() string {
+	if x != nil {
+		return x.NameId
+	}
+	return ""
+}
+
+func (x *PatientName) GetKind() NameKind {
+	if x != nil {
+		return x.Kind
+	}
+	return NameKind_NAME_KIND_UNSPECIFIED
+}
+
+func (x *PatientName) GetName() *HumanName {
+	if x != nil {
+		return x.Name
+	}
+	return nil
+}
+
+func (x *PatientName) GetWindow() *EffectiveWindow {
+	if x != nil {
+		return x.Window
+	}
+	return nil
+}
+
+func (x *PatientName) GetRecordedBy() string {
+	if x != nil {
+		return x.RecordedBy
+	}
+	return ""
+}
+
+func (x *PatientName) GetRecordedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.RecordedAt
+	}
+	return nil
+}
+
+func (x *PatientName) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+type CommunicationPreference struct {
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	PreferenceId string                 `protobuf:"bytes,1,opt,name=preference_id,json=preferenceId,proto3" json:"preference_id,omitempty"`
+	Channel      CommunicationChannel   `protobuf:"varint,2,opt,name=channel,proto3,enum=healthcare.empi.v1.CommunicationChannel" json:"channel,omitempty"`
+	Purpose      CommunicationPurpose   `protobuf:"varint,3,opt,name=purpose,proto3,enum=healthcare.empi.v1.CommunicationPurpose" json:"purpose,omitempty"`
+	// false is a recorded refusal, which is not the same as an absent row: one
+	// says the patient declined, the other says nobody asked.
+	Allowed       bool             `protobuf:"varint,4,opt,name=allowed,proto3" json:"allowed,omitempty"`
+	Window        *EffectiveWindow `protobuf:"bytes,5,opt,name=window,proto3" json:"window,omitempty"`
+	RecordedBy    string           `protobuf:"bytes,6,opt,name=recorded_by,json=recordedBy,proto3" json:"recorded_by,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CommunicationPreference) Reset() {
+	*x = CommunicationPreference{}
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CommunicationPreference) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CommunicationPreference) ProtoMessage() {}
+
+func (x *CommunicationPreference) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CommunicationPreference.ProtoReflect.Descriptor instead.
+func (*CommunicationPreference) Descriptor() ([]byte, []int) {
+	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *CommunicationPreference) GetPreferenceId() string {
+	if x != nil {
+		return x.PreferenceId
+	}
+	return ""
+}
+
+func (x *CommunicationPreference) GetChannel() CommunicationChannel {
+	if x != nil {
+		return x.Channel
+	}
+	return CommunicationChannel_COMMUNICATION_CHANNEL_UNSPECIFIED
+}
+
+func (x *CommunicationPreference) GetPurpose() CommunicationPurpose {
+	if x != nil {
+		return x.Purpose
+	}
+	return CommunicationPurpose_COMMUNICATION_PURPOSE_UNSPECIFIED
+}
+
+func (x *CommunicationPreference) GetAllowed() bool {
+	if x != nil {
+		return x.Allowed
+	}
+	return false
+}
+
+func (x *CommunicationPreference) GetWindow() *EffectiveWindow {
+	if x != nil {
+		return x.Window
+	}
+	return nil
+}
+
+func (x *CommunicationPreference) GetRecordedBy() string {
+	if x != nil {
+		return x.RecordedBy
+	}
+	return ""
+}
+
+type RelatedPerson struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	RelationshipId string                 `protobuf:"bytes,1,opt,name=relationship_id,json=relationshipId,proto3" json:"relationship_id,omitempty"`
+	// Set when the related person is themselves a patient here, which a parent
+	// usually is.
+	RelatedPatientId string `protobuf:"bytes,2,opt,name=related_patient_id,json=relatedPatientId,proto3" json:"related_patient_id,omitempty"`
+	// Used when they are not — a care-home key worker will never have a record.
+	Name         *HumanName       `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Contact      []*ContactPoint  `protobuf:"bytes,4,rep,name=contact,proto3" json:"contact,omitempty"`
+	Relationship RelationshipType `protobuf:"varint,5,opt,name=relationship,proto3,enum=healthcare.empi.v1.RelationshipType" json:"relationship,omitempty"`
+	Authorities  []Authority      `protobuf:"varint,6,rep,packed,name=authorities,proto3,enum=healthcare.empi.v1.Authority" json:"authorities,omitempty"`
+	Window       *EffectiveWindow `protobuf:"bytes,7,opt,name=window,proto3" json:"window,omitempty"`
+	// An unverified relationship carries no authority. "I am her son" is a
+	// sentence anybody can say at a reception desk.
+	VerifiedBy string                 `protobuf:"bytes,8,opt,name=verified_by,json=verifiedBy,proto3" json:"verified_by,omitempty"`
+	VerifiedAt *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=verified_at,json=verifiedAt,proto3" json:"verified_at,omitempty"`
+	// What was actually checked — a birth certificate, a court order — rather
+	// than merely that something was.
+	VerificationNote string `protobuf:"bytes,10,opt,name=verification_note,json=verificationNote,proto3" json:"verification_note,omitempty"`
+	RecordedBy       string `protobuf:"bytes,11,opt,name=recorded_by,json=recordedBy,proto3" json:"recorded_by,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *RelatedPerson) Reset() {
+	*x = RelatedPerson{}
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RelatedPerson) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RelatedPerson) ProtoMessage() {}
+
+func (x *RelatedPerson) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RelatedPerson.ProtoReflect.Descriptor instead.
+func (*RelatedPerson) Descriptor() ([]byte, []int) {
+	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *RelatedPerson) GetRelationshipId() string {
+	if x != nil {
+		return x.RelationshipId
+	}
+	return ""
+}
+
+func (x *RelatedPerson) GetRelatedPatientId() string {
+	if x != nil {
+		return x.RelatedPatientId
+	}
+	return ""
+}
+
+func (x *RelatedPerson) GetName() *HumanName {
+	if x != nil {
+		return x.Name
+	}
+	return nil
+}
+
+func (x *RelatedPerson) GetContact() []*ContactPoint {
+	if x != nil {
+		return x.Contact
+	}
+	return nil
+}
+
+func (x *RelatedPerson) GetRelationship() RelationshipType {
+	if x != nil {
+		return x.Relationship
+	}
+	return RelationshipType_RELATIONSHIP_TYPE_UNSPECIFIED
+}
+
+func (x *RelatedPerson) GetAuthorities() []Authority {
+	if x != nil {
+		return x.Authorities
+	}
+	return nil
+}
+
+func (x *RelatedPerson) GetWindow() *EffectiveWindow {
+	if x != nil {
+		return x.Window
+	}
+	return nil
+}
+
+func (x *RelatedPerson) GetVerifiedBy() string {
+	if x != nil {
+		return x.VerifiedBy
+	}
+	return ""
+}
+
+func (x *RelatedPerson) GetVerifiedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.VerifiedAt
+	}
+	return nil
+}
+
+func (x *RelatedPerson) GetVerificationNote() string {
+	if x != nil {
+		return x.VerificationNote
+	}
+	return ""
+}
+
+func (x *RelatedPerson) GetRecordedBy() string {
+	if x != nil {
+		return x.RecordedBy
+	}
+	return ""
+}
+
+type RecordNameRequest struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	PatientId string                 `protobuf:"bytes,1,opt,name=patient_id,json=patientId,proto3" json:"patient_id,omitempty"`
+	Kind      NameKind               `protobuf:"varint,2,opt,name=kind,proto3,enum=healthcare.empi.v1.NameKind" json:"kind,omitempty"`
+	Name      *HumanName             `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	// When the name started applying — a marriage date, a deed poll — not when
+	// somebody got round to typing it. Unset means now.
+	EffectiveFrom *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=effective_from,json=effectiveFrom,proto3" json:"effective_from,omitempty"`
+	Source        string                 `protobuf:"bytes,5,opt,name=source,proto3" json:"source,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RecordNameRequest) Reset() {
+	*x = RecordNameRequest{}
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RecordNameRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RecordNameRequest) ProtoMessage() {}
+
+func (x *RecordNameRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RecordNameRequest.ProtoReflect.Descriptor instead.
+func (*RecordNameRequest) Descriptor() ([]byte, []int) {
+	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *RecordNameRequest) GetPatientId() string {
+	if x != nil {
+		return x.PatientId
+	}
+	return ""
+}
+
+func (x *RecordNameRequest) GetKind() NameKind {
+	if x != nil {
+		return x.Kind
+	}
+	return NameKind_NAME_KIND_UNSPECIFIED
+}
+
+func (x *RecordNameRequest) GetName() *HumanName {
+	if x != nil {
+		return x.Name
+	}
+	return nil
+}
+
+func (x *RecordNameRequest) GetEffectiveFrom() *timestamppb.Timestamp {
+	if x != nil {
+		return x.EffectiveFrom
+	}
+	return nil
+}
+
+func (x *RecordNameRequest) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+type RecordNameResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RecordNameResponse) Reset() {
+	*x = RecordNameResponse{}
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RecordNameResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RecordNameResponse) ProtoMessage() {}
+
+func (x *RecordNameResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RecordNameResponse.ProtoReflect.Descriptor instead.
+func (*RecordNameResponse) Descriptor() ([]byte, []int) {
+	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{34}
+}
+
+type GetPatientHistoryRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PatientId     string                 `protobuf:"bytes,1,opt,name=patient_id,json=patientId,proto3" json:"patient_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetPatientHistoryRequest) Reset() {
+	*x = GetPatientHistoryRequest{}
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetPatientHistoryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetPatientHistoryRequest) ProtoMessage() {}
+
+func (x *GetPatientHistoryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetPatientHistoryRequest.ProtoReflect.Descriptor instead.
+func (*GetPatientHistoryRequest) Descriptor() ([]byte, []int) {
+	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *GetPatientHistoryRequest) GetPatientId() string {
+	if x != nil {
+		return x.PatientId
+	}
+	return ""
+}
+
+type GetPatientHistoryResponse struct {
+	state         protoimpl.MessageState     `protogen:"open.v1"`
+	Names         []*PatientName             `protobuf:"bytes,1,rep,name=names,proto3" json:"names,omitempty"`
+	Preferences   []*CommunicationPreference `protobuf:"bytes,2,rep,name=preferences,proto3" json:"preferences,omitempty"`
+	Related       []*RelatedPerson           `protobuf:"bytes,3,rep,name=related,proto3" json:"related,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetPatientHistoryResponse) Reset() {
+	*x = GetPatientHistoryResponse{}
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetPatientHistoryResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetPatientHistoryResponse) ProtoMessage() {}
+
+func (x *GetPatientHistoryResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetPatientHistoryResponse.ProtoReflect.Descriptor instead.
+func (*GetPatientHistoryResponse) Descriptor() ([]byte, []int) {
+	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *GetPatientHistoryResponse) GetNames() []*PatientName {
+	if x != nil {
+		return x.Names
+	}
+	return nil
+}
+
+func (x *GetPatientHistoryResponse) GetPreferences() []*CommunicationPreference {
+	if x != nil {
+		return x.Preferences
+	}
+	return nil
+}
+
+func (x *GetPatientHistoryResponse) GetRelated() []*RelatedPerson {
+	if x != nil {
+		return x.Related
+	}
+	return nil
+}
+
+type RecordCommunicationPreferenceRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PatientId     string                 `protobuf:"bytes,1,opt,name=patient_id,json=patientId,proto3" json:"patient_id,omitempty"`
+	Channel       CommunicationChannel   `protobuf:"varint,2,opt,name=channel,proto3,enum=healthcare.empi.v1.CommunicationChannel" json:"channel,omitempty"`
+	Purpose       CommunicationPurpose   `protobuf:"varint,3,opt,name=purpose,proto3,enum=healthcare.empi.v1.CommunicationPurpose" json:"purpose,omitempty"`
+	Allowed       bool                   `protobuf:"varint,4,opt,name=allowed,proto3" json:"allowed,omitempty"`
+	EffectiveFrom *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=effective_from,json=effectiveFrom,proto3" json:"effective_from,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RecordCommunicationPreferenceRequest) Reset() {
+	*x = RecordCommunicationPreferenceRequest{}
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RecordCommunicationPreferenceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RecordCommunicationPreferenceRequest) ProtoMessage() {}
+
+func (x *RecordCommunicationPreferenceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RecordCommunicationPreferenceRequest.ProtoReflect.Descriptor instead.
+func (*RecordCommunicationPreferenceRequest) Descriptor() ([]byte, []int) {
+	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *RecordCommunicationPreferenceRequest) GetPatientId() string {
+	if x != nil {
+		return x.PatientId
+	}
+	return ""
+}
+
+func (x *RecordCommunicationPreferenceRequest) GetChannel() CommunicationChannel {
+	if x != nil {
+		return x.Channel
+	}
+	return CommunicationChannel_COMMUNICATION_CHANNEL_UNSPECIFIED
+}
+
+func (x *RecordCommunicationPreferenceRequest) GetPurpose() CommunicationPurpose {
+	if x != nil {
+		return x.Purpose
+	}
+	return CommunicationPurpose_COMMUNICATION_PURPOSE_UNSPECIFIED
+}
+
+func (x *RecordCommunicationPreferenceRequest) GetAllowed() bool {
+	if x != nil {
+		return x.Allowed
+	}
+	return false
+}
+
+func (x *RecordCommunicationPreferenceRequest) GetEffectiveFrom() *timestamppb.Timestamp {
+	if x != nil {
+		return x.EffectiveFrom
+	}
+	return nil
+}
+
+type RecordCommunicationPreferenceResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RecordCommunicationPreferenceResponse) Reset() {
+	*x = RecordCommunicationPreferenceResponse{}
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RecordCommunicationPreferenceResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RecordCommunicationPreferenceResponse) ProtoMessage() {}
+
+func (x *RecordCommunicationPreferenceResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RecordCommunicationPreferenceResponse.ProtoReflect.Descriptor instead.
+func (*RecordCommunicationPreferenceResponse) Descriptor() ([]byte, []int) {
+	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{38}
+}
+
+type RecordDeceasedRequest struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	PatientId string                 `protobuf:"bytes,1,opt,name=patient_id,json=patientId,proto3" json:"patient_id,omitempty"`
+	Date      *PartialDate           `protobuf:"bytes,2,opt,name=date,proto3" json:"date,omitempty"`
+	// Required: a registrar, a clinician, a national death registry feed. A feed
+	// can be wrong about the wrong patient, and reversing it needs to know what
+	// claimed it.
+	Source        string `protobuf:"bytes,3,opt,name=source,proto3" json:"source,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RecordDeceasedRequest) Reset() {
+	*x = RecordDeceasedRequest{}
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RecordDeceasedRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RecordDeceasedRequest) ProtoMessage() {}
+
+func (x *RecordDeceasedRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RecordDeceasedRequest.ProtoReflect.Descriptor instead.
+func (*RecordDeceasedRequest) Descriptor() ([]byte, []int) {
+	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *RecordDeceasedRequest) GetPatientId() string {
+	if x != nil {
+		return x.PatientId
+	}
+	return ""
+}
+
+func (x *RecordDeceasedRequest) GetDate() *PartialDate {
+	if x != nil {
+		return x.Date
+	}
+	return nil
+}
+
+func (x *RecordDeceasedRequest) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+type RecordDeceasedResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Patient       *Patient               `protobuf:"bytes,1,opt,name=patient,proto3" json:"patient,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RecordDeceasedResponse) Reset() {
+	*x = RecordDeceasedResponse{}
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RecordDeceasedResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RecordDeceasedResponse) ProtoMessage() {}
+
+func (x *RecordDeceasedResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RecordDeceasedResponse.ProtoReflect.Descriptor instead.
+func (*RecordDeceasedResponse) Descriptor() ([]byte, []int) {
+	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *RecordDeceasedResponse) GetPatient() *Patient {
+	if x != nil {
+		return x.Patient
+	}
+	return nil
+}
+
+type ReverseDeceasedRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PatientId     string                 `protobuf:"bytes,1,opt,name=patient_id,json=patientId,proto3" json:"patient_id,omitempty"`
+	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReverseDeceasedRequest) Reset() {
+	*x = ReverseDeceasedRequest{}
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReverseDeceasedRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReverseDeceasedRequest) ProtoMessage() {}
+
+func (x *ReverseDeceasedRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReverseDeceasedRequest.ProtoReflect.Descriptor instead.
+func (*ReverseDeceasedRequest) Descriptor() ([]byte, []int) {
+	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *ReverseDeceasedRequest) GetPatientId() string {
+	if x != nil {
+		return x.PatientId
+	}
+	return ""
+}
+
+func (x *ReverseDeceasedRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type ReverseDeceasedResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Patient       *Patient               `protobuf:"bytes,1,opt,name=patient,proto3" json:"patient,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReverseDeceasedResponse) Reset() {
+	*x = ReverseDeceasedResponse{}
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReverseDeceasedResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReverseDeceasedResponse) ProtoMessage() {}
+
+func (x *ReverseDeceasedResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReverseDeceasedResponse.ProtoReflect.Descriptor instead.
+func (*ReverseDeceasedResponse) Descriptor() ([]byte, []int) {
+	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *ReverseDeceasedResponse) GetPatient() *Patient {
+	if x != nil {
+		return x.Patient
+	}
+	return nil
+}
+
+type AddRelatedPersonRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	PatientId        string                 `protobuf:"bytes,1,opt,name=patient_id,json=patientId,proto3" json:"patient_id,omitempty"`
+	RelatedPatientId string                 `protobuf:"bytes,2,opt,name=related_patient_id,json=relatedPatientId,proto3" json:"related_patient_id,omitempty"`
+	Name             *HumanName             `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Contact          []*ContactPoint        `protobuf:"bytes,4,rep,name=contact,proto3" json:"contact,omitempty"`
+	Relationship     RelationshipType       `protobuf:"varint,5,opt,name=relationship,proto3,enum=healthcare.empi.v1.RelationshipType" json:"relationship,omitempty"`
+	Authorities      []Authority            `protobuf:"varint,6,rep,packed,name=authorities,proto3,enum=healthcare.empi.v1.Authority" json:"authorities,omitempty"`
+	EffectiveFrom    *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=effective_from,json=effectiveFrom,proto3" json:"effective_from,omitempty"`
+	// When the authority ends. A guardian's ends on a date everybody can
+	// predict, and a relationship with no end is a standing grant nobody
+	// revisits.
+	EffectiveUntil *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=effective_until,json=effectiveUntil,proto3" json:"effective_until,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *AddRelatedPersonRequest) Reset() {
+	*x = AddRelatedPersonRequest{}
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddRelatedPersonRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddRelatedPersonRequest) ProtoMessage() {}
+
+func (x *AddRelatedPersonRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddRelatedPersonRequest.ProtoReflect.Descriptor instead.
+func (*AddRelatedPersonRequest) Descriptor() ([]byte, []int) {
+	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *AddRelatedPersonRequest) GetPatientId() string {
+	if x != nil {
+		return x.PatientId
+	}
+	return ""
+}
+
+func (x *AddRelatedPersonRequest) GetRelatedPatientId() string {
+	if x != nil {
+		return x.RelatedPatientId
+	}
+	return ""
+}
+
+func (x *AddRelatedPersonRequest) GetName() *HumanName {
+	if x != nil {
+		return x.Name
+	}
+	return nil
+}
+
+func (x *AddRelatedPersonRequest) GetContact() []*ContactPoint {
+	if x != nil {
+		return x.Contact
+	}
+	return nil
+}
+
+func (x *AddRelatedPersonRequest) GetRelationship() RelationshipType {
+	if x != nil {
+		return x.Relationship
+	}
+	return RelationshipType_RELATIONSHIP_TYPE_UNSPECIFIED
+}
+
+func (x *AddRelatedPersonRequest) GetAuthorities() []Authority {
+	if x != nil {
+		return x.Authorities
+	}
+	return nil
+}
+
+func (x *AddRelatedPersonRequest) GetEffectiveFrom() *timestamppb.Timestamp {
+	if x != nil {
+		return x.EffectiveFrom
+	}
+	return nil
+}
+
+func (x *AddRelatedPersonRequest) GetEffectiveUntil() *timestamppb.Timestamp {
+	if x != nil {
+		return x.EffectiveUntil
+	}
+	return nil
+}
+
+type AddRelatedPersonResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Related       *RelatedPerson         `protobuf:"bytes,1,opt,name=related,proto3" json:"related,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AddRelatedPersonResponse) Reset() {
+	*x = AddRelatedPersonResponse{}
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[44]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddRelatedPersonResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddRelatedPersonResponse) ProtoMessage() {}
+
+func (x *AddRelatedPersonResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[44]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddRelatedPersonResponse.ProtoReflect.Descriptor instead.
+func (*AddRelatedPersonResponse) Descriptor() ([]byte, []int) {
+	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{44}
+}
+
+func (x *AddRelatedPersonResponse) GetRelated() *RelatedPerson {
+	if x != nil {
+		return x.Related
+	}
+	return nil
+}
+
+type VerifyRelatedPersonRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	RelationshipId string                 `protobuf:"bytes,1,opt,name=relationship_id,json=relationshipId,proto3" json:"relationship_id,omitempty"`
+	// Required, and it must say what was checked.
+	Note          string `protobuf:"bytes,2,opt,name=note,proto3" json:"note,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *VerifyRelatedPersonRequest) Reset() {
+	*x = VerifyRelatedPersonRequest{}
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[45]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VerifyRelatedPersonRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VerifyRelatedPersonRequest) ProtoMessage() {}
+
+func (x *VerifyRelatedPersonRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[45]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VerifyRelatedPersonRequest.ProtoReflect.Descriptor instead.
+func (*VerifyRelatedPersonRequest) Descriptor() ([]byte, []int) {
+	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{45}
+}
+
+func (x *VerifyRelatedPersonRequest) GetRelationshipId() string {
+	if x != nil {
+		return x.RelationshipId
+	}
+	return ""
+}
+
+func (x *VerifyRelatedPersonRequest) GetNote() string {
+	if x != nil {
+		return x.Note
+	}
+	return ""
+}
+
+type VerifyRelatedPersonResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *VerifyRelatedPersonResponse) Reset() {
+	*x = VerifyRelatedPersonResponse{}
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VerifyRelatedPersonResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VerifyRelatedPersonResponse) ProtoMessage() {}
+
+func (x *VerifyRelatedPersonResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[46]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VerifyRelatedPersonResponse.ProtoReflect.Descriptor instead.
+func (*VerifyRelatedPersonResponse) Descriptor() ([]byte, []int) {
+	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{46}
+}
+
+type EndRelatedPersonRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	RelationshipId string                 `protobuf:"bytes,1,opt,name=relationship_id,json=relationshipId,proto3" json:"relationship_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *EndRelatedPersonRequest) Reset() {
+	*x = EndRelatedPersonRequest{}
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[47]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EndRelatedPersonRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EndRelatedPersonRequest) ProtoMessage() {}
+
+func (x *EndRelatedPersonRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[47]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EndRelatedPersonRequest.ProtoReflect.Descriptor instead.
+func (*EndRelatedPersonRequest) Descriptor() ([]byte, []int) {
+	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{47}
+}
+
+func (x *EndRelatedPersonRequest) GetRelationshipId() string {
+	if x != nil {
+		return x.RelationshipId
+	}
+	return ""
+}
+
+type EndRelatedPersonResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EndRelatedPersonResponse) Reset() {
+	*x = EndRelatedPersonResponse{}
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[48]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EndRelatedPersonResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EndRelatedPersonResponse) ProtoMessage() {}
+
+func (x *EndRelatedPersonResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[48]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EndRelatedPersonResponse.ProtoReflect.Descriptor instead.
+func (*EndRelatedPersonResponse) Descriptor() ([]byte, []int) {
+	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{48}
+}
+
+type GetCaregiverAuthorityRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The person asking to act.
+	HolderPatientId string `protobuf:"bytes,1,opt,name=holder_patient_id,json=holderPatientId,proto3" json:"holder_patient_id,omitempty"`
+	// The patient they want to act for.
+	SubjectPatientId string `protobuf:"bytes,2,opt,name=subject_patient_id,json=subjectPatientId,proto3" json:"subject_patient_id,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *GetCaregiverAuthorityRequest) Reset() {
+	*x = GetCaregiverAuthorityRequest{}
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[49]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetCaregiverAuthorityRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetCaregiverAuthorityRequest) ProtoMessage() {}
+
+func (x *GetCaregiverAuthorityRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[49]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetCaregiverAuthorityRequest.ProtoReflect.Descriptor instead.
+func (*GetCaregiverAuthorityRequest) Descriptor() ([]byte, []int) {
+	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{49}
+}
+
+func (x *GetCaregiverAuthorityRequest) GetHolderPatientId() string {
+	if x != nil {
+		return x.HolderPatientId
+	}
+	return ""
+}
+
+func (x *GetCaregiverAuthorityRequest) GetSubjectPatientId() string {
+	if x != nil {
+		return x.SubjectPatientId
+	}
+	return ""
+}
+
+type GetCaregiverAuthorityResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// What they may do right now: verified, in force, and in scope. Empty means
+	// nothing, which is also the answer for an unverified or expired
+	// relationship.
+	Authorities   []Authority `protobuf:"varint,1,rep,packed,name=authorities,proto3,enum=healthcare.empi.v1.Authority" json:"authorities,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetCaregiverAuthorityResponse) Reset() {
+	*x = GetCaregiverAuthorityResponse{}
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[50]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetCaregiverAuthorityResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetCaregiverAuthorityResponse) ProtoMessage() {}
+
+func (x *GetCaregiverAuthorityResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_empi_v1_patient_proto_msgTypes[50]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetCaregiverAuthorityResponse.ProtoReflect.Descriptor instead.
+func (*GetCaregiverAuthorityResponse) Descriptor() ([]byte, []int) {
+	return file_healthcare_empi_v1_patient_proto_rawDescGZIP(), []int{50}
+}
+
+func (x *GetCaregiverAuthorityResponse) GetAuthorities() []Authority {
+	if x != nil {
+		return x.Authorities
+	}
+	return nil
+}
+
 var File_healthcare_empi_v1_patient_proto protoreflect.FileDescriptor
 
 const file_healthcare_empi_v1_patient_proto_rawDesc = "" +
@@ -2577,7 +4213,7 @@ const file_healthcare_empi_v1_patient_proto_rawDesc = "" +
 	"similarity\x18\x02 \x01(\x01R\n" +
 	"similarity\x12\x16\n" +
 	"\x06weight\x18\x03 \x01(\x01R\x06weight\x12\x12\n" +
-	"\x04note\x18\x04 \x01(\tR\x04note\"\xf6\x01\n" +
+	"\x04note\x18\x04 \x01(\tR\x04note\"\xc7\x02\n" +
 	"\fPatientMatch\x125\n" +
 	"\apatient\x18\x01 \x01(\v2\x1b.healthcare.empi.v1.PatientR\apatient\x12\x1e\n" +
 	"\n" +
@@ -2585,7 +4221,8 @@ const file_healthcare_empi_v1_patient_proto_rawDesc = "" +
 	"confidence\x12:\n" +
 	"\aoutcome\x18\x03 \x01(\x0e2 .healthcare.empi.v1.MatchOutcomeR\aoutcome\x12;\n" +
 	"\x06fields\x18\x04 \x03(\v2#.healthcare.empi.v1.MatchFieldScoreR\x06fields\x12\x16\n" +
-	"\x06masked\x18\x05 \x01(\bR\x06masked\"\xf4\x01\n" +
+	"\x06masked\x18\x05 \x01(\bR\x06masked\x12O\n" +
+	"\x13matched_former_name\x18\x06 \x01(\v2\x1f.healthcare.empi.v1.PatientNameR\x11matchedFormerName\"\xf4\x01\n" +
 	"\x16RegisterPatientRequest\x12D\n" +
 	"\fdemographics\x18\x01 \x01(\v2 .healthcare.empi.v1.DemographicsR\fdemographics\x12G\n" +
 	"\videntifiers\x18\x02 \x03(\v2%.healthcare.empi.v1.PatientIdentifierR\videntifiers\x12K\n" +
@@ -2673,7 +4310,104 @@ const file_healthcare_empi_v1_patient_proto_rawDesc = "" +
 	" DismissDuplicateCandidateRequest\x12!\n" +
 	"\fcandidate_id\x18\x01 \x01(\tR\vcandidateId\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\"#\n" +
-	"!DismissDuplicateCandidateResponse*\xa0\x01\n" +
+	"!DismissDuplicateCandidateResponse\"s\n" +
+	"\x0fEffectiveWindow\x12.\n" +
+	"\x04from\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04from\x120\n" +
+	"\x05until\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x05until\"\xbe\x02\n" +
+	"\vPatientName\x12\x17\n" +
+	"\aname_id\x18\x01 \x01(\tR\x06nameId\x120\n" +
+	"\x04kind\x18\x02 \x01(\x0e2\x1c.healthcare.empi.v1.NameKindR\x04kind\x121\n" +
+	"\x04name\x18\x03 \x01(\v2\x1d.healthcare.empi.v1.HumanNameR\x04name\x12;\n" +
+	"\x06window\x18\x04 \x01(\v2#.healthcare.empi.v1.EffectiveWindowR\x06window\x12\x1f\n" +
+	"\vrecorded_by\x18\x05 \x01(\tR\n" +
+	"recordedBy\x12;\n" +
+	"\vrecorded_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"recordedAt\x12\x16\n" +
+	"\x06source\x18\a \x01(\tR\x06source\"\xbe\x02\n" +
+	"\x17CommunicationPreference\x12#\n" +
+	"\rpreference_id\x18\x01 \x01(\tR\fpreferenceId\x12B\n" +
+	"\achannel\x18\x02 \x01(\x0e2(.healthcare.empi.v1.CommunicationChannelR\achannel\x12B\n" +
+	"\apurpose\x18\x03 \x01(\x0e2(.healthcare.empi.v1.CommunicationPurposeR\apurpose\x12\x18\n" +
+	"\aallowed\x18\x04 \x01(\bR\aallowed\x12;\n" +
+	"\x06window\x18\x05 \x01(\v2#.healthcare.empi.v1.EffectiveWindowR\x06window\x12\x1f\n" +
+	"\vrecorded_by\x18\x06 \x01(\tR\n" +
+	"recordedBy\"\xc9\x04\n" +
+	"\rRelatedPerson\x12'\n" +
+	"\x0frelationship_id\x18\x01 \x01(\tR\x0erelationshipId\x12,\n" +
+	"\x12related_patient_id\x18\x02 \x01(\tR\x10relatedPatientId\x121\n" +
+	"\x04name\x18\x03 \x01(\v2\x1d.healthcare.empi.v1.HumanNameR\x04name\x12:\n" +
+	"\acontact\x18\x04 \x03(\v2 .healthcare.empi.v1.ContactPointR\acontact\x12H\n" +
+	"\frelationship\x18\x05 \x01(\x0e2$.healthcare.empi.v1.RelationshipTypeR\frelationship\x12?\n" +
+	"\vauthorities\x18\x06 \x03(\x0e2\x1d.healthcare.empi.v1.AuthorityR\vauthorities\x12;\n" +
+	"\x06window\x18\a \x01(\v2#.healthcare.empi.v1.EffectiveWindowR\x06window\x12\x1f\n" +
+	"\vverified_by\x18\b \x01(\tR\n" +
+	"verifiedBy\x12;\n" +
+	"\vverified_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"verifiedAt\x12+\n" +
+	"\x11verification_note\x18\n" +
+	" \x01(\tR\x10verificationNote\x12\x1f\n" +
+	"\vrecorded_by\x18\v \x01(\tR\n" +
+	"recordedBy\"\xf2\x01\n" +
+	"\x11RecordNameRequest\x12\x1d\n" +
+	"\n" +
+	"patient_id\x18\x01 \x01(\tR\tpatientId\x120\n" +
+	"\x04kind\x18\x02 \x01(\x0e2\x1c.healthcare.empi.v1.NameKindR\x04kind\x121\n" +
+	"\x04name\x18\x03 \x01(\v2\x1d.healthcare.empi.v1.HumanNameR\x04name\x12A\n" +
+	"\x0eeffective_from\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\reffectiveFrom\x12\x16\n" +
+	"\x06source\x18\x05 \x01(\tR\x06source\"\x14\n" +
+	"\x12RecordNameResponse\"9\n" +
+	"\x18GetPatientHistoryRequest\x12\x1d\n" +
+	"\n" +
+	"patient_id\x18\x01 \x01(\tR\tpatientId\"\xde\x01\n" +
+	"\x19GetPatientHistoryResponse\x125\n" +
+	"\x05names\x18\x01 \x03(\v2\x1f.healthcare.empi.v1.PatientNameR\x05names\x12M\n" +
+	"\vpreferences\x18\x02 \x03(\v2+.healthcare.empi.v1.CommunicationPreferenceR\vpreferences\x12;\n" +
+	"\arelated\x18\x03 \x03(\v2!.healthcare.empi.v1.RelatedPersonR\arelated\"\xaa\x02\n" +
+	"$RecordCommunicationPreferenceRequest\x12\x1d\n" +
+	"\n" +
+	"patient_id\x18\x01 \x01(\tR\tpatientId\x12B\n" +
+	"\achannel\x18\x02 \x01(\x0e2(.healthcare.empi.v1.CommunicationChannelR\achannel\x12B\n" +
+	"\apurpose\x18\x03 \x01(\x0e2(.healthcare.empi.v1.CommunicationPurposeR\apurpose\x12\x18\n" +
+	"\aallowed\x18\x04 \x01(\bR\aallowed\x12A\n" +
+	"\x0eeffective_from\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\reffectiveFrom\"'\n" +
+	"%RecordCommunicationPreferenceResponse\"\x83\x01\n" +
+	"\x15RecordDeceasedRequest\x12\x1d\n" +
+	"\n" +
+	"patient_id\x18\x01 \x01(\tR\tpatientId\x123\n" +
+	"\x04date\x18\x02 \x01(\v2\x1f.healthcare.empi.v1.PartialDateR\x04date\x12\x16\n" +
+	"\x06source\x18\x03 \x01(\tR\x06source\"O\n" +
+	"\x16RecordDeceasedResponse\x125\n" +
+	"\apatient\x18\x01 \x01(\v2\x1b.healthcare.empi.v1.PatientR\apatient\"O\n" +
+	"\x16ReverseDeceasedRequest\x12\x1d\n" +
+	"\n" +
+	"patient_id\x18\x01 \x01(\tR\tpatientId\x12\x16\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\"P\n" +
+	"\x17ReverseDeceasedResponse\x125\n" +
+	"\apatient\x18\x01 \x01(\v2\x1b.healthcare.empi.v1.PatientR\apatient\"\xe8\x03\n" +
+	"\x17AddRelatedPersonRequest\x12\x1d\n" +
+	"\n" +
+	"patient_id\x18\x01 \x01(\tR\tpatientId\x12,\n" +
+	"\x12related_patient_id\x18\x02 \x01(\tR\x10relatedPatientId\x121\n" +
+	"\x04name\x18\x03 \x01(\v2\x1d.healthcare.empi.v1.HumanNameR\x04name\x12:\n" +
+	"\acontact\x18\x04 \x03(\v2 .healthcare.empi.v1.ContactPointR\acontact\x12H\n" +
+	"\frelationship\x18\x05 \x01(\x0e2$.healthcare.empi.v1.RelationshipTypeR\frelationship\x12?\n" +
+	"\vauthorities\x18\x06 \x03(\x0e2\x1d.healthcare.empi.v1.AuthorityR\vauthorities\x12A\n" +
+	"\x0eeffective_from\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\reffectiveFrom\x12C\n" +
+	"\x0feffective_until\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\x0eeffectiveUntil\"W\n" +
+	"\x18AddRelatedPersonResponse\x12;\n" +
+	"\arelated\x18\x01 \x01(\v2!.healthcare.empi.v1.RelatedPersonR\arelated\"Y\n" +
+	"\x1aVerifyRelatedPersonRequest\x12'\n" +
+	"\x0frelationship_id\x18\x01 \x01(\tR\x0erelationshipId\x12\x12\n" +
+	"\x04note\x18\x02 \x01(\tR\x04note\"\x1d\n" +
+	"\x1bVerifyRelatedPersonResponse\"B\n" +
+	"\x17EndRelatedPersonRequest\x12'\n" +
+	"\x0frelationship_id\x18\x01 \x01(\tR\x0erelationshipId\"\x1a\n" +
+	"\x18EndRelatedPersonResponse\"x\n" +
+	"\x1cGetCaregiverAuthorityRequest\x12*\n" +
+	"\x11holder_patient_id\x18\x01 \x01(\tR\x0fholderPatientId\x12,\n" +
+	"\x12subject_patient_id\x18\x02 \x01(\tR\x10subjectPatientId\"`\n" +
+	"\x1dGetCaregiverAuthorityResponse\x12?\n" +
+	"\vauthorities\x18\x01 \x03(\x0e2\x1d.healthcare.empi.v1.AuthorityR\vauthorities*\xa0\x01\n" +
 	"\rPatientStatus\x12\x1e\n" +
 	"\x1aPATIENT_STATUS_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18PATIENT_STATUS_CANDIDATE\x10\x01\x12\x19\n" +
@@ -2719,7 +4453,40 @@ const file_healthcare_empi_v1_patient_proto_rawDesc = "" +
 	"\x19REVIEW_STATUS_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12REVIEW_STATUS_OPEN\x10\x01\x12\x18\n" +
 	"\x14REVIEW_STATUS_MERGED\x10\x02\x12\x1b\n" +
-	"\x17REVIEW_STATUS_DISMISSED\x10\x032\x85\b\n" +
+	"\x17REVIEW_STATUS_DISMISSED\x10\x03*h\n" +
+	"\bNameKind\x12\x19\n" +
+	"\x15NAME_KIND_UNSPECIFIED\x10\x00\x12\x13\n" +
+	"\x0fNAME_KIND_LEGAL\x10\x01\x12\x17\n" +
+	"\x13NAME_KIND_PREFERRED\x10\x02\x12\x13\n" +
+	"\x0fNAME_KIND_ALIAS\x10\x03*\xbe\x01\n" +
+	"\x14CommunicationChannel\x12%\n" +
+	"!COMMUNICATION_CHANNEL_UNSPECIFIED\x10\x00\x12\x1d\n" +
+	"\x19COMMUNICATION_CHANNEL_SMS\x10\x01\x12\x1f\n" +
+	"\x1bCOMMUNICATION_CHANNEL_EMAIL\x10\x02\x12\x1f\n" +
+	"\x1bCOMMUNICATION_CHANNEL_PHONE\x10\x03\x12\x1e\n" +
+	"\x1aCOMMUNICATION_CHANNEL_POST\x10\x04*\xdf\x01\n" +
+	"\x14CommunicationPurpose\x12%\n" +
+	"!COMMUNICATION_PURPOSE_UNSPECIFIED\x10\x00\x12.\n" +
+	"*COMMUNICATION_PURPOSE_APPOINTMENT_REMINDER\x10\x01\x12!\n" +
+	"\x1dCOMMUNICATION_PURPOSE_RESULTS\x10\x02\x12!\n" +
+	"\x1dCOMMUNICATION_PURPOSE_BILLING\x10\x03\x12*\n" +
+	"&COMMUNICATION_PURPOSE_HEALTH_PROMOTION\x10\x04*\x97\x02\n" +
+	"\x10RelationshipType\x12!\n" +
+	"\x1dRELATIONSHIP_TYPE_UNSPECIFIED\x10\x00\x12\x1c\n" +
+	"\x18RELATIONSHIP_TYPE_PARENT\x10\x01\x12\x1e\n" +
+	"\x1aRELATIONSHIP_TYPE_GUARDIAN\x10\x02\x12\x1c\n" +
+	"\x18RELATIONSHIP_TYPE_SPOUSE\x10\x03\x12\x1b\n" +
+	"\x17RELATIONSHIP_TYPE_CHILD\x10\x04\x12\x1d\n" +
+	"\x19RELATIONSHIP_TYPE_SIBLING\x10\x05\x12\x1f\n" +
+	"\x1bRELATIONSHIP_TYPE_CAREGIVER\x10\x06\x12'\n" +
+	"#RELATIONSHIP_TYPE_EMERGENCY_CONTACT\x10\a*\xbb\x01\n" +
+	"\tAuthority\x12\x19\n" +
+	"\x15AUTHORITY_UNSPECIFIED\x10\x00\x12\x1f\n" +
+	"\x1bAUTHORITY_VIEW_DEMOGRAPHICS\x10\x01\x12\x1f\n" +
+	"\x1bAUTHORITY_BOOK_APPOINTMENTS\x10\x02\x12\x1b\n" +
+	"\x17AUTHORITY_VIEW_CLINICAL\x10\x03\x12\x1d\n" +
+	"\x19AUTHORITY_RECEIVE_RESULTS\x10\x04\x12\x15\n" +
+	"\x11AUTHORITY_CONSENT\x10\x052\x94\x10\n" +
 	"\x0ePatientService\x12j\n" +
 	"\x0fRegisterPatient\x12*.healthcare.empi.v1.RegisterPatientRequest\x1a+.healthcare.empi.v1.RegisterPatientResponse\x12g\n" +
 	"\x0eSearchPatients\x12).healthcare.empi.v1.SearchPatientsRequest\x1a*.healthcare.empi.v1.SearchPatientsResponse\x12[\n" +
@@ -2730,7 +4497,17 @@ const file_healthcare_empi_v1_patient_proto_rawDesc = "" +
 	"\rMergePatients\x12(.healthcare.empi.v1.MergePatientsRequest\x1a).healthcare.empi.v1.MergePatientsResponse\x12j\n" +
 	"\x0fUnmergePatients\x12*.healthcare.empi.v1.UnmergePatientsRequest\x1a+.healthcare.empi.v1.UnmergePatientsResponse\x12\x82\x01\n" +
 	"\x17ListDuplicateCandidates\x122.healthcare.empi.v1.ListDuplicateCandidatesRequest\x1a3.healthcare.empi.v1.ListDuplicateCandidatesResponse\x12\x88\x01\n" +
-	"\x19DismissDuplicateCandidate\x124.healthcare.empi.v1.DismissDuplicateCandidateRequest\x1a5.healthcare.empi.v1.DismissDuplicateCandidateResponseBCZAgithub.com/ppusapati/health/code/gen/go/healthcare/empi/v1;empiv1b\x06proto3"
+	"\x19DismissDuplicateCandidate\x124.healthcare.empi.v1.DismissDuplicateCandidateRequest\x1a5.healthcare.empi.v1.DismissDuplicateCandidateResponse\x12[\n" +
+	"\n" +
+	"RecordName\x12%.healthcare.empi.v1.RecordNameRequest\x1a&.healthcare.empi.v1.RecordNameResponse\x12p\n" +
+	"\x11GetPatientHistory\x12,.healthcare.empi.v1.GetPatientHistoryRequest\x1a-.healthcare.empi.v1.GetPatientHistoryResponse\x12\x94\x01\n" +
+	"\x1dRecordCommunicationPreference\x128.healthcare.empi.v1.RecordCommunicationPreferenceRequest\x1a9.healthcare.empi.v1.RecordCommunicationPreferenceResponse\x12g\n" +
+	"\x0eRecordDeceased\x12).healthcare.empi.v1.RecordDeceasedRequest\x1a*.healthcare.empi.v1.RecordDeceasedResponse\x12j\n" +
+	"\x0fReverseDeceased\x12*.healthcare.empi.v1.ReverseDeceasedRequest\x1a+.healthcare.empi.v1.ReverseDeceasedResponse\x12m\n" +
+	"\x10AddRelatedPerson\x12+.healthcare.empi.v1.AddRelatedPersonRequest\x1a,.healthcare.empi.v1.AddRelatedPersonResponse\x12v\n" +
+	"\x13VerifyRelatedPerson\x12..healthcare.empi.v1.VerifyRelatedPersonRequest\x1a/.healthcare.empi.v1.VerifyRelatedPersonResponse\x12m\n" +
+	"\x10EndRelatedPerson\x12+.healthcare.empi.v1.EndRelatedPersonRequest\x1a,.healthcare.empi.v1.EndRelatedPersonResponse\x12|\n" +
+	"\x15GetCaregiverAuthority\x120.healthcare.empi.v1.GetCaregiverAuthorityRequest\x1a1.healthcare.empi.v1.GetCaregiverAuthorityResponseBCZAgithub.com/ppusapati/health/code/gen/go/healthcare/empi/v1;empiv1b\x06proto3"
 
 var (
 	file_healthcare_empi_v1_patient_proto_rawDescOnce sync.Once
@@ -2744,115 +4521,196 @@ func file_healthcare_empi_v1_patient_proto_rawDescGZIP() []byte {
 	return file_healthcare_empi_v1_patient_proto_rawDescData
 }
 
-var file_healthcare_empi_v1_patient_proto_enumTypes = make([]protoimpl.EnumInfo, 8)
-var file_healthcare_empi_v1_patient_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
+var file_healthcare_empi_v1_patient_proto_enumTypes = make([]protoimpl.EnumInfo, 13)
+var file_healthcare_empi_v1_patient_proto_msgTypes = make([]protoimpl.MessageInfo, 51)
 var file_healthcare_empi_v1_patient_proto_goTypes = []any{
-	(PatientStatus)(0),                        // 0: healthcare.empi.v1.PatientStatus
-	(Sex)(0),                                  // 1: healthcare.empi.v1.Sex
-	(DatePrecision)(0),                        // 2: healthcare.empi.v1.DatePrecision
-	(IdentifierType)(0),                       // 3: healthcare.empi.v1.IdentifierType
-	(IdentifierStatus)(0),                     // 4: healthcare.empi.v1.IdentifierStatus
-	(ContactSystem)(0),                        // 5: healthcare.empi.v1.ContactSystem
-	(MatchOutcome)(0),                         // 6: healthcare.empi.v1.MatchOutcome
-	(ReviewStatus)(0),                         // 7: healthcare.empi.v1.ReviewStatus
-	(*PartialDate)(nil),                       // 8: healthcare.empi.v1.PartialDate
-	(*HumanName)(nil),                         // 9: healthcare.empi.v1.HumanName
-	(*ContactPoint)(nil),                      // 10: healthcare.empi.v1.ContactPoint
-	(*Address)(nil),                           // 11: healthcare.empi.v1.Address
-	(*Demographics)(nil),                      // 12: healthcare.empi.v1.Demographics
-	(*PatientIdentifier)(nil),                 // 13: healthcare.empi.v1.PatientIdentifier
-	(*DeceasedRecord)(nil),                    // 14: healthcare.empi.v1.DeceasedRecord
-	(*Patient)(nil),                           // 15: healthcare.empi.v1.Patient
-	(*MatchFieldScore)(nil),                   // 16: healthcare.empi.v1.MatchFieldScore
-	(*PatientMatch)(nil),                      // 17: healthcare.empi.v1.PatientMatch
-	(*RegisterPatientRequest)(nil),            // 18: healthcare.empi.v1.RegisterPatientRequest
-	(*RegisterPatientResponse)(nil),           // 19: healthcare.empi.v1.RegisterPatientResponse
-	(*SearchPatientsRequest)(nil),             // 20: healthcare.empi.v1.SearchPatientsRequest
-	(*SearchPatientsResponse)(nil),            // 21: healthcare.empi.v1.SearchPatientsResponse
-	(*GetPatientRequest)(nil),                 // 22: healthcare.empi.v1.GetPatientRequest
-	(*GetPatientResponse)(nil),                // 23: healthcare.empi.v1.GetPatientResponse
-	(*UpdateDemographicsRequest)(nil),         // 24: healthcare.empi.v1.UpdateDemographicsRequest
-	(*UpdateDemographicsResponse)(nil),        // 25: healthcare.empi.v1.UpdateDemographicsResponse
-	(*ConfirmIdentityRequest)(nil),            // 26: healthcare.empi.v1.ConfirmIdentityRequest
-	(*ConfirmIdentityResponse)(nil),           // 27: healthcare.empi.v1.ConfirmIdentityResponse
-	(*DuplicateCandidate)(nil),                // 28: healthcare.empi.v1.DuplicateCandidate
-	(*MergePatientsRequest)(nil),              // 29: healthcare.empi.v1.MergePatientsRequest
-	(*MergePatientsResponse)(nil),             // 30: healthcare.empi.v1.MergePatientsResponse
-	(*UnmergePatientsRequest)(nil),            // 31: healthcare.empi.v1.UnmergePatientsRequest
-	(*UnmergePatientsResponse)(nil),           // 32: healthcare.empi.v1.UnmergePatientsResponse
-	(*ListDuplicateCandidatesRequest)(nil),    // 33: healthcare.empi.v1.ListDuplicateCandidatesRequest
-	(*ListDuplicateCandidatesResponse)(nil),   // 34: healthcare.empi.v1.ListDuplicateCandidatesResponse
-	(*DismissDuplicateCandidateRequest)(nil),  // 35: healthcare.empi.v1.DismissDuplicateCandidateRequest
-	(*DismissDuplicateCandidateResponse)(nil), // 36: healthcare.empi.v1.DismissDuplicateCandidateResponse
-	(*timestamppb.Timestamp)(nil),             // 37: google.protobuf.Timestamp
+	(PatientStatus)(0),                            // 0: healthcare.empi.v1.PatientStatus
+	(Sex)(0),                                      // 1: healthcare.empi.v1.Sex
+	(DatePrecision)(0),                            // 2: healthcare.empi.v1.DatePrecision
+	(IdentifierType)(0),                           // 3: healthcare.empi.v1.IdentifierType
+	(IdentifierStatus)(0),                         // 4: healthcare.empi.v1.IdentifierStatus
+	(ContactSystem)(0),                            // 5: healthcare.empi.v1.ContactSystem
+	(MatchOutcome)(0),                             // 6: healthcare.empi.v1.MatchOutcome
+	(ReviewStatus)(0),                             // 7: healthcare.empi.v1.ReviewStatus
+	(NameKind)(0),                                 // 8: healthcare.empi.v1.NameKind
+	(CommunicationChannel)(0),                     // 9: healthcare.empi.v1.CommunicationChannel
+	(CommunicationPurpose)(0),                     // 10: healthcare.empi.v1.CommunicationPurpose
+	(RelationshipType)(0),                         // 11: healthcare.empi.v1.RelationshipType
+	(Authority)(0),                                // 12: healthcare.empi.v1.Authority
+	(*PartialDate)(nil),                           // 13: healthcare.empi.v1.PartialDate
+	(*HumanName)(nil),                             // 14: healthcare.empi.v1.HumanName
+	(*ContactPoint)(nil),                          // 15: healthcare.empi.v1.ContactPoint
+	(*Address)(nil),                               // 16: healthcare.empi.v1.Address
+	(*Demographics)(nil),                          // 17: healthcare.empi.v1.Demographics
+	(*PatientIdentifier)(nil),                     // 18: healthcare.empi.v1.PatientIdentifier
+	(*DeceasedRecord)(nil),                        // 19: healthcare.empi.v1.DeceasedRecord
+	(*Patient)(nil),                               // 20: healthcare.empi.v1.Patient
+	(*MatchFieldScore)(nil),                       // 21: healthcare.empi.v1.MatchFieldScore
+	(*PatientMatch)(nil),                          // 22: healthcare.empi.v1.PatientMatch
+	(*RegisterPatientRequest)(nil),                // 23: healthcare.empi.v1.RegisterPatientRequest
+	(*RegisterPatientResponse)(nil),               // 24: healthcare.empi.v1.RegisterPatientResponse
+	(*SearchPatientsRequest)(nil),                 // 25: healthcare.empi.v1.SearchPatientsRequest
+	(*SearchPatientsResponse)(nil),                // 26: healthcare.empi.v1.SearchPatientsResponse
+	(*GetPatientRequest)(nil),                     // 27: healthcare.empi.v1.GetPatientRequest
+	(*GetPatientResponse)(nil),                    // 28: healthcare.empi.v1.GetPatientResponse
+	(*UpdateDemographicsRequest)(nil),             // 29: healthcare.empi.v1.UpdateDemographicsRequest
+	(*UpdateDemographicsResponse)(nil),            // 30: healthcare.empi.v1.UpdateDemographicsResponse
+	(*ConfirmIdentityRequest)(nil),                // 31: healthcare.empi.v1.ConfirmIdentityRequest
+	(*ConfirmIdentityResponse)(nil),               // 32: healthcare.empi.v1.ConfirmIdentityResponse
+	(*DuplicateCandidate)(nil),                    // 33: healthcare.empi.v1.DuplicateCandidate
+	(*MergePatientsRequest)(nil),                  // 34: healthcare.empi.v1.MergePatientsRequest
+	(*MergePatientsResponse)(nil),                 // 35: healthcare.empi.v1.MergePatientsResponse
+	(*UnmergePatientsRequest)(nil),                // 36: healthcare.empi.v1.UnmergePatientsRequest
+	(*UnmergePatientsResponse)(nil),               // 37: healthcare.empi.v1.UnmergePatientsResponse
+	(*ListDuplicateCandidatesRequest)(nil),        // 38: healthcare.empi.v1.ListDuplicateCandidatesRequest
+	(*ListDuplicateCandidatesResponse)(nil),       // 39: healthcare.empi.v1.ListDuplicateCandidatesResponse
+	(*DismissDuplicateCandidateRequest)(nil),      // 40: healthcare.empi.v1.DismissDuplicateCandidateRequest
+	(*DismissDuplicateCandidateResponse)(nil),     // 41: healthcare.empi.v1.DismissDuplicateCandidateResponse
+	(*EffectiveWindow)(nil),                       // 42: healthcare.empi.v1.EffectiveWindow
+	(*PatientName)(nil),                           // 43: healthcare.empi.v1.PatientName
+	(*CommunicationPreference)(nil),               // 44: healthcare.empi.v1.CommunicationPreference
+	(*RelatedPerson)(nil),                         // 45: healthcare.empi.v1.RelatedPerson
+	(*RecordNameRequest)(nil),                     // 46: healthcare.empi.v1.RecordNameRequest
+	(*RecordNameResponse)(nil),                    // 47: healthcare.empi.v1.RecordNameResponse
+	(*GetPatientHistoryRequest)(nil),              // 48: healthcare.empi.v1.GetPatientHistoryRequest
+	(*GetPatientHistoryResponse)(nil),             // 49: healthcare.empi.v1.GetPatientHistoryResponse
+	(*RecordCommunicationPreferenceRequest)(nil),  // 50: healthcare.empi.v1.RecordCommunicationPreferenceRequest
+	(*RecordCommunicationPreferenceResponse)(nil), // 51: healthcare.empi.v1.RecordCommunicationPreferenceResponse
+	(*RecordDeceasedRequest)(nil),                 // 52: healthcare.empi.v1.RecordDeceasedRequest
+	(*RecordDeceasedResponse)(nil),                // 53: healthcare.empi.v1.RecordDeceasedResponse
+	(*ReverseDeceasedRequest)(nil),                // 54: healthcare.empi.v1.ReverseDeceasedRequest
+	(*ReverseDeceasedResponse)(nil),               // 55: healthcare.empi.v1.ReverseDeceasedResponse
+	(*AddRelatedPersonRequest)(nil),               // 56: healthcare.empi.v1.AddRelatedPersonRequest
+	(*AddRelatedPersonResponse)(nil),              // 57: healthcare.empi.v1.AddRelatedPersonResponse
+	(*VerifyRelatedPersonRequest)(nil),            // 58: healthcare.empi.v1.VerifyRelatedPersonRequest
+	(*VerifyRelatedPersonResponse)(nil),           // 59: healthcare.empi.v1.VerifyRelatedPersonResponse
+	(*EndRelatedPersonRequest)(nil),               // 60: healthcare.empi.v1.EndRelatedPersonRequest
+	(*EndRelatedPersonResponse)(nil),              // 61: healthcare.empi.v1.EndRelatedPersonResponse
+	(*GetCaregiverAuthorityRequest)(nil),          // 62: healthcare.empi.v1.GetCaregiverAuthorityRequest
+	(*GetCaregiverAuthorityResponse)(nil),         // 63: healthcare.empi.v1.GetCaregiverAuthorityResponse
+	(*timestamppb.Timestamp)(nil),                 // 64: google.protobuf.Timestamp
 }
 var file_healthcare_empi_v1_patient_proto_depIdxs = []int32{
-	37, // 0: healthcare.empi.v1.PartialDate.date:type_name -> google.protobuf.Timestamp
+	64, // 0: healthcare.empi.v1.PartialDate.date:type_name -> google.protobuf.Timestamp
 	2,  // 1: healthcare.empi.v1.PartialDate.precision:type_name -> healthcare.empi.v1.DatePrecision
 	5,  // 2: healthcare.empi.v1.ContactPoint.system:type_name -> healthcare.empi.v1.ContactSystem
-	9,  // 3: healthcare.empi.v1.Demographics.name:type_name -> healthcare.empi.v1.HumanName
-	8,  // 4: healthcare.empi.v1.Demographics.birth_date:type_name -> healthcare.empi.v1.PartialDate
+	14, // 3: healthcare.empi.v1.Demographics.name:type_name -> healthcare.empi.v1.HumanName
+	13, // 4: healthcare.empi.v1.Demographics.birth_date:type_name -> healthcare.empi.v1.PartialDate
 	1,  // 5: healthcare.empi.v1.Demographics.sex:type_name -> healthcare.empi.v1.Sex
-	10, // 6: healthcare.empi.v1.Demographics.phones:type_name -> healthcare.empi.v1.ContactPoint
-	10, // 7: healthcare.empi.v1.Demographics.emails:type_name -> healthcare.empi.v1.ContactPoint
-	11, // 8: healthcare.empi.v1.Demographics.addresses:type_name -> healthcare.empi.v1.Address
+	15, // 6: healthcare.empi.v1.Demographics.phones:type_name -> healthcare.empi.v1.ContactPoint
+	15, // 7: healthcare.empi.v1.Demographics.emails:type_name -> healthcare.empi.v1.ContactPoint
+	16, // 8: healthcare.empi.v1.Demographics.addresses:type_name -> healthcare.empi.v1.Address
 	3,  // 9: healthcare.empi.v1.PatientIdentifier.type:type_name -> healthcare.empi.v1.IdentifierType
 	4,  // 10: healthcare.empi.v1.PatientIdentifier.status:type_name -> healthcare.empi.v1.IdentifierStatus
-	37, // 11: healthcare.empi.v1.PatientIdentifier.linked_at:type_name -> google.protobuf.Timestamp
-	37, // 12: healthcare.empi.v1.PatientIdentifier.unlinked_at:type_name -> google.protobuf.Timestamp
-	8,  // 13: healthcare.empi.v1.DeceasedRecord.date:type_name -> healthcare.empi.v1.PartialDate
-	37, // 14: healthcare.empi.v1.DeceasedRecord.recorded_at:type_name -> google.protobuf.Timestamp
+	64, // 11: healthcare.empi.v1.PatientIdentifier.linked_at:type_name -> google.protobuf.Timestamp
+	64, // 12: healthcare.empi.v1.PatientIdentifier.unlinked_at:type_name -> google.protobuf.Timestamp
+	13, // 13: healthcare.empi.v1.DeceasedRecord.date:type_name -> healthcare.empi.v1.PartialDate
+	64, // 14: healthcare.empi.v1.DeceasedRecord.recorded_at:type_name -> google.protobuf.Timestamp
 	0,  // 15: healthcare.empi.v1.Patient.status:type_name -> healthcare.empi.v1.PatientStatus
-	12, // 16: healthcare.empi.v1.Patient.demographics:type_name -> healthcare.empi.v1.Demographics
-	13, // 17: healthcare.empi.v1.Patient.identifiers:type_name -> healthcare.empi.v1.PatientIdentifier
-	14, // 18: healthcare.empi.v1.Patient.deceased:type_name -> healthcare.empi.v1.DeceasedRecord
-	37, // 19: healthcare.empi.v1.Patient.created_at:type_name -> google.protobuf.Timestamp
-	37, // 20: healthcare.empi.v1.Patient.updated_at:type_name -> google.protobuf.Timestamp
-	15, // 21: healthcare.empi.v1.PatientMatch.patient:type_name -> healthcare.empi.v1.Patient
+	17, // 16: healthcare.empi.v1.Patient.demographics:type_name -> healthcare.empi.v1.Demographics
+	18, // 17: healthcare.empi.v1.Patient.identifiers:type_name -> healthcare.empi.v1.PatientIdentifier
+	19, // 18: healthcare.empi.v1.Patient.deceased:type_name -> healthcare.empi.v1.DeceasedRecord
+	64, // 19: healthcare.empi.v1.Patient.created_at:type_name -> google.protobuf.Timestamp
+	64, // 20: healthcare.empi.v1.Patient.updated_at:type_name -> google.protobuf.Timestamp
+	20, // 21: healthcare.empi.v1.PatientMatch.patient:type_name -> healthcare.empi.v1.Patient
 	6,  // 22: healthcare.empi.v1.PatientMatch.outcome:type_name -> healthcare.empi.v1.MatchOutcome
-	16, // 23: healthcare.empi.v1.PatientMatch.fields:type_name -> healthcare.empi.v1.MatchFieldScore
-	12, // 24: healthcare.empi.v1.RegisterPatientRequest.demographics:type_name -> healthcare.empi.v1.Demographics
-	13, // 25: healthcare.empi.v1.RegisterPatientRequest.identifiers:type_name -> healthcare.empi.v1.PatientIdentifier
-	15, // 26: healthcare.empi.v1.RegisterPatientResponse.patient:type_name -> healthcare.empi.v1.Patient
-	17, // 27: healthcare.empi.v1.RegisterPatientResponse.potential_duplicates:type_name -> healthcare.empi.v1.PatientMatch
-	8,  // 28: healthcare.empi.v1.SearchPatientsRequest.birth_date:type_name -> healthcare.empi.v1.PartialDate
-	3,  // 29: healthcare.empi.v1.SearchPatientsRequest.identifier_type:type_name -> healthcare.empi.v1.IdentifierType
-	17, // 30: healthcare.empi.v1.SearchPatientsResponse.matches:type_name -> healthcare.empi.v1.PatientMatch
-	15, // 31: healthcare.empi.v1.GetPatientResponse.patient:type_name -> healthcare.empi.v1.Patient
-	12, // 32: healthcare.empi.v1.UpdateDemographicsRequest.demographics:type_name -> healthcare.empi.v1.Demographics
-	15, // 33: healthcare.empi.v1.UpdateDemographicsResponse.patient:type_name -> healthcare.empi.v1.Patient
-	15, // 34: healthcare.empi.v1.ConfirmIdentityResponse.patient:type_name -> healthcare.empi.v1.Patient
-	6,  // 35: healthcare.empi.v1.DuplicateCandidate.outcome:type_name -> healthcare.empi.v1.MatchOutcome
-	7,  // 36: healthcare.empi.v1.DuplicateCandidate.status:type_name -> healthcare.empi.v1.ReviewStatus
-	37, // 37: healthcare.empi.v1.DuplicateCandidate.detected_at:type_name -> google.protobuf.Timestamp
-	37, // 38: healthcare.empi.v1.DuplicateCandidate.reviewed_at:type_name -> google.protobuf.Timestamp
-	15, // 39: healthcare.empi.v1.MergePatientsResponse.survivor:type_name -> healthcare.empi.v1.Patient
-	15, // 40: healthcare.empi.v1.UnmergePatientsResponse.survivor:type_name -> healthcare.empi.v1.Patient
-	15, // 41: healthcare.empi.v1.UnmergePatientsResponse.restored:type_name -> healthcare.empi.v1.Patient
-	28, // 42: healthcare.empi.v1.ListDuplicateCandidatesResponse.candidates:type_name -> healthcare.empi.v1.DuplicateCandidate
-	18, // 43: healthcare.empi.v1.PatientService.RegisterPatient:input_type -> healthcare.empi.v1.RegisterPatientRequest
-	20, // 44: healthcare.empi.v1.PatientService.SearchPatients:input_type -> healthcare.empi.v1.SearchPatientsRequest
-	22, // 45: healthcare.empi.v1.PatientService.GetPatient:input_type -> healthcare.empi.v1.GetPatientRequest
-	24, // 46: healthcare.empi.v1.PatientService.UpdateDemographics:input_type -> healthcare.empi.v1.UpdateDemographicsRequest
-	26, // 47: healthcare.empi.v1.PatientService.ConfirmIdentity:input_type -> healthcare.empi.v1.ConfirmIdentityRequest
-	29, // 48: healthcare.empi.v1.PatientService.MergePatients:input_type -> healthcare.empi.v1.MergePatientsRequest
-	31, // 49: healthcare.empi.v1.PatientService.UnmergePatients:input_type -> healthcare.empi.v1.UnmergePatientsRequest
-	33, // 50: healthcare.empi.v1.PatientService.ListDuplicateCandidates:input_type -> healthcare.empi.v1.ListDuplicateCandidatesRequest
-	35, // 51: healthcare.empi.v1.PatientService.DismissDuplicateCandidate:input_type -> healthcare.empi.v1.DismissDuplicateCandidateRequest
-	19, // 52: healthcare.empi.v1.PatientService.RegisterPatient:output_type -> healthcare.empi.v1.RegisterPatientResponse
-	21, // 53: healthcare.empi.v1.PatientService.SearchPatients:output_type -> healthcare.empi.v1.SearchPatientsResponse
-	23, // 54: healthcare.empi.v1.PatientService.GetPatient:output_type -> healthcare.empi.v1.GetPatientResponse
-	25, // 55: healthcare.empi.v1.PatientService.UpdateDemographics:output_type -> healthcare.empi.v1.UpdateDemographicsResponse
-	27, // 56: healthcare.empi.v1.PatientService.ConfirmIdentity:output_type -> healthcare.empi.v1.ConfirmIdentityResponse
-	30, // 57: healthcare.empi.v1.PatientService.MergePatients:output_type -> healthcare.empi.v1.MergePatientsResponse
-	32, // 58: healthcare.empi.v1.PatientService.UnmergePatients:output_type -> healthcare.empi.v1.UnmergePatientsResponse
-	34, // 59: healthcare.empi.v1.PatientService.ListDuplicateCandidates:output_type -> healthcare.empi.v1.ListDuplicateCandidatesResponse
-	36, // 60: healthcare.empi.v1.PatientService.DismissDuplicateCandidate:output_type -> healthcare.empi.v1.DismissDuplicateCandidateResponse
-	52, // [52:61] is the sub-list for method output_type
-	43, // [43:52] is the sub-list for method input_type
-	43, // [43:43] is the sub-list for extension type_name
-	43, // [43:43] is the sub-list for extension extendee
-	0,  // [0:43] is the sub-list for field type_name
+	21, // 23: healthcare.empi.v1.PatientMatch.fields:type_name -> healthcare.empi.v1.MatchFieldScore
+	43, // 24: healthcare.empi.v1.PatientMatch.matched_former_name:type_name -> healthcare.empi.v1.PatientName
+	17, // 25: healthcare.empi.v1.RegisterPatientRequest.demographics:type_name -> healthcare.empi.v1.Demographics
+	18, // 26: healthcare.empi.v1.RegisterPatientRequest.identifiers:type_name -> healthcare.empi.v1.PatientIdentifier
+	20, // 27: healthcare.empi.v1.RegisterPatientResponse.patient:type_name -> healthcare.empi.v1.Patient
+	22, // 28: healthcare.empi.v1.RegisterPatientResponse.potential_duplicates:type_name -> healthcare.empi.v1.PatientMatch
+	13, // 29: healthcare.empi.v1.SearchPatientsRequest.birth_date:type_name -> healthcare.empi.v1.PartialDate
+	3,  // 30: healthcare.empi.v1.SearchPatientsRequest.identifier_type:type_name -> healthcare.empi.v1.IdentifierType
+	22, // 31: healthcare.empi.v1.SearchPatientsResponse.matches:type_name -> healthcare.empi.v1.PatientMatch
+	20, // 32: healthcare.empi.v1.GetPatientResponse.patient:type_name -> healthcare.empi.v1.Patient
+	17, // 33: healthcare.empi.v1.UpdateDemographicsRequest.demographics:type_name -> healthcare.empi.v1.Demographics
+	20, // 34: healthcare.empi.v1.UpdateDemographicsResponse.patient:type_name -> healthcare.empi.v1.Patient
+	20, // 35: healthcare.empi.v1.ConfirmIdentityResponse.patient:type_name -> healthcare.empi.v1.Patient
+	6,  // 36: healthcare.empi.v1.DuplicateCandidate.outcome:type_name -> healthcare.empi.v1.MatchOutcome
+	7,  // 37: healthcare.empi.v1.DuplicateCandidate.status:type_name -> healthcare.empi.v1.ReviewStatus
+	64, // 38: healthcare.empi.v1.DuplicateCandidate.detected_at:type_name -> google.protobuf.Timestamp
+	64, // 39: healthcare.empi.v1.DuplicateCandidate.reviewed_at:type_name -> google.protobuf.Timestamp
+	20, // 40: healthcare.empi.v1.MergePatientsResponse.survivor:type_name -> healthcare.empi.v1.Patient
+	20, // 41: healthcare.empi.v1.UnmergePatientsResponse.survivor:type_name -> healthcare.empi.v1.Patient
+	20, // 42: healthcare.empi.v1.UnmergePatientsResponse.restored:type_name -> healthcare.empi.v1.Patient
+	33, // 43: healthcare.empi.v1.ListDuplicateCandidatesResponse.candidates:type_name -> healthcare.empi.v1.DuplicateCandidate
+	64, // 44: healthcare.empi.v1.EffectiveWindow.from:type_name -> google.protobuf.Timestamp
+	64, // 45: healthcare.empi.v1.EffectiveWindow.until:type_name -> google.protobuf.Timestamp
+	8,  // 46: healthcare.empi.v1.PatientName.kind:type_name -> healthcare.empi.v1.NameKind
+	14, // 47: healthcare.empi.v1.PatientName.name:type_name -> healthcare.empi.v1.HumanName
+	42, // 48: healthcare.empi.v1.PatientName.window:type_name -> healthcare.empi.v1.EffectiveWindow
+	64, // 49: healthcare.empi.v1.PatientName.recorded_at:type_name -> google.protobuf.Timestamp
+	9,  // 50: healthcare.empi.v1.CommunicationPreference.channel:type_name -> healthcare.empi.v1.CommunicationChannel
+	10, // 51: healthcare.empi.v1.CommunicationPreference.purpose:type_name -> healthcare.empi.v1.CommunicationPurpose
+	42, // 52: healthcare.empi.v1.CommunicationPreference.window:type_name -> healthcare.empi.v1.EffectiveWindow
+	14, // 53: healthcare.empi.v1.RelatedPerson.name:type_name -> healthcare.empi.v1.HumanName
+	15, // 54: healthcare.empi.v1.RelatedPerson.contact:type_name -> healthcare.empi.v1.ContactPoint
+	11, // 55: healthcare.empi.v1.RelatedPerson.relationship:type_name -> healthcare.empi.v1.RelationshipType
+	12, // 56: healthcare.empi.v1.RelatedPerson.authorities:type_name -> healthcare.empi.v1.Authority
+	42, // 57: healthcare.empi.v1.RelatedPerson.window:type_name -> healthcare.empi.v1.EffectiveWindow
+	64, // 58: healthcare.empi.v1.RelatedPerson.verified_at:type_name -> google.protobuf.Timestamp
+	8,  // 59: healthcare.empi.v1.RecordNameRequest.kind:type_name -> healthcare.empi.v1.NameKind
+	14, // 60: healthcare.empi.v1.RecordNameRequest.name:type_name -> healthcare.empi.v1.HumanName
+	64, // 61: healthcare.empi.v1.RecordNameRequest.effective_from:type_name -> google.protobuf.Timestamp
+	43, // 62: healthcare.empi.v1.GetPatientHistoryResponse.names:type_name -> healthcare.empi.v1.PatientName
+	44, // 63: healthcare.empi.v1.GetPatientHistoryResponse.preferences:type_name -> healthcare.empi.v1.CommunicationPreference
+	45, // 64: healthcare.empi.v1.GetPatientHistoryResponse.related:type_name -> healthcare.empi.v1.RelatedPerson
+	9,  // 65: healthcare.empi.v1.RecordCommunicationPreferenceRequest.channel:type_name -> healthcare.empi.v1.CommunicationChannel
+	10, // 66: healthcare.empi.v1.RecordCommunicationPreferenceRequest.purpose:type_name -> healthcare.empi.v1.CommunicationPurpose
+	64, // 67: healthcare.empi.v1.RecordCommunicationPreferenceRequest.effective_from:type_name -> google.protobuf.Timestamp
+	13, // 68: healthcare.empi.v1.RecordDeceasedRequest.date:type_name -> healthcare.empi.v1.PartialDate
+	20, // 69: healthcare.empi.v1.RecordDeceasedResponse.patient:type_name -> healthcare.empi.v1.Patient
+	20, // 70: healthcare.empi.v1.ReverseDeceasedResponse.patient:type_name -> healthcare.empi.v1.Patient
+	14, // 71: healthcare.empi.v1.AddRelatedPersonRequest.name:type_name -> healthcare.empi.v1.HumanName
+	15, // 72: healthcare.empi.v1.AddRelatedPersonRequest.contact:type_name -> healthcare.empi.v1.ContactPoint
+	11, // 73: healthcare.empi.v1.AddRelatedPersonRequest.relationship:type_name -> healthcare.empi.v1.RelationshipType
+	12, // 74: healthcare.empi.v1.AddRelatedPersonRequest.authorities:type_name -> healthcare.empi.v1.Authority
+	64, // 75: healthcare.empi.v1.AddRelatedPersonRequest.effective_from:type_name -> google.protobuf.Timestamp
+	64, // 76: healthcare.empi.v1.AddRelatedPersonRequest.effective_until:type_name -> google.protobuf.Timestamp
+	45, // 77: healthcare.empi.v1.AddRelatedPersonResponse.related:type_name -> healthcare.empi.v1.RelatedPerson
+	12, // 78: healthcare.empi.v1.GetCaregiverAuthorityResponse.authorities:type_name -> healthcare.empi.v1.Authority
+	23, // 79: healthcare.empi.v1.PatientService.RegisterPatient:input_type -> healthcare.empi.v1.RegisterPatientRequest
+	25, // 80: healthcare.empi.v1.PatientService.SearchPatients:input_type -> healthcare.empi.v1.SearchPatientsRequest
+	27, // 81: healthcare.empi.v1.PatientService.GetPatient:input_type -> healthcare.empi.v1.GetPatientRequest
+	29, // 82: healthcare.empi.v1.PatientService.UpdateDemographics:input_type -> healthcare.empi.v1.UpdateDemographicsRequest
+	31, // 83: healthcare.empi.v1.PatientService.ConfirmIdentity:input_type -> healthcare.empi.v1.ConfirmIdentityRequest
+	34, // 84: healthcare.empi.v1.PatientService.MergePatients:input_type -> healthcare.empi.v1.MergePatientsRequest
+	36, // 85: healthcare.empi.v1.PatientService.UnmergePatients:input_type -> healthcare.empi.v1.UnmergePatientsRequest
+	38, // 86: healthcare.empi.v1.PatientService.ListDuplicateCandidates:input_type -> healthcare.empi.v1.ListDuplicateCandidatesRequest
+	40, // 87: healthcare.empi.v1.PatientService.DismissDuplicateCandidate:input_type -> healthcare.empi.v1.DismissDuplicateCandidateRequest
+	46, // 88: healthcare.empi.v1.PatientService.RecordName:input_type -> healthcare.empi.v1.RecordNameRequest
+	48, // 89: healthcare.empi.v1.PatientService.GetPatientHistory:input_type -> healthcare.empi.v1.GetPatientHistoryRequest
+	50, // 90: healthcare.empi.v1.PatientService.RecordCommunicationPreference:input_type -> healthcare.empi.v1.RecordCommunicationPreferenceRequest
+	52, // 91: healthcare.empi.v1.PatientService.RecordDeceased:input_type -> healthcare.empi.v1.RecordDeceasedRequest
+	54, // 92: healthcare.empi.v1.PatientService.ReverseDeceased:input_type -> healthcare.empi.v1.ReverseDeceasedRequest
+	56, // 93: healthcare.empi.v1.PatientService.AddRelatedPerson:input_type -> healthcare.empi.v1.AddRelatedPersonRequest
+	58, // 94: healthcare.empi.v1.PatientService.VerifyRelatedPerson:input_type -> healthcare.empi.v1.VerifyRelatedPersonRequest
+	60, // 95: healthcare.empi.v1.PatientService.EndRelatedPerson:input_type -> healthcare.empi.v1.EndRelatedPersonRequest
+	62, // 96: healthcare.empi.v1.PatientService.GetCaregiverAuthority:input_type -> healthcare.empi.v1.GetCaregiverAuthorityRequest
+	24, // 97: healthcare.empi.v1.PatientService.RegisterPatient:output_type -> healthcare.empi.v1.RegisterPatientResponse
+	26, // 98: healthcare.empi.v1.PatientService.SearchPatients:output_type -> healthcare.empi.v1.SearchPatientsResponse
+	28, // 99: healthcare.empi.v1.PatientService.GetPatient:output_type -> healthcare.empi.v1.GetPatientResponse
+	30, // 100: healthcare.empi.v1.PatientService.UpdateDemographics:output_type -> healthcare.empi.v1.UpdateDemographicsResponse
+	32, // 101: healthcare.empi.v1.PatientService.ConfirmIdentity:output_type -> healthcare.empi.v1.ConfirmIdentityResponse
+	35, // 102: healthcare.empi.v1.PatientService.MergePatients:output_type -> healthcare.empi.v1.MergePatientsResponse
+	37, // 103: healthcare.empi.v1.PatientService.UnmergePatients:output_type -> healthcare.empi.v1.UnmergePatientsResponse
+	39, // 104: healthcare.empi.v1.PatientService.ListDuplicateCandidates:output_type -> healthcare.empi.v1.ListDuplicateCandidatesResponse
+	41, // 105: healthcare.empi.v1.PatientService.DismissDuplicateCandidate:output_type -> healthcare.empi.v1.DismissDuplicateCandidateResponse
+	47, // 106: healthcare.empi.v1.PatientService.RecordName:output_type -> healthcare.empi.v1.RecordNameResponse
+	49, // 107: healthcare.empi.v1.PatientService.GetPatientHistory:output_type -> healthcare.empi.v1.GetPatientHistoryResponse
+	51, // 108: healthcare.empi.v1.PatientService.RecordCommunicationPreference:output_type -> healthcare.empi.v1.RecordCommunicationPreferenceResponse
+	53, // 109: healthcare.empi.v1.PatientService.RecordDeceased:output_type -> healthcare.empi.v1.RecordDeceasedResponse
+	55, // 110: healthcare.empi.v1.PatientService.ReverseDeceased:output_type -> healthcare.empi.v1.ReverseDeceasedResponse
+	57, // 111: healthcare.empi.v1.PatientService.AddRelatedPerson:output_type -> healthcare.empi.v1.AddRelatedPersonResponse
+	59, // 112: healthcare.empi.v1.PatientService.VerifyRelatedPerson:output_type -> healthcare.empi.v1.VerifyRelatedPersonResponse
+	61, // 113: healthcare.empi.v1.PatientService.EndRelatedPerson:output_type -> healthcare.empi.v1.EndRelatedPersonResponse
+	63, // 114: healthcare.empi.v1.PatientService.GetCaregiverAuthority:output_type -> healthcare.empi.v1.GetCaregiverAuthorityResponse
+	97, // [97:115] is the sub-list for method output_type
+	79, // [79:97] is the sub-list for method input_type
+	79, // [79:79] is the sub-list for extension type_name
+	79, // [79:79] is the sub-list for extension extendee
+	0,  // [0:79] is the sub-list for field type_name
 }
 
 func init() { file_healthcare_empi_v1_patient_proto_init() }
@@ -2865,8 +4723,8 @@ func file_healthcare_empi_v1_patient_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_healthcare_empi_v1_patient_proto_rawDesc), len(file_healthcare_empi_v1_patient_proto_rawDesc)),
-			NumEnums:      8,
-			NumMessages:   29,
+			NumEnums:      13,
+			NumMessages:   51,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

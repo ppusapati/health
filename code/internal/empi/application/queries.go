@@ -195,24 +195,53 @@ func (s *Service) searchByName(ctx context.Context, scope authctx.TenantScope,
 		return nil, "", err
 	}
 
+	// The search reaches patients through names they no longer hold, so some of
+	// these rows will not resemble the name typed. Fetching the name that
+	// actually matched is what lets the result explain itself rather than look
+	// like a bad hit.
+	formerNames, err := s.history.MatchingFormerNames(ctx, scope, ids, in.Name)
+	if err != nil {
+		return nil, "", err
+	}
+
 	proposed := domain.Demographics{
 		Name:      domain.HumanName{Family: in.Name},
 		BirthDate: in.BirthDate,
 		Phones:    phoneOrNone(in.Phone),
 	}
 
+	prefix := strings.ToLower(in.Name)
+
 	out := make([]MatchedPatient, 0, len(found))
 	for _, p := range found {
 		held := identifiersByPatient[p.ID()]
+
+		// A patient whose current name matches is a current-name hit even if an
+		// old name also matches; saying "former name" about them would mislead.
+		former := domain.PatientName{}
+		if !strings.HasPrefix(strings.ToLower(p.Demographics.Name.Family), prefix) {
+			former = formerNames[p.ID()]
+		}
+
+		// Score against the name that actually matched. Scoring a maiden-name
+		// hit against the married name would report near-zero name similarity
+		// for a row the search deliberately returned, and the clerk would read
+		// that as the system saying "not this person".
+		scored := p.Demographics
+		if former.ID != "" {
+			scored.Name = former.Name
+		}
+
 		// Scored even on a plain name search, so the clerk sees which of five
 		// people called Iyer is most likely to be the one at the desk.
 		match := domain.Score(proposed, nil, domain.MatchCandidate{
-			PatientID: p.ID(), Demographics: p.Demographics, Identifiers: held,
+			PatientID: p.ID(), Demographics: scored, Identifiers: held,
 		}, weights, thresholds)
 
 		shown, masked := maskFor(p, restricted)
 		out = append(out, MatchedPatient{
 			Patient: shown, Identifiers: held, Match: match, Masked: masked,
+			MatchedFormerName: former,
 		})
 	}
 	return out, nextToken, nil
@@ -364,11 +393,23 @@ func (s *Service) UpdateDemographics(ctx context.Context, in UpdateDemographicsI
 			return err
 		}
 
+		nameBefore := patient.Demographics.Name.Display()
+
 		if err := patient.UpdateDemographics(in.Demographics, registrationPolicy, now); err != nil {
 			return registrationError(err)
 		}
 		if err := s.patients.UpdateDemographics(ctx, scope, patient); err != nil {
 			return err
+		}
+
+		// A name change closes the previous window and opens a new one. This
+		// is the path a marriage actually takes — a clerk editing the surname
+		// on the demographics screen — and without it the prior name is simply
+		// overwritten, which is the failure SRS-EMPI-007 exists to prevent.
+		if patient.Demographics.Name.Display() != nameBefore {
+			if err := s.openLegalName(ctx, scope, session, patient, "correction", now); err != nil {
+				return err
+			}
 		}
 
 		// The event carries no demographic values. A correction is interesting

@@ -13,6 +13,7 @@ import (
 	empiv1 "github.com/ppusapati/health/code/gen/go/healthcare/empi/v1"
 	"github.com/ppusapati/health/code/internal/empi/application"
 	"github.com/ppusapati/health/code/internal/empi/domain"
+	"github.com/ppusapati/health/code/internal/platform/effective"
 )
 
 var sexToProto = map[domain.Sex]empiv1.Sex{
@@ -239,6 +240,10 @@ func matchToProto(m application.MatchedPatient) *empiv1.PatientMatch {
 		Confidence: m.Match.Score,
 		Outcome:    outcomeToProto[m.Match.Outcome],
 		Masked:     m.Masked,
+		// Unset unless the search reached this patient through a name they no
+		// longer hold, so a client can present the row with the reason it is
+		// there rather than as an unexplained low-scoring hit.
+		MatchedFormerName: nameToProto(m.MatchedFormerName),
 	}
 	for _, f := range m.Match.Fields {
 		out.Fields = append(out.Fields, &empiv1.MatchFieldScore{
@@ -284,4 +289,208 @@ func candidatesToProto(in []domain.DuplicateCandidate) []*empiv1.DuplicateCandid
 		out = append(out, msg)
 	}
 	return out
+}
+
+// Effective-dated history mappings (SRS-EMPI-007/009).
+
+var nameKindToProto = map[domain.NameKind]empiv1.NameKind{
+	domain.NameLegal:     empiv1.NameKind_NAME_KIND_LEGAL,
+	domain.NamePreferred: empiv1.NameKind_NAME_KIND_PREFERRED,
+	domain.NameAlias:     empiv1.NameKind_NAME_KIND_ALIAS,
+}
+
+var nameKindFromProto = map[empiv1.NameKind]domain.NameKind{
+	empiv1.NameKind_NAME_KIND_UNSPECIFIED: domain.NameLegal,
+	empiv1.NameKind_NAME_KIND_LEGAL:       domain.NameLegal,
+	empiv1.NameKind_NAME_KIND_PREFERRED:   domain.NamePreferred,
+	empiv1.NameKind_NAME_KIND_ALIAS:       domain.NameAlias,
+}
+
+var channelToProto = map[domain.CommunicationChannel]empiv1.CommunicationChannel{
+	domain.ChannelSMS:   empiv1.CommunicationChannel_COMMUNICATION_CHANNEL_SMS,
+	domain.ChannelEmail: empiv1.CommunicationChannel_COMMUNICATION_CHANNEL_EMAIL,
+	domain.ChannelPhone: empiv1.CommunicationChannel_COMMUNICATION_CHANNEL_PHONE,
+	domain.ChannelPost:  empiv1.CommunicationChannel_COMMUNICATION_CHANNEL_POST,
+}
+
+var channelFromProto = map[empiv1.CommunicationChannel]domain.CommunicationChannel{
+	empiv1.CommunicationChannel_COMMUNICATION_CHANNEL_SMS:   domain.ChannelSMS,
+	empiv1.CommunicationChannel_COMMUNICATION_CHANNEL_EMAIL: domain.ChannelEmail,
+	empiv1.CommunicationChannel_COMMUNICATION_CHANNEL_PHONE: domain.ChannelPhone,
+	empiv1.CommunicationChannel_COMMUNICATION_CHANNEL_POST:  domain.ChannelPost,
+}
+
+var communicationPurposeToProto = map[domain.CommunicationPurpose]empiv1.CommunicationPurpose{
+	domain.PurposeAppointmentReminder: empiv1.CommunicationPurpose_COMMUNICATION_PURPOSE_APPOINTMENT_REMINDER,
+	domain.PurposeResults:             empiv1.CommunicationPurpose_COMMUNICATION_PURPOSE_RESULTS,
+	domain.PurposeBilling:             empiv1.CommunicationPurpose_COMMUNICATION_PURPOSE_BILLING,
+	domain.PurposeHealthPromotion:     empiv1.CommunicationPurpose_COMMUNICATION_PURPOSE_HEALTH_PROMOTION,
+}
+
+var communicationPurposeFromProto = map[empiv1.CommunicationPurpose]domain.CommunicationPurpose{
+	empiv1.CommunicationPurpose_COMMUNICATION_PURPOSE_APPOINTMENT_REMINDER: domain.PurposeAppointmentReminder,
+	empiv1.CommunicationPurpose_COMMUNICATION_PURPOSE_RESULTS:              domain.PurposeResults,
+	empiv1.CommunicationPurpose_COMMUNICATION_PURPOSE_BILLING:              domain.PurposeBilling,
+	empiv1.CommunicationPurpose_COMMUNICATION_PURPOSE_HEALTH_PROMOTION:     domain.PurposeHealthPromotion,
+}
+
+var relationshipToProto = map[domain.RelationshipType]empiv1.RelationshipType{
+	domain.RelationshipParent:           empiv1.RelationshipType_RELATIONSHIP_TYPE_PARENT,
+	domain.RelationshipGuardian:         empiv1.RelationshipType_RELATIONSHIP_TYPE_GUARDIAN,
+	domain.RelationshipSpouse:           empiv1.RelationshipType_RELATIONSHIP_TYPE_SPOUSE,
+	domain.RelationshipChild:            empiv1.RelationshipType_RELATIONSHIP_TYPE_CHILD,
+	domain.RelationshipSibling:          empiv1.RelationshipType_RELATIONSHIP_TYPE_SIBLING,
+	domain.RelationshipCaregiver:        empiv1.RelationshipType_RELATIONSHIP_TYPE_CAREGIVER,
+	domain.RelationshipEmergencyContact: empiv1.RelationshipType_RELATIONSHIP_TYPE_EMERGENCY_CONTACT,
+}
+
+var relationshipFromProto = map[empiv1.RelationshipType]domain.RelationshipType{
+	empiv1.RelationshipType_RELATIONSHIP_TYPE_PARENT:            domain.RelationshipParent,
+	empiv1.RelationshipType_RELATIONSHIP_TYPE_GUARDIAN:          domain.RelationshipGuardian,
+	empiv1.RelationshipType_RELATIONSHIP_TYPE_SPOUSE:            domain.RelationshipSpouse,
+	empiv1.RelationshipType_RELATIONSHIP_TYPE_CHILD:             domain.RelationshipChild,
+	empiv1.RelationshipType_RELATIONSHIP_TYPE_SIBLING:           domain.RelationshipSibling,
+	empiv1.RelationshipType_RELATIONSHIP_TYPE_CAREGIVER:         domain.RelationshipCaregiver,
+	empiv1.RelationshipType_RELATIONSHIP_TYPE_EMERGENCY_CONTACT: domain.RelationshipEmergencyContact,
+}
+
+var authorityToProto = map[domain.Authority]empiv1.Authority{
+	domain.AuthorityViewDemographics: empiv1.Authority_AUTHORITY_VIEW_DEMOGRAPHICS,
+	domain.AuthorityBookAppointments: empiv1.Authority_AUTHORITY_BOOK_APPOINTMENTS,
+	domain.AuthorityViewClinical:     empiv1.Authority_AUTHORITY_VIEW_CLINICAL,
+	domain.AuthorityReceiveResults:   empiv1.Authority_AUTHORITY_RECEIVE_RESULTS,
+	domain.AuthorityConsent:          empiv1.Authority_AUTHORITY_CONSENT,
+}
+
+var authorityFromProto = map[empiv1.Authority]domain.Authority{
+	empiv1.Authority_AUTHORITY_VIEW_DEMOGRAPHICS: domain.AuthorityViewDemographics,
+	empiv1.Authority_AUTHORITY_BOOK_APPOINTMENTS: domain.AuthorityBookAppointments,
+	empiv1.Authority_AUTHORITY_VIEW_CLINICAL:     domain.AuthorityViewClinical,
+	empiv1.Authority_AUTHORITY_RECEIVE_RESULTS:   domain.AuthorityReceiveResults,
+	empiv1.Authority_AUTHORITY_CONSENT:           domain.AuthorityConsent,
+}
+
+func windowToProto(w effective.Window) *empiv1.EffectiveWindow {
+	out := &empiv1.EffectiveWindow{From: timestamppb.New(w.From)}
+	if !w.OpenEnded() {
+		out.Until = timestamppb.New(w.Until)
+	}
+	return out
+}
+
+// nameToProto returns nil for the zero name, so an absent former name is an
+// unset field rather than an empty message the client has to recognise.
+func nameToProto(n domain.PatientName) *empiv1.PatientName {
+	if n.ID == "" {
+		return nil
+	}
+	return &empiv1.PatientName{
+		NameId: n.ID, Kind: nameKindToProto[n.Kind],
+		Name: &empiv1.HumanName{
+			Family: n.Name.Family, Given: n.Name.Given,
+			Prefix: n.Name.Prefix, Suffix: n.Name.Suffix,
+		},
+		Window:     windowToProto(n.Window),
+		RecordedBy: n.RecordedBy, RecordedAt: timestamppb.New(n.RecordedAt),
+		Source: n.Source,
+	}
+}
+
+func namesToProto(in domain.NameHistory) []*empiv1.PatientName {
+	out := make([]*empiv1.PatientName, 0, len(in))
+	for _, n := range in {
+		out = append(out, nameToProto(n))
+	}
+	return out
+}
+
+func preferencesToProto(in domain.PreferenceSet) []*empiv1.CommunicationPreference {
+	out := make([]*empiv1.CommunicationPreference, 0, len(in))
+	for _, p := range in {
+		out = append(out, &empiv1.CommunicationPreference{
+			PreferenceId: p.ID,
+			Channel:      channelToProto[p.Channel],
+			Purpose:      communicationPurposeToProto[p.Purpose],
+			Allowed:      p.Allowed,
+			Window:       windowToProto(p.Window),
+			RecordedBy:   p.RecordedBy,
+		})
+	}
+	return out
+}
+
+func relatedToProto(in domain.RelatedPersonSet) []*empiv1.RelatedPerson {
+	out := make([]*empiv1.RelatedPerson, 0, len(in))
+	for _, r := range in {
+		out = append(out, relatedPersonToProto(r))
+	}
+	return out
+}
+
+func relatedPersonToProto(r domain.RelatedPerson) *empiv1.RelatedPerson {
+	msg := &empiv1.RelatedPerson{
+		RelationshipId:   r.ID,
+		RelatedPatientId: r.RelatedPatientID,
+		Name: &empiv1.HumanName{
+			Family: r.Name.Family, Given: r.Name.Given,
+			Prefix: r.Name.Prefix, Suffix: r.Name.Suffix,
+		},
+		Relationship:     relationshipToProto[r.Relationship],
+		Window:           windowToProto(r.Window),
+		VerifiedBy:       r.VerifiedBy,
+		VerificationNote: r.VerificationNote,
+		RecordedBy:       r.RecordedBy,
+	}
+	for _, c := range r.Contact {
+		msg.Contact = append(msg.Contact, &empiv1.ContactPoint{
+			System: empiv1.ContactSystem_CONTACT_SYSTEM_PHONE, Value: c.Value, Use: c.Use,
+		})
+	}
+	msg.Authorities = authoritiesToProto(r.Authorities)
+	if r.VerifiedAt != nil {
+		msg.VerifiedAt = timestamppb.New(*r.VerifiedAt)
+	}
+	return msg
+}
+
+func authoritiesToProto(in []domain.Authority) []empiv1.Authority {
+	out := make([]empiv1.Authority, 0, len(in))
+	for _, a := range in {
+		out = append(out, authorityToProto[a])
+	}
+	return out
+}
+
+func authoritiesFromProto(in []empiv1.Authority) []domain.Authority {
+	out := make([]domain.Authority, 0, len(in))
+	for _, a := range in {
+		// An unrecognised authority is dropped rather than mapped to a
+		// default: silently granting "view_demographics" because a client sent
+		// an enum this build does not know would widen access on a version
+		// skew. The domain refuses an empty grant where one was intended.
+		if mapped, ok := authorityFromProto[a]; ok {
+			out = append(out, mapped)
+		}
+	}
+	return out
+}
+
+func contactsFromProto(in []*empiv1.ContactPoint) []domain.ContactPoint {
+	out := make([]domain.ContactPoint, 0, len(in))
+	for _, c := range in {
+		out = append(out, domain.ContactPoint{
+			System: domain.ContactPhone, Value: c.GetValue(), Use: c.GetUse(),
+		})
+	}
+	return out
+}
+
+func humanNameFromProto(n *empiv1.HumanName) domain.HumanName {
+	if n == nil {
+		return domain.HumanName{}
+	}
+	return domain.HumanName{
+		Family: n.GetFamily(), Given: n.GetGiven(),
+		Prefix: n.GetPrefix(), Suffix: n.GetSuffix(),
+	}
 }
