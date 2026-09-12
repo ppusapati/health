@@ -22,6 +22,7 @@ sql:
       - db/migrations/0017_scheduling.up.sql
       - db/migrations/0018_scheduling_lifecycle.up.sql
       - db/migrations/0019_scheduling_queue.up.sql
+      - db/migrations/0020_encounter.up.sql
     gen:
       go:
         package: sqlcgen

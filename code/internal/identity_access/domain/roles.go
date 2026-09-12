@@ -70,6 +70,10 @@ var rolePermissions = map[Role][]string{
 		// a clinic runs is configuration, and it is deliberately not bundled
 		// with the ability to look inside the diary at who is coming.
 		"sch.schedule.configure",
+		// What a facility requires before an encounter can be closed
+		// (SRS-ENC-008). Configuration, and again not bundled with reading the
+		// encounters themselves.
+		"enc.encounter.configure",
 	},
 	RoleScheduler: {
 		"organization.facility.read",
@@ -111,6 +115,12 @@ var rolePermissions = map[Role][]string{
 		"sch.schedule.read",
 		"sch.appointment.book",
 		"sch.appointment.manage",
+		// The desk opens the visit when the patient arrives and reads the list
+		// of who is in. It never records a diagnosis: what is wrong with the
+		// patient is a clinical act, and behind one permission every
+		// receptionist could enter one under their own name.
+		"enc.encounter.read",
+		"enc.encounter.manage",
 	},
 
 	// HIM resolves identities. They hold merge and unrestricted read, because
@@ -140,6 +150,24 @@ var rolePermissions = map[Role][]string{
 		// (SRS-SCH-011), and a correction to a status recorded in error is a
 		// clinical judgement about what actually happened.
 		"sch.appointment.correct",
+		// The consultation itself: run the encounter, record what is wrong,
+		// and close it with a summary.
+		"enc.encounter.read",
+		"enc.encounter.manage",
+		"enc.diagnosis.record",
+		"enc.encounter.close",
+		// Closing over an incomplete record where policy allows it
+		// (SRS-ENC-008). A separate permission so a hospital can withhold it
+		// from junior staff, but the control that actually bites is the
+		// mandatory reason and the report it feeds: an emergency department
+		// that cannot close a resuscitation until the notes are perfect will
+		// leave it open, and an open encounter reads as a patient still under
+		// care.
+		"enc.encounter.override",
+		// Restricted clinical entries — mental health, sexual health,
+		// safeguarding (SRS-CLN-019). A clinician treating the patient needs
+		// them; the read is separately audited every time.
+		"enc.restricted.read",
 	},
 }
 

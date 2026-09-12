@@ -213,6 +213,127 @@ type EmpiRelatedPerson struct {
 	RecordedAt       pgtype.Timestamptz
 }
 
+type EncounterCareTeamMember struct {
+	CareTeamID     uuid.UUID
+	TenantID       uuid.UUID
+	EncounterID    uuid.UUID
+	SubjectID      string
+	Role           string
+	EffectiveFrom  pgtype.Timestamptz
+	EffectiveUntil pgtype.Timestamptz
+	AssignedBy     string
+	AssignedAt     pgtype.Timestamptz
+}
+
+type EncounterClosureOverride struct {
+	OverrideID   uuid.UUID
+	TenantID     uuid.UUID
+	EncounterID  uuid.UUID
+	MissingItems []string
+	Reason       string
+	OverriddenBy string
+	OverriddenAt pgtype.Timestamptz
+}
+
+type EncounterClosurePolicy struct {
+	PolicyID       uuid.UUID
+	TenantID       uuid.UUID
+	FacilityID     pgtype.UUID
+	EncounterClass string
+	RequiredItems  []string
+	AllowOverride  bool
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type EncounterEncounter struct {
+	EncounterID         uuid.UUID
+	TenantID            uuid.UUID
+	FacilityID          uuid.UUID
+	OrgUnitID           pgtype.UUID
+	PatientID           uuid.UUID
+	Class               string
+	VisitType           string
+	AttendingProviderID string
+	AppointmentID       pgtype.UUID
+	EpisodeID           pgtype.UUID
+	ReferralID          string
+	Reason              string
+	Status              string
+	StartedAt           pgtype.Timestamptz
+	EndedAt             pgtype.Timestamptz
+	ClosedAt            pgtype.Timestamptz
+	CreatedBy           string
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	Version             int64
+}
+
+type EncounterEncounterDiagnosis struct {
+	DiagnosisID     uuid.UUID
+	TenantID        uuid.UUID
+	EncounterID     uuid.UUID
+	PatientID       uuid.UUID
+	CodeSystem      string
+	CodeVersion     string
+	Code            string
+	CodeDisplay     string
+	Certainty       string
+	Rank            string
+	Note            string
+	OnsetAt         pgtype.Timestamptz
+	SupersededByID  pgtype.UUID
+	RetractedReason string
+	RecordedBy      string
+	RecordedAt      pgtype.Timestamptz
+}
+
+type EncounterEncounterStatusHistory struct {
+	HistoryID   uuid.UUID
+	TenantID    uuid.UUID
+	EncounterID uuid.UUID
+	FromStatus  string
+	ToStatus    string
+	ChangedAt   pgtype.Timestamptz
+	ChangedBy   string
+	Reason      string
+}
+
+type EncounterEpisode struct {
+	EpisodeID     uuid.UUID
+	TenantID      uuid.UUID
+	PatientID     uuid.UUID
+	FacilityID    uuid.UUID
+	EpisodeType   string
+	Label         string
+	CareManagerID string
+	Status        string
+	StartedAt     pgtype.Timestamptz
+	EndedAt       pgtype.Timestamptz
+	CreatedBy     string
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+	Version       int64
+}
+
+type EncounterVisitSummary struct {
+	SummaryID       uuid.UUID
+	TenantID        uuid.UUID
+	EncounterID     uuid.UUID
+	PatientID       uuid.UUID
+	Version         int32
+	SupersedesID    pgtype.UUID
+	AmendmentReason string
+	EncounterClass  string
+	StartedAt       pgtype.Timestamptz
+	EndedAt         pgtype.Timestamptz
+	Diagnoses       []byte
+	CareTeam        []string
+	Narrative       string
+	GeneratedBy     string
+	GeneratedAt     pgtype.Timestamptz
+}
+
 type IdentityAccessAccount struct {
 	AccountID           uuid.UUID
 	TenantID            uuid.UUID

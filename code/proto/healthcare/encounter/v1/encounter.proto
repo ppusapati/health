@@ -1,0 +1,658 @@
+// Encounters, episodes of care, care teams and diagnoses.
+//
+// Owning context : encounter  (Master Engineering Registry)
+// Owning service : EncounterService
+// Trace          : SRS-ENC-001 … SRS-ENC-012
+//
+// The distinction this contract is built around is SRS-ENC-003's: an
+// appointment is a plan, an encounter is what happened. They are separately
+// auditable, so an encounter carries its own clinical times and the appointment
+// is an optional reference rather than a parent.
+syntax = "proto3";
+
+package healthcare.encounter.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ppusapati/health/code/gen/go/healthcare/encounter/v1;encounterv1";
+
+// The kind of visit (SRS-ENC-002).
+//
+// One model with a class rather than seven models: everything downstream —
+// orders, results, notes, billing — attaches to an encounter and would
+// otherwise have to know about seven of them.
+enum EncounterClass {
+  ENCOUNTER_CLASS_UNSPECIFIED = 0;
+  ENCOUNTER_CLASS_OUTPATIENT = 1;
+  // The class whose rules bend: it may be started for a patient nobody has
+  // identified yet, and finalised over an incomplete record under the override
+  // SRS-ENC-008 allows.
+  ENCOUNTER_CLASS_EMERGENCY = 2;
+  // Spans days and beds. Its start and end are an admission and a discharge,
+  // not a consultation.
+  ENCOUNTER_CLASS_INPATIENT = 3;
+  ENCOUNTER_CLASS_DAY_CARE = 4;
+  // Recorded distinctly because a remote consultation has different consent,
+  // identification and prescribing rules in most jurisdictions.
+  ENCOUNTER_CLASS_TELEMEDICINE = 5;
+  ENCOUNTER_CLASS_HOME_CARE = 6;
+  // A visit for a test with no consultation. It exists because the alternative
+  // is a result with no encounter to hang from, and results without context are
+  // how the wrong patient's film gets reported.
+  ENCOUNTER_CLASS_DIAGNOSTIC_ONLY = 7;
+}
+
+// Where an encounter sits in its life (SRS-ENC-006).
+enum EncounterStatus {
+  ENCOUNTER_STATUS_UNSPECIFIED = 0;
+  // Created but not begun. A scheduled admission is planned days ahead.
+  ENCOUNTER_STATUS_PLANNED = 1;
+  ENCOUNTER_STATUS_IN_PROGRESS = 2;
+  // An inpatient temporarily absent. Distinct from discharged because the bed
+  // is still theirs.
+  ENCOUNTER_STATUS_ON_LEAVE = 3;
+  // Clinically complete but not yet closed: documentation may still be
+  // outstanding.
+  ENCOUNTER_STATUS_FINISHED = 4;
+  // Finished and documented, with a visit summary issued. Later changes are
+  // amendments (SRS-ENC-009).
+  ENCOUNTER_STATUS_CLOSED = 5;
+  // A visit that did not happen.
+  ENCOUNTER_STATUS_CANCELLED = 6;
+  // A record that was never true — opened against the wrong patient, most
+  // often. Distinct from cancelled because counting them together would tell a
+  // quality team that patients are cancelling when in fact clerks are
+  // misclicking.
+  ENCOUNTER_STATUS_ENTERED_IN_ERROR = 7;
+}
+
+// The kind of longitudinal course an episode groups (SRS-ENC-004).
+enum EpisodeType {
+  EPISODE_TYPE_UNSPECIFIED = 0;
+  EPISODE_TYPE_PREGNANCY = 1;
+  EPISODE_TYPE_ONCOLOGY = 2;
+  EPISODE_TYPE_DIALYSIS = 3;
+  EPISODE_TYPE_CHRONIC_DISEASE = 4;
+  EPISODE_TYPE_REHABILITATION = 5;
+  EPISODE_TYPE_SURGICAL_CARE = 6;
+  // The honest catch-all. Present because the alternative is somebody filing a
+  // course of care under "chronic disease" because there was nowhere else to
+  // put it, which produces a wrong answer rather than a missing one.
+  EPISODE_TYPE_OTHER = 7;
+}
+
+enum EpisodeStatus {
+  EPISODE_STATUS_UNSPECIFIED = 0;
+  EPISODE_STATUS_ACTIVE = 1;
+  // Paused rather than finished — a course of chemotherapy suspended while the
+  // patient recovers from an infection.
+  EPISODE_STATUS_ON_HOLD = 2;
+  EPISODE_STATUS_FINISHED = 3;
+  EPISODE_STATUS_CANCELLED = 4;
+}
+
+// What somebody does on an encounter (SRS-ENC-005).
+//
+// Coarse on purpose: authorization needs to know whether this clinician is
+// looking after this patient, not their exact job title.
+enum CareTeamRole {
+  CARE_TEAM_ROLE_UNSPECIFIED = 0;
+  CARE_TEAM_ROLE_ATTENDING = 1;
+  CARE_TEAM_ROLE_CONSULTING = 2;
+  CARE_TEAM_ROLE_NURSE = 3;
+  CARE_TEAM_ROLE_RESIDENT = 4;
+  CARE_TEAM_ROLE_THERAPIST = 5;
+  CARE_TEAM_ROLE_PHARMACIST = 6;
+  CARE_TEAM_ROLE_SOCIAL_WORK = 7;
+  CARE_TEAM_ROLE_ADMITTING = 8;
+  CARE_TEAM_ROLE_DISCHARGING = 9;
+}
+
+// How sure the clinician is (SRS-ENC-007).
+enum DiagnosisCertainty {
+  DIAGNOSIS_CERTAINTY_UNSPECIFIED = 0;
+  // Most of what is recorded during an admission. A system that made everything
+  // final would produce a discharge summary full of conditions nobody
+  // confirmed.
+  DIAGNOSIS_CERTAINTY_PROVISIONAL = 1;
+  DIAGNOSIS_CERTAINTY_DIFFERENTIAL = 2;
+  DIAGNOSIS_CERTAINTY_FINAL = 3;
+  // Considered and excluded. Worth keeping: the next clinician needs to know
+  // the question was asked.
+  DIAGNOSIS_CERTAINTY_RULED_OUT = 4;
+}
+
+// How central a diagnosis is to this encounter (SRS-ENC-007).
+enum DiagnosisRank {
+  DIAGNOSIS_RANK_UNSPECIFIED = 0;
+  // The reason the patient is here. At most one per encounter: the rank answers
+  // "what was this visit about", and two answers is no answer.
+  DIAGNOSIS_RANK_PRIMARY = 1;
+  DIAGNOSIS_RANK_SECONDARY = 2;
+  // Arose during the encounter rather than causing it. Distinguished because a
+  // complication is a quality signal and a secondary diagnosis is not, and
+  // counting them together hides harm.
+  DIAGNOSIS_RANK_COMPLICATION = 3;
+  DIAGNOSIS_RANK_COMORBIDITY = 4;
+}
+
+// What a timeline entry is (SRS-ENC-011, SRS-CLN-018).
+enum TimelineEntryKind {
+  TIMELINE_ENTRY_KIND_UNSPECIFIED = 0;
+  TIMELINE_ENTRY_KIND_ENCOUNTER = 1;
+  TIMELINE_ENTRY_KIND_DIAGNOSIS = 2;
+  TIMELINE_ENTRY_KIND_NOTE = 3;
+  TIMELINE_ENTRY_KIND_OBSERVATION = 4;
+  TIMELINE_ENTRY_KIND_MEDICATION = 5;
+  TIMELINE_ENTRY_KIND_PROCEDURE = 6;
+  TIMELINE_ENTRY_KIND_ORDER = 7;
+  TIMELINE_ENTRY_KIND_DOCUMENT = 8;
+  TIMELINE_ENTRY_KIND_IMAGING = 9;
+  TIMELINE_ENTRY_KIND_ALLERGY = 10;
+}
+
+// How tightly an entry is held (SRS-CLN-019).
+enum Confidentiality {
+  CONFIDENTIALITY_UNSPECIFIED = 0;
+  CONFIDENTIALITY_NORMAL = 1;
+  // Needs a narrower role and purpose. Mental health, sexual health,
+  // safeguarding.
+  CONFIDENTIALITY_RESTRICTED = 2;
+  // Visible only to the authoring team unless an emergency is declared and
+  // recorded.
+  CONFIDENTIALITY_VERY_RESTRICTED = 3;
+}
+
+// A coded concept from a terminology.
+//
+// System and code together, never code alone: "C50" means breast cancer in
+// ICD-10 and something else in a local scheme.
+message Coding {
+  string system = 1;
+  // Pins the release. ICD-10 codes have been reassigned between revisions, so a
+  // code with no version is ambiguous once a decade.
+  string version = 2;
+  string code = 3;
+  // A bare code on a screen is a screen clinicians stop reading.
+  string display = 4;
+}
+
+message EncounterStatusChange {
+  EncounterStatus from = 1;
+  EncounterStatus to = 2;
+  google.protobuf.Timestamp at = 3;
+  string by = 4;
+  // Required for cancellation, entered-in-error and any change after closure.
+  string reason = 5;
+}
+
+message Encounter {
+  string encounter_id = 1;
+  string facility_id = 2;
+  string org_unit_id = 3;
+  string patient_id = 4;
+  EncounterClass class = 5;
+  string visit_type = 6;
+  // The clinician responsible. One, not many: the care team holds everybody
+  // else, and a record where responsibility is diffuse is one where nobody
+  // holds it.
+  string attending_provider_id = 7;
+  // Empty for a walk-in, and empty is not an error (SRS-ENC-003).
+  string appointment_id = 8;
+  string episode_id = 9;
+  // The external request this visit answers (SRS-ENC-010).
+  string referral_id = 10;
+  // Why the patient came, in the words recorded at the door.
+  string reason = 11;
+  EncounterStatus status = 12;
+  // Clinical times, independent of the appointment. Unset until the encounter
+  // begins and ends.
+  google.protobuf.Timestamp started_at = 13;
+  google.protobuf.Timestamp ended_at = 14;
+  google.protobuf.Timestamp closed_at = 15;
+  repeated EncounterStatusChange history = 16;
+  string created_by = 17;
+  google.protobuf.Timestamp created_at = 18;
+  int64 version = 19;
+}
+
+message Episode {
+  string episode_id = 1;
+  string patient_id = 2;
+  string facility_id = 3;
+  EpisodeType type = 4;
+  // What clinicians call it — "second pregnancy", "left breast".
+  string label = 5;
+  // Optional: plenty of episodes are managed by a team rather than a person.
+  string care_manager_id = 6;
+  EpisodeStatus status = 7;
+  google.protobuf.Timestamp started_at = 8;
+  google.protobuf.Timestamp ended_at = 9;
+  int64 version = 10;
+}
+
+message CareTeamMember {
+  string care_team_id = 1;
+  string encounter_id = 2;
+  string subject_id = 3;
+  CareTeamRole role = 4;
+  // Dated rather than a plain membership list: the question authorization asks
+  // is whether this clinician was on the team *at the time*.
+  google.protobuf.Timestamp effective_from = 5;
+  // Unset means still involved.
+  google.protobuf.Timestamp effective_until = 6;
+  string assigned_by = 7;
+}
+
+message Diagnosis {
+  string diagnosis_id = 1;
+  string encounter_id = 2;
+  string patient_id = 3;
+  Coding code = 4;
+  DiagnosisCertainty certainty = 5;
+  DiagnosisRank rank = 6;
+  // The clinician's qualification of the code — "left side", "since 2019".
+  string note = 7;
+  // When the condition began, where known. Distinct from recorded_at: a
+  // diagnosis of an illness that started last month is not a diagnosis made
+  // last month.
+  google.protobuf.Timestamp onset_at = 8;
+  // Chains to the entry that replaced this one, so the trail reads forwards.
+  string superseded_by_id = 9;
+  // Distinct from superseded: superseded means the thinking moved on, retracted
+  // means this was never true of this patient.
+  string retracted_reason = 10;
+  string recorded_by = 11;
+  google.protobuf.Timestamp recorded_at = 12;
+}
+
+// What closing an encounter produces (SRS-ENC-009).
+//
+// Stored rather than rendered on demand: a summary rendered on demand shows
+// today's chart, so a patient handed a printout in March and a clinician
+// looking at the same "summary" in June see different documents with the same
+// name.
+message VisitSummary {
+  string summary_id = 1;
+  string encounter_id = 2;
+  string patient_id = 3;
+  // Starts at 1 and increments with each amendment. The original is never
+  // replaced.
+  int32 version = 4;
+  string supersedes_id = 5;
+  // Empty on version 1. An amendment with no reason is indistinguishable from a
+  // rewrite, and a rewrite is what SRS-ENC-009 forbids.
+  string amendment_reason = 6;
+  EncounterClass class = 7;
+  google.protobuf.Timestamp started_at = 8;
+  google.protobuf.Timestamp ended_at = 9;
+  repeated Coding diagnoses = 10;
+  repeated string care_team = 11;
+  string narrative = 12;
+  string generated_by = 13;
+  google.protobuf.Timestamp generated_at = 14;
+}
+
+// One thing that happened, as the timeline shows it (SRS-ENC-011).
+message TimelineEntry {
+  string entry_id = 1;
+  TimelineEntryKind kind = 2;
+  // When the thing happened clinically, not when it was typed.
+  google.protobuf.Timestamp at = 3;
+  string encounter_id = 4;
+  // A short label. Never a result value or a diagnosis text: a title is
+  // rendered in list views that a masked entry still appears in.
+  string title = 5;
+  Confidentiality confidentiality = 6;
+  // An entry the reader may know exists but may not read. A masked entry keeps
+  // its kind and time and loses its title, so a chart shows that something is
+  // there without saying what.
+  bool masked = 7;
+}
+
+// What a facility requires before an encounter can be closed (SRS-ENC-008).
+message ClosurePolicyForClass {
+  EncounterClass class = 1;
+  // Item keys: final_diagnosis, signed_note, attending_provider, end_time,
+  // discharge_disposition.
+  repeated string required_items = 2;
+  // Per class, because the judgement differs: an emergency department that
+  // cannot close a resuscitation until the notes are perfect will simply leave
+  // it open, and an open encounter reads as a patient still under care.
+  bool allow_override = 3;
+}
+
+// A finalisation forced over an incomplete record (SRS-ENC-008).
+message ClosureOverride {
+  string override_id = 1;
+  string encounter_id = 2;
+  // What was outstanding at the moment of the override, captured then rather
+  // than recomputed later.
+  repeated string missing_items = 3;
+  string reason = 4;
+  string overridden_by = 5;
+  google.protobuf.Timestamp overridden_at = 6;
+}
+
+message OpenEncounterRequest {
+  string patient_id = 1;
+  string facility_id = 2;
+  string org_unit_id = 3;
+  EncounterClass class = 4;
+  string visit_type = 5;
+  // Required for every class but diagnostic-only.
+  string attending_provider_id = 6;
+  string appointment_id = 7;
+  string episode_id = 8;
+  string referral_id = 9;
+  string reason = 10;
+  // Begins the encounter in the same call, which is what a consultation
+  // actually looks like. A planned encounter is the exception — a scheduled
+  // admission days ahead.
+  bool start_immediately = 11;
+  // When the patient was actually seen, for a late entry.
+  google.protobuf.Timestamp started_at = 12;
+}
+
+message OpenEncounterResponse {
+  Encounter encounter = 1;
+}
+
+message StartEncounterRequest {
+  string encounter_id = 1;
+  google.protobuf.Timestamp started_at = 2;
+}
+
+message StartEncounterResponse {
+  Encounter encounter = 1;
+}
+
+message EndEncounterRequest {
+  string encounter_id = 1;
+  google.protobuf.Timestamp ended_at = 2;
+}
+
+message EndEncounterResponse {
+  Encounter encounter = 1;
+}
+
+message CancelEncounterRequest {
+  string encounter_id = 1;
+  string reason = 2;
+  // Marks a record that should never have existed rather than a visit that did
+  // not take place.
+  bool entered_in_error = 3;
+}
+
+message CancelEncounterResponse {
+  Encounter encounter = 1;
+}
+
+message ReopenEncounterRequest {
+  string encounter_id = 1;
+  string reason = 2;
+}
+
+message ReopenEncounterResponse {
+  Encounter encounter = 1;
+}
+
+message SetEncounterLeaveRequest {
+  string encounter_id = 1;
+  string reason = 2;
+  // Brings the patient back from leave.
+  bool returning = 3;
+}
+
+message SetEncounterLeaveResponse {
+  Encounter encounter = 1;
+}
+
+message GetEncounterRequest {
+  string encounter_id = 1;
+}
+
+message GetEncounterResponse {
+  Encounter encounter = 1;
+}
+
+message ListEncountersRequest {
+  string patient_id = 1;
+  // Returns the encounters still under way — the ward round. Mutually exclusive
+  // with patient_id.
+  string facility_id = 2;
+  string episode_id = 3;
+  EncounterClass class = 4;
+  // Shows entered-in-error encounters. Off by default: a record that was never
+  // true should not appear in a clinical chronology unless somebody is
+  // investigating precisely that.
+  bool include_retracted = 5;
+  int32 page_size = 6;
+}
+
+message ListEncountersResponse {
+  repeated Encounter encounters = 1;
+}
+
+message OpenEpisodeRequest {
+  string patient_id = 1;
+  string facility_id = 2;
+  EpisodeType type = 3;
+  string label = 4;
+  string care_manager_id = 5;
+  google.protobuf.Timestamp started_at = 6;
+}
+
+message OpenEpisodeResponse {
+  Episode episode = 1;
+}
+
+message SetEpisodeStatusRequest {
+  string episode_id = 1;
+  EpisodeStatus status = 2;
+  google.protobuf.Timestamp ended_at = 3;
+}
+
+message SetEpisodeStatusResponse {
+  Episode episode = 1;
+}
+
+message ListEpisodesRequest {
+  string patient_id = 1;
+  bool open_only = 2;
+  int32 page_size = 3;
+}
+
+message ListEpisodesResponse {
+  repeated Episode episodes = 1;
+}
+
+message AssignCareTeamMemberRequest {
+  string encounter_id = 1;
+  string subject_id = 2;
+  CareTeamRole role = 3;
+  google.protobuf.Timestamp effective_from = 4;
+  google.protobuf.Timestamp effective_until = 5;
+}
+
+message AssignCareTeamMemberResponse {
+  CareTeamMember member = 1;
+}
+
+message EndCareTeamAssignmentRequest {
+  string care_team_id = 1;
+  google.protobuf.Timestamp effective_until = 2;
+}
+
+message EndCareTeamAssignmentResponse {}
+
+message GetCareTeamRequest {
+  string encounter_id = 1;
+}
+
+message GetCareTeamResponse {
+  repeated CareTeamMember members = 1;
+}
+
+message RecordDiagnosisRequest {
+  string encounter_id = 1;
+  Coding code = 2;
+  DiagnosisCertainty certainty = 3;
+  DiagnosisRank rank = 4;
+  string note = 5;
+  google.protobuf.Timestamp onset_at = 6;
+  // Names the earlier entry this one replaces. The earlier entry is kept: a
+  // differential that became a final diagnosis is a clinical reasoning trail.
+  string supersedes_id = 7;
+}
+
+message RecordDiagnosisResponse {
+  Diagnosis diagnosis = 1;
+}
+
+message RetractDiagnosisRequest {
+  string diagnosis_id = 1;
+  string reason = 2;
+}
+
+message RetractDiagnosisResponse {}
+
+message ListDiagnosesRequest {
+  // An encounter's full trail, superseded entries included.
+  string encounter_id = 1;
+  // Or the conditions that still stand across every encounter, which is what a
+  // problem list reads.
+  string patient_id = 2;
+  int32 page_size = 3;
+}
+
+message ListDiagnosesResponse {
+  repeated Diagnosis diagnoses = 1;
+}
+
+message CloseEncounterRequest {
+  string encounter_id = 1;
+  // The summary text, assembled from signed content.
+  string narrative = 2;
+  // Forces closure over an incomplete record where policy allows it. Needs the
+  // override permission as well.
+  string override_reason = 3;
+}
+
+message CloseEncounterResponse {
+  Encounter encounter = 1;
+  VisitSummary summary = 2;
+  bool overridden = 3;
+  // What was outstanding at the moment of the override.
+  repeated string missing_items = 4;
+}
+
+message AmendSummaryRequest {
+  string encounter_id = 1;
+  string narrative = 2;
+  string reason = 3;
+}
+
+message AmendSummaryResponse {
+  VisitSummary summary = 1;
+}
+
+message GetSummariesRequest {
+  string encounter_id = 1;
+}
+
+message GetSummariesResponse {
+  // Every version, newest first. The superseded ones stay readable: somebody
+  // acted on them.
+  repeated VisitSummary summaries = 1;
+}
+
+message SetClosurePolicyRequest {
+  // Empty applies tenant-wide; naming a facility overrides.
+  string facility_id = 1;
+  repeated ClosurePolicyForClass classes = 2;
+}
+
+message SetClosurePolicyResponse {}
+
+message GetClosurePolicyRequest {
+  string facility_id = 1;
+}
+
+message GetClosurePolicyResponse {
+  repeated ClosurePolicyForClass classes = 1;
+}
+
+message ListClosureOverridesRequest {
+  // Empty returns every forced closure in the tenant, which is the report
+  // SRS-ENC-008 exists to make possible.
+  string encounter_id = 1;
+  int32 page_size = 2;
+}
+
+message ListClosureOverridesResponse {
+  repeated ClosureOverride overrides = 1;
+}
+
+message GetTimelineRequest {
+  string patient_id = 1;
+  google.protobuf.Timestamp from = 2;
+  google.protobuf.Timestamp until = 3;
+  // Empty means every kind. A filter is a view and never changes the record.
+  repeated TimelineEntryKind kinds = 4;
+  int32 page_size = 5;
+}
+
+message GetTimelineResponse {
+  repeated TimelineEntry entries = 1;
+}
+
+service EncounterService {
+  // SRS-ENC-001, SRS-ENC-002, SRS-ENC-003. An encounter carries its own
+  // clinical times; the appointment it answers, where there is one, is a
+  // reference rather than a parent.
+  rpc OpenEncounter(OpenEncounterRequest) returns (OpenEncounterResponse);
+  rpc StartEncounter(StartEncounterRequest) returns (StartEncounterResponse);
+  rpc EndEncounter(EndEncounterRequest) returns (EndEncounterResponse);
+
+  // SRS-ENC-006. Invalid state changes are rejected; cancelled and
+  // entered-in-error are different facts and stay distinguishable.
+  rpc CancelEncounter(CancelEncounterRequest) returns (CancelEncounterResponse);
+  rpc ReopenEncounter(ReopenEncounterRequest) returns (ReopenEncounterResponse);
+  rpc SetEncounterLeave(SetEncounterLeaveRequest) returns (SetEncounterLeaveResponse);
+
+  rpc GetEncounter(GetEncounterRequest) returns (GetEncounterResponse);
+  rpc ListEncounters(ListEncountersRequest) returns (ListEncountersResponse);
+
+  // SRS-ENC-004. Multiple encounters reference one episode without copying
+  // data.
+  rpc OpenEpisode(OpenEpisodeRequest) returns (OpenEpisodeResponse);
+  rpc SetEpisodeStatus(SetEpisodeStatusRequest) returns (SetEpisodeStatusResponse);
+  rpc ListEpisodes(ListEpisodesRequest) returns (ListEpisodesResponse);
+
+  // SRS-ENC-005. Effective-dated, so authorization can evaluate whether a
+  // clinician was looking after this patient at the time.
+  rpc AssignCareTeamMember(AssignCareTeamMemberRequest) returns (AssignCareTeamMemberResponse);
+  rpc EndCareTeamAssignment(EndCareTeamAssignmentRequest) returns (EndCareTeamAssignmentResponse);
+  rpc GetCareTeam(GetCareTeamRequest) returns (GetCareTeamResponse);
+
+  // SRS-ENC-007. Append-only: a change of mind supersedes rather than
+  // overwrites, because the trail is the clinical reasoning.
+  rpc RecordDiagnosis(RecordDiagnosisRequest) returns (RecordDiagnosisResponse);
+  rpc RetractDiagnosis(RetractDiagnosisRequest) returns (RetractDiagnosisResponse);
+  rpc ListDiagnoses(ListDiagnosesRequest) returns (ListDiagnosesResponse);
+
+  // SRS-ENC-008, SRS-ENC-009. Closure lists what is blocking it, can be forced
+  // where policy allows with an audited reason, and issues a stored summary
+  // that is amended rather than rewritten.
+  rpc CloseEncounter(CloseEncounterRequest) returns (CloseEncounterResponse);
+  rpc AmendSummary(AmendSummaryRequest) returns (AmendSummaryResponse);
+  rpc GetSummaries(GetSummariesRequest) returns (GetSummariesResponse);
+  rpc SetClosurePolicy(SetClosurePolicyRequest) returns (SetClosurePolicyResponse);
+  rpc GetClosurePolicy(GetClosurePolicyRequest) returns (GetClosurePolicyResponse);
+  rpc ListClosureOverrides(ListClosureOverridesRequest) returns (ListClosureOverridesResponse);
+
+  // SRS-ENC-011. Restricted entries the reader may not see are masked or
+  // omitted, and the restricted read is explicitly audited.
+  rpc GetTimeline(GetTimelineRequest) returns (GetTimelineResponse);
+}

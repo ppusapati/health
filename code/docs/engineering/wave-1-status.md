@@ -13,8 +13,8 @@ What this records is which requirements have working, tested implementations.
 |---|---|---|---|
 | 1 | EMPI foundation | SRS-EMPI-001 … 009 | **Complete** |
 | 2 | EMPI completion | SRS-EMPI-010 … 018 | **Complete** |
-| 3 | Scheduling | SRS-SCH-001 … 016 | **In progress** — 001–006, 013–015 implemented |
-| 4 | Encounter, clinical, nursing | SRS-ENC/CLN/NUR | Not started |
+| 3 | Scheduling | SRS-SCH-001 … 016 | **Complete** |
+| 4 | Encounter, clinical, nursing | SRS-ENC/CLN/NUR | **In progress** — SRS-ENC complete |
 | 5 | Orders, medication, billing | SRS-ORD/MED/BIL | Not started |
 
 ## Sprint 1 — patient identity
@@ -748,6 +748,178 @@ one permission, every receptionist could delete a clinician's Tuesday.
 Implemented as a distinct `sch.appointment.book`, with `sch.schedule.configure`
 reserved for rosters — the same shape as the SRS-EMPI-005 slip recorded above.
 Pinned by `TestAClerkCannotRewriteTheRoster`.
+
+## Sprint 4 — encounter, clinical and nursing
+
+| Requirement | What it asks for | State |
+|---|---|---|
+| SRS-ENC-001 | Encounter linked to patient, facility, service, visit type, attending provider and reason | **Implemented** |
+| SRS-ENC-002 | Seven encounter classes deriving class-specific rules from one common model | **Implemented** |
+| SRS-ENC-003 | Start/end with timestamps independent of appointment status; both separately auditable | **Implemented** |
+| SRS-ENC-004 | Episode-of-care grouping; many encounters reference one episode without copying data | **Implemented** |
+| SRS-ENC-005 | Care team with role and effective time, so authorization can evaluate an active relationship | **Implemented** |
+| SRS-ENC-006 | Status transitions with explicit cancellation and entered-in-error semantics | **Implemented** |
+| SRS-ENC-007 | Encounter diagnoses with certainty, rank and coding system; history and author retained | **Implemented** |
+| SRS-ENC-008 | Block finalisation on incomplete mandatory documentation, with an audited emergency override | **Implemented** |
+| SRS-ENC-009 | Close with a visit summary generated from signed data; later changes are amendments | **Implemented** |
+| SRS-ENC-010 | Linked external referral/request source | **Implemented** — the reference is held and travels with the encounter; closing the loop back to the referrer is SRS-CLN-022's consult response, which arrives with 4B |
+| SRS-ENC-011 | Longitudinal timeline with purpose/permission filtering; unauthorised restricted notes omitted or masked | **Implemented** |
+| SRS-ENC-012 | `encounter.started/completed/cancelled` and `diagnosis.recorded`, deterministic ordering and version per aggregate | **Implemented** |
+| SRS-CLN-001 … 024 | Clinical core | Not started — Sprint 4B |
+| SRS-NUR-001 … 018 | Nursing core | Not started — Sprint 4C |
+
+### What the encounter context enforces
+
+- **An appointment is a plan; an encounter is what happened.** SRS-ENC-003 is
+  explicit that the two stay separately auditable, and the reason is that a
+  patient can be seen without an appointment, an appointment can be kept without
+  a consultation ever starting, and a consultation can run long past the slot it
+  was booked into. So the encounter carries its own clinical start and end, and
+  the appointment is a nullable reference rather than a parent. A system that
+  conflated them cannot answer "when was this patient actually seen", which is
+  the question every audit and every billing dispute turns on. The start time is
+  supplied rather than taken from the clock, so a late entry records when the
+  patient was seen rather than when somebody got to a keyboard.
+- **One encounter model, seven classes.** Everything downstream — orders,
+  results, notes, billing — attaches to an encounter and would otherwise have to
+  know about seven of them. The differences between an outpatient visit and an
+  admission are rules about one thing, not seven things. The class-specific rules
+  that exist are small and load-bearing: a consultation names somebody answerable
+  and a diagnostic-only visit does not, because inventing an attending clinician
+  for a walk-in X-ray would put a name against a decision that person never made.
+- **Cancelled and entered-in-error are different facts.** A cancelled visit did
+  not take place; an entered-in-error one is a record that was never true, almost
+  always an encounter opened against the wrong patient. Counting them together
+  would tell a quality team that patients are cancelling when in fact clerks are
+  misclicking. Entered-in-error is reachable even from closed, because the mistake
+  is usually noticed afterwards and the only alternative is leaving a false record
+  standing. It is not a delete: the clinical content written against it is still
+  real and still has to be traceable, and orphaning it is how a result ends up
+  attributed to nobody.
+- **A care-team membership is dated, and the question is about the past.**
+  Authorization asks whether this clinician was looking after this patient *at the
+  time*. A list with no dates answers today's question and silently gives the
+  wrong answer to every question about the past — including the one an
+  investigation asks. Ending an assignment closes it rather than deleting it, for
+  the same reason. The attending clinician joins their own care team on the way
+  in, because otherwise authorization would answer "no" for the person responsible
+  for the patient.
+- **An episode holds the grouping and nothing else.** SRS-ENC-004's criterion is
+  that encounters reference one episode "without copying data", so the moment the
+  episode held a copy of a diagnosis or a plan, that copy would be the version
+  somebody read after the original changed. A finished course of care is not
+  reopened: a pregnancy that resumes is a different pregnancy.
+- **A diagnosis is superseded, never overwritten.** A differential that became a
+  final diagnosis is a clinical reasoning trail, and overwriting it destroys the
+  only evidence that the reasoning happened. A second primary diagnosis supersedes
+  the first automatically rather than being refused — the clinician correcting it
+  is doing the right thing and should not have to retract first — and a partial
+  unique index holds "at most one live primary" at the table, because the rank
+  answers "what was this visit about" and two answers is no answer. The
+  superseding chain's foreign key is deferred to commit, so the supersede can
+  precede the insert that the unique index requires it to precede.
+- **A code with no terminology is a number nobody can safely act on.** "C50"
+  means breast cancer in ICD-10 and something else in a local scheme, so system
+  and code travel together, with the terminology version pinned — ICD-10 codes
+  have been reassigned between revisions — and a display term, because a bare code
+  on a screen is a screen clinicians stop reading.
+- **The closure gate blocks, names everything, and can be forced with a
+  reason.** A hard block with no way through does not produce complete records; it
+  produces encounters left open for months, and an open encounter looks like a
+  patient still under care. So SRS-ENC-008's gate lists *every* missing item
+  rather than the first — a clinician told about one item, who fixes it and is
+  then told about another, stops trusting the message — phrases each as the action
+  to take rather than the rule that was broken, and can be overridden where policy
+  allows by somebody who states why. The override is stored as well as audited:
+  the audit trail answers "who did this", and the stored record answers "how often
+  does this happen and for what", which is the question a quality committee asks.
+  What was outstanding is captured at the moment of the override rather than
+  recomputed, because the items are usually completed afterwards and a recomputing
+  report would show every override as having overridden nothing. Overriding a
+  complete encounter is refused, because it would inflate the report the override
+  exists to make possible.
+- **The visit summary is stored, not rendered.** A summary rendered on demand
+  shows today's chart, so a patient handed a printout in March and a clinician
+  looking at the same "summary" in June see different documents with the same
+  name. SRS-ENC-009 requires that a closed encounter's chronology cannot be
+  *silently* rewritten, and a stored artefact is what makes "silently" impossible:
+  a later change is a new version with a mandatory reason, and the previous
+  version stays readable because somebody acted on it.
+- **The confidentiality filter runs once, on the way out.** A timeline is the
+  screen where every context's output meets, which makes it the screen where a
+  confidentiality mistake reaches the most people. Restricted entries are *masked*
+  rather than omitted — a clinician who can see that a note exists knows to ask,
+  while an omitted note produces a chart that silently claims to be complete — and
+  the very-restricted tier is omitted, because the existence of a safeguarding
+  note can itself be the disclosure. Break-glass reaches restricted content and
+  stops there. A confidentiality class this version does not recognise is treated
+  as the tightest: over-restricting is an inconvenience somebody reports, and
+  under-restricting is a disclosure nobody notices.
+
+### Sprint 4 evidence
+
+| Property | Test |
+|---|---|
+| An encounter begins in a valid state with an identifier of its own | `TestOpeningAnEncounterStartsItInAValidState` |
+| An encounter needs a patient, a facility and somebody answerable | `TestAnEncounterNeedsAPatientAFacilityAndAResponsibleClinician` |
+| A walk-in encounter needs no appointment | `TestAnEncounterNeedsNoAppointment` |
+| The encounter records when the patient was actually seen | `TestAnEncounterRecordsWhenThePatientWasActuallySeen`, `TestAnEncounterKeepsItsOwnClinicalTimes` |
+| An encounter cannot start in the future or end before it started | `TestAnEncounterCannotStartInTheFuture`, `TestAnEncounterCannotEndBeforeItStarted` |
+| A consultation names its clinician; a diagnostic-only visit does not | `TestAConsultationNamesItsClinicianAndAnXRayDoesNot`, `TestADiagnosticOnlyVisitNeedsNoAttendingClinician` |
+| The attending clinician is on the care team from the start | `TestTheAttendingClinicianIsOnTheCareTeamFromTheStart` |
+| Care-team membership is answered as of a time | `TestCareTeamMembershipIsAnsweredAsOfATime` |
+| Ending a care-team assignment keeps it | `TestEndingACareTeamAssignmentKeepsIt` |
+| A care-team assignment must end after it begins | `TestACareTeamAssignmentMustEndAfterItBegins` |
+| Encounters share an episode without copying it | `TestEncountersShareAnEpisodeWithoutCopyingIt`, `TestAnEpisodeGroupsEncountersWithoutCopyingThem` |
+| A finished episode takes no more encounters | `TestAFinishedEpisodeTakesNoMoreEncounters` |
+| An episode needs a label | `TestAnEpisodeNeedsALabel` |
+| One patient's encounter cannot be filed into another's episode, and the refusal leaks nothing | `TestAnEpisodeCannotBeUsedForAnotherPatient` |
+| An impossible state change is rejected | `TestAnEncounterRefusesAnImpossibleStateChange` (both layers), `TestAnInvalidTransitionNamesBothStates` |
+| Cancelled and entered-in-error stay distinct | `TestCancelledAndEnteredInErrorStayDistinct`, `TestCancelledAndEnteredInErrorAreDistinct` |
+| Cancelling and retracting need reasons | `TestCancellingNeedsAReason`, `TestCancellingAndRetractingNeedReasons` |
+| A closed encounter is amended, not reopened | `TestAClosedEncounterCannotBeReopened` |
+| A finished encounter can be continued | `TestAFinishedEncounterCanBeContinued` |
+| Only an inpatient can go on leave | `TestOnlyAnInpatientCanGoOnLeave` |
+| Only an open encounter accepts clinical content | `TestOnlyAnOpenEncounterAcceptsClinicalContent`, `TestAClosedEncounterTakesNoNewDiagnosis` |
+| A status change records its author, and repeating one is harmless | `TestAStatusChangeRecordsItsAuthor`, `TestRepeatingAStatusChangeIsHarmless` |
+| A diagnosis needs its terminology and a display term | `TestADiagnosisNeedsItsTerminologyAndADisplayTerm`, `TestADiagnosisNeedsItsTerminology`, `TestADiagnosisNeedsADisplayTerm` |
+| Revising a diagnosis keeps the reasoning trail and leaves one live primary | `TestRevisingADiagnosisKeepsTheReasoningTrail`, `TestSupersedingADiagnosisKeepsTheReasoningTrail` |
+| A condition cannot have begun in the future | `TestAConditionCannotHaveBegunInTheFuture` |
+| A clerk cannot record a diagnosis | `TestAClerkCannotRecordADiagnosis` |
+| An incomplete closure lists everything that is missing, as actions | `TestAnIncompleteEncounterCannotBeClosedAndSaysWhy`, `TestAnIncompleteClosureListsEverythingThatIsMissing` |
+| A complete encounter closes cleanly; a diagnostic-only visit has nothing to document | `TestACompleteEncounterClosesCleanly`, `TestADiagnosticOnlyVisitHasNothingToDocument` |
+| An emergency encounter can be forced closed with an audited reason | `TestAnEmergencyEncounterCanBeForcedClosedWithAnAuditedReason`, `TestOnlyEmergencyEncountersCanBeForcedClosedByDefault` |
+| A routine encounter cannot be forced closed | `TestARoutineEncounterCannotBeForcedClosed` |
+| Overriding a complete encounter is refused, and "ok" is not a reason | `TestOverridingACompleteEncounterIsRefused`, `TestAnOverrideNeedsASubstantiveReasonAndSomethingToOverride` |
+| An unrecognised documentation requirement blocks | `TestAnUnknownDocumentationRequirementBlocks` |
+| A facility can configure what blocks a closure; a clerk cannot | `TestAFacilityCanConfigureWhatBlocksAClosure`, `TestAClerkCannotSetTheClosurePolicy` |
+| A visit summary is amended rather than rewritten | `TestAVisitSummaryIsAmendedRatherThanRewritten` (both layers) |
+| The encounter events carry the aggregate version and no clinical detail | `TestTheEncounterEventsCarryTheAggregateVersion` |
+| The timeline shows encounters and diagnoses newest first | `TestTheTimelineShowsEncountersAndDiagnosesNewestFirst`, `TestTheTimelineSortsNewestFirst` |
+| An ordinary reader sees neither restricted note | `TestAnOrdinaryReaderSeesNeitherRestrictedNote` |
+| The author of a restricted note can always read it back | `TestTheAuthorOfARestrictedNoteCanAlwaysReadItBack` |
+| Break-glass reaches restricted but not very-restricted | `TestBreakGlassReachesRestrictedButNotVeryRestricted` |
+| An unknown confidentiality class is treated as the tightest | `TestAnUnknownConfidentialityClassIsTreatedAsTheTightest` |
+| The filter reports what it withheld, for audit | `TestTheFilterReportsWhatItWithheld` |
+| Filtering by kind leaves the timeline alone | `TestFilteringByKindLeavesTheTimelineAlone` |
+| An encounter cannot be reached from another tenant, or opened for their patient | `TestAnEncounterCannotBeReachedFromAnotherTenant`, `TestAnEncounterCannotBeOpenedForAnotherTenantsPatient` |
+
+### Decisions taken against the backlog
+
+**SRS-ENC-008's override is a permission of its own.** The requirement says
+"with emergency override where policy allows", which is two controls, not one:
+policy decides which encounter classes can be forced at all, and a permission
+decides who may do it. Implemented as `enc.encounter.override`, held by
+clinicians and not by clerks, so a hospital can withhold it from junior staff.
+The control that actually bites, though, is the mandatory reason and the stored
+report it feeds — a permission everybody holds is not a permission, and an
+override nobody counts is not a control.
+
+**Recording a diagnosis is separated from managing an encounter.** A clerk
+opens and closes encounters all day; what is wrong with the patient is a
+clinical act. Behind one permission every receptionist could enter a diagnosis
+under their own name. Implemented as a distinct `enc.diagnosis.record`, pinned
+by `TestAClerkCannotRecordADiagnosis`.
 
 ## Wave-0 capabilities Wave 1 consumes
 
