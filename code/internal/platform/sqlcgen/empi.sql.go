@@ -484,6 +484,46 @@ func (q *Queries) GetPatient(ctx context.Context, arg GetPatientParams) (EmpiPat
 	return i, err
 }
 
+const getPatientIdentifier = `-- name: GetPatientIdentifier :one
+SELECT identifier_id, tenant_id, patient_id, identifier_type, system, value,
+       assigning_authority, status, source, is_primary,
+       linked_at, unlinked_at, superseded_by_id, reason,
+       assurance, verified_at
+FROM empi.patient_identifier
+WHERE tenant_id = $1 AND identifier_id = $2
+`
+
+type GetPatientIdentifierParams struct {
+	TenantID     uuid.UUID
+	IdentifierID uuid.UUID
+}
+
+// One identifier by its own id, so unlinking need not load a patient's whole
+// set and scan it.
+func (q *Queries) GetPatientIdentifier(ctx context.Context, arg GetPatientIdentifierParams) (EmpiPatientIdentifier, error) {
+	row := q.db.QueryRow(ctx, getPatientIdentifier, arg.TenantID, arg.IdentifierID)
+	var i EmpiPatientIdentifier
+	err := row.Scan(
+		&i.IdentifierID,
+		&i.TenantID,
+		&i.PatientID,
+		&i.IdentifierType,
+		&i.System,
+		&i.Value,
+		&i.AssigningAuthority,
+		&i.Status,
+		&i.Source,
+		&i.IsPrimary,
+		&i.LinkedAt,
+		&i.UnlinkedAt,
+		&i.SupersededByID,
+		&i.Reason,
+		&i.Assurance,
+		&i.VerifiedAt,
+	)
+	return i, err
+}
+
 const getStandingMergeForLoser = `-- name: GetStandingMergeForLoser :one
 SELECT merge_id, tenant_id, survivor_id, merged_id, merged_previous_status,
        reason, performed_by, performed_at, moved_identifiers, carried_deceased,
@@ -667,10 +707,12 @@ func (q *Queries) InsertPatient(ctx context.Context, arg InsertPatientParams) er
 const insertPatientIdentifier = `-- name: InsertPatientIdentifier :exec
 INSERT INTO empi.patient_identifier (
     identifier_id, tenant_id, patient_id, identifier_type, system, value,
-    assigning_authority, status, source, is_primary, linked_at
+    assigning_authority, status, source, is_primary, linked_at,
+    assurance, verified_at
 ) VALUES (
     $1, $2, $3, $4, $5, $6,
-    $7, $8, $9, $10, $11
+    $7, $8, $9, $10, $11,
+    $12, $13
 )
 `
 
@@ -686,6 +728,8 @@ type InsertPatientIdentifierParams struct {
 	Source             string
 	IsPrimary          bool
 	LinkedAt           pgtype.Timestamptz
+	Assurance          string
+	VerifiedAt         pgtype.Timestamptz
 }
 
 // Relies on patient_identifier_active_value_key to refuse a value already held
@@ -704,6 +748,8 @@ func (q *Queries) InsertPatientIdentifier(ctx context.Context, arg InsertPatient
 		arg.Source,
 		arg.IsPrimary,
 		arg.LinkedAt,
+		arg.Assurance,
+		arg.VerifiedAt,
 	)
 	return err
 }
@@ -861,7 +907,8 @@ func (q *Queries) ListCommunicationPreferences(ctx context.Context, arg ListComm
 const listIdentifiersForPatients = `-- name: ListIdentifiersForPatients :many
 SELECT identifier_id, tenant_id, patient_id, identifier_type, system, value,
        assigning_authority, status, source, is_primary,
-       linked_at, unlinked_at, superseded_by_id, reason
+       linked_at, unlinked_at, superseded_by_id, reason,
+       assurance, verified_at
 FROM empi.patient_identifier
 WHERE tenant_id = $1 AND patient_id = ANY($2::uuid[])
 ORDER BY patient_id, is_primary DESC, linked_at
@@ -898,6 +945,8 @@ func (q *Queries) ListIdentifiersForPatients(ctx context.Context, arg ListIdenti
 			&i.UnlinkedAt,
 			&i.SupersededByID,
 			&i.Reason,
+			&i.Assurance,
+			&i.VerifiedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -961,7 +1010,8 @@ func (q *Queries) ListOpenDuplicateCandidates(ctx context.Context, arg ListOpenD
 const listPatientIdentifiers = `-- name: ListPatientIdentifiers :many
 SELECT identifier_id, tenant_id, patient_id, identifier_type, system, value,
        assigning_authority, status, source, is_primary,
-       linked_at, unlinked_at, superseded_by_id, reason
+       linked_at, unlinked_at, superseded_by_id, reason,
+       assurance, verified_at
 FROM empi.patient_identifier
 WHERE tenant_id = $1 AND patient_id = $2
 ORDER BY is_primary DESC, linked_at, identifier_id
@@ -996,6 +1046,8 @@ func (q *Queries) ListPatientIdentifiers(ctx context.Context, arg ListPatientIde
 			&i.UnlinkedAt,
 			&i.SupersededByID,
 			&i.Reason,
+			&i.Assurance,
+			&i.VerifiedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1398,6 +1450,85 @@ func (q *Queries) MoveIdentifierToPatient(ctx context.Context, arg MoveIdentifie
 		arg.IsPrimary,
 		arg.Reason,
 		arg.UnlinkedAt,
+		arg.TenantID,
+		arg.IdentifierID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const recordIdentifierVerification = `-- name: RecordIdentifierVerification :execrows
+UPDATE empi.patient_identifier
+SET assurance           = 'verified',
+    verified_at         = $1,
+    assigning_authority = $2
+WHERE tenant_id = $3
+  AND identifier_id = $4
+  AND status = 'active'
+`
+
+type RecordIdentifierVerificationParams struct {
+	VerifiedAt         pgtype.Timestamptz
+	AssigningAuthority string
+	TenantID           uuid.UUID
+	IdentifierID       uuid.UUID
+}
+
+// Stores an issuing authority's confirmation against a linked identifier.
+//
+// Only while active: verifying a revoked identifier would assert that a value
+// known to belong elsewhere belongs here.
+func (q *Queries) RecordIdentifierVerification(ctx context.Context, arg RecordIdentifierVerificationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordIdentifierVerification,
+		arg.VerifiedAt,
+		arg.AssigningAuthority,
+		arg.TenantID,
+		arg.IdentifierID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const retirePatientIdentifier = `-- name: RetirePatientIdentifier :execrows
+UPDATE empi.patient_identifier
+SET status          = $1,
+    reason          = $2,
+    unlinked_at     = $3,
+    superseded_by_id = $4,
+    is_primary      = false
+WHERE tenant_id = $5
+  AND identifier_id = $6
+  AND status = 'active'
+`
+
+type RetirePatientIdentifierParams struct {
+	Status         string
+	Reason         string
+	UnlinkedAt     pgtype.Timestamptz
+	SupersededByID pgtype.UUID
+	TenantID       uuid.UUID
+	IdentifierID   uuid.UUID
+}
+
+// Supersedes or revokes an identifier, keeping the row.
+//
+// There is no delete on this table. SRS-EMPI-011 requires link and unlink
+// history to be retained, and an investigator asking "what did this patient's
+// wristband say in March, and who said so" needs the row that was retired, not
+// its absence.
+//
+// Guarded on status = 'active': two concurrent unlinks would otherwise both
+// write, and the second would overwrite the first one's reason with its own.
+func (q *Queries) RetirePatientIdentifier(ctx context.Context, arg RetirePatientIdentifierParams) (int64, error) {
+	result, err := q.db.Exec(ctx, retirePatientIdentifier,
+		arg.Status,
+		arg.Reason,
+		arg.UnlinkedAt,
+		arg.SupersededByID,
 		arg.TenantID,
 		arg.IdentifierID,
 	)

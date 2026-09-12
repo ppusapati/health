@@ -65,6 +65,19 @@ enum IdentifierType {
   IDENTIFIER_TYPE_EXTERNAL = 5;
 }
 
+// How much an identifier is worth as identity evidence (SRS-EMPI-011).
+//
+// "A clerk typed this ABHA number" and "ABDM confirmed it belongs to this
+// person" are the same value with very different weight, and SRS-EMPI-010
+// relies on the difference when it requires a configured *positive* identifier.
+enum IdentifierAssurance {
+  IDENTIFIER_ASSURANCE_UNSPECIFIED = 0;
+  // Stated by a person and typed in. What happens at a registration desk.
+  IDENTIFIER_ASSURANCE_ASSERTED = 1;
+  // Confirmed by the authority that issues it, at a recorded moment.
+  IDENTIFIER_ASSURANCE_VERIFIED = 2;
+}
+
 enum IdentifierStatus {
   IDENTIFIER_STATUS_UNSPECIFIED = 0;
   IDENTIFIER_STATUS_ACTIVE = 1;
@@ -148,6 +161,75 @@ message PatientIdentifier {
   google.protobuf.Timestamp unlinked_at = 10;
   // Explains a supersede or a revoke.
   string reason = 11;
+  IdentifierAssurance assurance = 12;
+  // When the issuing authority last confirmed the value. Unset while the
+  // identifier is merely asserted.
+  google.protobuf.Timestamp verified_at = 13;
+}
+
+message LinkIdentifierRequest {
+  string patient_id = 1;
+  // The MRN is issued by this system from the facility's sequence and is not
+  // linkable from outside: accepting one would let a caller pick a value the
+  // sequence has not reached, and the next issue would collide.
+  IdentifierType type = 2;
+  string system = 3;
+  string value = 4;
+  string assigning_authority = 5;
+  // Where this system learned the value. Required — SRS-EMPI-011 retains
+  // source, and a link with no source cannot be unwound with any confidence
+  // about what claimed it.
+  string source = 6;
+  // Ask the issuing authority to confirm the value, when a registry is
+  // configured for this system.
+  bool verify = 7;
+  // Refuse the link unless the authority confirms it. Distinct from verify: a
+  // desk that wants confirmation but will accept an asserted value during an
+  // outage sets verify alone.
+  bool require_verification = 8;
+}
+
+message LinkIdentifierResponse {
+  PatientIdentifier identifier = 1;
+  // False when no registry is configured for the system, which is a different
+  // situation from an authority that was asked and declined.
+  bool verification_attempted = 2;
+  // The authority could not be reached. The identifier is linked as asserted.
+  bool registry_unavailable = 3;
+  // A negative answer's explanation.
+  string verification_reason = 4;
+  // What the issuing authority holds against the identifier, when it returned
+  // anything. Never applied to the record here: a difference is a conflict for
+  // reconciliation (SRS-EMPI-012), and silently overwriting trusted data with
+  // a feed is the failure that requirement exists to prevent.
+  Demographics authority_demographics = 5;
+  bool has_authority_demographics = 6;
+}
+
+message UnlinkIdentifierRequest {
+  string identifier_id = 1;
+  // True when the identifier should never have pointed at this patient, as
+  // opposed to having been correct and replaced. The difference decides whether
+  // a search on the value still resolves here, so it is explicit rather than
+  // inferred.
+  bool revoke = 2;
+  string reason = 3;
+}
+
+message UnlinkIdentifierResponse {
+  // The retired identifier, not its absence: SRS-EMPI-011 retains unlink
+  // history, and there is no delete on this path.
+  PatientIdentifier identifier = 1;
+}
+
+message VerifyIdentifierRequest {
+  string identifier_id = 1;
+}
+
+message VerifyIdentifierResponse {
+  PatientIdentifier identifier = 1;
+  Demographics authority_demographics = 2;
+  bool has_authority_demographics = 3;
 }
 
 message DeceasedRecord {
@@ -639,6 +721,14 @@ service PatientService {
   // SRS-EMPI-004. The manual-review worklist thresholds route to.
   rpc ListDuplicateCandidates(ListDuplicateCandidatesRequest) returns (ListDuplicateCandidatesResponse);
   rpc DismissDuplicateCandidate(DismissDuplicateCandidateRequest) returns (DismissDuplicateCandidateResponse);
+
+  // SRS-EMPI-011. External identifiers are linked and unlinked through an
+  // adapter; neither direction deletes a row, because link and unlink history
+  // is what makes a wrong link investigable.
+  rpc LinkIdentifier(LinkIdentifierRequest) returns (LinkIdentifierResponse);
+  rpc UnlinkIdentifier(UnlinkIdentifierRequest) returns (UnlinkIdentifierResponse);
+  // Confirms an identifier linked while the issuing authority was unreachable.
+  rpc VerifyIdentifier(VerifyIdentifierRequest) returns (VerifyIdentifierResponse);
 
   // SRS-EMPI-007. Names, preferences and relationships, effective-dated.
   rpc RecordName(RecordNameRequest) returns (RecordNameResponse);

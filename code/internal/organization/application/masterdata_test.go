@@ -74,8 +74,14 @@ func newHarness(t *testing.T) harness {
 		t.Fatalf("insert tenant: %v", err)
 	}
 
-	svc := application.NewService(tx, tenants, orgpostgres.FacilityRepo{Repository: repo},
-		platformStore, store.AuditAppenderFunc(platformStore.AppendAudit), uuidGen{}, clock)
+	svc := application.NewService(application.Deps{
+		UnitOfWork: tx, Tenants: tenants,
+		Facilities: orgpostgres.FacilityRepo{Repository: repo},
+		Numbers:    repo,
+		Events:     platformStore,
+		Audits:     store.AuditAppenderFunc(platformStore.AppendAudit),
+		IDs:        uuidGen{}, Clock: clock,
+	})
 
 	return harness{
 		svc: svc, repo: repo, clock: clock, pool: pool, tenant: tenant.ID,

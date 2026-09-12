@@ -77,6 +77,12 @@ type Identifier struct {
 	// Primary marks the identifier a banner shows. Exactly one active MRN per
 	// patient is primary; a merge moves it.
 	Primary bool
+	// Assurance is how the value came to be believed — stated by a person, or
+	// confirmed by the authority that issues it. See assurance.go.
+	Assurance IdentifierAssurance
+	// VerifiedAt is when the issuing authority last confirmed the value. Nil
+	// while the identifier is merely asserted.
+	VerifiedAt *time.Time
 
 	LinkedAt time.Time
 	// UnlinkedAt is set when the identifier leaves active use, whichever way it
@@ -127,8 +133,12 @@ func NewIdentifier(id, patientID string, t IdentifierType, system, value,
 		System: system, Value: value,
 		AssigningAuthority: normaliseText(authority),
 		Status:             IdentifierActive,
-		Source:             normaliseText(source),
-		LinkedAt:           now.UTC(),
+		// Asserted until an authority says otherwise. Defaulting the other way
+		// would make an unreachable registry silently upgrade every identifier
+		// typed during the outage.
+		Assurance: AssuranceAsserted,
+		Source:    normaliseText(source),
+		LinkedAt:  now.UTC(),
 	}, nil
 }
 

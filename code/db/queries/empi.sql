@@ -67,16 +67,19 @@ WHERE tenant_id = @tenant_id
 -- concurrent registrations both win (SRS-EMPI-016).
 INSERT INTO empi.patient_identifier (
     identifier_id, tenant_id, patient_id, identifier_type, system, value,
-    assigning_authority, status, source, is_primary, linked_at
+    assigning_authority, status, source, is_primary, linked_at,
+    assurance, verified_at
 ) VALUES (
     @identifier_id, @tenant_id, @patient_id, @identifier_type, @system, @value,
-    @assigning_authority, @status, @source, @is_primary, @linked_at
+    @assigning_authority, @status, @source, @is_primary, @linked_at,
+    @assurance, @verified_at
 );
 
 -- name: ListPatientIdentifiers :many
 SELECT identifier_id, tenant_id, patient_id, identifier_type, system, value,
        assigning_authority, status, source, is_primary,
-       linked_at, unlinked_at, superseded_by_id, reason
+       linked_at, unlinked_at, superseded_by_id, reason,
+       assurance, verified_at
 FROM empi.patient_identifier
 WHERE tenant_id = @tenant_id AND patient_id = @patient_id
 ORDER BY is_primary DESC, linked_at, identifier_id;
@@ -86,10 +89,54 @@ ORDER BY is_primary DESC, linked_at, identifier_id;
 -- twenty candidates twenty-one round trips.
 SELECT identifier_id, tenant_id, patient_id, identifier_type, system, value,
        assigning_authority, status, source, is_primary,
-       linked_at, unlinked_at, superseded_by_id, reason
+       linked_at, unlinked_at, superseded_by_id, reason,
+       assurance, verified_at
 FROM empi.patient_identifier
 WHERE tenant_id = @tenant_id AND patient_id = ANY(@patient_ids::uuid[])
 ORDER BY patient_id, is_primary DESC, linked_at;
+
+-- name: GetPatientIdentifier :one
+-- One identifier by its own id, so unlinking need not load a patient's whole
+-- set and scan it.
+SELECT identifier_id, tenant_id, patient_id, identifier_type, system, value,
+       assigning_authority, status, source, is_primary,
+       linked_at, unlinked_at, superseded_by_id, reason,
+       assurance, verified_at
+FROM empi.patient_identifier
+WHERE tenant_id = @tenant_id AND identifier_id = @identifier_id;
+
+-- name: RetirePatientIdentifier :execrows
+-- Supersedes or revokes an identifier, keeping the row.
+--
+-- There is no delete on this table. SRS-EMPI-011 requires link and unlink
+-- history to be retained, and an investigator asking "what did this patient's
+-- wristband say in March, and who said so" needs the row that was retired, not
+-- its absence.
+--
+-- Guarded on status = 'active': two concurrent unlinks would otherwise both
+-- write, and the second would overwrite the first one's reason with its own.
+UPDATE empi.patient_identifier
+SET status          = @status,
+    reason          = @reason,
+    unlinked_at     = @unlinked_at,
+    superseded_by_id = @superseded_by_id,
+    is_primary      = false
+WHERE tenant_id = @tenant_id
+  AND identifier_id = @identifier_id
+  AND status = 'active';
+
+-- name: RecordIdentifierVerification :execrows
+-- Stores an issuing authority's confirmation against a linked identifier.
+--
+-- Only while active: verifying a revoked identifier would assert that a value
+-- known to belong elsewhere belongs here.
+UPDATE empi.patient_identifier
+SET assurance           = 'verified',
+    verified_at         = @verified_at,
+    assigning_authority = @assigning_authority
+WHERE tenant_id = @tenant_id
+  AND identifier_id = @identifier_id
+  AND status = 'active';
 
 -- name: FindPatientByIdentifier :many
 -- Resolves an identifier a patient quoted.

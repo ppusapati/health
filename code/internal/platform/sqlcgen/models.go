@@ -115,6 +115,8 @@ type EmpiPatientIdentifier struct {
 	UnlinkedAt         pgtype.Timestamptz
 	SupersededByID     pgtype.UUID
 	Reason             string
+	Assurance          string
+	VerifiedAt         pgtype.Timestamptz
 }
 
 type EmpiPatientName struct {

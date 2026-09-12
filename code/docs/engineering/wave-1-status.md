@@ -45,14 +45,18 @@ search. Implemented as a distinct `empi.patient.merge` held only by
 adjacent SRS-EMPI-006 row, which does say `empi.merge`. Read as a transcription
 slip in the backlog. Pinned by `TestOnlyHIMCanMergePatients`.
 
-**Facility commissioning does not provision an MRN sequence.** Registration
-refuses with `ORG_SEQUENCE_NOT_CONFIGURED` until a tenant configures one for
-the facility. That is deliberate — the format of a number printed on a
-wristband for the rest of somebody's life is a hospital's decision, not a
-default quietly made for them — but it means a freshly created facility cannot
-register a patient. Facility creation should provision a default sequence that
-a tenant admin reviews before the first registration. Tracked as a Sprint-2
-item; the tests configure it explicitly today.
+**Facility commissioning did not provision an MRN sequence.** *Closed in
+Sprint 2A.* Registration used to refuse with `ORG_SEQUENCE_NOT_CONFIGURED`
+until a tenant configured a sequence for the facility, which meant a freshly
+created facility could not register a patient and the tests had to configure
+one explicitly. Commissioning now provisions a per-facility sequence in the
+same transaction as the facility row, prefixed with the facility code and
+padded to `DefaultMRNPadWidth`. It is `ON CONFLICT DO NOTHING`, so
+re-commissioning a code that once existed cannot reset a live counter and
+re-issue an MRN already printed on a wristband. The test scaffolding that
+stood in for this is deleted, and
+`TestCommissioningAFacilityProvisionsItsMRNSequence` asserts the production
+path instead.
 
 ### What merge and unmerge enforce
 
@@ -195,6 +199,95 @@ item; the tests configure it explicitly today.
 
 Sprint 1 is complete: SRS-EMPI-001 to SRS-EMPI-009 are implemented and
 covered by tests.
+
+## Sprint 2 — identifiers, reconciliation and correction
+
+| Requirement | What it asks for | State |
+|---|---|---|
+| SRS-EMPI-010 | Patient photo with consent/configuration; never the sole identity proof | Not started |
+| SRS-EMPI-011 | Link ABHA and other external identifiers through an adapter, not as primary keys; link/unlink history and source retained | **Implemented** |
+| SRS-EMPI-012 | Demographic conflict from external sources routed to reconciliation, never a silent overwrite | Not started |
+| SRS-EMPI-013 | Communication and privacy preferences distinct from clinical consent | **Implemented** in Sprint 1C; notification-service consumption arrives with SRS-NTF |
+| SRS-EMPI-014 | Sensitive demographic fields with configured field-level access; masked and audited | Partial — masking and audited reads exist; the *configured* per-field policy does not |
+| SRS-EMPI-015 | Temporary/unknown patient registration for emergency use, reconciled later | Partial — `candidate` status and `ConfirmIdentity` exist; unidentified registration does not |
+| SRS-EMPI-016 | Prevent duplicate MRN assignment under concurrent registration | **Implemented** |
+| SRS-EMPI-017 | Data correction request workflow retaining prior value and provenance | Not started |
+| SRS-EMPI-018 | `patient.created`, `patient.demographics_updated`, `patient.merged`, `patient.deceased`, carrying only necessary metadata | **Implemented** |
+
+### What the identifier lifecycle enforces
+
+- **Verification is a seam, not a vendor.** `ports.IdentifierRegistry` is one
+  interface: a system name and a `Verify`. ADR-003's reasoning applies again —
+  ABDM is one of several national schemes this system will meet, the others are
+  not specified, and binding the application layer to any of their SDKs now
+  would make the second one a rewrite rather than an adapter. The development
+  registry refuses to construct without an explicit opt-in, like `devauth`, so
+  a production build cannot reach it through configuration drift.
+
+- **Asserted and verified are different evidence.** "A clerk typed this ABHA
+  number" and "ABDM confirmed it belongs to this person" are the same value
+  with very different weight. Storing only the value loses the difference, and
+  the difference is what SRS-EMPI-010 will rely on when it requires a
+  configured *positive* identifier. Deliberately two states rather than a
+  numeric score: two asserted identifiers do not add up to a verified one.
+
+- **An outage is not a refusal.** A national identifier service being down must
+  not stop a hospital admitting patients, so the identifier links as asserted
+  and the response says the authority was unreachable. A caller that cannot
+  accept an unverified national identifier sets `require_verification` and gets
+  a refusal instead. Collapsing the two would make an outage either a stream of
+  rejected registrations or a silent mass downgrade.
+
+- **Nothing is deleted.** SRS-EMPI-011 retains link and unlink history, and
+  there is no delete on the port or the table. A wrong link is found months
+  later by a clinician reading a chart that does not match the patient; what
+  makes it investigable is the row saying who claimed it, when, and on what
+  basis.
+
+- **Superseded and revoked differ in one way that matters.** A superseded value
+  still resolves — it is on a discharge summary printed last week. A revoked one
+  does not, because it belongs to somebody else. That single distinction is why
+  there are two states rather than one "inactive", and the caller chooses
+  explicitly rather than having it inferred.
+
+- **The MRN is not linkable from outside.** It is issued from the facility's
+  sequence; accepting one from a caller would let a client pick a value the
+  sequence has not reached, and the next issue would collide.
+
+- **A refusal does not name the holder.** Linking an identifier already held
+  elsewhere is refused without saying by whom. The caller asked about a value,
+  not about that patient, and confirming who holds a national identifier to
+  anybody who can guess one is a disclosure.
+
+- **Events carry metadata, not demographics.** An event stream is read by more
+  systems, by more people and under fewer controls than the record it
+  describes. `TestNoPatientEventCarriesDemographics` checks every
+  `patient.*` payload written for a tenant, not the ones the test thought to
+  look at.
+
+### Sprint 2 evidence
+
+| Property | Test |
+|---|---|
+| A development registry is off unless explicitly enabled | `TestADevelopmentRegistryIsOffUnlessEnabled` |
+| One identifier system cannot have two registries | `TestARegistrySystemCannotBeClaimedTwice` |
+| No registry configured still links, as asserted | `TestAnIdentifierLinksAsAssertedWhenNoRegistryIsConfigured` |
+| A verified identifier records who confirmed it and when | `TestAVerifiedIdentifierRecordsWhoConfirmedItAndWhen` |
+| An unrecognised value is refused when verification is required | `TestAnUnrecognisedIdentifierIsRefusedWhenVerificationIsRequired` |
+| A registry outage does not block admission | `TestARegistryOutageDoesNotBlockLinking` |
+| Requiring verification refuses during an outage, distinguishably | `TestRequiringVerificationRefusesDuringAnOutage` |
+| An asserted identifier is verified later without losing its history | `TestAnAssertedIdentifierCanBeVerifiedLater` |
+| Unlinking retains the row, its reason and its source | `TestUnlinkingRetainsTheIdentifierAndItsReason` |
+| A revoked identifier stops resolving but stays on file | `TestARevokedIdentifierStopsResolvingButIsStillOnFile` |
+| An MRN cannot be supplied by a caller | `TestAnMRNCannotBeLinkedFromOutside` |
+| One identifier cannot be linked to two patients, and the refusal names nobody | `TestAnIdentifierCannotBeLinkedToTwoPatients` |
+| Linking needs more than read access | `TestLinkingAnIdentifierNeedsMoreThanReadAccess` |
+| Unlinking needs a reason; linking needs a source | `TestUnlinkingNeedsAReason`, `TestLinkingNeedsASource` |
+| An identifier cannot be reached across a tenant boundary | `TestAnIdentifierCannotBeUnlinkedFromAnotherTenant` |
+| A newly commissioned facility can register immediately | `TestCommissioningAFacilityProvisionsItsMRNSequence` |
+| Re-provisioning does not reset a live MRN counter | `TestReprovisioningDoesNotResetALiveMRNSequence` |
+| No patient event carries demographics | `TestNoPatientEventCarriesDemographics` |
+| sqlc sees every migration | `TestSqlcSeesEveryMigration` |
 
 ## Wave-0 capabilities Wave 1 consumes
 

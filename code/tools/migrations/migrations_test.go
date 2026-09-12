@@ -386,3 +386,59 @@ func TestDetectorsWork(t *testing.T) {
 		t.Fatal("the NOT NULL detector does not fire on a column that would break the previous version")
 	}
 }
+
+// sqlc is given its schema as an explicit, ordered list of migration files
+// rather than a directory. The ordering is deliberate — sqlc has to see
+// migrations in the order PostgreSQL will apply them — but an explicit list has
+// a failure mode a directory does not: adding a migration and forgetting to
+// register it.
+//
+// That failure is quiet in exactly the wrong way. sqlc keeps generating happily
+// against the previous schema, so the build stays green and the generated code
+// simply does not know about the new columns. Whether anybody notices depends
+// on whether the queries written that day happen to reference them.
+func TestSqlcSeesEveryMigration(t *testing.T) {
+	var cfg struct {
+		SQL []struct {
+			Schema []string `yaml:"schema"`
+		} `yaml:"sql"`
+	}
+	raw, err := os.ReadFile(filepath.Join(codeRoot(t), "sqlc.yaml"))
+	if err != nil {
+		t.Fatalf("read sqlc.yaml: %v", err)
+	}
+	if err := yaml.Unmarshal(raw, &cfg); err != nil {
+		t.Fatalf("parse sqlc.yaml: %v", err)
+	}
+	if len(cfg.SQL) == 0 {
+		t.Fatal("sqlc.yaml declares no sql package; this invariant would pass vacuously")
+	}
+
+	registered := map[string]int{}
+	var order []string
+	for _, pkg := range cfg.SQL {
+		for _, path := range pkg.Schema {
+			name := filepath.Base(path)
+			registered[name]++
+			order = append(order, name)
+		}
+	}
+
+	for _, m := range loadMigrations(t) {
+		if registered[m.up] == 0 {
+			t.Errorf("migration %s is not listed in sqlc.yaml, so sqlc generates "+
+				"against a schema that does not contain it — silently, because "+
+				"generation still succeeds", m.up)
+		}
+		if registered[m.up] > 1 {
+			t.Errorf("migration %s is listed %d times in sqlc.yaml", m.up, registered[m.up])
+		}
+	}
+
+	// Listed in apply order. Out of order, a migration that alters a table
+	// created by a later one fails to generate, and the error names the column
+	// rather than the ordering.
+	if !sort.SliceIsSorted(order, func(i, j int) bool { return order[i] < order[j] }) {
+		t.Errorf("sqlc.yaml lists schema files out of migration order: %v", order)
+	}
+}

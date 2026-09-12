@@ -18,6 +18,7 @@ import (
 	organizationv1 "github.com/ppusapati/health/code/gen/go/healthcare/organization/v1"
 	"github.com/ppusapati/health/code/gen/go/healthcare/organization/v1/organizationv1connect"
 	"github.com/ppusapati/health/code/internal/app"
+	empiports "github.com/ppusapati/health/code/internal/empi/ports"
 	"github.com/ppusapati/health/code/internal/identity_access/adapters/devauth"
 	orgpostgres "github.com/ppusapati/health/code/internal/organization/adapters/postgres"
 	orgdomain "github.com/ppusapati/health/code/internal/organization/domain"
@@ -50,6 +51,16 @@ type empiHarness struct {
 
 func newEmpiHarness(t *testing.T) *empiHarness {
 	t.Helper()
+	return newEmpiHarnessWith(t, nil)
+}
+
+// newEmpiHarnessWith builds the harness with an optional identifier registry.
+//
+// Nil is the default deployment shape and the one most tests want: a hospital
+// with no national identifier adapter, where every external identifier is
+// linked as asserted.
+func newEmpiHarnessWith(t *testing.T, registries empiports.IdentifierRegistries) *empiHarness {
+	t.Helper()
 
 	pool := pgtest.New(t)
 	verifier, err := devauth.New(true)
@@ -59,7 +70,8 @@ func newEmpiHarness(t *testing.T) *empiHarness {
 
 	built := app.New(app.Deps{
 		Pool: pool, Verifier: verifier,
-		Build: platformapitransport.BuildInfo{Version: "test", Commit: "test", BuiltAt: "test"},
+		IdentifierRegistries: registries,
+		Build:                platformapitransport.BuildInfo{Version: "test", Commit: "test", BuiltAt: "test"},
 		RateLimit: platformtransport.RateLimitConfig{
 			RequestsPerSecond: 10000, Burst: 10000,
 			UnauthenticatedRequestsPerSecond: 10000, UnauthenticatedBurst: 10000,
@@ -75,7 +87,7 @@ func newEmpiHarness(t *testing.T) *empiHarness {
 		org:      organizationv1connect.NewOrganizationServiceClient(server.Client(), server.URL),
 	}
 
-	// A tenant and a facility, then the MRN sequence the facility issues from.
+	// A tenant and a facility. The facility's MRN sequence comes with it.
 	resp, err := h.org.CreateTenant(context.Background(),
 		as(platformOperatorToken(), &organizationv1.CreateTenantRequest{
 			DisplayName: "Apollo Group", LegalJurisdiction: "IN",
@@ -100,12 +112,13 @@ func newEmpiHarness(t *testing.T) *empiHarness {
 	return h
 }
 
-// provision gives a tenant what the patient index needs: the module
-// entitlement and the facility's MRN sequence.
+// provision gives a tenant what the patient index needs.
+//
+// Only the module entitlement now: commissioning a facility provisions its MRN
+// sequence, so there is nothing left here for the test to do on its behalf.
 func (h *empiHarness) provision(t *testing.T, tenantID, facilityID string) {
 	t.Helper()
 	h.entitleEMPI(t, tenantID)
-	h.ensureMRNSequence(t, tenantID, facilityID)
 }
 
 // entitleEMPI grants the tenant the patient-index module.
@@ -130,31 +143,6 @@ func (h *empiHarness) entitleEMPI(t *testing.T, tenantID string) {
 	}
 	if err := repo.InsertEntitlement(context.Background(), scope, entitlement); err != nil {
 		t.Fatalf("InsertEntitlement: %v", err)
-	}
-}
-
-// ensureMRNSequence provisions the facility's MRN series.
-//
-// Registration refuses with ORG_SEQUENCE_NOT_CONFIGURED until this exists, and
-// that is the right behaviour: the format of a number printed on a wristband
-// for the rest of a person's life is a decision a hospital makes, not one a
-// default quietly makes for them. Facility commissioning should do this; until
-// it does, the test does it explicitly.
-func (h *empiHarness) ensureMRNSequence(t *testing.T, tenantID, facilityID string) {
-	t.Helper()
-
-	repo := orgpostgres.New(pgtx.NewManager(h.pool))
-	scope := authctx.NewSession(authctx.Session{
-		SubjectID: "setup", TenantID: tenantID,
-	}).TenantScope()
-
-	sequence, err := orgdomain.NewNumberSequence(uuid.NewString(), tenantID, facilityID,
-		orgdomain.ScopeMRN, "MRN-", 6, 1, "", time.Now().UTC())
-	if err != nil {
-		t.Fatalf("NewNumberSequence: %v", err)
-	}
-	if err := repo.EnsureSequence(context.Background(), scope, sequence); err != nil {
-		t.Fatalf("EnsureSequence: %v", err)
 	}
 }
 
@@ -294,8 +282,12 @@ func TestRegisteringAPatientIssuesAnMRN(t *testing.T) {
 	if mrn == nil {
 		t.Fatalf("no MRN was issued: %+v", patient.GetIdentifiers())
 	}
-	if !strings.HasPrefix(mrn.GetValue(), "MRN-") {
-		t.Fatalf("MRN %q does not follow the facility's configured format", mrn.GetValue())
+	// Commissioning the facility provisioned its MRN sequence, prefixed with
+	// the facility code. Nothing in this test configured a sequence, which is
+	// the point: a new site can register its first patient without a separate
+	// setup step that somebody has to remember.
+	if !strings.HasPrefix(mrn.GetValue(), "MAIN-") {
+		t.Fatalf("MRN %q does not carry the commissioned facility's prefix", mrn.GetValue())
 	}
 	if !mrn.GetPrimary() {
 		t.Fatal("the issued MRN is not flagged as the primary identifier")
@@ -746,7 +738,7 @@ func TestRegistrationEmitsAPatientCreatedEvent(t *testing.T) {
 	if strings.Contains(payload, "Iyer") || strings.Contains(payload, "9876543210") {
 		t.Fatalf("the event carries demographics: %s", payload)
 	}
-	if !strings.Contains(payload, "MRN-") {
+	if !strings.Contains(payload, "MAIN-") {
 		t.Fatalf("the event carries no MRN, which downstream contexts print on labels: %s", payload)
 	}
 }

@@ -89,6 +89,49 @@ type IdentifierRepository interface {
 	// ForPatients batch-loads, so a page of candidates is one query rather than
 	// one per row.
 	ForPatients(ctx context.Context, scope authctx.TenantScope, patientIDs []string) (map[string]domain.IdentifierSet, error)
+	// Get reads one identifier by its own id, so unlinking does not have to
+	// load and scan a patient's whole set.
+	Get(ctx context.Context, scope authctx.TenantScope, identifierID string) (domain.Identifier, error)
+	// Retire writes back a superseded or revoked identifier, keeping the row.
+	// SRS-EMPI-011 requires link and unlink history to be retained, so there is
+	// deliberately no delete on this port.
+	Retire(ctx context.Context, scope authctx.TenantScope, i domain.Identifier) error
+	// RecordVerification stores an authority's confirmation against a linked
+	// identifier.
+	RecordVerification(ctx context.Context, scope authctx.TenantScope, i domain.Identifier) error
+}
+
+// IdentifierRegistry asks the authority that issues an identifier whether a
+// value is real and whose it is (SRS-EMPI-011).
+//
+// A port, and one interface, because ADR-003's reasoning applies again: ABDM is
+// one of several national schemes this system will meet, the others are not
+// specified yet, and binding the application layer to any of their SDKs now
+// would make the second one a rewrite rather than an adapter.
+//
+// Verification is deliberately not part of linking. An identifier can be linked
+// while the registry is unreachable — a registration desk cannot stop admitting
+// patients because a national service is down — and it is then linked as
+// asserted, which the record says plainly.
+type IdentifierRegistry interface {
+	// System is the identifier system this registry answers for, matching
+	// domain.Identifier.System. It is how a registry is selected, so it must
+	// be exact.
+	System() string
+	// Verify asks the authority about one value.
+	//
+	// Returns domain.ErrRegistryUnavailable when the authority could not be
+	// asked, which is not the same answer as "not recognised" and must not be
+	// collapsed into one.
+	Verify(ctx context.Context, value string) (domain.Verification, error)
+}
+
+// IdentifierRegistries selects a registry by identifier system.
+//
+// Absence is normal, not an error: most identifier systems a hospital records
+// have no online authority to ask, and those identifiers stay asserted.
+type IdentifierRegistries interface {
+	For(system string) (IdentifierRegistry, bool)
 }
 
 // ConfigRepository reads the tenant's registration and matching configuration.

@@ -50,24 +50,39 @@ type Service struct {
 	uow        ports.UnitOfWork
 	tenants    ports.TenantRepository
 	facilities ports.FacilityRepository
+	numbers    ports.NumberIssuer
 	events     ports.EventAppender
 	audits     ports.AuditAppender
 	ids        ports.IDGenerator
 	clock      ports.Clock
 }
 
+// Deps are the collaborators the service needs.
+//
+// A struct rather than eight positional parameters: four of them are
+// repositories of similar shape, and the only thing protecting their order
+// would be convention.
+type Deps struct {
+	UnitOfWork ports.UnitOfWork
+	Tenants    ports.TenantRepository
+	Facilities ports.FacilityRepository
+	// Numbers provisions and issues document numbers. Optional: a deployment
+	// that wires no issuer creates facilities that cannot yet issue an MRN, and
+	// says so at the point of issue rather than at commissioning.
+	Numbers ports.NumberIssuer
+	Events  ports.EventAppender
+	Audits  ports.AuditAppender
+	IDs     ports.IDGenerator
+	Clock   ports.Clock
+}
+
 // NewService wires the use cases to their ports.
-func NewService(
-	uow ports.UnitOfWork,
-	tenants ports.TenantRepository,
-	facilities ports.FacilityRepository,
-	events ports.EventAppender,
-	audits ports.AuditAppender,
-	ids ports.IDGenerator,
-	clock ports.Clock,
-) *Service {
-	return &Service{uow: uow, tenants: tenants, facilities: facilities,
-		events: events, audits: audits, ids: ids, clock: clock}
+func NewService(d Deps) *Service {
+	return &Service{
+		uow: d.UnitOfWork, tenants: d.Tenants, facilities: d.Facilities,
+		numbers: d.Numbers, events: d.Events, audits: d.Audits,
+		ids: d.IDs, clock: d.Clock,
+	}
 }
 
 // CreateTenantInput is the command payload for tenant provisioning.
@@ -218,6 +233,9 @@ func (s *Service) CreateFacility(ctx context.Context, in CreateFacilityInput) (*
 		if err := s.facilities.Insert(ctx, scope, facility); err != nil {
 			return err
 		}
+		if err := s.provisionMRNSequence(ctx, scope, facility, now); err != nil {
+			return err
+		}
 		payload, err := json.Marshal(map[string]string{
 			"facility_id": facility.ID,
 			"code":        facility.Code,
@@ -242,6 +260,51 @@ func (s *Service) CreateFacility(ctx context.Context, in CreateFacilityInput) (*
 		return nil, err
 	}
 	return facility, nil
+}
+
+// DefaultMRNPadWidth is the numeric width of a newly commissioned facility's
+// MRN. Seven digits is ten million records — longer than any single site's
+// life — and a fixed width is what stops "MRN 42" and "MRN 042" being read as
+// two different numbers on two different printouts.
+const DefaultMRNPadWidth = 7
+
+// provisionMRNSequence gives a new facility the counter its registrations need.
+//
+// Done at commissioning, inside the same transaction as the facility row, so
+// there is no window in which a facility exists but cannot register a patient.
+// Lazily creating the sequence on first use would put that window at the worst
+// possible moment — the first patient through the door of a new site — and
+// would have to invent a starting value under concurrency, which is exactly the
+// race SRS-EMPI-016 forbids.
+//
+// The sequence is per-facility and never resets: an MRN identifies a person for
+// life, so it carries no period key. The facility code becomes the prefix, so a
+// number says which site registered the patient without a lookup.
+func (s *Service) provisionMRNSequence(ctx context.Context, scope authctx.TenantScope,
+	facility *domain.Facility, now time.Time) error {
+
+	if s.numbers == nil {
+		// A deployment that wires no issuer is valid — the organization context
+		// does not require one — and the failure surfaces at the first attempt
+		// to issue, naming the missing sequence.
+		return nil
+	}
+
+	// EnsureSequence is ON CONFLICT DO NOTHING, so re-commissioning a facility
+	// code that once existed cannot reset a live counter back to 1 and re-issue
+	// an MRN already printed on a wristband.
+	return s.numbers.EnsureSequence(ctx, scope, domain.NumberSequence{
+		ID:         s.ids.NewID(),
+		TenantID:   scope.TenantID(),
+		Scope:      domain.ScopeMRN,
+		FacilityID: facility.ID,
+		Prefix:     facility.Code + "-",
+		PadWidth:   DefaultMRNPadWidth,
+		NextValue:  1,
+		PeriodKey:  "",
+		CreatedAt:  now,
+		UpdatedAt:  now,
+	})
 }
 
 // GetFacility reads one facility within the caller's tenant.

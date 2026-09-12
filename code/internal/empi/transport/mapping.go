@@ -76,6 +76,11 @@ var identifierStatusToProto = map[domain.IdentifierStatus]empiv1.IdentifierStatu
 	domain.IdentifierRevoked:    empiv1.IdentifierStatus_IDENTIFIER_STATUS_REVOKED,
 }
 
+var assuranceToProto = map[domain.IdentifierAssurance]empiv1.IdentifierAssurance{
+	domain.AssuranceAsserted: empiv1.IdentifierAssurance_IDENTIFIER_ASSURANCE_ASSERTED,
+	domain.AssuranceVerified: empiv1.IdentifierAssurance_IDENTIFIER_ASSURANCE_VERIFIED,
+}
+
 var outcomeToProto = map[domain.MatchOutcome]empiv1.MatchOutcome{
 	domain.OutcomeDistinct: empiv1.MatchOutcome_MATCH_OUTCOME_DISTINCT,
 	domain.OutcomeReview:   empiv1.MatchOutcome_MATCH_OUTCOME_REVIEW,
@@ -179,23 +184,36 @@ func identifiersFromProto(in []*empiv1.PatientIdentifier) []domain.Identifier {
 	return out
 }
 
+// identifierToProto returns nil for the zero identifier, so an absent one is
+// an unset field rather than an empty message.
+func identifierToProto(i domain.Identifier) *empiv1.PatientIdentifier {
+	if i.ID == "" {
+		return nil
+	}
+	msg := &empiv1.PatientIdentifier{
+		IdentifierId: i.ID, Type: identifierTypeToProto[i.Type],
+		System: i.System, Value: i.Value,
+		AssigningAuthority: i.AssigningAuthority,
+		Status:             identifierStatusToProto[i.Status],
+		Source:             i.Source, Primary: i.Primary, Reason: i.Reason,
+		Assurance: assuranceToProto[i.Assurance],
+	}
+	if !i.LinkedAt.IsZero() {
+		msg.LinkedAt = timestamppb.New(i.LinkedAt)
+	}
+	if i.UnlinkedAt != nil {
+		msg.UnlinkedAt = timestamppb.New(*i.UnlinkedAt)
+	}
+	if i.VerifiedAt != nil {
+		msg.VerifiedAt = timestamppb.New(*i.VerifiedAt)
+	}
+	return msg
+}
+
 func identifiersToProto(in domain.IdentifierSet) []*empiv1.PatientIdentifier {
 	out := make([]*empiv1.PatientIdentifier, 0, len(in))
 	for _, i := range in {
-		msg := &empiv1.PatientIdentifier{
-			IdentifierId: i.ID, Type: identifierTypeToProto[i.Type],
-			System: i.System, Value: i.Value,
-			AssigningAuthority: i.AssigningAuthority,
-			Status:             identifierStatusToProto[i.Status],
-			Source:             i.Source, Primary: i.Primary, Reason: i.Reason,
-		}
-		if !i.LinkedAt.IsZero() {
-			msg.LinkedAt = timestamppb.New(i.LinkedAt)
-		}
-		if i.UnlinkedAt != nil {
-			msg.UnlinkedAt = timestamppb.New(*i.UnlinkedAt)
-		}
-		out = append(out, msg)
+		out = append(out, identifierToProto(i))
 	}
 	return out
 }

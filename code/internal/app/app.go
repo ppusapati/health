@@ -19,6 +19,7 @@ import (
 	"github.com/ppusapati/health/code/gen/go/healthcare/platform_api/v1/platformapiv1connect"
 	empipostgres "github.com/ppusapati/health/code/internal/empi/adapters/postgres"
 	empiapp "github.com/ppusapati/health/code/internal/empi/application"
+	empiports "github.com/ppusapati/health/code/internal/empi/ports"
 	empitransport "github.com/ppusapati/health/code/internal/empi/transport"
 	identitytransport "github.com/ppusapati/health/code/internal/identity_access/transport"
 	orgpostgres "github.com/ppusapati/health/code/internal/organization/adapters/postgres"
@@ -88,6 +89,15 @@ type Deps struct {
 	// PublishInterval is how often the outbox is drained. Zero takes the
 	// default.
 	PublishInterval time.Duration
+
+	// IdentifierRegistries resolves an identifier system to the authority that
+	// issues it (SRS-EMPI-011).
+	//
+	// Nil is a valid deployment and the default: a hospital with no national
+	// identifier adapter links every external identifier as asserted, which is
+	// an honest record of what it actually knows. Wiring a registry is what
+	// makes verification possible, not what makes linking possible.
+	IdentifierRegistries empiports.IdentifierRegistries
 }
 
 // Server holds the assembled HTTP handler and the services behind it.
@@ -149,6 +159,7 @@ func New(deps Deps) *Server {
 		Config:      empipostgres.ConfigRepo{Repository: empiRepo},
 		Merges:      empipostgres.MergeRepo{Repository: empiRepo},
 		History:     empipostgres.HistoryRepo{Repository: empiRepo},
+		Registries:  deps.IdentifierRegistries,
 		Numbers:     empipostgres.NewMRNIssuer(repo),
 		Tenants:     empipostgres.NewTenantJurisdiction(orgpostgres.TenantRepo{Repository: repo}),
 		Events:      platformStore,
@@ -157,15 +168,16 @@ func New(deps Deps) *Server {
 		Clock:       systemClock{},
 	})
 
-	orgService := orgapp.NewService(
-		txManager,
-		orgpostgres.TenantRepo{Repository: repo},
-		orgpostgres.FacilityRepo{Repository: repo},
-		platformStore,
-		store.AuditAppenderFunc(platformStore.AppendAudit),
-		uuidGenerator{},
-		systemClock{},
-	)
+	orgService := orgapp.NewService(orgapp.Deps{
+		UnitOfWork: txManager,
+		Tenants:    orgpostgres.TenantRepo{Repository: repo},
+		Facilities: orgpostgres.FacilityRepo{Repository: repo},
+		Numbers:    repo,
+		Events:     platformStore,
+		Audits:     store.AuditAppenderFunc(platformStore.AppendAudit),
+		IDs:        uuidGenerator{},
+		Clock:      systemClock{},
+	})
 
 	// Order matters.
 	//

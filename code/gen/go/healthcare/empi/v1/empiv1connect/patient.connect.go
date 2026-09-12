@@ -67,6 +67,15 @@ const (
 	// PatientServiceDismissDuplicateCandidateProcedure is the fully-qualified name of the
 	// PatientService's DismissDuplicateCandidate RPC.
 	PatientServiceDismissDuplicateCandidateProcedure = "/healthcare.empi.v1.PatientService/DismissDuplicateCandidate"
+	// PatientServiceLinkIdentifierProcedure is the fully-qualified name of the PatientService's
+	// LinkIdentifier RPC.
+	PatientServiceLinkIdentifierProcedure = "/healthcare.empi.v1.PatientService/LinkIdentifier"
+	// PatientServiceUnlinkIdentifierProcedure is the fully-qualified name of the PatientService's
+	// UnlinkIdentifier RPC.
+	PatientServiceUnlinkIdentifierProcedure = "/healthcare.empi.v1.PatientService/UnlinkIdentifier"
+	// PatientServiceVerifyIdentifierProcedure is the fully-qualified name of the PatientService's
+	// VerifyIdentifier RPC.
+	PatientServiceVerifyIdentifierProcedure = "/healthcare.empi.v1.PatientService/VerifyIdentifier"
 	// PatientServiceRecordNameProcedure is the fully-qualified name of the PatientService's RecordName
 	// RPC.
 	PatientServiceRecordNameProcedure = "/healthcare.empi.v1.PatientService/RecordName"
@@ -115,6 +124,13 @@ type PatientServiceClient interface {
 	// SRS-EMPI-004. The manual-review worklist thresholds route to.
 	ListDuplicateCandidates(context.Context, *connect.Request[v1.ListDuplicateCandidatesRequest]) (*connect.Response[v1.ListDuplicateCandidatesResponse], error)
 	DismissDuplicateCandidate(context.Context, *connect.Request[v1.DismissDuplicateCandidateRequest]) (*connect.Response[v1.DismissDuplicateCandidateResponse], error)
+	// SRS-EMPI-011. External identifiers are linked and unlinked through an
+	// adapter; neither direction deletes a row, because link and unlink history
+	// is what makes a wrong link investigable.
+	LinkIdentifier(context.Context, *connect.Request[v1.LinkIdentifierRequest]) (*connect.Response[v1.LinkIdentifierResponse], error)
+	UnlinkIdentifier(context.Context, *connect.Request[v1.UnlinkIdentifierRequest]) (*connect.Response[v1.UnlinkIdentifierResponse], error)
+	// Confirms an identifier linked while the issuing authority was unreachable.
+	VerifyIdentifier(context.Context, *connect.Request[v1.VerifyIdentifierRequest]) (*connect.Response[v1.VerifyIdentifierResponse], error)
 	// SRS-EMPI-007. Names, preferences and relationships, effective-dated.
 	RecordName(context.Context, *connect.Request[v1.RecordNameRequest]) (*connect.Response[v1.RecordNameResponse], error)
 	GetPatientHistory(context.Context, *connect.Request[v1.GetPatientHistoryRequest]) (*connect.Response[v1.GetPatientHistoryResponse], error)
@@ -197,6 +213,24 @@ func NewPatientServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(patientServiceMethods.ByName("DismissDuplicateCandidate")),
 			connect.WithClientOptions(opts...),
 		),
+		linkIdentifier: connect.NewClient[v1.LinkIdentifierRequest, v1.LinkIdentifierResponse](
+			httpClient,
+			baseURL+PatientServiceLinkIdentifierProcedure,
+			connect.WithSchema(patientServiceMethods.ByName("LinkIdentifier")),
+			connect.WithClientOptions(opts...),
+		),
+		unlinkIdentifier: connect.NewClient[v1.UnlinkIdentifierRequest, v1.UnlinkIdentifierResponse](
+			httpClient,
+			baseURL+PatientServiceUnlinkIdentifierProcedure,
+			connect.WithSchema(patientServiceMethods.ByName("UnlinkIdentifier")),
+			connect.WithClientOptions(opts...),
+		),
+		verifyIdentifier: connect.NewClient[v1.VerifyIdentifierRequest, v1.VerifyIdentifierResponse](
+			httpClient,
+			baseURL+PatientServiceVerifyIdentifierProcedure,
+			connect.WithSchema(patientServiceMethods.ByName("VerifyIdentifier")),
+			connect.WithClientOptions(opts...),
+		),
 		recordName: connect.NewClient[v1.RecordNameRequest, v1.RecordNameResponse](
 			httpClient,
 			baseURL+PatientServiceRecordNameProcedure,
@@ -265,6 +299,9 @@ type patientServiceClient struct {
 	unmergePatients               *connect.Client[v1.UnmergePatientsRequest, v1.UnmergePatientsResponse]
 	listDuplicateCandidates       *connect.Client[v1.ListDuplicateCandidatesRequest, v1.ListDuplicateCandidatesResponse]
 	dismissDuplicateCandidate     *connect.Client[v1.DismissDuplicateCandidateRequest, v1.DismissDuplicateCandidateResponse]
+	linkIdentifier                *connect.Client[v1.LinkIdentifierRequest, v1.LinkIdentifierResponse]
+	unlinkIdentifier              *connect.Client[v1.UnlinkIdentifierRequest, v1.UnlinkIdentifierResponse]
+	verifyIdentifier              *connect.Client[v1.VerifyIdentifierRequest, v1.VerifyIdentifierResponse]
 	recordName                    *connect.Client[v1.RecordNameRequest, v1.RecordNameResponse]
 	getPatientHistory             *connect.Client[v1.GetPatientHistoryRequest, v1.GetPatientHistoryResponse]
 	recordCommunicationPreference *connect.Client[v1.RecordCommunicationPreferenceRequest, v1.RecordCommunicationPreferenceResponse]
@@ -319,6 +356,21 @@ func (c *patientServiceClient) ListDuplicateCandidates(ctx context.Context, req 
 // DismissDuplicateCandidate calls healthcare.empi.v1.PatientService.DismissDuplicateCandidate.
 func (c *patientServiceClient) DismissDuplicateCandidate(ctx context.Context, req *connect.Request[v1.DismissDuplicateCandidateRequest]) (*connect.Response[v1.DismissDuplicateCandidateResponse], error) {
 	return c.dismissDuplicateCandidate.CallUnary(ctx, req)
+}
+
+// LinkIdentifier calls healthcare.empi.v1.PatientService.LinkIdentifier.
+func (c *patientServiceClient) LinkIdentifier(ctx context.Context, req *connect.Request[v1.LinkIdentifierRequest]) (*connect.Response[v1.LinkIdentifierResponse], error) {
+	return c.linkIdentifier.CallUnary(ctx, req)
+}
+
+// UnlinkIdentifier calls healthcare.empi.v1.PatientService.UnlinkIdentifier.
+func (c *patientServiceClient) UnlinkIdentifier(ctx context.Context, req *connect.Request[v1.UnlinkIdentifierRequest]) (*connect.Response[v1.UnlinkIdentifierResponse], error) {
+	return c.unlinkIdentifier.CallUnary(ctx, req)
+}
+
+// VerifyIdentifier calls healthcare.empi.v1.PatientService.VerifyIdentifier.
+func (c *patientServiceClient) VerifyIdentifier(ctx context.Context, req *connect.Request[v1.VerifyIdentifierRequest]) (*connect.Response[v1.VerifyIdentifierResponse], error) {
+	return c.verifyIdentifier.CallUnary(ctx, req)
 }
 
 // RecordName calls healthcare.empi.v1.PatientService.RecordName.
@@ -386,6 +438,13 @@ type PatientServiceHandler interface {
 	// SRS-EMPI-004. The manual-review worklist thresholds route to.
 	ListDuplicateCandidates(context.Context, *connect.Request[v1.ListDuplicateCandidatesRequest]) (*connect.Response[v1.ListDuplicateCandidatesResponse], error)
 	DismissDuplicateCandidate(context.Context, *connect.Request[v1.DismissDuplicateCandidateRequest]) (*connect.Response[v1.DismissDuplicateCandidateResponse], error)
+	// SRS-EMPI-011. External identifiers are linked and unlinked through an
+	// adapter; neither direction deletes a row, because link and unlink history
+	// is what makes a wrong link investigable.
+	LinkIdentifier(context.Context, *connect.Request[v1.LinkIdentifierRequest]) (*connect.Response[v1.LinkIdentifierResponse], error)
+	UnlinkIdentifier(context.Context, *connect.Request[v1.UnlinkIdentifierRequest]) (*connect.Response[v1.UnlinkIdentifierResponse], error)
+	// Confirms an identifier linked while the issuing authority was unreachable.
+	VerifyIdentifier(context.Context, *connect.Request[v1.VerifyIdentifierRequest]) (*connect.Response[v1.VerifyIdentifierResponse], error)
 	// SRS-EMPI-007. Names, preferences and relationships, effective-dated.
 	RecordName(context.Context, *connect.Request[v1.RecordNameRequest]) (*connect.Response[v1.RecordNameResponse], error)
 	GetPatientHistory(context.Context, *connect.Request[v1.GetPatientHistoryRequest]) (*connect.Response[v1.GetPatientHistoryResponse], error)
@@ -464,6 +523,24 @@ func NewPatientServiceHandler(svc PatientServiceHandler, opts ...connect.Handler
 		connect.WithSchema(patientServiceMethods.ByName("DismissDuplicateCandidate")),
 		connect.WithHandlerOptions(opts...),
 	)
+	patientServiceLinkIdentifierHandler := connect.NewUnaryHandler(
+		PatientServiceLinkIdentifierProcedure,
+		svc.LinkIdentifier,
+		connect.WithSchema(patientServiceMethods.ByName("LinkIdentifier")),
+		connect.WithHandlerOptions(opts...),
+	)
+	patientServiceUnlinkIdentifierHandler := connect.NewUnaryHandler(
+		PatientServiceUnlinkIdentifierProcedure,
+		svc.UnlinkIdentifier,
+		connect.WithSchema(patientServiceMethods.ByName("UnlinkIdentifier")),
+		connect.WithHandlerOptions(opts...),
+	)
+	patientServiceVerifyIdentifierHandler := connect.NewUnaryHandler(
+		PatientServiceVerifyIdentifierProcedure,
+		svc.VerifyIdentifier,
+		connect.WithSchema(patientServiceMethods.ByName("VerifyIdentifier")),
+		connect.WithHandlerOptions(opts...),
+	)
 	patientServiceRecordNameHandler := connect.NewUnaryHandler(
 		PatientServiceRecordNameProcedure,
 		svc.RecordName,
@@ -538,6 +615,12 @@ func NewPatientServiceHandler(svc PatientServiceHandler, opts ...connect.Handler
 			patientServiceListDuplicateCandidatesHandler.ServeHTTP(w, r)
 		case PatientServiceDismissDuplicateCandidateProcedure:
 			patientServiceDismissDuplicateCandidateHandler.ServeHTTP(w, r)
+		case PatientServiceLinkIdentifierProcedure:
+			patientServiceLinkIdentifierHandler.ServeHTTP(w, r)
+		case PatientServiceUnlinkIdentifierProcedure:
+			patientServiceUnlinkIdentifierHandler.ServeHTTP(w, r)
+		case PatientServiceVerifyIdentifierProcedure:
+			patientServiceVerifyIdentifierHandler.ServeHTTP(w, r)
 		case PatientServiceRecordNameProcedure:
 			patientServiceRecordNameHandler.ServeHTTP(w, r)
 		case PatientServiceGetPatientHistoryProcedure:
@@ -599,6 +682,18 @@ func (UnimplementedPatientServiceHandler) ListDuplicateCandidates(context.Contex
 
 func (UnimplementedPatientServiceHandler) DismissDuplicateCandidate(context.Context, *connect.Request[v1.DismissDuplicateCandidateRequest]) (*connect.Response[v1.DismissDuplicateCandidateResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.empi.v1.PatientService.DismissDuplicateCandidate is not implemented"))
+}
+
+func (UnimplementedPatientServiceHandler) LinkIdentifier(context.Context, *connect.Request[v1.LinkIdentifierRequest]) (*connect.Response[v1.LinkIdentifierResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.empi.v1.PatientService.LinkIdentifier is not implemented"))
+}
+
+func (UnimplementedPatientServiceHandler) UnlinkIdentifier(context.Context, *connect.Request[v1.UnlinkIdentifierRequest]) (*connect.Response[v1.UnlinkIdentifierResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.empi.v1.PatientService.UnlinkIdentifier is not implemented"))
+}
+
+func (UnimplementedPatientServiceHandler) VerifyIdentifier(context.Context, *connect.Request[v1.VerifyIdentifierRequest]) (*connect.Response[v1.VerifyIdentifierResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.empi.v1.PatientService.VerifyIdentifier is not implemented"))
 }
 
 func (UnimplementedPatientServiceHandler) RecordName(context.Context, *connect.Request[v1.RecordNameRequest]) (*connect.Response[v1.RecordNameResponse], error) {

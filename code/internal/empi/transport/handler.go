@@ -356,3 +356,79 @@ func (h *Handler) GetCaregiverAuthority(
 		Authorities: authoritiesToProto(authorities),
 	}), nil
 }
+
+// LinkIdentifier implements SRS-EMPI-011.
+func (h *Handler) LinkIdentifier(
+	ctx context.Context,
+	req *connect.Request[empiv1.LinkIdentifierRequest],
+) (*connect.Response[empiv1.LinkIdentifierResponse], error) {
+	msg := req.Msg
+
+	result, err := h.svc.LinkIdentifier(ctx, application.LinkIdentifierInput{
+		PatientID:           msg.GetPatientId(),
+		Type:                identifierTypeFromProto[msg.GetType()],
+		System:              msg.GetSystem(),
+		Value:               msg.GetValue(),
+		AssigningAuthority:  msg.GetAssigningAuthority(),
+		Source:              msg.GetSource(),
+		Verify:              msg.GetVerify(),
+		RequireVerification: msg.GetRequireVerification(),
+	})
+	if err != nil {
+		return nil, platformtransport.ToConnect(err, platformtransport.CorrelationIDFromContext(ctx))
+	}
+
+	out := &empiv1.LinkIdentifierResponse{
+		Identifier:               identifierToProto(result.Identifier),
+		VerificationAttempted:    result.VerificationAttempted,
+		RegistryUnavailable:      result.RegistryUnavailable,
+		VerificationReason:       result.VerificationReason,
+		HasAuthorityDemographics: result.HasAuthorityDemographics,
+	}
+	if result.HasAuthorityDemographics {
+		out.AuthorityDemographics = demographicsToProto(result.AuthorityDemographics)
+	}
+	return connect.NewResponse(out), nil
+}
+
+// UnlinkIdentifier implements SRS-EMPI-011.
+func (h *Handler) UnlinkIdentifier(
+	ctx context.Context,
+	req *connect.Request[empiv1.UnlinkIdentifierRequest],
+) (*connect.Response[empiv1.UnlinkIdentifierResponse], error) {
+	msg := req.Msg
+
+	retired, err := h.svc.UnlinkIdentifier(ctx, application.UnlinkIdentifierInput{
+		IdentifierID: msg.GetIdentifierId(),
+		Revoke:       msg.GetRevoke(),
+		Reason:       msg.GetReason(),
+	})
+	if err != nil {
+		return nil, platformtransport.ToConnect(err, platformtransport.CorrelationIDFromContext(ctx))
+	}
+	return connect.NewResponse(&empiv1.UnlinkIdentifierResponse{
+		Identifier: identifierToProto(retired),
+	}), nil
+}
+
+// VerifyIdentifier implements SRS-EMPI-011.
+func (h *Handler) VerifyIdentifier(
+	ctx context.Context,
+	req *connect.Request[empiv1.VerifyIdentifierRequest],
+) (*connect.Response[empiv1.VerifyIdentifierResponse], error) {
+	result, err := h.svc.VerifyIdentifier(ctx, application.VerifyIdentifierInput{
+		IdentifierID: req.Msg.GetIdentifierId(),
+	})
+	if err != nil {
+		return nil, platformtransport.ToConnect(err, platformtransport.CorrelationIDFromContext(ctx))
+	}
+
+	out := &empiv1.VerifyIdentifierResponse{
+		Identifier:               identifierToProto(result.Identifier),
+		HasAuthorityDemographics: result.HasAuthorityDemographics,
+	}
+	if result.HasAuthorityDemographics {
+		out.AuthorityDemographics = demographicsToProto(result.AuthorityDemographics)
+	}
+	return connect.NewResponse(out), nil
+}

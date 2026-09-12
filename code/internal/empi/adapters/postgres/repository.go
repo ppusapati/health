@@ -321,6 +321,8 @@ func (r IdentifierRepo) Link(ctx context.Context, scope authctx.TenantScope, i d
 		IdentifierType: string(i.Type), System: i.System, Value: i.Value,
 		AssigningAuthority: i.AssigningAuthority, Status: string(i.Status),
 		Source: i.Source, IsPrimary: i.Primary, LinkedAt: timestamptz(i.LinkedAt),
+		Assurance:  string(assuranceOrDefault(i.Assurance)),
+		VerifiedAt: nullableTimestamptz(i.VerifiedAt),
 	})
 
 	var pgErr *pgconn.PgError
@@ -497,6 +499,121 @@ func patientFromRow(row sqlcgen.EmpiPatient) (*domain.Patient, error) {
 	return domain.Restore(row.PatientID.String(), p), nil
 }
 
+// assuranceOrDefault treats the zero value as asserted.
+//
+// A caller that built an Identifier literally rather than through
+// NewIdentifier would otherwise write an empty string, which the CHECK
+// constraint rejects — correctly, but with an error that says nothing about
+// the missing field.
+func assuranceOrDefault(a domain.IdentifierAssurance) domain.IdentifierAssurance {
+	if a == "" {
+		return domain.AssuranceAsserted
+	}
+	return a
+}
+
+func nullableTimestamptz(t *time.Time) pgtype.Timestamptz {
+	if t == nil {
+		return pgtype.Timestamptz{}
+	}
+	return timestamptz(*t)
+}
+
+// Get reads one identifier by its own id.
+func (r IdentifierRepo) Get(ctx context.Context, scope authctx.TenantScope,
+	identifierID string) (domain.Identifier, error) {
+
+	tenantID, err := scopeTenantID(scope)
+	if err != nil {
+		return domain.Identifier{}, err
+	}
+	id, err := uuid.Parse(identifierID)
+	if err != nil {
+		return domain.Identifier{}, notFound()
+	}
+
+	row, err := r.queries(ctx).GetPatientIdentifier(ctx, sqlcgen.GetPatientIdentifierParams{
+		TenantID: tenantID, IdentifierID: id,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.Identifier{}, notFound()
+	}
+	if err != nil {
+		return domain.Identifier{}, err
+	}
+	return identifierFromRow(sqlcgen.EmpiPatientIdentifier(row)), nil
+}
+
+// Retire writes back a superseded or revoked identifier, keeping the row.
+func (r IdentifierRepo) Retire(ctx context.Context, scope authctx.TenantScope,
+	i domain.Identifier) error {
+
+	tenantID, err := scopeTenantID(scope)
+	if err != nil {
+		return err
+	}
+	id, err := uuid.Parse(i.ID)
+	if err != nil {
+		return notFound()
+	}
+
+	var supersededBy pgtype.UUID
+	if i.SupersededByID != "" {
+		parsed, parseErr := uuid.Parse(i.SupersededByID)
+		if parseErr != nil {
+			return rpcerr.Internal("EMPI_IDENTIFIER_ID_INVALID",
+				"superseded_by_id must be a UUID").WithCause(parseErr)
+		}
+		supersededBy = pgtype.UUID{Bytes: parsed, Valid: true}
+	}
+
+	rows, err := r.queries(ctx).RetirePatientIdentifier(ctx, sqlcgen.RetirePatientIdentifierParams{
+		TenantID: tenantID, IdentifierID: id,
+		Status: string(i.Status), Reason: i.Reason,
+		UnlinkedAt: nullableTimestamptz(i.UnlinkedAt), SupersededByID: supersededBy,
+	})
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		// The statement is guarded on status = 'active', so no rows means
+		// somebody else retired it between the read and the write. Reporting a
+		// conflict rather than success matters: the caller's reason was not the
+		// one recorded.
+		return rpcerr.FailedPrecondition("EMPI_IDENTIFIER_NOT_ACTIVE",
+			"the identifier is no longer active")
+	}
+	return nil
+}
+
+// RecordVerification stores an issuing authority's confirmation.
+func (r IdentifierRepo) RecordVerification(ctx context.Context, scope authctx.TenantScope,
+	i domain.Identifier) error {
+
+	tenantID, err := scopeTenantID(scope)
+	if err != nil {
+		return err
+	}
+	id, err := uuid.Parse(i.ID)
+	if err != nil {
+		return notFound()
+	}
+
+	rows, err := r.queries(ctx).RecordIdentifierVerification(ctx, sqlcgen.RecordIdentifierVerificationParams{
+		TenantID: tenantID, IdentifierID: id,
+		VerifiedAt:         nullableTimestamptz(i.VerifiedAt),
+		AssigningAuthority: i.AssigningAuthority,
+	})
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return rpcerr.FailedPrecondition("EMPI_IDENTIFIER_NOT_ACTIVE",
+			"the identifier is no longer active")
+	}
+	return nil
+}
+
 func identifierFromRow(row sqlcgen.EmpiPatientIdentifier) domain.Identifier {
 	i := domain.Identifier{
 		ID: row.IdentifierID.String(), PatientID: row.PatientID.String(),
@@ -506,6 +623,11 @@ func identifierFromRow(row sqlcgen.EmpiPatientIdentifier) domain.Identifier {
 		Status:             domain.IdentifierStatus(row.Status),
 		Source:             row.Source, Primary: row.IsPrimary,
 		LinkedAt: row.LinkedAt.Time.UTC(), Reason: row.Reason,
+		Assurance: domain.IdentifierAssurance(row.Assurance),
+	}
+	if row.VerifiedAt.Valid {
+		at := row.VerifiedAt.Time.UTC()
+		i.VerifiedAt = &at
 	}
 	if row.UnlinkedAt.Valid {
 		at := row.UnlinkedAt.Time.UTC()
