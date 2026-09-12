@@ -66,6 +66,11 @@ var rolePermissions = map[Role][]string{
 		// inside it are different jobs, and bundling them would put every
 		// tenant admin in the patient index.
 		"empi.patient.configure",
+		// Note templates, shared smart phrases and the escalation policy are
+		// configuration (SRS-CLN-002, SRS-CLN-012, SRS-CLN-015). Note what is
+		// absent: no cln.record.read. Deciding what a note asks and reading
+		// what it says are different jobs.
+		"cln.record.configure",
 		// Rosters are tenant administration for the same reason: deciding when
 		// a clinic runs is configuration, and it is deliberately not bundled
 		// with the ability to look inside the diary at who is coming.
@@ -121,6 +126,13 @@ var rolePermissions = map[Role][]string{
 		// receptionist could enter one under their own name.
 		"enc.encounter.read",
 		"enc.encounter.manage",
+		// Typing a dictated note is data entry, and a ward clerk does it.
+		// Signing it is not: that is the clinician's assertion, and it is a
+		// separate permission the desk does not hold (SRS-CLN-009).
+		//
+		// Deliberately no cln.record.read: a clerk who could read the chart
+		// would have the whole clinical record of every patient they book.
+		"cln.record.write",
 	},
 
 	// HIM resolves identities. They hold merge and unrestricted read, because
@@ -168,6 +180,19 @@ var rolePermissions = map[Role][]string{
 		// safeguarding (SRS-CLN-019). A clinician treating the patient needs
 		// them; the read is separately audited every time.
 		"enc.restricted.read",
+
+		// The clinical record: write it, sign it, read it back.
+		"cln.record.read",
+		"cln.record.write",
+		// Signing asserts clinical responsibility rather than data entry
+		// (SRS-CLN-009). A ward clerk typing a dictated note saves the draft
+		// and must not be able to finalise it.
+		"cln.document.sign",
+		"cln.record.read_restricted",
+		// Acknowledging a critical result means somebody has taken clinical
+		// action (SRS-CLN-012). A permission the whole hospital held would let
+		// the desk clear the safety worklist by clicking through it.
+		"cln.result.acknowledge",
 	},
 }
 

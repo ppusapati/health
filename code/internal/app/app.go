@@ -13,12 +13,16 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/ppusapati/health/code/gen/go/healthcare/clinical/v1/clinicalv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/empi/v1/empiv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/encounter/v1/encounterv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/identity_access/v1/identityaccessv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/organization/v1/organizationv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/platform_api/v1/platformapiv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/scheduling/v1/schedulingv1connect"
+	clinicalpostgres "github.com/ppusapati/health/code/internal/clinical/adapters/postgres"
+	clinicalapp "github.com/ppusapati/health/code/internal/clinical/application"
+	clinicaltransport "github.com/ppusapati/health/code/internal/clinical/transport"
 	empipostgres "github.com/ppusapati/health/code/internal/empi/adapters/postgres"
 	empiapp "github.com/ppusapati/health/code/internal/empi/application"
 	empiports "github.com/ppusapati/health/code/internal/empi/ports"
@@ -130,6 +134,7 @@ type Server struct {
 	Patients     *empiapp.Service
 	Scheduling   *schedulingapp.Service
 	Encounters   *encounterapp.Service
+	Clinical     *clinicalapp.Service
 	Store        *store.Store
 	RateLimiter  *platformtransport.RateLimiter
 
@@ -221,6 +226,10 @@ func New(deps Deps) *Server {
 		Clock:    systemClock{},
 	})
 
+	clinicalRepo := clinicalpostgres.New(txManager)
+	clinicalDocuments := clinicalpostgres.DocumentRepo{Repository: clinicalRepo}
+	clinicalTimeline := clinicalpostgres.TimelineRepo{Repository: clinicalRepo}
+
 	encounterRepo := encounterpostgres.New(txManager)
 	encounterService := encounterapp.NewService(encounterapp.Deps{
 		UnitOfWork: txManager,
@@ -230,15 +239,35 @@ func New(deps Deps) *Server {
 		Diagnoses:  encounterpostgres.DiagnosisRepo{Repository: encounterRepo},
 		Policies:   encounterpostgres.ClosurePolicyRepo{Repository: encounterRepo},
 		Summaries:  encounterpostgres.SummaryRepo{Repository: encounterRepo},
-		// Clinical is nil until Sprint 4B wires the clinical context. A
-		// closure policy that requires a signed note therefore blocks rather
-		// than silently passing, which is the right way round: a deployment
-		// with no clinical documentation should not be able to satisfy a rule
-		// about clinical documentation.
+		// The clinical record answers the closure gate's "is there a signed
+		// note" and supplies the clinical half of the timeline (SRS-ENC-008,
+		// SRS-ENC-011). Narrow by construction: the seam returns booleans and
+		// projections, never clinical content.
+		Clinical: clinicalpostgres.NewClinicalContent(clinicalDocuments, clinicalTimeline),
 		Patients: encounterpostgres.NewPatients(
 			empipostgres.PatientRepo{Repository: empiRepo}),
 		Appointments: encounterpostgres.NewAppointments(
 			schedulingpostgres.AppointmentRepo{Repository: schedulingRepo}),
+		Events: platformStore,
+		Audits: store.AuditAppenderFunc(platformStore.AppendAudit),
+		IDs:    uuidGenerator{},
+		Clock:  systemClock{},
+	})
+
+	clinicalService := clinicalapp.NewService(clinicalapp.Deps{
+		UnitOfWork: txManager,
+		Documents:  clinicalDocuments,
+		Templates:  clinicalpostgres.TemplateRepo{Repository: clinicalRepo},
+		Records:    clinicalpostgres.RecordRepo{Repository: clinicalRepo},
+		Governance: clinicalpostgres.GovernanceRepo{Repository: clinicalRepo},
+		Decisions:  clinicalpostgres.DecisionRepo{Repository: clinicalRepo},
+		Phrases:    clinicalpostgres.SmartPhraseRepo{Repository: clinicalRepo},
+		Timeline:   clinicalTimeline,
+		Encounters: clinicalpostgres.NewEncounters(
+			encounterpostgres.EncounterRepo{Repository: encounterRepo}),
+		Patients: clinicalpostgres.NewPatients(
+			empipostgres.PatientRepo{Repository: empiRepo},
+			empipostgres.IdentifierRepo{Repository: empiRepo}, time.Now),
 		Events: platformStore,
 		Audits: store.AuditAppenderFunc(platformStore.AppendAudit),
 		IDs:    uuidGenerator{},
@@ -310,6 +339,8 @@ func New(deps Deps) *Server {
 		schedulingtransport.NewHandler(schedulingService), interceptors))
 	mux.Handle(encounterv1connect.NewEncounterServiceHandler(
 		encountertransport.NewHandler(encounterService), interceptors))
+	mux.Handle(clinicalv1connect.NewClinicalServiceHandler(
+		clinicaltransport.NewHandler(clinicalService), interceptors))
 	mux.Handle(platformapiv1connect.NewHealthServiceHandler(
 		platformapitransport.NewHandler(deps.Build, map[string]platformapitransport.Pinger{
 			"postgres": poolPinger{pool: deps.Pool},
@@ -327,6 +358,7 @@ func New(deps Deps) *Server {
 		Patients:        empiService,
 		Scheduling:      schedulingService,
 		Encounters:      encounterService,
+		Clinical:        clinicalService,
 		Store:           platformStore,
 		RateLimiter:     rateLimiter,
 		Publisher:       publisher,

@@ -765,7 +765,30 @@ Pinned by `TestAClerkCannotRewriteTheRoster`.
 | SRS-ENC-010 | Linked external referral/request source | **Implemented** — the reference is held and travels with the encounter; closing the loop back to the referrer is SRS-CLN-022's consult response, which arrives with 4B |
 | SRS-ENC-011 | Longitudinal timeline with purpose/permission filtering; unauthorised restricted notes omitted or masked | **Implemented** |
 | SRS-ENC-012 | `encounter.started/completed/cancelled` and `diagnosis.recorded`, deterministic ordering and version per aggregate | **Implemented** |
-| SRS-CLN-001 … 024 | Clinical core | Not started — Sprint 4B |
+| SRS-CLN-001 | Patient banner with positive identifiers, age/sex, allergies, major alerts and encounter context | **Implemented** |
+| SRS-CLN-002 | Structured and narrative notes against versioned specialty templates; the saved note references the exact version | **Implemented** |
+| SRS-CLN-003 | Problem list with status, onset, resolution and coded mapping; a resolved problem stays historical | **Implemented** |
+| SRS-CLN-004 | Allergy/intolerance with substance, reaction, severity, certainty and verification status, visible to decision support on commit | **Implemented** |
+| SRS-CLN-005 | Observations with code, value, unit, reference/interpretation, time, performer, device and status; trends keep the original unit | **Implemented** |
+| SRS-CLN-006 | Procedure record with indication, performer, site/laterality, outcome, complications and linked orders | **Implemented** |
+| SRS-CLN-007 | Care plans with problems, goals, interventions, owners, target dates and status | **Implemented** — the plan and its activities are modelled and stored; the task linkage lands with SRS-NUR-011's worklist in 4C |
+| SRS-CLN-008 | Document lifecycle draft → signed → amended/addendum/entered-in-error; signed content cannot be edited in place | **Implemented** |
+| SRS-CLN-009 | Signature with authenticated identity, timestamp and meaning; signature metadata and content hash retained | **Implemented** |
+| SRS-CLN-010 | Provenance for imported records: source organisation, source system and ingestion time, distinguishable from local authorship | **Implemented** |
+| SRS-CLN-011 | Abnormal/critical flags come from the authoritative diagnostic service; the UI must not infer criticality | **Implemented** |
+| SRS-CLN-012 | Critical-result acknowledgement with timestamp and action; unacknowledged alerts escalate | **Implemented** — escalation is computed and due alerts are listed; the delivery channel is the notification port Sprint 3C established |
+| SRS-CLN-013 | Clinical and procedure-specific consents, not conflated with privacy consents | **Implemented** |
+| SRS-CLN-014 | Attachments and images with type, source, timestamp and confidentiality class | **Implemented** — metadata, classification and access follow the parent record; the binary store is a port with no production adapter yet |
+| SRS-CLN-015 | Smart phrases with user-visible expansion; the signed note stores the expanded text | **Implemented** |
+| SRS-CLN-016 | Dictation as draft input; the clinician reviews and signs | **Implemented** — dictated content is marked and a transcriber's signature does not finalise; the speech-recognition vendor is a seam |
+| SRS-CLN-017 | Patient-context lock and warning across multiple open charts | **Implemented** |
+| SRS-CLN-018 | Chronological timeline filtered by kind, never changing the underlying record | **Implemented** |
+| SRS-CLN-019 | Restricted note class with narrower authorization; restricted reads explicitly audited | **Implemented** |
+| SRS-CLN-020 | Versioned calculators storing inputs, formula version, output, units and interpretation; recalculation never overwrites | **Implemented** |
+| SRS-CLN-021 | CDS alerts naming the triggering rule and version, with a stored, reportable override reason | **Implemented** |
+| SRS-CLN-022 | Referral/consult request with specialty, urgency, reason and question; the response closes the loop and stays linked | **Implemented** |
+| SRS-CLN-023 | Registry references pointing at canonical clinical facts rather than copying the chart | **Implemented** |
+| SRS-CLN-024 | `clinical_document.signed`, `observation.recorded`, `problem.updated`, `allergy.updated`, `procedure.completed`, `critical_result.acknowledged` | **Implemented** |
 | SRS-NUR-001 … 018 | Nursing core | Not started — Sprint 4C |
 
 ### What the encounter context enforces
@@ -856,6 +879,119 @@ Pinned by `TestAClerkCannotRewriteTheRoster`.
   as the tightest: over-restricting is an inconvenience somebody reports, and
   under-restricting is a disclosure nobody notices.
 
+### What the clinical record enforces
+
+- **A signature is a claim about a specific set of words.** SRS-CLN-009 asks
+  for the content hash to be retained, and the reason is that "Dr Rao signed
+  this note" is worthless if nobody can say which note. The hash covers the
+  section headings and their order as well as the text, because moving a
+  sentence from *History* to *Plan* changes what the clinician asserted while
+  leaving the words identical. `Intact()` recomputes it, so a note whose stored
+  content has drifted from what was signed is detectable rather than merely
+  improbable.
+- **Signed content is never edited; it is amended or annotated.** The
+  requirement says "cannot be edited in-place", and in-place is the whole
+  point: a correction that overwrites destroys the version somebody else acted
+  on. So an amendment produces a new document with a mandatory reason and the
+  old one stays readable, and the guard is not only in the domain — the update
+  query carries `AND status = 'draft'`, so a second path to the table cannot
+  reach a signed row either. An amendment and an addendum are deliberately
+  different things: an amendment says the record was wrong, an addendum says
+  the record was incomplete, and a reader who cannot tell them apart cannot
+  tell a correction from a continuation.
+- **A transcriber's signature does not finalise a note.** SRS-CLN-016 is
+  explicit that the clinician reviews and signs dictated content. A signature
+  meaning of *transcriber* asserts "I typed what I heard", which is a very
+  different claim from "I am answerable for this clinical judgement", and a
+  system that let the first one close the document would put a clinician's name
+  against words they never read.
+- **Smart phrases are expanded before the note is stored, never after.**
+  SRS-CLN-015's criterion is "no hidden clinical text". A macro resolved at
+  display time means the stored note and the note on the screen are different
+  documents, and the one that gets disclosed in a complaint is the stored one.
+  Expansion happens on the way in, so what was signed is what is on the screen.
+- **Criticality comes from the laboratory, not from us.** SRS-CLN-011 says the
+  UI must not infer criticality independently, and the reason is that reference
+  ranges are method-specific and age-specific: a potassium that is critical on
+  one analyser is ordinary on another, and a neonatal bilirubin compared
+  against an adult range is dangerous in both directions. So the interpretation
+  arrives with the result, carries the name of the source that assigned it, and
+  an interpretation with no named source is refused. An interpretation code
+  this version does not recognise is *not* treated as normal — the failure mode
+  of guessing "normal" is a missed critical result.
+- **Acknowledging a critical result requires saying what was done.** A
+  timestamp alone answers "was it seen", which is the question the system
+  wants; "what happened to the patient" is the question the incident review
+  asks. Requiring the action turns the acknowledgement from a dismissed dialog
+  into a clinical record, and an alert that nobody acknowledges escalates on a
+  clock rather than waiting to be noticed.
+- **An unverified allergy still warns.** Verification status is recorded
+  because SRS-CLN-004 asks for it, but the severity ranking deliberately does
+  not discount an unconfirmed entry, and an allergy of unknown criticality
+  outranks a confirmed mild intolerance. A patient who says "penicillin makes
+  me stop breathing" has not been through an allergy clinic, and suppressing
+  that warning until somebody verifies it inverts the safety argument. The
+  banner leads with what could kill: the ordering is by danger, not by entry
+  date.
+- **A resolved problem stays on the list.** SRS-CLN-003's criterion is that it
+  remains historical, and the reason is that "resolved" is a clinical claim
+  that can be wrong — a cancer in remission is on the list precisely because it
+  might come back — and a chart that deletes resolved problems cannot answer
+  "has this patient ever had".
+- **A measured value without a unit is not a value.** 5 of potassium is
+  ordinary in mmol/L and lethal in g/L. The unit travels with the number,
+  trends keep the original unit and source rather than silently normalising,
+  and a value that arrives unitless is refused at the domain rather than
+  rendered.
+- **Laterality is stated, never assumed.** Wrong-site surgery is the canonical
+  never-event, and a procedure on a paired organ that leaves the side blank is
+  how it happens. A body site that has sides requires one.
+- **Clinical consent and privacy consent are different records.** SRS-CLN-013
+  says not to conflate them, and conflating them is worse than untidy:
+  "consented to surgery" and "consented to share my record with the district
+  registry" answer to different law, different withdrawal rules and different
+  readers. A consent that is absent is not a refusal, and a refusal is visible
+  rather than inferred from silence — the alternative is treating "nobody
+  asked" as "the patient agreed".
+- **A recalculation is a new result, not an update.** SRS-CLN-020 requires that
+  a new formula never overwrites a historical one, because the clinician acted
+  on the old score and an audit that shows only the recomputed value says the
+  decision was made on evidence that did not exist at the time. Inputs and
+  formula version are stored alongside the output for the same reason.
+- **The patient-context lock is about the chart you are not looking at.** Two
+  charts open is normal on a ward round; ordering into the wrong one is the
+  error SRS-CLN-017 exists to catch. The client asserts which patient it
+  believes it is acting on and the server compares that against the target, so
+  a stale tab is refused rather than trusted. Asserting nothing is not a
+  mismatch — the lock catches a wrong claim, it does not force every caller to
+  make one.
+- **Restricted notes are a class on the document, not a separate store.** A
+  parallel store for sensitive notes is a store that gets forgotten by the next
+  feature. The class rides with the document, the timeline filter applies it on
+  the way out, and a class this version does not recognise counts as
+  restricted. Reads of restricted content are audited as such, so "who looked
+  at the psychiatric note" is answerable.
+- **A CDS override is stored, not just allowed.** SRS-CLN-021 asks for the
+  triggering rule and version, because an alert everybody overrides is an alert
+  that should be retired, and that argument can only be made from counted
+  overrides against a named rule version. A soft alert does not block — a
+  system that blocks on everything trains clinicians to click through
+  everything, which is how the hard blocks stop working.
+- **A consult that is never answered is an open loop.** SRS-CLN-022's criterion
+  is that the response closes the loop and stays linked. So the request states
+  the question being asked rather than just the specialty — "please see" is not
+  a question — and declining needs a reason, because an unexplained decline
+  leaves the referrer with nothing to act on.
+- **A registry membership points; it does not copy.** SRS-CLN-023 is explicit,
+  and the reason is the same one behind the episode in 4A: a copied fact is the
+  version somebody reads after the original changed.
+- **The clinical events carry references, not content.** SRS-CLN-024's
+  criterion is "minimum necessary data and references", so
+  `clinical_document.signed` names the document, the patient and the signer and
+  says nothing about what the note says. An event bus is the widest-reach
+  surface in the system, and a diagnosis in an event payload is a diagnosis in
+  every consumer's logs.
+
 ### Sprint 4 evidence
 
 | Property | Test |
@@ -903,6 +1039,47 @@ Pinned by `TestAClerkCannotRewriteTheRoster`.
 | The filter reports what it withheld, for audit | `TestTheFilterReportsWhatItWithheld` |
 | Filtering by kind leaves the timeline alone | `TestFilteringByKindLeavesTheTimelineAlone` |
 | An encounter cannot be reached from another tenant, or opened for their patient | `TestAnEncounterCannotBeReachedFromAnotherTenant`, `TestAnEncounterCannotBeOpenedForAnotherTenantsPatient` |
+| The banner leads with what could kill, and quiet allergies stay off it | `TestTheBannerLeadsWithWhatCouldKill`, `TestOnlyDangerousAllergiesReachTheBanner` |
+| A note needs a patient and an encounter | `TestADocumentNeedsAPatientAndAnEncounter` |
+| A template needs a version and at least one section | `TestATemplateNeedsAVersionAndASection` |
+| A note records the template version it was composed against, and a retired template cannot be chosen | `TestANoteRecordsTheTemplateVersionItWasComposedAgainst`, `TestANoteRecordsItsTemplateVersionAndARetiredOneCannotBeChosen` |
+| A signature needs an identity and something to sign | `TestASignatureNeedsAnIdentityAndSomethingToSign` |
+| A signature pins exactly what was signed | `TestASignaturePinsWhatWasSigned` (both layers) |
+| The content hash covers heading order, not just words | `TestTheContentHashCoversOrderAndHeadings` |
+| A signature records what it asserts | `TestASignatureRecordsWhatItAsserts` (both layers) |
+| A transcriber's signature does not finalise a note | `TestATranscribersSignatureDoesNotFinaliseANote` |
+| Signed content cannot be edited in place; a draft can | `TestASignedNoteCannotBeEdited`, `TestASignedNoteCannotBeEditedInPlace`, `TestADraftIsEditedRatherThanAmended` |
+| An amendment and an addendum are different things | `TestAnAmendmentAndAnAddendumAreDifferentThings` (both layers) |
+| A retracted document is kept, not deleted | `TestARetractedDocumentIsKept` |
+| A clerk can type a note but cannot sign it | `TestAClerkCanTypeANoteButNotSignIt` |
+| A closed encounter takes no new note | `TestAClosedEncounterTakesNoNewNote` |
+| Smart phrases are expanded before the note is stored | `TestSmartPhrasesAreExpandedBeforeTheNoteIsStored`, `TestSmartPhrasesAreExpandedIntoTheStoredNote` |
+| A resolved problem stays on the list, and cannot resolve before it began | `TestAResolvedProblemStaysOnTheList`, `TestAProblemCannotResolveBeforeItBegan` |
+| An allergy substance must be coded | `TestAnAllergySubstanceMustBeCoded` |
+| An unconfirmed allergy still warns, and unknown criticality outranks a mild intolerance | `TestAnUnconfirmedAllergyStillWarns`, `TestAnUnassessedAllergyOutranksAnIntolerance` |
+| A measured value needs its unit | `TestAMeasuredValueNeedsItsUnit` |
+| An interpretation must name its source, and an unknown one is not normal | `TestAnInterpretationMustNameItsSource`, `TestAnUnknownInterpretationIsNotNormal` |
+| A trend is oldest first and keeps its original source | `TestATrendIsOldestFirstAndKeepsItsSource` |
+| Acknowledging a critical result needs the action taken | `TestAcknowledgingACriticalResultNeedsTheActionTaken` |
+| An unacknowledged critical result escalates | `TestAnUnacknowledgedCriticalResultEscalates` |
+| A completed procedure names its performer, and laterality is stated rather than assumed | `TestACompletedProcedureNamesItsPerformer`, `TestALateralityIsStatedRatherThanAssumed` |
+| A complication is coded | `TestAComplicationIsCoded` |
+| A care plan needs an owner and orders its work | `TestACarePlanNeedsAnOwnerAndOrdersItsWork` |
+| Provenance names where imported data came from | `TestProvenanceNamesWhereDataCameFrom` |
+| A procedure consent names the procedure, and consent on somebody's behalf names the giver | `TestAProcedureConsentNamesTheProcedure`, `TestAConsentGivenOnSomebodysBehalfNamesTheGiver` |
+| An absent consent is not a consent, and a refusal is visible | `TestAnAbsentConsentIsNotAConsentAndARefusalIsVisible` |
+| An attachment carries its own confidentiality | `TestAnAttachmentCarriesItsOwnConfidentiality` |
+| A document carries its confidentiality class, and an unknown class counts as restricted | `TestADocumentCarriesItsConfidentialityClass`, `TestAnUnknownConfidentialityClassCountsAsRestricted` |
+| A restricted note is not visible without the permission | `TestARestrictedNoteIsNotVisibleWithoutThePermission` |
+| The patient-context lock catches the wrong chart | `TestThePatientContextLockCatchesTheWrongChart` (both layers), `TestAStalePatientContextIsRefused` |
+| Asserting no context is not a mismatch | `TestNoAssertedContextIsNotAMismatch` |
+| A calculation stores its inputs and formula version | `TestACalculationStoresItsInputsAndFormulaVersion` |
+| A CDS alert names its rule version and records the override; a soft alert does not block | `TestACDSAlertNamesItsRuleVersionAndRecordsTheOverride`, `TestASoftAlertDoesNotBlock` |
+| A consult states its question and closes the loop; declining needs a reason | `TestAConsultStatesItsQuestionAndCloseTheLoop`, `TestDecliningAConsultNeedsAReason` |
+| A registry membership points at something | `TestARegistryMembershipPointsAtSomething` |
+| Signing emits an event carrying no clinical content | `TestSigningEmitsAnEventCarryingNoClinicalContent` |
+| The encounter closure gate reads the clinical record across the seam | `TestTheClosureGateSeesASignedNote` |
+| A note cannot be reached from another tenant | `TestANoteCannotBeReachedFromAnotherTenant` |
 
 ### Decisions taken against the backlog
 
@@ -920,6 +1097,36 @@ opens and closes encounters all day; what is wrong with the patient is a
 clinical act. Behind one permission every receptionist could enter a diagnosis
 under their own name. Implemented as a distinct `enc.diagnosis.record`, pinned
 by `TestAClerkCannotRecordADiagnosis`.
+
+**SRS-CLN-009's signature is a permission separate from writing.** The
+requirement bundles composing and signing into "document clinical notes", but a
+ward clerk typing up a dictated round is doing data entry, and the signature is
+a clinician asserting responsibility for a clinical judgement. Behind one
+permission, the desk would be signing notes. Implemented as `cln.record.write`
+for composition and `cln.document.sign` for the assertion, pinned by
+`TestAClerkCanTypeANoteButNotSignIt`.
+
+**The clerk who types notes deliberately cannot read them back.** This looks
+wrong until you ask what the alternative grants: a clerk who holds
+`cln.record.read` holds the clinical record of every patient they book, which
+is the largest quiet disclosure surface in the system. Transcription needs write
+and does not need read, so the clerk gets write alone. The same reasoning is why
+`cln.record.configure` — note templates, smart phrases and the escalation policy
+— sits with the tenant admin and carries no read: deciding what a note asks and
+reading what it says are different jobs.
+
+**Reading restricted content is its own permission, not a tier of the read
+permission.** SRS-CLN-019 asks for "narrower role/purpose authorization", and a
+narrower tier inside one permission is a tier that every future feature has to
+remember to check. `cln.record.read_restricted` is a distinct grant, so the
+default answer for any code path that forgets to ask is *no*.
+
+**SRS-CLN-011's "UI must not infer criticality" is enforced at the domain, not
+the UI.** A requirement written against the user interface is a requirement that
+holds until the second client is written. The interpretation arrives with the
+result and carries the name of the service that assigned it; an interpretation
+with no named source is refused before it is stored, so there is no path by
+which a client could supply one. Pinned by `TestAnInterpretationMustNameItsSource`.
 
 ## Wave-0 capabilities Wave 1 consumes
 

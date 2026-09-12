@@ -9,6 +9,324 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type ClinicalAllergy struct {
+	AllergyID        uuid.UUID
+	TenantID         uuid.UUID
+	PatientID        uuid.UUID
+	EncounterID      pgtype.UUID
+	SubstanceSystem  string
+	SubstanceVersion string
+	SubstanceCode    string
+	SubstanceDisplay string
+	Kind             string
+	Criticality      string
+	Verification     string
+	Reactions        []byte
+	OnsetAt          pgtype.Timestamptz
+	Note             string
+	RecordedBy       string
+	RecordedAt       pgtype.Timestamptz
+	UpdatedBy        string
+	UpdatedAt        pgtype.Timestamptz
+	Version          int64
+}
+
+type ClinicalAttachment struct {
+	AttachmentID    uuid.UUID
+	TenantID        uuid.UUID
+	ParentType      string
+	ParentID        uuid.UUID
+	PatientID       uuid.UUID
+	Kind            string
+	ContentType     string
+	StorageKey      string
+	SizeBytes       int64
+	Digest          string
+	Description     string
+	Confidentiality string
+	CapturedAt      pgtype.Timestamptz
+	SourceSystem    string
+	UploadedBy      string
+	UploadedAt      pgtype.Timestamptz
+}
+
+type ClinicalCalculatorResult struct {
+	ResultID       uuid.UUID
+	TenantID       uuid.UUID
+	PatientID      uuid.UUID
+	EncounterID    pgtype.UUID
+	CalculatorID   string
+	FormulaVersion string
+	Name           string
+	Inputs         []byte
+	Value          float64
+	Unit           string
+	Interpretation string
+	SupersededByID pgtype.UUID
+	CalculatedBy   string
+	CalculatedAt   pgtype.Timestamptz
+}
+
+type ClinicalCarePlan struct {
+	CarePlanID  uuid.UUID
+	TenantID    uuid.UUID
+	PatientID   uuid.UUID
+	EncounterID pgtype.UUID
+	Title       string
+	Status      string
+	ProblemIds  []string
+	Goals       []byte
+	Activities  []byte
+	OwnerID     string
+	StartsAt    pgtype.Timestamptz
+	EndsAt      pgtype.Timestamptz
+	CreatedBy   string
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+	Version     int64
+}
+
+type ClinicalCdsAlert struct {
+	AlertID        uuid.UUID
+	TenantID       uuid.UUID
+	PatientID      uuid.UUID
+	EncounterID    pgtype.UUID
+	RuleID         string
+	RuleVersion    string
+	Level          string
+	Message        string
+	ContextType    string
+	ContextID      string
+	Outcome        string
+	OverrideCode   string
+	OverrideReason string
+	FiredAt        pgtype.Timestamptz
+	RespondedBy    string
+	RespondedAt    pgtype.Timestamptz
+}
+
+type ClinicalClinicalConsent struct {
+	ConsentID        uuid.UUID
+	TenantID         uuid.UUID
+	PatientID        uuid.UUID
+	EncounterID      pgtype.UUID
+	Kind             string
+	ProcedureSystem  string
+	ProcedureCode    string
+	ProcedureDisplay string
+	Status           string
+	GivenBy          string
+	GivenByName      string
+	DocumentID       pgtype.UUID
+	WitnessID        string
+	ValidFrom        pgtype.Timestamptz
+	ValidUntil       pgtype.Timestamptz
+	Note             string
+	RecordedBy       string
+	RecordedAt       pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+}
+
+type ClinicalConsult struct {
+	ConsultID           uuid.UUID
+	TenantID            uuid.UUID
+	PatientID           uuid.UUID
+	EncounterID         uuid.UUID
+	Specialty           string
+	Urgency             string
+	Reason              string
+	Question            string
+	Status              string
+	RespondingSubjectID string
+	Response            string
+	ResponseDocumentID  pgtype.UUID
+	DeclineReason       string
+	RequestedBy         string
+	RequestedAt         pgtype.Timestamptz
+	RespondedAt         pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	Version             int64
+}
+
+type ClinicalCriticalAcknowledgement struct {
+	AcknowledgementID uuid.UUID
+	TenantID          uuid.UUID
+	ObservationID     uuid.UUID
+	PatientID         uuid.UUID
+	AcknowledgedBy    string
+	AcknowledgedAt    pgtype.Timestamptz
+	Action            string
+	NotifiedAt        pgtype.Timestamptz
+}
+
+type ClinicalDocument struct {
+	DocumentID       uuid.UUID
+	TenantID         uuid.UUID
+	PatientID        uuid.UUID
+	EncounterID      uuid.UUID
+	Kind             string
+	TemplateID       pgtype.UUID
+	TemplateVersion  string
+	Title            string
+	Sections         []byte
+	Status           string
+	Confidentiality  string
+	AmendsID         pgtype.UUID
+	AddsToID         pgtype.UUID
+	ChangeReason     string
+	RetractionReason string
+	Dictated         bool
+	AuthoredBy       string
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	Version          int64
+}
+
+type ClinicalObservation struct {
+	ObservationID        uuid.UUID
+	TenantID             uuid.UUID
+	PatientID            uuid.UUID
+	EncounterID          pgtype.UUID
+	CodeSystem           string
+	CodeVersion          string
+	Code                 string
+	CodeDisplay          string
+	ValueQuantity        *float64
+	ValueUnit            string
+	ValueText            string
+	ValueCodeSystem      string
+	ValueCode            string
+	ValueCodeDisplay     string
+	ReferenceLow         *float64
+	ReferenceHigh        *float64
+	ReferenceText        string
+	Interpretation       string
+	InterpretationSource string
+	Status               string
+	EffectiveAt          pgtype.Timestamptz
+	IssuedAt             pgtype.Timestamptz
+	PerformerID          string
+	DeviceID             string
+	SourceSystem         string
+	Note                 string
+	AmendsID             pgtype.UUID
+	RecordedBy           string
+	RecordedAt           pgtype.Timestamptz
+	Version              int64
+}
+
+type ClinicalProblem struct {
+	ProblemID       uuid.UUID
+	TenantID        uuid.UUID
+	PatientID       uuid.UUID
+	EncounterID     pgtype.UUID
+	CodeSystem      string
+	CodeVersion     string
+	Code            string
+	CodeDisplay     string
+	Note            string
+	Status          string
+	OnsetAt         pgtype.Timestamptz
+	ResolvedAt      pgtype.Timestamptz
+	Confidentiality string
+	RecordedBy      string
+	RecordedAt      pgtype.Timestamptz
+	UpdatedBy       string
+	UpdatedAt       pgtype.Timestamptz
+	Version         int64
+}
+
+type ClinicalProcedure struct {
+	ProcedureID    uuid.UUID
+	TenantID       uuid.UUID
+	PatientID      uuid.UUID
+	EncounterID    uuid.UUID
+	CodeSystem     string
+	CodeVersion    string
+	Code           string
+	CodeDisplay    string
+	Status         string
+	Indication     []byte
+	Performers     []byte
+	BodySite       []byte
+	Laterality     string
+	Outcome        string
+	Complications  []byte
+	OrderIds       []string
+	DeviceIds      []string
+	SpecimenIds    []string
+	PerformedStart pgtype.Timestamptz
+	PerformedEnd   pgtype.Timestamptz
+	Note           string
+	RecordedBy     string
+	RecordedAt     pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	Version        int64
+}
+
+type ClinicalProvenance struct {
+	ProvenanceID       uuid.UUID
+	TenantID           uuid.UUID
+	RecordType         string
+	RecordID           uuid.UUID
+	SourceOrganization string
+	SourceSystem       string
+	SourceRecordID     string
+	IngestedAt         pgtype.Timestamptz
+	AuthoredAt         pgtype.Timestamptz
+	AuthoredBy         string
+	Assertion          string
+}
+
+type ClinicalRegistryMembership struct {
+	MembershipID uuid.UUID
+	TenantID     uuid.UUID
+	PatientID    uuid.UUID
+	RegistryID   string
+	ProblemID    pgtype.UUID
+	DiagnosisID  pgtype.UUID
+	EnrolledAt   pgtype.Timestamptz
+	ExitedAt     pgtype.Timestamptz
+	ExitReason   string
+	Consented    bool
+	EnrolledBy   string
+	RecordedAt   pgtype.Timestamptz
+}
+
+type ClinicalSignature struct {
+	SignatureID     uuid.UUID
+	TenantID        uuid.UUID
+	DocumentID      uuid.UUID
+	SubjectID       string
+	Meaning         string
+	SignedAt        pgtype.Timestamptz
+	ContentHash     string
+	TemplateVersion string
+}
+
+type ClinicalSmartPhrase struct {
+	PhraseID  uuid.UUID
+	TenantID  uuid.UUID
+	OwnerID   string
+	Shortcut  string
+	Expansion string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+type ClinicalTemplate struct {
+	TemplateID uuid.UUID
+	TenantID   uuid.UUID
+	Version    string
+	Name       string
+	Kind       string
+	Specialty  string
+	Sections   []string
+	Retired    bool
+	CreatedBy  string
+	CreatedAt  pgtype.Timestamptz
+}
+
 type EmpiCommunicationPreference struct {
 	PreferenceID   uuid.UUID
 	TenantID       uuid.UUID
