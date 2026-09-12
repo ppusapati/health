@@ -84,6 +84,17 @@ func (s *Service) BookAppointment(ctx context.Context, in BookAppointmentInput) 
 				"this patient's record does not accept routine appointments")
 		}
 
+		// SRS-SCH-015. A teleconsult is refused unless this facility offers one
+		// for this kind of visit, and the patient meets whatever identity bar
+		// the facility set: identifying somebody over video is materially
+		// harder than at a desk, and a hospital may reasonably insist the first
+		// visit is in person.
+		if slot.VisitMode == domain.ModeTeleconsult {
+			if err := s.checkTeleconsultEligible(ctx, scope, slot, in.PatientID); err != nil {
+				return err
+			}
+		}
+
 		// The claim. Materialises the slot row if this is its first booking and
 		// takes one unit, in one call, guarded on capacity.
 		slotID, err := s.slots.ClaimCapacity(ctx, scope, slot, s.ids.NewID(), now)
@@ -101,6 +112,17 @@ func (s *Service) BookAppointment(ctx context.Context, in BookAppointmentInput) 
 			return scheduleError(err)
 		}
 		appointment.SlotID = slotID
+
+		// A teleconsult with no join link is an appointment nobody can attend,
+		// and an in-person one carrying a link invites a patient to stay home.
+		if slot.VisitMode == domain.ModeTeleconsult && s.meetings != nil {
+			link, err := s.meetings.NewMeeting(ctx, scope, appointment.ID(),
+				appointment.StartsAt, appointment.EndsAt)
+			if err != nil {
+				return err
+			}
+			appointment.JoinURL = link
+		}
 
 		if err := s.appointments.Insert(ctx, scope, appointment); err != nil {
 			return err
@@ -339,4 +361,29 @@ func (s *Service) authorizeRead(ctx context.Context, permission, resourceType, r
 			rpcerr.PermissionDenied("SCH_READ_DENIED", decision.Reason)
 	}
 	return session, session.TenantScope(), nil
+}
+
+// checkTeleconsultEligible enforces the facility's remote-consultation rules
+// (SRS-SCH-015).
+func (s *Service) checkTeleconsultEligible(ctx context.Context, scope authctx.TenantScope,
+	slot domain.Slot, patientID string) error {
+
+	_, teleconsultPolicy, err := s.policies.Resolve(ctx, scope, slot.FacilityID)
+	if err != nil {
+		return err
+	}
+
+	confirmed, err := s.patients.IdentityConfirmed(ctx, scope, patientID)
+	if err != nil {
+		return err
+	}
+
+	if err := teleconsultPolicy.CheckEligible(slot.VisitType, confirmed); err != nil {
+		var notEligible domain.ErrTeleconsultNotEligible
+		if errors.As(err, &notEligible) {
+			return rpcerr.FailedPrecondition("SCH_TELECONSULT_NOT_ELIGIBLE", notEligible.Error())
+		}
+		return err
+	}
+	return nil
 }

@@ -150,6 +150,13 @@ type Appointment struct {
 	SeriesID string
 	// Occurrence is this appointment's position in its series, from 1.
 	Occurrence int
+	// RescheduleCount is how many times this booking has been moved. Carried
+	// forward across the chain, because a policy capping reschedules is about
+	// the patient rather than about any one row.
+	RescheduleCount int
+	// JoinURL is where a teleconsult happens (SRS-SCH-015). Empty for an
+	// in-person appointment: one carrying a link invites a patient to stay home.
+	JoinURL string
 
 	CreatedAt time.Time
 	UpdatedAt time.Time

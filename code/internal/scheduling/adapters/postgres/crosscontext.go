@@ -113,3 +113,18 @@ func (p Patients) AcceptsRoutineScheduling(ctx context.Context, scope authctx.Te
 	}
 	return patient.AcceptsRoutineScheduling(), nil
 }
+
+// IdentityConfirmed reports whether identity was positively established.
+//
+// Active rather than candidate: a candidate record is one created before
+// identity was confirmed, which is exactly the state SRS-EMPI-010's evidence
+// rule moves a patient out of.
+func (p Patients) IdentityConfirmed(ctx context.Context, scope authctx.TenantScope,
+	patientID string) (bool, error) {
+
+	patient, err := p.patients.GetByID(ctx, scope, patientID)
+	if err != nil {
+		return false, err
+	}
+	return patient.Status == empidomain.StatusActive, nil
+}

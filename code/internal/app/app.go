@@ -33,6 +33,7 @@ import (
 	platformapitransport "github.com/ppusapati/health/code/internal/platform_api/transport"
 	schedulingpostgres "github.com/ppusapati/health/code/internal/scheduling/adapters/postgres"
 	schedulingapp "github.com/ppusapati/health/code/internal/scheduling/application"
+	schedulingports "github.com/ppusapati/health/code/internal/scheduling/ports"
 	schedulingtransport "github.com/ppusapati/health/code/internal/scheduling/transport"
 )
 
@@ -109,6 +110,13 @@ type Deps struct {
 	// patient photographs refuses to capture one rather than recording a row
 	// that points at nothing.
 	PhotoStore empiports.PhotoStore
+
+	// MeetingProvider mints teleconsult join links (SRS-SCH-015).
+	//
+	// Nil is a valid deployment and the default: a hospital that runs no video
+	// service books teleconsults with no link, and the absence is visible rather
+	// than a broken URL.
+	MeetingProvider schedulingports.MeetingProvider
 }
 
 // Server holds the assembled HTTP handler and the services behind it.
@@ -191,6 +199,10 @@ func New(deps Deps) *Server {
 		Schedules:    schedulingpostgres.ScheduleRepo{Repository: schedulingRepo},
 		Slots:        schedulingpostgres.SlotRepo{Repository: schedulingRepo},
 		Appointments: schedulingpostgres.AppointmentRepo{Repository: schedulingRepo},
+		Policies:     schedulingpostgres.PolicyRepo{Repository: schedulingRepo},
+		Series:       schedulingpostgres.SeriesRepo{Repository: schedulingRepo},
+		Waitlist:     schedulingpostgres.WaitlistRepo{Repository: schedulingRepo},
+		Meetings:     deps.MeetingProvider,
 		Calendar: schedulingpostgres.NewCalendar(repo,
 			orgpostgres.FacilityRepo{Repository: repo}),
 		Patients: schedulingpostgres.NewPatients(empipostgres.PatientRepo{Repository: empiRepo}),

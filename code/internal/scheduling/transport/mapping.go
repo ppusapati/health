@@ -176,6 +176,8 @@ func appointmentToProto(a *domain.Appointment) *schedulingv1.Appointment {
 		StartsAt: timestamp(a.StartsAt), EndsAt: timestamp(a.EndsAt),
 		Status: statusToProto[a.Status], BookedBy: a.BookedBy, Reason: a.Reason,
 		RescheduledFromId: a.RescheduledFromID, Version: a.Version,
+		SeriesId: a.SeriesID, Occurrence: int32(a.Occurrence),
+		RescheduleCount: int32(a.RescheduleCount), JoinUrl: a.JoinURL,
 	}
 	for _, change := range a.History {
 		out.History = append(out.History, &schedulingv1.StatusChange{
@@ -191,6 +193,87 @@ func appointmentsToProto(in []*domain.Appointment) []*schedulingv1.Appointment {
 	out := make([]*schedulingv1.Appointment, 0, len(in))
 	for _, a := range in {
 		out = append(out, appointmentToProto(a))
+	}
+	return out
+}
+
+// Lifecycle, series and waitlist (SRS-SCH-005/006/013/015).
+
+var seriesScopeFromProto = map[schedulingv1.SeriesScope]domain.SeriesScope{
+	schedulingv1.SeriesScope_SERIES_SCOPE_THIS_OCCURRENCE:    domain.ScopeThisOccurrence,
+	schedulingv1.SeriesScope_SERIES_SCOPE_FUTURE_OCCURRENCES: domain.ScopeFutureOccurrences,
+}
+
+var waitlistStatusToProto = map[domain.WaitlistStatus]schedulingv1.WaitlistStatus{
+	domain.WaitlistWaiting:   schedulingv1.WaitlistStatus_WAITLIST_STATUS_WAITING,
+	domain.WaitlistOffered:   schedulingv1.WaitlistStatus_WAITLIST_STATUS_OFFERED,
+	domain.WaitlistAccepted:  schedulingv1.WaitlistStatus_WAITLIST_STATUS_ACCEPTED,
+	domain.WaitlistDeclined:  schedulingv1.WaitlistStatus_WAITLIST_STATUS_DECLINED,
+	domain.WaitlistExpired:   schedulingv1.WaitlistStatus_WAITLIST_STATUS_EXPIRED,
+	domain.WaitlistWithdrawn: schedulingv1.WaitlistStatus_WAITLIST_STATUS_WITHDRAWN,
+}
+
+func outcomeToProto(o domain.CancellationOutcome) *schedulingv1.PolicyOutcome {
+	return &schedulingv1.PolicyOutcome{
+		Timely:                o.Timely,
+		NoticeGivenMinutes:    int32(o.NoticeGiven.Minutes()),
+		NoticeRequiredMinutes: int32(o.NoticeRequired.Minutes()),
+		Chargeable:            o.Chargeable,
+	}
+}
+
+func waitlistToProto(w domain.WaitlistEntry) *schedulingv1.WaitlistEntry {
+	if w.ID == "" {
+		return nil
+	}
+	return &schedulingv1.WaitlistEntry{
+		WaitlistId: w.ID, PatientId: w.PatientID,
+		ResourceId: w.ResourceID, FacilityId: w.FacilityID, OrgUnitId: w.OrgUnitID,
+		VisitType: visitTypeToProto[w.VisitType],
+		NotBefore: timestamp(w.NotBefore), NotAfter: timestamp(w.NotAfter),
+		AppointmentId: w.AppointmentID, Status: waitlistStatusToProto[w.Status],
+		OfferedSlotAt: timestamp(w.OfferedSlotAt), OfferExpiresAt: timestamp(w.OfferExpiresAt),
+	}
+}
+
+func waitlistsToProto(in []domain.WaitlistEntry) []*schedulingv1.WaitlistEntry {
+	out := make([]*schedulingv1.WaitlistEntry, 0, len(in))
+	for _, w := range in {
+		out = append(out, waitlistToProto(w))
+	}
+	return out
+}
+
+func policyFromProto(p *schedulingv1.SchedulingPolicy) (
+	domain.CancellationPolicy, domain.TeleconsultPolicy) {
+
+	if p == nil {
+		return domain.DefaultCancellationPolicy(), domain.DefaultTeleconsultPolicy()
+	}
+
+	visitTypes := make([]domain.VisitType, 0, len(p.GetTeleconsultVisitTypes()))
+	for _, v := range p.GetTeleconsultVisitTypes() {
+		if mapped, ok := visitTypeFromProto[v]; ok {
+			visitTypes = append(visitTypes, mapped)
+		}
+	}
+
+	return domain.CancellationPolicy{
+			NoticeHours:           int(p.GetNoticeHours()),
+			RescheduleNoticeHours: int(p.GetRescheduleNoticeHours()),
+			MaxReschedules:        int(p.GetMaxReschedules()),
+			ChargeableWhenLate:    p.GetChargeableWhenLate(),
+		}, domain.TeleconsultPolicy{
+			Enabled:                  p.GetTeleconsultEnabled(),
+			AllowedVisitTypes:        visitTypes,
+			RequireConfirmedIdentity: p.GetTeleconsultRequiresConfirmedIdentity(),
+		}
+}
+
+func timestamps(in []time.Time) []*timestamppb.Timestamp {
+	out := make([]*timestamppb.Timestamp, 0, len(in))
+	for _, t := range in {
+		out = append(out, timestamp(t))
 	}
 	return out
 }

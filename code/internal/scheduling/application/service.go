@@ -69,8 +69,12 @@ type Service struct {
 	schedules    ports.ScheduleRepository
 	slots        ports.SlotRepository
 	appointments ports.AppointmentRepository
+	policies     ports.PolicyRepository
+	series       ports.SeriesRepository
+	waitlist     ports.WaitlistRepository
 	calendar     ports.FacilityCalendar
 	patients     ports.PatientDirectory
+	meetings     ports.MeetingProvider
 	events       ports.EventAppender
 	audits       ports.AuditAppender
 	ids          ports.IDGenerator
@@ -84,12 +88,19 @@ type Deps struct {
 	Schedules    ports.ScheduleRepository
 	Slots        ports.SlotRepository
 	Appointments ports.AppointmentRepository
+	Policies     ports.PolicyRepository
+	Series       ports.SeriesRepository
+	Waitlist     ports.WaitlistRepository
 	Calendar     ports.FacilityCalendar
 	Patients     ports.PatientDirectory
-	Events       ports.EventAppender
-	Audits       ports.AuditAppender
-	IDs          ports.IDGenerator
-	Clock        ports.Clock
+	// Meetings mints teleconsult join links. Nil is a valid deployment: a
+	// hospital that runs no video service books teleconsults with no link, and
+	// the absence is visible rather than a broken URL.
+	Meetings ports.MeetingProvider
+	Events   ports.EventAppender
+	Audits   ports.AuditAppender
+	IDs      ports.IDGenerator
+	Clock    ports.Clock
 }
 
 // NewService wires the use cases to their ports.
@@ -97,7 +108,8 @@ func NewService(d Deps) *Service {
 	return &Service{
 		uow: d.UnitOfWork, resources: d.Resources, schedules: d.Schedules,
 		slots: d.Slots, appointments: d.Appointments,
-		calendar: d.Calendar, patients: d.Patients,
+		policies: d.Policies, series: d.Series, waitlist: d.Waitlist,
+		calendar: d.Calendar, patients: d.Patients, meetings: d.Meetings,
 		events: d.Events, audits: d.Audits, ids: d.IDs, clock: d.Clock,
 	}
 }

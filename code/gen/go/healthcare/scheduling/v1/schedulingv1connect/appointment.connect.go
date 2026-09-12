@@ -60,6 +60,39 @@ const (
 	// AppointmentServiceBookAppointmentProcedure is the fully-qualified name of the
 	// AppointmentService's BookAppointment RPC.
 	AppointmentServiceBookAppointmentProcedure = "/healthcare.scheduling.v1.AppointmentService/BookAppointment"
+	// AppointmentServiceCancelAppointmentProcedure is the fully-qualified name of the
+	// AppointmentService's CancelAppointment RPC.
+	AppointmentServiceCancelAppointmentProcedure = "/healthcare.scheduling.v1.AppointmentService/CancelAppointment"
+	// AppointmentServiceRescheduleAppointmentProcedure is the fully-qualified name of the
+	// AppointmentService's RescheduleAppointment RPC.
+	AppointmentServiceRescheduleAppointmentProcedure = "/healthcare.scheduling.v1.AppointmentService/RescheduleAppointment"
+	// AppointmentServiceSetSchedulingPolicyProcedure is the fully-qualified name of the
+	// AppointmentService's SetSchedulingPolicy RPC.
+	AppointmentServiceSetSchedulingPolicyProcedure = "/healthcare.scheduling.v1.AppointmentService/SetSchedulingPolicy"
+	// AppointmentServiceBookSeriesProcedure is the fully-qualified name of the AppointmentService's
+	// BookSeries RPC.
+	AppointmentServiceBookSeriesProcedure = "/healthcare.scheduling.v1.AppointmentService/BookSeries"
+	// AppointmentServiceCancelSeriesProcedure is the fully-qualified name of the AppointmentService's
+	// CancelSeries RPC.
+	AppointmentServiceCancelSeriesProcedure = "/healthcare.scheduling.v1.AppointmentService/CancelSeries"
+	// AppointmentServiceJoinWaitlistProcedure is the fully-qualified name of the AppointmentService's
+	// JoinWaitlist RPC.
+	AppointmentServiceJoinWaitlistProcedure = "/healthcare.scheduling.v1.AppointmentService/JoinWaitlist"
+	// AppointmentServiceOfferWaitlistSlotProcedure is the fully-qualified name of the
+	// AppointmentService's OfferWaitlistSlot RPC.
+	AppointmentServiceOfferWaitlistSlotProcedure = "/healthcare.scheduling.v1.AppointmentService/OfferWaitlistSlot"
+	// AppointmentServiceAcceptWaitlistOfferProcedure is the fully-qualified name of the
+	// AppointmentService's AcceptWaitlistOffer RPC.
+	AppointmentServiceAcceptWaitlistOfferProcedure = "/healthcare.scheduling.v1.AppointmentService/AcceptWaitlistOffer"
+	// AppointmentServiceDeclineWaitlistOfferProcedure is the fully-qualified name of the
+	// AppointmentService's DeclineWaitlistOffer RPC.
+	AppointmentServiceDeclineWaitlistOfferProcedure = "/healthcare.scheduling.v1.AppointmentService/DeclineWaitlistOffer"
+	// AppointmentServiceListWaitlistProcedure is the fully-qualified name of the AppointmentService's
+	// ListWaitlist RPC.
+	AppointmentServiceListWaitlistProcedure = "/healthcare.scheduling.v1.AppointmentService/ListWaitlist"
+	// AppointmentServiceExpireWaitlistOffersProcedure is the fully-qualified name of the
+	// AppointmentService's ExpireWaitlistOffers RPC.
+	AppointmentServiceExpireWaitlistOffersProcedure = "/healthcare.scheduling.v1.AppointmentService/ExpireWaitlistOffers"
 	// AppointmentServiceGetAppointmentProcedure is the fully-qualified name of the AppointmentService's
 	// GetAppointment RPC.
 	AppointmentServiceGetAppointmentProcedure = "/healthcare.scheduling.v1.AppointmentService/GetAppointment"
@@ -85,6 +118,27 @@ type AppointmentServiceClient interface {
 	// SRS-SCH-004. Atomic, and incapable of exceeding configured capacity under
 	// concurrency.
 	BookAppointment(context.Context, *connect.Request[v1.BookAppointmentRequest]) (*connect.Response[v1.BookAppointmentResponse], error)
+	// SRS-SCH-005. Reschedule and cancel under a policy-driven cutoff. The
+	// original retains its status history: a patient disputing an attendance
+	// record needs to see that the 9th was moved rather than that it silently
+	// became the 16th.
+	CancelAppointment(context.Context, *connect.Request[v1.CancelAppointmentRequest]) (*connect.Response[v1.CancelAppointmentResponse], error)
+	RescheduleAppointment(context.Context, *connect.Request[v1.RescheduleAppointmentRequest]) (*connect.Response[v1.RescheduleAppointmentResponse], error)
+	SetSchedulingPolicy(context.Context, *connect.Request[v1.SetSchedulingPolicyRequest]) (*connect.Response[v1.SetSchedulingPolicyResponse], error)
+	// SRS-SCH-013. A change affects one occurrence or every future one, and never
+	// a past one.
+	BookSeries(context.Context, *connect.Request[v1.BookSeriesRequest]) (*connect.Response[v1.BookSeriesResponse], error)
+	CancelSeries(context.Context, *connect.Request[v1.CancelSeriesRequest]) (*connect.Response[v1.CancelSeriesResponse], error)
+	// SRS-SCH-006. An offer holds a slot for a stated period and then stops. It
+	// never consumes the slot: capacity held for somebody who has stopped
+	// reading their messages is capacity nobody can use and nobody can see is
+	// gone.
+	JoinWaitlist(context.Context, *connect.Request[v1.JoinWaitlistRequest]) (*connect.Response[v1.JoinWaitlistResponse], error)
+	OfferWaitlistSlot(context.Context, *connect.Request[v1.OfferWaitlistSlotRequest]) (*connect.Response[v1.OfferWaitlistSlotResponse], error)
+	AcceptWaitlistOffer(context.Context, *connect.Request[v1.AcceptWaitlistOfferRequest]) (*connect.Response[v1.AcceptWaitlistOfferResponse], error)
+	DeclineWaitlistOffer(context.Context, *connect.Request[v1.DeclineWaitlistOfferRequest]) (*connect.Response[v1.DeclineWaitlistOfferResponse], error)
+	ListWaitlist(context.Context, *connect.Request[v1.ListWaitlistRequest]) (*connect.Response[v1.ListWaitlistResponse], error)
+	ExpireWaitlistOffers(context.Context, *connect.Request[v1.ExpireWaitlistOffersRequest]) (*connect.Response[v1.ExpireWaitlistOffersResponse], error)
 	GetAppointment(context.Context, *connect.Request[v1.GetAppointmentRequest]) (*connect.Response[v1.GetAppointmentResponse], error)
 	ListAppointments(context.Context, *connect.Request[v1.ListAppointmentsRequest]) (*connect.Response[v1.ListAppointmentsResponse], error)
 }
@@ -143,6 +197,72 @@ func NewAppointmentServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			connect.WithSchema(appointmentServiceMethods.ByName("BookAppointment")),
 			connect.WithClientOptions(opts...),
 		),
+		cancelAppointment: connect.NewClient[v1.CancelAppointmentRequest, v1.CancelAppointmentResponse](
+			httpClient,
+			baseURL+AppointmentServiceCancelAppointmentProcedure,
+			connect.WithSchema(appointmentServiceMethods.ByName("CancelAppointment")),
+			connect.WithClientOptions(opts...),
+		),
+		rescheduleAppointment: connect.NewClient[v1.RescheduleAppointmentRequest, v1.RescheduleAppointmentResponse](
+			httpClient,
+			baseURL+AppointmentServiceRescheduleAppointmentProcedure,
+			connect.WithSchema(appointmentServiceMethods.ByName("RescheduleAppointment")),
+			connect.WithClientOptions(opts...),
+		),
+		setSchedulingPolicy: connect.NewClient[v1.SetSchedulingPolicyRequest, v1.SetSchedulingPolicyResponse](
+			httpClient,
+			baseURL+AppointmentServiceSetSchedulingPolicyProcedure,
+			connect.WithSchema(appointmentServiceMethods.ByName("SetSchedulingPolicy")),
+			connect.WithClientOptions(opts...),
+		),
+		bookSeries: connect.NewClient[v1.BookSeriesRequest, v1.BookSeriesResponse](
+			httpClient,
+			baseURL+AppointmentServiceBookSeriesProcedure,
+			connect.WithSchema(appointmentServiceMethods.ByName("BookSeries")),
+			connect.WithClientOptions(opts...),
+		),
+		cancelSeries: connect.NewClient[v1.CancelSeriesRequest, v1.CancelSeriesResponse](
+			httpClient,
+			baseURL+AppointmentServiceCancelSeriesProcedure,
+			connect.WithSchema(appointmentServiceMethods.ByName("CancelSeries")),
+			connect.WithClientOptions(opts...),
+		),
+		joinWaitlist: connect.NewClient[v1.JoinWaitlistRequest, v1.JoinWaitlistResponse](
+			httpClient,
+			baseURL+AppointmentServiceJoinWaitlistProcedure,
+			connect.WithSchema(appointmentServiceMethods.ByName("JoinWaitlist")),
+			connect.WithClientOptions(opts...),
+		),
+		offerWaitlistSlot: connect.NewClient[v1.OfferWaitlistSlotRequest, v1.OfferWaitlistSlotResponse](
+			httpClient,
+			baseURL+AppointmentServiceOfferWaitlistSlotProcedure,
+			connect.WithSchema(appointmentServiceMethods.ByName("OfferWaitlistSlot")),
+			connect.WithClientOptions(opts...),
+		),
+		acceptWaitlistOffer: connect.NewClient[v1.AcceptWaitlistOfferRequest, v1.AcceptWaitlistOfferResponse](
+			httpClient,
+			baseURL+AppointmentServiceAcceptWaitlistOfferProcedure,
+			connect.WithSchema(appointmentServiceMethods.ByName("AcceptWaitlistOffer")),
+			connect.WithClientOptions(opts...),
+		),
+		declineWaitlistOffer: connect.NewClient[v1.DeclineWaitlistOfferRequest, v1.DeclineWaitlistOfferResponse](
+			httpClient,
+			baseURL+AppointmentServiceDeclineWaitlistOfferProcedure,
+			connect.WithSchema(appointmentServiceMethods.ByName("DeclineWaitlistOffer")),
+			connect.WithClientOptions(opts...),
+		),
+		listWaitlist: connect.NewClient[v1.ListWaitlistRequest, v1.ListWaitlistResponse](
+			httpClient,
+			baseURL+AppointmentServiceListWaitlistProcedure,
+			connect.WithSchema(appointmentServiceMethods.ByName("ListWaitlist")),
+			connect.WithClientOptions(opts...),
+		),
+		expireWaitlistOffers: connect.NewClient[v1.ExpireWaitlistOffersRequest, v1.ExpireWaitlistOffersResponse](
+			httpClient,
+			baseURL+AppointmentServiceExpireWaitlistOffersProcedure,
+			connect.WithSchema(appointmentServiceMethods.ByName("ExpireWaitlistOffers")),
+			connect.WithClientOptions(opts...),
+		),
 		getAppointment: connect.NewClient[v1.GetAppointmentRequest, v1.GetAppointmentResponse](
 			httpClient,
 			baseURL+AppointmentServiceGetAppointmentProcedure,
@@ -160,15 +280,26 @@ func NewAppointmentServiceClient(httpClient connect.HTTPClient, baseURL string, 
 
 // appointmentServiceClient implements AppointmentServiceClient.
 type appointmentServiceClient struct {
-	defineResource    *connect.Client[v1.DefineResourceRequest, v1.DefineResourceResponse]
-	setResourceStatus *connect.Client[v1.SetResourceStatusRequest, v1.SetResourceStatusResponse]
-	defineSchedule    *connect.Client[v1.DefineScheduleRequest, v1.DefineScheduleResponse]
-	blockPeriod       *connect.Client[v1.BlockPeriodRequest, v1.BlockPeriodResponse]
-	unblockPeriod     *connect.Client[v1.UnblockPeriodRequest, v1.UnblockPeriodResponse]
-	searchSlots       *connect.Client[v1.SearchSlotsRequest, v1.SearchSlotsResponse]
-	bookAppointment   *connect.Client[v1.BookAppointmentRequest, v1.BookAppointmentResponse]
-	getAppointment    *connect.Client[v1.GetAppointmentRequest, v1.GetAppointmentResponse]
-	listAppointments  *connect.Client[v1.ListAppointmentsRequest, v1.ListAppointmentsResponse]
+	defineResource        *connect.Client[v1.DefineResourceRequest, v1.DefineResourceResponse]
+	setResourceStatus     *connect.Client[v1.SetResourceStatusRequest, v1.SetResourceStatusResponse]
+	defineSchedule        *connect.Client[v1.DefineScheduleRequest, v1.DefineScheduleResponse]
+	blockPeriod           *connect.Client[v1.BlockPeriodRequest, v1.BlockPeriodResponse]
+	unblockPeriod         *connect.Client[v1.UnblockPeriodRequest, v1.UnblockPeriodResponse]
+	searchSlots           *connect.Client[v1.SearchSlotsRequest, v1.SearchSlotsResponse]
+	bookAppointment       *connect.Client[v1.BookAppointmentRequest, v1.BookAppointmentResponse]
+	cancelAppointment     *connect.Client[v1.CancelAppointmentRequest, v1.CancelAppointmentResponse]
+	rescheduleAppointment *connect.Client[v1.RescheduleAppointmentRequest, v1.RescheduleAppointmentResponse]
+	setSchedulingPolicy   *connect.Client[v1.SetSchedulingPolicyRequest, v1.SetSchedulingPolicyResponse]
+	bookSeries            *connect.Client[v1.BookSeriesRequest, v1.BookSeriesResponse]
+	cancelSeries          *connect.Client[v1.CancelSeriesRequest, v1.CancelSeriesResponse]
+	joinWaitlist          *connect.Client[v1.JoinWaitlistRequest, v1.JoinWaitlistResponse]
+	offerWaitlistSlot     *connect.Client[v1.OfferWaitlistSlotRequest, v1.OfferWaitlistSlotResponse]
+	acceptWaitlistOffer   *connect.Client[v1.AcceptWaitlistOfferRequest, v1.AcceptWaitlistOfferResponse]
+	declineWaitlistOffer  *connect.Client[v1.DeclineWaitlistOfferRequest, v1.DeclineWaitlistOfferResponse]
+	listWaitlist          *connect.Client[v1.ListWaitlistRequest, v1.ListWaitlistResponse]
+	expireWaitlistOffers  *connect.Client[v1.ExpireWaitlistOffersRequest, v1.ExpireWaitlistOffersResponse]
+	getAppointment        *connect.Client[v1.GetAppointmentRequest, v1.GetAppointmentResponse]
+	listAppointments      *connect.Client[v1.ListAppointmentsRequest, v1.ListAppointmentsResponse]
 }
 
 // DefineResource calls healthcare.scheduling.v1.AppointmentService.DefineResource.
@@ -206,6 +337,61 @@ func (c *appointmentServiceClient) BookAppointment(ctx context.Context, req *con
 	return c.bookAppointment.CallUnary(ctx, req)
 }
 
+// CancelAppointment calls healthcare.scheduling.v1.AppointmentService.CancelAppointment.
+func (c *appointmentServiceClient) CancelAppointment(ctx context.Context, req *connect.Request[v1.CancelAppointmentRequest]) (*connect.Response[v1.CancelAppointmentResponse], error) {
+	return c.cancelAppointment.CallUnary(ctx, req)
+}
+
+// RescheduleAppointment calls healthcare.scheduling.v1.AppointmentService.RescheduleAppointment.
+func (c *appointmentServiceClient) RescheduleAppointment(ctx context.Context, req *connect.Request[v1.RescheduleAppointmentRequest]) (*connect.Response[v1.RescheduleAppointmentResponse], error) {
+	return c.rescheduleAppointment.CallUnary(ctx, req)
+}
+
+// SetSchedulingPolicy calls healthcare.scheduling.v1.AppointmentService.SetSchedulingPolicy.
+func (c *appointmentServiceClient) SetSchedulingPolicy(ctx context.Context, req *connect.Request[v1.SetSchedulingPolicyRequest]) (*connect.Response[v1.SetSchedulingPolicyResponse], error) {
+	return c.setSchedulingPolicy.CallUnary(ctx, req)
+}
+
+// BookSeries calls healthcare.scheduling.v1.AppointmentService.BookSeries.
+func (c *appointmentServiceClient) BookSeries(ctx context.Context, req *connect.Request[v1.BookSeriesRequest]) (*connect.Response[v1.BookSeriesResponse], error) {
+	return c.bookSeries.CallUnary(ctx, req)
+}
+
+// CancelSeries calls healthcare.scheduling.v1.AppointmentService.CancelSeries.
+func (c *appointmentServiceClient) CancelSeries(ctx context.Context, req *connect.Request[v1.CancelSeriesRequest]) (*connect.Response[v1.CancelSeriesResponse], error) {
+	return c.cancelSeries.CallUnary(ctx, req)
+}
+
+// JoinWaitlist calls healthcare.scheduling.v1.AppointmentService.JoinWaitlist.
+func (c *appointmentServiceClient) JoinWaitlist(ctx context.Context, req *connect.Request[v1.JoinWaitlistRequest]) (*connect.Response[v1.JoinWaitlistResponse], error) {
+	return c.joinWaitlist.CallUnary(ctx, req)
+}
+
+// OfferWaitlistSlot calls healthcare.scheduling.v1.AppointmentService.OfferWaitlistSlot.
+func (c *appointmentServiceClient) OfferWaitlistSlot(ctx context.Context, req *connect.Request[v1.OfferWaitlistSlotRequest]) (*connect.Response[v1.OfferWaitlistSlotResponse], error) {
+	return c.offerWaitlistSlot.CallUnary(ctx, req)
+}
+
+// AcceptWaitlistOffer calls healthcare.scheduling.v1.AppointmentService.AcceptWaitlistOffer.
+func (c *appointmentServiceClient) AcceptWaitlistOffer(ctx context.Context, req *connect.Request[v1.AcceptWaitlistOfferRequest]) (*connect.Response[v1.AcceptWaitlistOfferResponse], error) {
+	return c.acceptWaitlistOffer.CallUnary(ctx, req)
+}
+
+// DeclineWaitlistOffer calls healthcare.scheduling.v1.AppointmentService.DeclineWaitlistOffer.
+func (c *appointmentServiceClient) DeclineWaitlistOffer(ctx context.Context, req *connect.Request[v1.DeclineWaitlistOfferRequest]) (*connect.Response[v1.DeclineWaitlistOfferResponse], error) {
+	return c.declineWaitlistOffer.CallUnary(ctx, req)
+}
+
+// ListWaitlist calls healthcare.scheduling.v1.AppointmentService.ListWaitlist.
+func (c *appointmentServiceClient) ListWaitlist(ctx context.Context, req *connect.Request[v1.ListWaitlistRequest]) (*connect.Response[v1.ListWaitlistResponse], error) {
+	return c.listWaitlist.CallUnary(ctx, req)
+}
+
+// ExpireWaitlistOffers calls healthcare.scheduling.v1.AppointmentService.ExpireWaitlistOffers.
+func (c *appointmentServiceClient) ExpireWaitlistOffers(ctx context.Context, req *connect.Request[v1.ExpireWaitlistOffersRequest]) (*connect.Response[v1.ExpireWaitlistOffersResponse], error) {
+	return c.expireWaitlistOffers.CallUnary(ctx, req)
+}
+
 // GetAppointment calls healthcare.scheduling.v1.AppointmentService.GetAppointment.
 func (c *appointmentServiceClient) GetAppointment(ctx context.Context, req *connect.Request[v1.GetAppointmentRequest]) (*connect.Response[v1.GetAppointmentResponse], error) {
 	return c.getAppointment.CallUnary(ctx, req)
@@ -234,6 +420,27 @@ type AppointmentServiceHandler interface {
 	// SRS-SCH-004. Atomic, and incapable of exceeding configured capacity under
 	// concurrency.
 	BookAppointment(context.Context, *connect.Request[v1.BookAppointmentRequest]) (*connect.Response[v1.BookAppointmentResponse], error)
+	// SRS-SCH-005. Reschedule and cancel under a policy-driven cutoff. The
+	// original retains its status history: a patient disputing an attendance
+	// record needs to see that the 9th was moved rather than that it silently
+	// became the 16th.
+	CancelAppointment(context.Context, *connect.Request[v1.CancelAppointmentRequest]) (*connect.Response[v1.CancelAppointmentResponse], error)
+	RescheduleAppointment(context.Context, *connect.Request[v1.RescheduleAppointmentRequest]) (*connect.Response[v1.RescheduleAppointmentResponse], error)
+	SetSchedulingPolicy(context.Context, *connect.Request[v1.SetSchedulingPolicyRequest]) (*connect.Response[v1.SetSchedulingPolicyResponse], error)
+	// SRS-SCH-013. A change affects one occurrence or every future one, and never
+	// a past one.
+	BookSeries(context.Context, *connect.Request[v1.BookSeriesRequest]) (*connect.Response[v1.BookSeriesResponse], error)
+	CancelSeries(context.Context, *connect.Request[v1.CancelSeriesRequest]) (*connect.Response[v1.CancelSeriesResponse], error)
+	// SRS-SCH-006. An offer holds a slot for a stated period and then stops. It
+	// never consumes the slot: capacity held for somebody who has stopped
+	// reading their messages is capacity nobody can use and nobody can see is
+	// gone.
+	JoinWaitlist(context.Context, *connect.Request[v1.JoinWaitlistRequest]) (*connect.Response[v1.JoinWaitlistResponse], error)
+	OfferWaitlistSlot(context.Context, *connect.Request[v1.OfferWaitlistSlotRequest]) (*connect.Response[v1.OfferWaitlistSlotResponse], error)
+	AcceptWaitlistOffer(context.Context, *connect.Request[v1.AcceptWaitlistOfferRequest]) (*connect.Response[v1.AcceptWaitlistOfferResponse], error)
+	DeclineWaitlistOffer(context.Context, *connect.Request[v1.DeclineWaitlistOfferRequest]) (*connect.Response[v1.DeclineWaitlistOfferResponse], error)
+	ListWaitlist(context.Context, *connect.Request[v1.ListWaitlistRequest]) (*connect.Response[v1.ListWaitlistResponse], error)
+	ExpireWaitlistOffers(context.Context, *connect.Request[v1.ExpireWaitlistOffersRequest]) (*connect.Response[v1.ExpireWaitlistOffersResponse], error)
 	GetAppointment(context.Context, *connect.Request[v1.GetAppointmentRequest]) (*connect.Response[v1.GetAppointmentResponse], error)
 	ListAppointments(context.Context, *connect.Request[v1.ListAppointmentsRequest]) (*connect.Response[v1.ListAppointmentsResponse], error)
 }
@@ -287,6 +494,72 @@ func NewAppointmentServiceHandler(svc AppointmentServiceHandler, opts ...connect
 		connect.WithSchema(appointmentServiceMethods.ByName("BookAppointment")),
 		connect.WithHandlerOptions(opts...),
 	)
+	appointmentServiceCancelAppointmentHandler := connect.NewUnaryHandler(
+		AppointmentServiceCancelAppointmentProcedure,
+		svc.CancelAppointment,
+		connect.WithSchema(appointmentServiceMethods.ByName("CancelAppointment")),
+		connect.WithHandlerOptions(opts...),
+	)
+	appointmentServiceRescheduleAppointmentHandler := connect.NewUnaryHandler(
+		AppointmentServiceRescheduleAppointmentProcedure,
+		svc.RescheduleAppointment,
+		connect.WithSchema(appointmentServiceMethods.ByName("RescheduleAppointment")),
+		connect.WithHandlerOptions(opts...),
+	)
+	appointmentServiceSetSchedulingPolicyHandler := connect.NewUnaryHandler(
+		AppointmentServiceSetSchedulingPolicyProcedure,
+		svc.SetSchedulingPolicy,
+		connect.WithSchema(appointmentServiceMethods.ByName("SetSchedulingPolicy")),
+		connect.WithHandlerOptions(opts...),
+	)
+	appointmentServiceBookSeriesHandler := connect.NewUnaryHandler(
+		AppointmentServiceBookSeriesProcedure,
+		svc.BookSeries,
+		connect.WithSchema(appointmentServiceMethods.ByName("BookSeries")),
+		connect.WithHandlerOptions(opts...),
+	)
+	appointmentServiceCancelSeriesHandler := connect.NewUnaryHandler(
+		AppointmentServiceCancelSeriesProcedure,
+		svc.CancelSeries,
+		connect.WithSchema(appointmentServiceMethods.ByName("CancelSeries")),
+		connect.WithHandlerOptions(opts...),
+	)
+	appointmentServiceJoinWaitlistHandler := connect.NewUnaryHandler(
+		AppointmentServiceJoinWaitlistProcedure,
+		svc.JoinWaitlist,
+		connect.WithSchema(appointmentServiceMethods.ByName("JoinWaitlist")),
+		connect.WithHandlerOptions(opts...),
+	)
+	appointmentServiceOfferWaitlistSlotHandler := connect.NewUnaryHandler(
+		AppointmentServiceOfferWaitlistSlotProcedure,
+		svc.OfferWaitlistSlot,
+		connect.WithSchema(appointmentServiceMethods.ByName("OfferWaitlistSlot")),
+		connect.WithHandlerOptions(opts...),
+	)
+	appointmentServiceAcceptWaitlistOfferHandler := connect.NewUnaryHandler(
+		AppointmentServiceAcceptWaitlistOfferProcedure,
+		svc.AcceptWaitlistOffer,
+		connect.WithSchema(appointmentServiceMethods.ByName("AcceptWaitlistOffer")),
+		connect.WithHandlerOptions(opts...),
+	)
+	appointmentServiceDeclineWaitlistOfferHandler := connect.NewUnaryHandler(
+		AppointmentServiceDeclineWaitlistOfferProcedure,
+		svc.DeclineWaitlistOffer,
+		connect.WithSchema(appointmentServiceMethods.ByName("DeclineWaitlistOffer")),
+		connect.WithHandlerOptions(opts...),
+	)
+	appointmentServiceListWaitlistHandler := connect.NewUnaryHandler(
+		AppointmentServiceListWaitlistProcedure,
+		svc.ListWaitlist,
+		connect.WithSchema(appointmentServiceMethods.ByName("ListWaitlist")),
+		connect.WithHandlerOptions(opts...),
+	)
+	appointmentServiceExpireWaitlistOffersHandler := connect.NewUnaryHandler(
+		AppointmentServiceExpireWaitlistOffersProcedure,
+		svc.ExpireWaitlistOffers,
+		connect.WithSchema(appointmentServiceMethods.ByName("ExpireWaitlistOffers")),
+		connect.WithHandlerOptions(opts...),
+	)
 	appointmentServiceGetAppointmentHandler := connect.NewUnaryHandler(
 		AppointmentServiceGetAppointmentProcedure,
 		svc.GetAppointment,
@@ -315,6 +588,28 @@ func NewAppointmentServiceHandler(svc AppointmentServiceHandler, opts ...connect
 			appointmentServiceSearchSlotsHandler.ServeHTTP(w, r)
 		case AppointmentServiceBookAppointmentProcedure:
 			appointmentServiceBookAppointmentHandler.ServeHTTP(w, r)
+		case AppointmentServiceCancelAppointmentProcedure:
+			appointmentServiceCancelAppointmentHandler.ServeHTTP(w, r)
+		case AppointmentServiceRescheduleAppointmentProcedure:
+			appointmentServiceRescheduleAppointmentHandler.ServeHTTP(w, r)
+		case AppointmentServiceSetSchedulingPolicyProcedure:
+			appointmentServiceSetSchedulingPolicyHandler.ServeHTTP(w, r)
+		case AppointmentServiceBookSeriesProcedure:
+			appointmentServiceBookSeriesHandler.ServeHTTP(w, r)
+		case AppointmentServiceCancelSeriesProcedure:
+			appointmentServiceCancelSeriesHandler.ServeHTTP(w, r)
+		case AppointmentServiceJoinWaitlistProcedure:
+			appointmentServiceJoinWaitlistHandler.ServeHTTP(w, r)
+		case AppointmentServiceOfferWaitlistSlotProcedure:
+			appointmentServiceOfferWaitlistSlotHandler.ServeHTTP(w, r)
+		case AppointmentServiceAcceptWaitlistOfferProcedure:
+			appointmentServiceAcceptWaitlistOfferHandler.ServeHTTP(w, r)
+		case AppointmentServiceDeclineWaitlistOfferProcedure:
+			appointmentServiceDeclineWaitlistOfferHandler.ServeHTTP(w, r)
+		case AppointmentServiceListWaitlistProcedure:
+			appointmentServiceListWaitlistHandler.ServeHTTP(w, r)
+		case AppointmentServiceExpireWaitlistOffersProcedure:
+			appointmentServiceExpireWaitlistOffersHandler.ServeHTTP(w, r)
 		case AppointmentServiceGetAppointmentProcedure:
 			appointmentServiceGetAppointmentHandler.ServeHTTP(w, r)
 		case AppointmentServiceListAppointmentsProcedure:
@@ -354,6 +649,50 @@ func (UnimplementedAppointmentServiceHandler) SearchSlots(context.Context, *conn
 
 func (UnimplementedAppointmentServiceHandler) BookAppointment(context.Context, *connect.Request[v1.BookAppointmentRequest]) (*connect.Response[v1.BookAppointmentResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.scheduling.v1.AppointmentService.BookAppointment is not implemented"))
+}
+
+func (UnimplementedAppointmentServiceHandler) CancelAppointment(context.Context, *connect.Request[v1.CancelAppointmentRequest]) (*connect.Response[v1.CancelAppointmentResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.scheduling.v1.AppointmentService.CancelAppointment is not implemented"))
+}
+
+func (UnimplementedAppointmentServiceHandler) RescheduleAppointment(context.Context, *connect.Request[v1.RescheduleAppointmentRequest]) (*connect.Response[v1.RescheduleAppointmentResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.scheduling.v1.AppointmentService.RescheduleAppointment is not implemented"))
+}
+
+func (UnimplementedAppointmentServiceHandler) SetSchedulingPolicy(context.Context, *connect.Request[v1.SetSchedulingPolicyRequest]) (*connect.Response[v1.SetSchedulingPolicyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.scheduling.v1.AppointmentService.SetSchedulingPolicy is not implemented"))
+}
+
+func (UnimplementedAppointmentServiceHandler) BookSeries(context.Context, *connect.Request[v1.BookSeriesRequest]) (*connect.Response[v1.BookSeriesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.scheduling.v1.AppointmentService.BookSeries is not implemented"))
+}
+
+func (UnimplementedAppointmentServiceHandler) CancelSeries(context.Context, *connect.Request[v1.CancelSeriesRequest]) (*connect.Response[v1.CancelSeriesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.scheduling.v1.AppointmentService.CancelSeries is not implemented"))
+}
+
+func (UnimplementedAppointmentServiceHandler) JoinWaitlist(context.Context, *connect.Request[v1.JoinWaitlistRequest]) (*connect.Response[v1.JoinWaitlistResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.scheduling.v1.AppointmentService.JoinWaitlist is not implemented"))
+}
+
+func (UnimplementedAppointmentServiceHandler) OfferWaitlistSlot(context.Context, *connect.Request[v1.OfferWaitlistSlotRequest]) (*connect.Response[v1.OfferWaitlistSlotResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.scheduling.v1.AppointmentService.OfferWaitlistSlot is not implemented"))
+}
+
+func (UnimplementedAppointmentServiceHandler) AcceptWaitlistOffer(context.Context, *connect.Request[v1.AcceptWaitlistOfferRequest]) (*connect.Response[v1.AcceptWaitlistOfferResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.scheduling.v1.AppointmentService.AcceptWaitlistOffer is not implemented"))
+}
+
+func (UnimplementedAppointmentServiceHandler) DeclineWaitlistOffer(context.Context, *connect.Request[v1.DeclineWaitlistOfferRequest]) (*connect.Response[v1.DeclineWaitlistOfferResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.scheduling.v1.AppointmentService.DeclineWaitlistOffer is not implemented"))
+}
+
+func (UnimplementedAppointmentServiceHandler) ListWaitlist(context.Context, *connect.Request[v1.ListWaitlistRequest]) (*connect.Response[v1.ListWaitlistResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.scheduling.v1.AppointmentService.ListWaitlist is not implemented"))
+}
+
+func (UnimplementedAppointmentServiceHandler) ExpireWaitlistOffers(context.Context, *connect.Request[v1.ExpireWaitlistOffersRequest]) (*connect.Response[v1.ExpireWaitlistOffersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.scheduling.v1.AppointmentService.ExpireWaitlistOffers is not implemented"))
 }
 
 func (UnimplementedAppointmentServiceHandler) GetAppointment(context.Context, *connect.Request[v1.GetAppointmentRequest]) (*connect.Response[v1.GetAppointmentResponse], error) {

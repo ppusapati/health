@@ -13,7 +13,7 @@ What this records is which requirements have working, tested implementations.
 |---|---|---|---|
 | 1 | EMPI foundation | SRS-EMPI-001 … 009 | **Complete** |
 | 2 | EMPI completion | SRS-EMPI-010 … 018 | **Complete** |
-| 3 | Scheduling | SRS-SCH-001 … 016 | **In progress** — 001–004, 014, 016 implemented |
+| 3 | Scheduling | SRS-SCH-001 … 016 | **In progress** — 001–006, 013–015 implemented |
 | 4 | Encounter, clinical, nursing | SRS-ENC/CLN/NUR | Not started |
 | 5 | Orders, medication, billing | SRS-ORD/MED/BIL | Not started |
 
@@ -481,17 +481,17 @@ pushes it off-record.
 | SRS-SCH-002 | Leave/block/meeting/theatre/procedure exceptions; blocked capacity unbookable without override | **Implemented** |
 | SRS-SCH-003 | Slot search by specialty, provider, facility, visit type, date range and mode; only bookable capacity, paginated | **Implemented** |
 | SRS-SCH-004 | Atomic booking that cannot exceed configured capacity under concurrency | **Implemented** |
-| SRS-SCH-005 | Reschedule/cancel with cutoff policy, reason, fee/refund integration; status history retained | Not started |
-| SRS-SCH-006 | Waitlist with expiring offers and no duplicate confirmed bookings | Not started |
+| SRS-SCH-005 | Reschedule/cancel with cutoff policy, reason, fee/refund integration; status history retained | **Implemented** |
+| SRS-SCH-006 | Waitlist with expiring offers and no duplicate confirmed bookings | **Implemented** |
 | SRS-SCH-007 | Check-in with token/queue state, arrival mode | Not started |
 | SRS-SCH-008 | Nine queue states; invalid transitions rejected unless authorised correction | Domain and persistence complete; the queue RPCs arrive with 3C |
 | SRS-SCH-009 | Wait-time estimate from service rate, queue and provider status | Not started |
 | SRS-SCH-010 | Walk-in appointment/queue with reason and prioritisation | Not started |
 | SRS-SCH-011 | Medically justified queue reprioritisation, audited and visible | Not started |
 | SRS-SCH-012 | Configurable booking/reminder/reschedule/cancellation notifications | Not started |
-| SRS-SCH-013 | Recurring appointments and therapy series | Not started |
+| SRS-SCH-013 | Recurring appointments and therapy series | **Implemented** |
 | SRS-SCH-014 | Prevent booking an inactive provider/resource/facility, with a domain-specific error | **Implemented** |
-| SRS-SCH-015 | Teleconsult vs in-person rules driving location/link and eligibility | Partial — visit mode is on the roster and the booking; the link and eligibility half arrives with 3B |
+| SRS-SCH-015 | Teleconsult vs in-person rules driving location/link and eligibility | **Implemented** |
 | SRS-SCH-016 | `appointment.booked/rescheduled/cancelled/checked_in/no_show`, idempotent and versioned | Partial — `booked` emitted; the rest arrive with their use cases |
 
 ### What availability and booking enforce
@@ -543,6 +543,67 @@ pushes it off-record.
   whether or not the patient came. Getting this backwards either double-books
   the clinic or leaves a morning of phantom bookings nobody can fill.
 
+### What the appointment lifecycle enforces
+
+- **A reschedule is a new booking chained to the old one.** SRS-SCH-005
+  requires the original to retain its status history, so it is cancelled and
+  linked rather than edited: a patient disputing an attendance record needs to
+  see that the 9th was moved, not that it silently became the 16th. The new slot
+  is claimed before the old one is released, so a move that fails leaves the
+  patient holding the appointment they had.
+
+- **The notice is captured at the moment of the decision.** A policy changed in
+  March must not retroactively make a February cancellation late, so the notice
+  given and the notice required are both stored on the outcome rather than
+  recomputed from two timestamps when somebody disputes a fee.
+
+- **This system never charges anybody.** It records whether the notice period
+  was met and refers the case onward; SRS-BIL owns what it costs. Putting the
+  fee here would put pricing in the diary, which is not where a refund gets
+  approved. The default policy charges nothing, because billing patients on the
+  strength of a setting nobody chose would be wrong.
+
+- **A series change reaches one occurrence or every future one, never a past
+  one.** A course stopped after four sessions is four sessions of treatment, and
+  a bulk cancellation that rewrote them would rewrite the record of care that
+  was given. Settled occurrences are skipped for the same reason.
+
+- **A course books what it can.** Refusing twelve appointments because week
+  seven is full would make staff book them one at a time, and the eleventh is
+  the one they get wrong. Unavailable occurrences are reported; a course where
+  nothing could be booked rolls back rather than leaving an empty series for
+  somebody to clean up.
+
+- **A series keeps its local time.** Occurrences advance by days rather than by
+  duration, so a course crossing a daylight-saving boundary stays at ten o'clock.
+  A patient told "every Tuesday at ten" does not expect the eighth session at
+  nine.
+
+- **A waitlist offer does not consume the slot.** An offer is a promise, and a
+  promise that held capacity would leave the clinic holding a slot for somebody
+  who has stopped reading their messages — capacity nobody can use and nobody
+  can see is gone. The claim happens on acceptance, through the ordinary atomic
+  path, which is also what stops an offer made twice by mistake producing two
+  bookings.
+
+- **Accepting an earlier slot replaces the appointment already held.** That is
+  the "cannot create duplicate confirmed bookings" half of SRS-SCH-006, and it
+  is why a waitlist entry carries the booking it is waiting to improve on. An
+  offer later than that booking is refused: it is a downgrade somebody would
+  have to explain.
+
+- **An unanswered offer returns the patient to the list**, rather than closing
+  it. Not answering one message is not the same as no longer wanting an
+  appointment.
+
+- **Teleconsults are off until a facility enables them.** A facility that has
+  not thought about remote consultations has not decided which of its clinics
+  can safely run that way, and defaulting to yes decides it for them. A
+  teleconsult with no join link is an appointment nobody can attend; an
+  in-person one carrying a link invites a patient to stay home, so a database
+  constraint refuses it. Minting the link is a port, because it is a credential:
+  anybody holding it can join a consultation.
+
 ### Sprint 3 evidence
 
 | Property | Test |
@@ -562,6 +623,23 @@ pushes it off-record.
 | A clerk cannot rewrite the roster; a clinician cannot book | `TestAClerkCannotRewriteTheRoster`, `TestAClinicianCannotBook` |
 | Booking emits an event carrying no clinical or demographic detail | `TestBookingEmitsAnAppointmentBookedEvent` |
 | A diary cannot be reached across a tenant boundary | `TestASlotSearchCannotReachAnotherTenant` |
+| A cancellation records the notice against the policy in force | `TestCancellingRecordsTheNoticeAgainstThePolicyInForce`, `TestACancellationRecordsTheNoticeGivenAndRequired` |
+| The default policy charges nothing; a configured one refers | `TestTheDefaultPolicyChargesNothing`, `TestALateCancellationIsChargeableOnlyWhereConfigured` |
+| A completed appointment cannot be cancelled | `TestACompletedAppointmentCannotBeCancelled` |
+| A reschedule chains to the original and keeps its history | `TestReschedulingChainsToTheOriginalAndKeepsItsHistory` |
+| Reschedules are capped by policy | `TestReschedulingIsCappedByPolicy` |
+| A series books what it can and reports the rest | `TestASeriesBooksWhatItCanAndReportsTheRest` |
+| A series change reaches only the scope asked, never the past | `TestCancellingASeriesRespectsTheScopeAsked`, `TestASeriesChangeReachesOnlyTheScopeAsked` |
+| A bulk series change skips settled occurrences | `TestABulkSeriesChangeSkipsSettledOccurrences` |
+| A series keeps its local time across a daylight-saving change | `TestASeriesKeepsItsLocalTimeAcrossADaylightSavingChange` |
+| A waitlist offer expires and does not hold the slot | `TestAWaitlistOfferExpiresAndDoesNotHoldTheSlot`, `TestAnOfferExpires` |
+| Accepting an offer replaces the existing booking | `TestAcceptingAnOfferReplacesTheExistingBooking` |
+| A waitlist will not offer a later slot | `TestAWaitlistWillNotOfferALaterSlot`, `TestAWaitlistOnlyAcceptsAnEarlierSlot` |
+| An expired or declined offer returns the patient to the list | `TestAnExpiredOfferReturnsThePatientToTheList`, `TestDecliningKeepsThePatientWaiting` |
+| Teleconsults are off until a facility enables them | `TestATeleconsultIsRefusedWhereNotEnabled`, `TestTeleconsultsAreOffByDefault` |
+| A teleconsult policy can restrict visit types and require confirmed identity | `TestATeleconsultPolicyCanRestrictVisitTypes`, `TestATeleconsultPolicyCanRequireConfirmedIdentity` |
+| An in-person appointment carries no join link | `TestAnInPersonAppointmentCarriesNoJoinLink` |
+| A clerk cannot set the cancellation policy | `TestAClerkCannotSetTheCancellationPolicy` |
 | The ordinary clinic path is permitted; an invalid sequence is not | `TestTheOrdinaryClinicPathIsPermitted`, `TestAnInvalidSequenceIsRejected` |
 | An authorised correction can undo a mistaken no-show, and the no-show survives | `TestACorrectionCanUndoAMistakenNoShow` |
 | Cancelled releases capacity; no-show does not | `TestOnlyCancellationReleasesCapacity` |

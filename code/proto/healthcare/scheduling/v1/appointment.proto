@@ -189,6 +189,17 @@ message Appointment {
   // reschedule.
   string rescheduled_from_id = 14;
   int64 version = 15;
+  // Groups a recurring therapy series (SRS-SCH-013).
+  string series_id = 16;
+  // This appointment's position in its series, from 1.
+  int32 occurrence = 17;
+  // How many times this booking has been moved. Carried forward across the
+  // chain, because a policy capping reschedules is about the patient rather
+  // than about any one row.
+  int32 reschedule_count = 18;
+  // Where a teleconsult happens (SRS-SCH-015). Empty for an in-person
+  // appointment: one carrying a link invites a patient to stay home.
+  string join_url = 19;
 }
 
 message DefineResourceRequest {
@@ -310,6 +321,213 @@ message ListAppointmentsResponse {
   repeated Appointment appointments = 1;
 }
 
+// How far a change to a recurring series reaches (SRS-SCH-013).
+//
+// A physiotherapy course is twelve appointments; the patient asks to move next
+// Tuesday, or asks to move every remaining Tuesday, and those are different
+// requests. Past occurrences are never touched by either: they happened.
+enum SeriesScope {
+  SERIES_SCOPE_UNSPECIFIED = 0;
+  SERIES_SCOPE_THIS_OCCURRENCE = 1;
+  SERIES_SCOPE_FUTURE_OCCURRENCES = 2;
+}
+
+enum WaitlistStatus {
+  WAITLIST_STATUS_UNSPECIFIED = 0;
+  WAITLIST_STATUS_WAITING = 1;
+  // Has been shown an earlier slot and has not answered.
+  WAITLIST_STATUS_OFFERED = 2;
+  WAITLIST_STATUS_ACCEPTED = 3;
+  WAITLIST_STATUS_DECLINED = 4;
+  WAITLIST_STATUS_EXPIRED = 5;
+  WAITLIST_STATUS_WITHDRAWN = 6;
+}
+
+// What the policy made of a cancellation or a reschedule (SRS-SCH-005).
+//
+// Captured at the moment of the decision, so a policy changed in March cannot
+// retroactively make a February cancellation late. This system never charges
+// anybody: it records whether the notice period was met and leaves the fee to
+// SRS-BIL.
+message PolicyOutcome {
+  bool timely = 1;
+  // Stored rather than derived later: "cancelled 23 hours before" is the fact a
+  // dispute turns on, and recomputing it from two timestamps months later
+  // invites a rounding argument.
+  int32 notice_given_minutes = 2;
+  int32 notice_required_minutes = 3;
+  // Refer to billing. What it costs is SRS-BIL's decision, not this one.
+  bool chargeable = 4;
+}
+
+message CancelAppointmentRequest {
+  string appointment_id = 1;
+  string reason = 2;
+}
+
+message CancelAppointmentResponse {
+  Appointment appointment = 1;
+  PolicyOutcome outcome = 2;
+}
+
+message RescheduleAppointmentRequest {
+  string appointment_id = 1;
+  string resource_id = 2;
+  google.protobuf.Timestamp starts_at = 3;
+  VisitType visit_type = 4;
+  string reason = 5;
+  bool override = 6;
+}
+
+message RescheduleAppointmentResponse {
+  Appointment appointment = 1;
+  // The booking this replaced. Cancelled rather than edited, because
+  // SRS-SCH-005 requires the original to retain its status history.
+  string previous_appointment_id = 2;
+  PolicyOutcome outcome = 3;
+}
+
+message SchedulingPolicy {
+  int32 notice_hours = 1;
+  // Usually shorter than cancellation notice: moving an appointment leaves the
+  // clinic able to refill the slot, while cancelling on the day does not.
+  int32 reschedule_notice_hours = 2;
+  // 0 means unlimited. A booking moved eleven times is a patient who is not
+  // coming, and each move cost a slot somebody else could have used.
+  int32 max_reschedules = 3;
+  bool chargeable_when_late = 4;
+  // Off by default: a facility that has not thought about remote consultations
+  // has not decided which of its clinics can safely run that way.
+  bool teleconsult_enabled = 5;
+  // Empty means every visit type the roster offers remotely.
+  repeated VisitType teleconsult_visit_types = 6;
+  bool teleconsult_requires_confirmed_identity = 7;
+}
+
+message SetSchedulingPolicyRequest {
+  // Empty applies tenant-wide; naming a facility overrides.
+  string facility_id = 1;
+  SchedulingPolicy policy = 2;
+}
+
+message SetSchedulingPolicyResponse {}
+
+message BookSeriesRequest {
+  string patient_id = 1;
+  string resource_id = 2;
+  google.protobuf.Timestamp starts_at = 3;
+  VisitType visit_type = 4;
+  // Seven for a weekly course, which is most of them.
+  int32 interval_days = 5;
+  int32 occurrences = 6;
+  string reason = 7;
+}
+
+message BookSeriesResponse {
+  string series_id = 1;
+  repeated Appointment appointments = 2;
+  // The occurrences whose slot was gone. Reported rather than refused: a
+  // twelve-week course where week seven is full is eleven appointments the
+  // patient should keep.
+  repeated google.protobuf.Timestamp unavailable = 3;
+}
+
+message CancelSeriesRequest {
+  string series_id = 1;
+  // The occurrence a future-occurrences change pivots on. Empty with
+  // FUTURE_OCCURRENCES means every remaining occurrence.
+  string from_appointment_id = 2;
+  SeriesScope scope = 3;
+  string reason = 4;
+}
+
+message CancelSeriesResponse {
+  repeated string cancelled_appointment_ids = 1;
+}
+
+message WaitlistEntry {
+  string waitlist_id = 1;
+  string patient_id = 2;
+  string resource_id = 3;
+  string facility_id = 4;
+  string org_unit_id = 5;
+  VisitType visit_type = 6;
+  // A patient who cannot come before Thursday should not be offered Wednesday.
+  google.protobuf.Timestamp not_before = 7;
+  google.protobuf.Timestamp not_after = 8;
+  // The booking this patient already holds, if any. An earlier slot accepted
+  // becomes a reschedule of it rather than a second booking.
+  string appointment_id = 9;
+  WaitlistStatus status = 10;
+  google.protobuf.Timestamp offered_slot_at = 11;
+  // A slot promised to somebody who has stopped reading their messages is
+  // capacity nobody can use, so the offer expires.
+  google.protobuf.Timestamp offer_expires_at = 12;
+}
+
+message JoinWaitlistRequest {
+  string patient_id = 1;
+  string resource_id = 2;
+  string facility_id = 3;
+  string org_unit_id = 4;
+  VisitType visit_type = 5;
+  google.protobuf.Timestamp not_before = 6;
+  google.protobuf.Timestamp not_after = 7;
+  string appointment_id = 8;
+}
+
+message JoinWaitlistResponse {
+  WaitlistEntry entry = 1;
+}
+
+message OfferWaitlistSlotRequest {
+  string waitlist_id = 1;
+  string resource_id = 2;
+  google.protobuf.Timestamp starts_at = 3;
+  VisitType visit_type = 4;
+  // How long the offer stands. Zero takes the default.
+  int32 valid_for_minutes = 5;
+}
+
+message OfferWaitlistSlotResponse {
+  WaitlistEntry entry = 1;
+}
+
+message AcceptWaitlistOfferRequest {
+  string waitlist_id = 1;
+}
+
+message AcceptWaitlistOfferResponse {
+  WaitlistEntry entry = 1;
+  Appointment appointment = 2;
+  // The appointment the patient gave up, if any. Cancelled rather than left
+  // standing: two confirmed bookings is exactly what SRS-SCH-006 forbids.
+  string replaced_appointment_id = 3;
+}
+
+message DeclineWaitlistOfferRequest {
+  string waitlist_id = 1;
+}
+
+message DeclineWaitlistOfferResponse {
+  WaitlistEntry entry = 1;
+}
+
+message ListWaitlistRequest {
+  string resource_id = 1;
+  int32 page_size = 2;
+}
+
+message ListWaitlistResponse {
+  repeated WaitlistEntry entries = 1;
+}
+
+message ExpireWaitlistOffersRequest {}
+
+message ExpireWaitlistOffersResponse {
+  int64 expired = 1;
+}
+
 service AppointmentService {
   // SRS-SCH-001. Rosters are configuration: defining when a clinic runs is
   // deliberately not bundled with looking inside the diary at who is coming.
@@ -329,6 +547,30 @@ service AppointmentService {
   // SRS-SCH-004. Atomic, and incapable of exceeding configured capacity under
   // concurrency.
   rpc BookAppointment(BookAppointmentRequest) returns (BookAppointmentResponse);
+
+  // SRS-SCH-005. Reschedule and cancel under a policy-driven cutoff. The
+  // original retains its status history: a patient disputing an attendance
+  // record needs to see that the 9th was moved rather than that it silently
+  // became the 16th.
+  rpc CancelAppointment(CancelAppointmentRequest) returns (CancelAppointmentResponse);
+  rpc RescheduleAppointment(RescheduleAppointmentRequest) returns (RescheduleAppointmentResponse);
+  rpc SetSchedulingPolicy(SetSchedulingPolicyRequest) returns (SetSchedulingPolicyResponse);
+
+  // SRS-SCH-013. A change affects one occurrence or every future one, and never
+  // a past one.
+  rpc BookSeries(BookSeriesRequest) returns (BookSeriesResponse);
+  rpc CancelSeries(CancelSeriesRequest) returns (CancelSeriesResponse);
+
+  // SRS-SCH-006. An offer holds a slot for a stated period and then stops. It
+  // never consumes the slot: capacity held for somebody who has stopped
+  // reading their messages is capacity nobody can use and nobody can see is
+  // gone.
+  rpc JoinWaitlist(JoinWaitlistRequest) returns (JoinWaitlistResponse);
+  rpc OfferWaitlistSlot(OfferWaitlistSlotRequest) returns (OfferWaitlistSlotResponse);
+  rpc AcceptWaitlistOffer(AcceptWaitlistOfferRequest) returns (AcceptWaitlistOfferResponse);
+  rpc DeclineWaitlistOffer(DeclineWaitlistOfferRequest) returns (DeclineWaitlistOfferResponse);
+  rpc ListWaitlist(ListWaitlistRequest) returns (ListWaitlistResponse);
+  rpc ExpireWaitlistOffers(ExpireWaitlistOffersRequest) returns (ExpireWaitlistOffersResponse);
 
   rpc GetAppointment(GetAppointmentRequest) returns (GetAppointmentResponse);
   rpc ListAppointments(ListAppointmentsRequest) returns (ListAppointmentsResponse);

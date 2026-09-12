@@ -593,6 +593,38 @@ type SchedulingAppointment struct {
 	CreatedAt         pgtype.Timestamptz
 	UpdatedAt         pgtype.Timestamptz
 	Version           int64
+	SeriesID          pgtype.UUID
+	Occurrence        *int32
+	RescheduleCount   int32
+	JoinUrl           string
+}
+
+type SchedulingAppointmentPolicyOutcome struct {
+	OutcomeID             uuid.UUID
+	TenantID              uuid.UUID
+	AppointmentID         uuid.UUID
+	Kind                  string
+	Timely                bool
+	NoticeGivenMinutes    int32
+	NoticeRequiredMinutes int32
+	Chargeable            bool
+	DecidedBy             string
+	DecidedAt             pgtype.Timestamptz
+	Reason                string
+}
+
+type SchedulingAppointmentSeries struct {
+	SeriesID     uuid.UUID
+	TenantID     uuid.UUID
+	PatientID    uuid.UUID
+	ResourceID   uuid.UUID
+	VisitType    string
+	IntervalDays int32
+	Occurrences  int32
+	StartsAt     pgtype.Timestamptz
+	CreatedBy    string
+	CreatedAt    pgtype.Timestamptz
+	Cancelled    bool
 }
 
 type SchedulingAppointmentStatusHistory struct {
@@ -605,6 +637,21 @@ type SchedulingAppointmentStatusHistory struct {
 	ChangedBy     string
 	Reason        string
 	Corrected     bool
+}
+
+type SchedulingCancellationPolicy struct {
+	PolicyID                             uuid.UUID
+	TenantID                             uuid.UUID
+	FacilityID                           pgtype.UUID
+	NoticeHours                          int32
+	RescheduleNoticeHours                int32
+	MaxReschedules                       int32
+	ChargeableWhenLate                   bool
+	TeleconsultEnabled                   bool
+	TeleconsultVisitTypes                []string
+	TeleconsultRequiresConfirmedIdentity bool
+	CreatedAt                            pgtype.Timestamptz
+	UpdatedAt                            pgtype.Timestamptz
 }
 
 type SchedulingResource struct {
@@ -663,6 +710,25 @@ type SchedulingSlot struct {
 	Booked     int32
 	CreatedAt  pgtype.Timestamptz
 	UpdatedAt  pgtype.Timestamptz
+}
+
+type SchedulingWaitlistEntry struct {
+	WaitlistID     uuid.UUID
+	TenantID       uuid.UUID
+	PatientID      uuid.UUID
+	ResourceID     pgtype.UUID
+	FacilityID     pgtype.UUID
+	OrgUnitID      pgtype.UUID
+	VisitType      string
+	NotBefore      pgtype.Timestamptz
+	NotAfter       pgtype.Timestamptz
+	AppointmentID  pgtype.UUID
+	Status         string
+	OfferedSlotAt  pgtype.Timestamptz
+	OfferExpiresAt pgtype.Timestamptz
+	CreatedBy      string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 type SecurityPlatformDowntimeAction struct {

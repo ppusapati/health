@@ -387,6 +387,122 @@ func (AppointmentStatus) EnumDescriptor() ([]byte, []int) {
 	return file_healthcare_scheduling_v1_appointment_proto_rawDescGZIP(), []int{5}
 }
 
+// How far a change to a recurring series reaches (SRS-SCH-013).
+//
+// A physiotherapy course is twelve appointments; the patient asks to move next
+// Tuesday, or asks to move every remaining Tuesday, and those are different
+// requests. Past occurrences are never touched by either: they happened.
+type SeriesScope int32
+
+const (
+	SeriesScope_SERIES_SCOPE_UNSPECIFIED        SeriesScope = 0
+	SeriesScope_SERIES_SCOPE_THIS_OCCURRENCE    SeriesScope = 1
+	SeriesScope_SERIES_SCOPE_FUTURE_OCCURRENCES SeriesScope = 2
+)
+
+// Enum value maps for SeriesScope.
+var (
+	SeriesScope_name = map[int32]string{
+		0: "SERIES_SCOPE_UNSPECIFIED",
+		1: "SERIES_SCOPE_THIS_OCCURRENCE",
+		2: "SERIES_SCOPE_FUTURE_OCCURRENCES",
+	}
+	SeriesScope_value = map[string]int32{
+		"SERIES_SCOPE_UNSPECIFIED":        0,
+		"SERIES_SCOPE_THIS_OCCURRENCE":    1,
+		"SERIES_SCOPE_FUTURE_OCCURRENCES": 2,
+	}
+)
+
+func (x SeriesScope) Enum() *SeriesScope {
+	p := new(SeriesScope)
+	*p = x
+	return p
+}
+
+func (x SeriesScope) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (SeriesScope) Descriptor() protoreflect.EnumDescriptor {
+	return file_healthcare_scheduling_v1_appointment_proto_enumTypes[6].Descriptor()
+}
+
+func (SeriesScope) Type() protoreflect.EnumType {
+	return &file_healthcare_scheduling_v1_appointment_proto_enumTypes[6]
+}
+
+func (x SeriesScope) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use SeriesScope.Descriptor instead.
+func (SeriesScope) EnumDescriptor() ([]byte, []int) {
+	return file_healthcare_scheduling_v1_appointment_proto_rawDescGZIP(), []int{6}
+}
+
+type WaitlistStatus int32
+
+const (
+	WaitlistStatus_WAITLIST_STATUS_UNSPECIFIED WaitlistStatus = 0
+	WaitlistStatus_WAITLIST_STATUS_WAITING     WaitlistStatus = 1
+	// Has been shown an earlier slot and has not answered.
+	WaitlistStatus_WAITLIST_STATUS_OFFERED   WaitlistStatus = 2
+	WaitlistStatus_WAITLIST_STATUS_ACCEPTED  WaitlistStatus = 3
+	WaitlistStatus_WAITLIST_STATUS_DECLINED  WaitlistStatus = 4
+	WaitlistStatus_WAITLIST_STATUS_EXPIRED   WaitlistStatus = 5
+	WaitlistStatus_WAITLIST_STATUS_WITHDRAWN WaitlistStatus = 6
+)
+
+// Enum value maps for WaitlistStatus.
+var (
+	WaitlistStatus_name = map[int32]string{
+		0: "WAITLIST_STATUS_UNSPECIFIED",
+		1: "WAITLIST_STATUS_WAITING",
+		2: "WAITLIST_STATUS_OFFERED",
+		3: "WAITLIST_STATUS_ACCEPTED",
+		4: "WAITLIST_STATUS_DECLINED",
+		5: "WAITLIST_STATUS_EXPIRED",
+		6: "WAITLIST_STATUS_WITHDRAWN",
+	}
+	WaitlistStatus_value = map[string]int32{
+		"WAITLIST_STATUS_UNSPECIFIED": 0,
+		"WAITLIST_STATUS_WAITING":     1,
+		"WAITLIST_STATUS_OFFERED":     2,
+		"WAITLIST_STATUS_ACCEPTED":    3,
+		"WAITLIST_STATUS_DECLINED":    4,
+		"WAITLIST_STATUS_EXPIRED":     5,
+		"WAITLIST_STATUS_WITHDRAWN":   6,
+	}
+)
+
+func (x WaitlistStatus) Enum() *WaitlistStatus {
+	p := new(WaitlistStatus)
+	*p = x
+	return p
+}
+
+func (x WaitlistStatus) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (WaitlistStatus) Descriptor() protoreflect.EnumDescriptor {
+	return file_healthcare_scheduling_v1_appointment_proto_enumTypes[7].Descriptor()
+}
+
+func (WaitlistStatus) Type() protoreflect.EnumType {
+	return &file_healthcare_scheduling_v1_appointment_proto_enumTypes[7]
+}
+
+func (x WaitlistStatus) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use WaitlistStatus.Descriptor instead.
+func (WaitlistStatus) EnumDescriptor() ([]byte, []int) {
+	return file_healthcare_scheduling_v1_appointment_proto_rawDescGZIP(), []int{7}
+}
+
 type Resource struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	ResourceId string                 `protobuf:"bytes,1,opt,name=resource_id,json=resourceId,proto3" json:"resource_id,omitempty"`
@@ -987,8 +1103,19 @@ type Appointment struct {
 	// reschedule.
 	RescheduledFromId string `protobuf:"bytes,14,opt,name=rescheduled_from_id,json=rescheduledFromId,proto3" json:"rescheduled_from_id,omitempty"`
 	Version           int64  `protobuf:"varint,15,opt,name=version,proto3" json:"version,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Groups a recurring therapy series (SRS-SCH-013).
+	SeriesId string `protobuf:"bytes,16,opt,name=series_id,json=seriesId,proto3" json:"series_id,omitempty"`
+	// This appointment's position in its series, from 1.
+	Occurrence int32 `protobuf:"varint,17,opt,name=occurrence,proto3" json:"occurrence,omitempty"`
+	// How many times this booking has been moved. Carried forward across the
+	// chain, because a policy capping reschedules is about the patient rather
+	// than about any one row.
+	RescheduleCount int32 `protobuf:"varint,18,opt,name=reschedule_count,json=rescheduleCount,proto3" json:"reschedule_count,omitempty"`
+	// Where a teleconsult happens (SRS-SCH-015). Empty for an in-person
+	// appointment: one carrying a link invites a patient to stay home.
+	JoinUrl       string `protobuf:"bytes,19,opt,name=join_url,json=joinUrl,proto3" json:"join_url,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Appointment) Reset() {
@@ -1124,6 +1251,34 @@ func (x *Appointment) GetVersion() int64 {
 		return x.Version
 	}
 	return 0
+}
+
+func (x *Appointment) GetSeriesId() string {
+	if x != nil {
+		return x.SeriesId
+	}
+	return ""
+}
+
+func (x *Appointment) GetOccurrence() int32 {
+	if x != nil {
+		return x.Occurrence
+	}
+	return 0
+}
+
+func (x *Appointment) GetRescheduleCount() int32 {
+	if x != nil {
+		return x.RescheduleCount
+	}
+	return 0
+}
+
+func (x *Appointment) GetJoinUrl() string {
+	if x != nil {
+		return x.JoinUrl
+	}
+	return ""
 }
 
 type DefineResourceRequest struct {
@@ -2219,6 +2374,1564 @@ func (x *ListAppointmentsResponse) GetAppointments() []*Appointment {
 	return nil
 }
 
+// What the policy made of a cancellation or a reschedule (SRS-SCH-005).
+//
+// Captured at the moment of the decision, so a policy changed in March cannot
+// retroactively make a February cancellation late. This system never charges
+// anybody: it records whether the notice period was met and leaves the fee to
+// SRS-BIL.
+type PolicyOutcome struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Timely bool                   `protobuf:"varint,1,opt,name=timely,proto3" json:"timely,omitempty"`
+	// Stored rather than derived later: "cancelled 23 hours before" is the fact a
+	// dispute turns on, and recomputing it from two timestamps months later
+	// invites a rounding argument.
+	NoticeGivenMinutes    int32 `protobuf:"varint,2,opt,name=notice_given_minutes,json=noticeGivenMinutes,proto3" json:"notice_given_minutes,omitempty"`
+	NoticeRequiredMinutes int32 `protobuf:"varint,3,opt,name=notice_required_minutes,json=noticeRequiredMinutes,proto3" json:"notice_required_minutes,omitempty"`
+	// Refer to billing. What it costs is SRS-BIL's decision, not this one.
+	Chargeable    bool `protobuf:"varint,4,opt,name=chargeable,proto3" json:"chargeable,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PolicyOutcome) Reset() {
+	*x = PolicyOutcome{}
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PolicyOutcome) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PolicyOutcome) ProtoMessage() {}
+
+func (x *PolicyOutcome) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PolicyOutcome.ProtoReflect.Descriptor instead.
+func (*PolicyOutcome) Descriptor() ([]byte, []int) {
+	return file_healthcare_scheduling_v1_appointment_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *PolicyOutcome) GetTimely() bool {
+	if x != nil {
+		return x.Timely
+	}
+	return false
+}
+
+func (x *PolicyOutcome) GetNoticeGivenMinutes() int32 {
+	if x != nil {
+		return x.NoticeGivenMinutes
+	}
+	return 0
+}
+
+func (x *PolicyOutcome) GetNoticeRequiredMinutes() int32 {
+	if x != nil {
+		return x.NoticeRequiredMinutes
+	}
+	return 0
+}
+
+func (x *PolicyOutcome) GetChargeable() bool {
+	if x != nil {
+		return x.Chargeable
+	}
+	return false
+}
+
+type CancelAppointmentRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AppointmentId string                 `protobuf:"bytes,1,opt,name=appointment_id,json=appointmentId,proto3" json:"appointment_id,omitempty"`
+	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CancelAppointmentRequest) Reset() {
+	*x = CancelAppointmentRequest{}
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CancelAppointmentRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CancelAppointmentRequest) ProtoMessage() {}
+
+func (x *CancelAppointmentRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CancelAppointmentRequest.ProtoReflect.Descriptor instead.
+func (*CancelAppointmentRequest) Descriptor() ([]byte, []int) {
+	return file_healthcare_scheduling_v1_appointment_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *CancelAppointmentRequest) GetAppointmentId() string {
+	if x != nil {
+		return x.AppointmentId
+	}
+	return ""
+}
+
+func (x *CancelAppointmentRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type CancelAppointmentResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Appointment   *Appointment           `protobuf:"bytes,1,opt,name=appointment,proto3" json:"appointment,omitempty"`
+	Outcome       *PolicyOutcome         `protobuf:"bytes,2,opt,name=outcome,proto3" json:"outcome,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CancelAppointmentResponse) Reset() {
+	*x = CancelAppointmentResponse{}
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CancelAppointmentResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CancelAppointmentResponse) ProtoMessage() {}
+
+func (x *CancelAppointmentResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CancelAppointmentResponse.ProtoReflect.Descriptor instead.
+func (*CancelAppointmentResponse) Descriptor() ([]byte, []int) {
+	return file_healthcare_scheduling_v1_appointment_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *CancelAppointmentResponse) GetAppointment() *Appointment {
+	if x != nil {
+		return x.Appointment
+	}
+	return nil
+}
+
+func (x *CancelAppointmentResponse) GetOutcome() *PolicyOutcome {
+	if x != nil {
+		return x.Outcome
+	}
+	return nil
+}
+
+type RescheduleAppointmentRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AppointmentId string                 `protobuf:"bytes,1,opt,name=appointment_id,json=appointmentId,proto3" json:"appointment_id,omitempty"`
+	ResourceId    string                 `protobuf:"bytes,2,opt,name=resource_id,json=resourceId,proto3" json:"resource_id,omitempty"`
+	StartsAt      *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=starts_at,json=startsAt,proto3" json:"starts_at,omitempty"`
+	VisitType     VisitType              `protobuf:"varint,4,opt,name=visit_type,json=visitType,proto3,enum=healthcare.scheduling.v1.VisitType" json:"visit_type,omitempty"`
+	Reason        string                 `protobuf:"bytes,5,opt,name=reason,proto3" json:"reason,omitempty"`
+	Override      bool                   `protobuf:"varint,6,opt,name=override,proto3" json:"override,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RescheduleAppointmentRequest) Reset() {
+	*x = RescheduleAppointmentRequest{}
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RescheduleAppointmentRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RescheduleAppointmentRequest) ProtoMessage() {}
+
+func (x *RescheduleAppointmentRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RescheduleAppointmentRequest.ProtoReflect.Descriptor instead.
+func (*RescheduleAppointmentRequest) Descriptor() ([]byte, []int) {
+	return file_healthcare_scheduling_v1_appointment_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *RescheduleAppointmentRequest) GetAppointmentId() string {
+	if x != nil {
+		return x.AppointmentId
+	}
+	return ""
+}
+
+func (x *RescheduleAppointmentRequest) GetResourceId() string {
+	if x != nil {
+		return x.ResourceId
+	}
+	return ""
+}
+
+func (x *RescheduleAppointmentRequest) GetStartsAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StartsAt
+	}
+	return nil
+}
+
+func (x *RescheduleAppointmentRequest) GetVisitType() VisitType {
+	if x != nil {
+		return x.VisitType
+	}
+	return VisitType_VISIT_TYPE_UNSPECIFIED
+}
+
+func (x *RescheduleAppointmentRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *RescheduleAppointmentRequest) GetOverride() bool {
+	if x != nil {
+		return x.Override
+	}
+	return false
+}
+
+type RescheduleAppointmentResponse struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Appointment *Appointment           `protobuf:"bytes,1,opt,name=appointment,proto3" json:"appointment,omitempty"`
+	// The booking this replaced. Cancelled rather than edited, because
+	// SRS-SCH-005 requires the original to retain its status history.
+	PreviousAppointmentId string         `protobuf:"bytes,2,opt,name=previous_appointment_id,json=previousAppointmentId,proto3" json:"previous_appointment_id,omitempty"`
+	Outcome               *PolicyOutcome `protobuf:"bytes,3,opt,name=outcome,proto3" json:"outcome,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *RescheduleAppointmentResponse) Reset() {
+	*x = RescheduleAppointmentResponse{}
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RescheduleAppointmentResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RescheduleAppointmentResponse) ProtoMessage() {}
+
+func (x *RescheduleAppointmentResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RescheduleAppointmentResponse.ProtoReflect.Descriptor instead.
+func (*RescheduleAppointmentResponse) Descriptor() ([]byte, []int) {
+	return file_healthcare_scheduling_v1_appointment_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *RescheduleAppointmentResponse) GetAppointment() *Appointment {
+	if x != nil {
+		return x.Appointment
+	}
+	return nil
+}
+
+func (x *RescheduleAppointmentResponse) GetPreviousAppointmentId() string {
+	if x != nil {
+		return x.PreviousAppointmentId
+	}
+	return ""
+}
+
+func (x *RescheduleAppointmentResponse) GetOutcome() *PolicyOutcome {
+	if x != nil {
+		return x.Outcome
+	}
+	return nil
+}
+
+type SchedulingPolicy struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	NoticeHours int32                  `protobuf:"varint,1,opt,name=notice_hours,json=noticeHours,proto3" json:"notice_hours,omitempty"`
+	// Usually shorter than cancellation notice: moving an appointment leaves the
+	// clinic able to refill the slot, while cancelling on the day does not.
+	RescheduleNoticeHours int32 `protobuf:"varint,2,opt,name=reschedule_notice_hours,json=rescheduleNoticeHours,proto3" json:"reschedule_notice_hours,omitempty"`
+	// 0 means unlimited. A booking moved eleven times is a patient who is not
+	// coming, and each move cost a slot somebody else could have used.
+	MaxReschedules     int32 `protobuf:"varint,3,opt,name=max_reschedules,json=maxReschedules,proto3" json:"max_reschedules,omitempty"`
+	ChargeableWhenLate bool  `protobuf:"varint,4,opt,name=chargeable_when_late,json=chargeableWhenLate,proto3" json:"chargeable_when_late,omitempty"`
+	// Off by default: a facility that has not thought about remote consultations
+	// has not decided which of its clinics can safely run that way.
+	TeleconsultEnabled bool `protobuf:"varint,5,opt,name=teleconsult_enabled,json=teleconsultEnabled,proto3" json:"teleconsult_enabled,omitempty"`
+	// Empty means every visit type the roster offers remotely.
+	TeleconsultVisitTypes                []VisitType `protobuf:"varint,6,rep,packed,name=teleconsult_visit_types,json=teleconsultVisitTypes,proto3,enum=healthcare.scheduling.v1.VisitType" json:"teleconsult_visit_types,omitempty"`
+	TeleconsultRequiresConfirmedIdentity bool        `protobuf:"varint,7,opt,name=teleconsult_requires_confirmed_identity,json=teleconsultRequiresConfirmedIdentity,proto3" json:"teleconsult_requires_confirmed_identity,omitempty"`
+	unknownFields                        protoimpl.UnknownFields
+	sizeCache                            protoimpl.SizeCache
+}
+
+func (x *SchedulingPolicy) Reset() {
+	*x = SchedulingPolicy{}
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SchedulingPolicy) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SchedulingPolicy) ProtoMessage() {}
+
+func (x *SchedulingPolicy) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SchedulingPolicy.ProtoReflect.Descriptor instead.
+func (*SchedulingPolicy) Descriptor() ([]byte, []int) {
+	return file_healthcare_scheduling_v1_appointment_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *SchedulingPolicy) GetNoticeHours() int32 {
+	if x != nil {
+		return x.NoticeHours
+	}
+	return 0
+}
+
+func (x *SchedulingPolicy) GetRescheduleNoticeHours() int32 {
+	if x != nil {
+		return x.RescheduleNoticeHours
+	}
+	return 0
+}
+
+func (x *SchedulingPolicy) GetMaxReschedules() int32 {
+	if x != nil {
+		return x.MaxReschedules
+	}
+	return 0
+}
+
+func (x *SchedulingPolicy) GetChargeableWhenLate() bool {
+	if x != nil {
+		return x.ChargeableWhenLate
+	}
+	return false
+}
+
+func (x *SchedulingPolicy) GetTeleconsultEnabled() bool {
+	if x != nil {
+		return x.TeleconsultEnabled
+	}
+	return false
+}
+
+func (x *SchedulingPolicy) GetTeleconsultVisitTypes() []VisitType {
+	if x != nil {
+		return x.TeleconsultVisitTypes
+	}
+	return nil
+}
+
+func (x *SchedulingPolicy) GetTeleconsultRequiresConfirmedIdentity() bool {
+	if x != nil {
+		return x.TeleconsultRequiresConfirmedIdentity
+	}
+	return false
+}
+
+type SetSchedulingPolicyRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Empty applies tenant-wide; naming a facility overrides.
+	FacilityId    string            `protobuf:"bytes,1,opt,name=facility_id,json=facilityId,proto3" json:"facility_id,omitempty"`
+	Policy        *SchedulingPolicy `protobuf:"bytes,2,opt,name=policy,proto3" json:"policy,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetSchedulingPolicyRequest) Reset() {
+	*x = SetSchedulingPolicyRequest{}
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetSchedulingPolicyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetSchedulingPolicyRequest) ProtoMessage() {}
+
+func (x *SetSchedulingPolicyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetSchedulingPolicyRequest.ProtoReflect.Descriptor instead.
+func (*SetSchedulingPolicyRequest) Descriptor() ([]byte, []int) {
+	return file_healthcare_scheduling_v1_appointment_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *SetSchedulingPolicyRequest) GetFacilityId() string {
+	if x != nil {
+		return x.FacilityId
+	}
+	return ""
+}
+
+func (x *SetSchedulingPolicyRequest) GetPolicy() *SchedulingPolicy {
+	if x != nil {
+		return x.Policy
+	}
+	return nil
+}
+
+type SetSchedulingPolicyResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetSchedulingPolicyResponse) Reset() {
+	*x = SetSchedulingPolicyResponse{}
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetSchedulingPolicyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetSchedulingPolicyResponse) ProtoMessage() {}
+
+func (x *SetSchedulingPolicyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetSchedulingPolicyResponse.ProtoReflect.Descriptor instead.
+func (*SetSchedulingPolicyResponse) Descriptor() ([]byte, []int) {
+	return file_healthcare_scheduling_v1_appointment_proto_rawDescGZIP(), []int{31}
+}
+
+type BookSeriesRequest struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	PatientId  string                 `protobuf:"bytes,1,opt,name=patient_id,json=patientId,proto3" json:"patient_id,omitempty"`
+	ResourceId string                 `protobuf:"bytes,2,opt,name=resource_id,json=resourceId,proto3" json:"resource_id,omitempty"`
+	StartsAt   *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=starts_at,json=startsAt,proto3" json:"starts_at,omitempty"`
+	VisitType  VisitType              `protobuf:"varint,4,opt,name=visit_type,json=visitType,proto3,enum=healthcare.scheduling.v1.VisitType" json:"visit_type,omitempty"`
+	// Seven for a weekly course, which is most of them.
+	IntervalDays  int32  `protobuf:"varint,5,opt,name=interval_days,json=intervalDays,proto3" json:"interval_days,omitempty"`
+	Occurrences   int32  `protobuf:"varint,6,opt,name=occurrences,proto3" json:"occurrences,omitempty"`
+	Reason        string `protobuf:"bytes,7,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BookSeriesRequest) Reset() {
+	*x = BookSeriesRequest{}
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BookSeriesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BookSeriesRequest) ProtoMessage() {}
+
+func (x *BookSeriesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BookSeriesRequest.ProtoReflect.Descriptor instead.
+func (*BookSeriesRequest) Descriptor() ([]byte, []int) {
+	return file_healthcare_scheduling_v1_appointment_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *BookSeriesRequest) GetPatientId() string {
+	if x != nil {
+		return x.PatientId
+	}
+	return ""
+}
+
+func (x *BookSeriesRequest) GetResourceId() string {
+	if x != nil {
+		return x.ResourceId
+	}
+	return ""
+}
+
+func (x *BookSeriesRequest) GetStartsAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StartsAt
+	}
+	return nil
+}
+
+func (x *BookSeriesRequest) GetVisitType() VisitType {
+	if x != nil {
+		return x.VisitType
+	}
+	return VisitType_VISIT_TYPE_UNSPECIFIED
+}
+
+func (x *BookSeriesRequest) GetIntervalDays() int32 {
+	if x != nil {
+		return x.IntervalDays
+	}
+	return 0
+}
+
+func (x *BookSeriesRequest) GetOccurrences() int32 {
+	if x != nil {
+		return x.Occurrences
+	}
+	return 0
+}
+
+func (x *BookSeriesRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type BookSeriesResponse struct {
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	SeriesId     string                 `protobuf:"bytes,1,opt,name=series_id,json=seriesId,proto3" json:"series_id,omitempty"`
+	Appointments []*Appointment         `protobuf:"bytes,2,rep,name=appointments,proto3" json:"appointments,omitempty"`
+	// The occurrences whose slot was gone. Reported rather than refused: a
+	// twelve-week course where week seven is full is eleven appointments the
+	// patient should keep.
+	Unavailable   []*timestamppb.Timestamp `protobuf:"bytes,3,rep,name=unavailable,proto3" json:"unavailable,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BookSeriesResponse) Reset() {
+	*x = BookSeriesResponse{}
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BookSeriesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BookSeriesResponse) ProtoMessage() {}
+
+func (x *BookSeriesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BookSeriesResponse.ProtoReflect.Descriptor instead.
+func (*BookSeriesResponse) Descriptor() ([]byte, []int) {
+	return file_healthcare_scheduling_v1_appointment_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *BookSeriesResponse) GetSeriesId() string {
+	if x != nil {
+		return x.SeriesId
+	}
+	return ""
+}
+
+func (x *BookSeriesResponse) GetAppointments() []*Appointment {
+	if x != nil {
+		return x.Appointments
+	}
+	return nil
+}
+
+func (x *BookSeriesResponse) GetUnavailable() []*timestamppb.Timestamp {
+	if x != nil {
+		return x.Unavailable
+	}
+	return nil
+}
+
+type CancelSeriesRequest struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	SeriesId string                 `protobuf:"bytes,1,opt,name=series_id,json=seriesId,proto3" json:"series_id,omitempty"`
+	// The occurrence a future-occurrences change pivots on. Empty with
+	// FUTURE_OCCURRENCES means every remaining occurrence.
+	FromAppointmentId string      `protobuf:"bytes,2,opt,name=from_appointment_id,json=fromAppointmentId,proto3" json:"from_appointment_id,omitempty"`
+	Scope             SeriesScope `protobuf:"varint,3,opt,name=scope,proto3,enum=healthcare.scheduling.v1.SeriesScope" json:"scope,omitempty"`
+	Reason            string      `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *CancelSeriesRequest) Reset() {
+	*x = CancelSeriesRequest{}
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CancelSeriesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CancelSeriesRequest) ProtoMessage() {}
+
+func (x *CancelSeriesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CancelSeriesRequest.ProtoReflect.Descriptor instead.
+func (*CancelSeriesRequest) Descriptor() ([]byte, []int) {
+	return file_healthcare_scheduling_v1_appointment_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *CancelSeriesRequest) GetSeriesId() string {
+	if x != nil {
+		return x.SeriesId
+	}
+	return ""
+}
+
+func (x *CancelSeriesRequest) GetFromAppointmentId() string {
+	if x != nil {
+		return x.FromAppointmentId
+	}
+	return ""
+}
+
+func (x *CancelSeriesRequest) GetScope() SeriesScope {
+	if x != nil {
+		return x.Scope
+	}
+	return SeriesScope_SERIES_SCOPE_UNSPECIFIED
+}
+
+func (x *CancelSeriesRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type CancelSeriesResponse struct {
+	state                   protoimpl.MessageState `protogen:"open.v1"`
+	CancelledAppointmentIds []string               `protobuf:"bytes,1,rep,name=cancelled_appointment_ids,json=cancelledAppointmentIds,proto3" json:"cancelled_appointment_ids,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
+}
+
+func (x *CancelSeriesResponse) Reset() {
+	*x = CancelSeriesResponse{}
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CancelSeriesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CancelSeriesResponse) ProtoMessage() {}
+
+func (x *CancelSeriesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CancelSeriesResponse.ProtoReflect.Descriptor instead.
+func (*CancelSeriesResponse) Descriptor() ([]byte, []int) {
+	return file_healthcare_scheduling_v1_appointment_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *CancelSeriesResponse) GetCancelledAppointmentIds() []string {
+	if x != nil {
+		return x.CancelledAppointmentIds
+	}
+	return nil
+}
+
+type WaitlistEntry struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	WaitlistId string                 `protobuf:"bytes,1,opt,name=waitlist_id,json=waitlistId,proto3" json:"waitlist_id,omitempty"`
+	PatientId  string                 `protobuf:"bytes,2,opt,name=patient_id,json=patientId,proto3" json:"patient_id,omitempty"`
+	ResourceId string                 `protobuf:"bytes,3,opt,name=resource_id,json=resourceId,proto3" json:"resource_id,omitempty"`
+	FacilityId string                 `protobuf:"bytes,4,opt,name=facility_id,json=facilityId,proto3" json:"facility_id,omitempty"`
+	OrgUnitId  string                 `protobuf:"bytes,5,opt,name=org_unit_id,json=orgUnitId,proto3" json:"org_unit_id,omitempty"`
+	VisitType  VisitType              `protobuf:"varint,6,opt,name=visit_type,json=visitType,proto3,enum=healthcare.scheduling.v1.VisitType" json:"visit_type,omitempty"`
+	// A patient who cannot come before Thursday should not be offered Wednesday.
+	NotBefore *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=not_before,json=notBefore,proto3" json:"not_before,omitempty"`
+	NotAfter  *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=not_after,json=notAfter,proto3" json:"not_after,omitempty"`
+	// The booking this patient already holds, if any. An earlier slot accepted
+	// becomes a reschedule of it rather than a second booking.
+	AppointmentId string                 `protobuf:"bytes,9,opt,name=appointment_id,json=appointmentId,proto3" json:"appointment_id,omitempty"`
+	Status        WaitlistStatus         `protobuf:"varint,10,opt,name=status,proto3,enum=healthcare.scheduling.v1.WaitlistStatus" json:"status,omitempty"`
+	OfferedSlotAt *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=offered_slot_at,json=offeredSlotAt,proto3" json:"offered_slot_at,omitempty"`
+	// A slot promised to somebody who has stopped reading their messages is
+	// capacity nobody can use, so the offer expires.
+	OfferExpiresAt *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=offer_expires_at,json=offerExpiresAt,proto3" json:"offer_expires_at,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *WaitlistEntry) Reset() {
+	*x = WaitlistEntry{}
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WaitlistEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WaitlistEntry) ProtoMessage() {}
+
+func (x *WaitlistEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WaitlistEntry.ProtoReflect.Descriptor instead.
+func (*WaitlistEntry) Descriptor() ([]byte, []int) {
+	return file_healthcare_scheduling_v1_appointment_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *WaitlistEntry) GetWaitlistId() string {
+	if x != nil {
+		return x.WaitlistId
+	}
+	return ""
+}
+
+func (x *WaitlistEntry) GetPatientId() string {
+	if x != nil {
+		return x.PatientId
+	}
+	return ""
+}
+
+func (x *WaitlistEntry) GetResourceId() string {
+	if x != nil {
+		return x.ResourceId
+	}
+	return ""
+}
+
+func (x *WaitlistEntry) GetFacilityId() string {
+	if x != nil {
+		return x.FacilityId
+	}
+	return ""
+}
+
+func (x *WaitlistEntry) GetOrgUnitId() string {
+	if x != nil {
+		return x.OrgUnitId
+	}
+	return ""
+}
+
+func (x *WaitlistEntry) GetVisitType() VisitType {
+	if x != nil {
+		return x.VisitType
+	}
+	return VisitType_VISIT_TYPE_UNSPECIFIED
+}
+
+func (x *WaitlistEntry) GetNotBefore() *timestamppb.Timestamp {
+	if x != nil {
+		return x.NotBefore
+	}
+	return nil
+}
+
+func (x *WaitlistEntry) GetNotAfter() *timestamppb.Timestamp {
+	if x != nil {
+		return x.NotAfter
+	}
+	return nil
+}
+
+func (x *WaitlistEntry) GetAppointmentId() string {
+	if x != nil {
+		return x.AppointmentId
+	}
+	return ""
+}
+
+func (x *WaitlistEntry) GetStatus() WaitlistStatus {
+	if x != nil {
+		return x.Status
+	}
+	return WaitlistStatus_WAITLIST_STATUS_UNSPECIFIED
+}
+
+func (x *WaitlistEntry) GetOfferedSlotAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.OfferedSlotAt
+	}
+	return nil
+}
+
+func (x *WaitlistEntry) GetOfferExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.OfferExpiresAt
+	}
+	return nil
+}
+
+type JoinWaitlistRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PatientId     string                 `protobuf:"bytes,1,opt,name=patient_id,json=patientId,proto3" json:"patient_id,omitempty"`
+	ResourceId    string                 `protobuf:"bytes,2,opt,name=resource_id,json=resourceId,proto3" json:"resource_id,omitempty"`
+	FacilityId    string                 `protobuf:"bytes,3,opt,name=facility_id,json=facilityId,proto3" json:"facility_id,omitempty"`
+	OrgUnitId     string                 `protobuf:"bytes,4,opt,name=org_unit_id,json=orgUnitId,proto3" json:"org_unit_id,omitempty"`
+	VisitType     VisitType              `protobuf:"varint,5,opt,name=visit_type,json=visitType,proto3,enum=healthcare.scheduling.v1.VisitType" json:"visit_type,omitempty"`
+	NotBefore     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=not_before,json=notBefore,proto3" json:"not_before,omitempty"`
+	NotAfter      *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=not_after,json=notAfter,proto3" json:"not_after,omitempty"`
+	AppointmentId string                 `protobuf:"bytes,8,opt,name=appointment_id,json=appointmentId,proto3" json:"appointment_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *JoinWaitlistRequest) Reset() {
+	*x = JoinWaitlistRequest{}
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *JoinWaitlistRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*JoinWaitlistRequest) ProtoMessage() {}
+
+func (x *JoinWaitlistRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use JoinWaitlistRequest.ProtoReflect.Descriptor instead.
+func (*JoinWaitlistRequest) Descriptor() ([]byte, []int) {
+	return file_healthcare_scheduling_v1_appointment_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *JoinWaitlistRequest) GetPatientId() string {
+	if x != nil {
+		return x.PatientId
+	}
+	return ""
+}
+
+func (x *JoinWaitlistRequest) GetResourceId() string {
+	if x != nil {
+		return x.ResourceId
+	}
+	return ""
+}
+
+func (x *JoinWaitlistRequest) GetFacilityId() string {
+	if x != nil {
+		return x.FacilityId
+	}
+	return ""
+}
+
+func (x *JoinWaitlistRequest) GetOrgUnitId() string {
+	if x != nil {
+		return x.OrgUnitId
+	}
+	return ""
+}
+
+func (x *JoinWaitlistRequest) GetVisitType() VisitType {
+	if x != nil {
+		return x.VisitType
+	}
+	return VisitType_VISIT_TYPE_UNSPECIFIED
+}
+
+func (x *JoinWaitlistRequest) GetNotBefore() *timestamppb.Timestamp {
+	if x != nil {
+		return x.NotBefore
+	}
+	return nil
+}
+
+func (x *JoinWaitlistRequest) GetNotAfter() *timestamppb.Timestamp {
+	if x != nil {
+		return x.NotAfter
+	}
+	return nil
+}
+
+func (x *JoinWaitlistRequest) GetAppointmentId() string {
+	if x != nil {
+		return x.AppointmentId
+	}
+	return ""
+}
+
+type JoinWaitlistResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Entry         *WaitlistEntry         `protobuf:"bytes,1,opt,name=entry,proto3" json:"entry,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *JoinWaitlistResponse) Reset() {
+	*x = JoinWaitlistResponse{}
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *JoinWaitlistResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*JoinWaitlistResponse) ProtoMessage() {}
+
+func (x *JoinWaitlistResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use JoinWaitlistResponse.ProtoReflect.Descriptor instead.
+func (*JoinWaitlistResponse) Descriptor() ([]byte, []int) {
+	return file_healthcare_scheduling_v1_appointment_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *JoinWaitlistResponse) GetEntry() *WaitlistEntry {
+	if x != nil {
+		return x.Entry
+	}
+	return nil
+}
+
+type OfferWaitlistSlotRequest struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	WaitlistId string                 `protobuf:"bytes,1,opt,name=waitlist_id,json=waitlistId,proto3" json:"waitlist_id,omitempty"`
+	ResourceId string                 `protobuf:"bytes,2,opt,name=resource_id,json=resourceId,proto3" json:"resource_id,omitempty"`
+	StartsAt   *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=starts_at,json=startsAt,proto3" json:"starts_at,omitempty"`
+	VisitType  VisitType              `protobuf:"varint,4,opt,name=visit_type,json=visitType,proto3,enum=healthcare.scheduling.v1.VisitType" json:"visit_type,omitempty"`
+	// How long the offer stands. Zero takes the default.
+	ValidForMinutes int32 `protobuf:"varint,5,opt,name=valid_for_minutes,json=validForMinutes,proto3" json:"valid_for_minutes,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *OfferWaitlistSlotRequest) Reset() {
+	*x = OfferWaitlistSlotRequest{}
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OfferWaitlistSlotRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OfferWaitlistSlotRequest) ProtoMessage() {}
+
+func (x *OfferWaitlistSlotRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OfferWaitlistSlotRequest.ProtoReflect.Descriptor instead.
+func (*OfferWaitlistSlotRequest) Descriptor() ([]byte, []int) {
+	return file_healthcare_scheduling_v1_appointment_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *OfferWaitlistSlotRequest) GetWaitlistId() string {
+	if x != nil {
+		return x.WaitlistId
+	}
+	return ""
+}
+
+func (x *OfferWaitlistSlotRequest) GetResourceId() string {
+	if x != nil {
+		return x.ResourceId
+	}
+	return ""
+}
+
+func (x *OfferWaitlistSlotRequest) GetStartsAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StartsAt
+	}
+	return nil
+}
+
+func (x *OfferWaitlistSlotRequest) GetVisitType() VisitType {
+	if x != nil {
+		return x.VisitType
+	}
+	return VisitType_VISIT_TYPE_UNSPECIFIED
+}
+
+func (x *OfferWaitlistSlotRequest) GetValidForMinutes() int32 {
+	if x != nil {
+		return x.ValidForMinutes
+	}
+	return 0
+}
+
+type OfferWaitlistSlotResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Entry         *WaitlistEntry         `protobuf:"bytes,1,opt,name=entry,proto3" json:"entry,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OfferWaitlistSlotResponse) Reset() {
+	*x = OfferWaitlistSlotResponse{}
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OfferWaitlistSlotResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OfferWaitlistSlotResponse) ProtoMessage() {}
+
+func (x *OfferWaitlistSlotResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OfferWaitlistSlotResponse.ProtoReflect.Descriptor instead.
+func (*OfferWaitlistSlotResponse) Descriptor() ([]byte, []int) {
+	return file_healthcare_scheduling_v1_appointment_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *OfferWaitlistSlotResponse) GetEntry() *WaitlistEntry {
+	if x != nil {
+		return x.Entry
+	}
+	return nil
+}
+
+type AcceptWaitlistOfferRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	WaitlistId    string                 `protobuf:"bytes,1,opt,name=waitlist_id,json=waitlistId,proto3" json:"waitlist_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AcceptWaitlistOfferRequest) Reset() {
+	*x = AcceptWaitlistOfferRequest{}
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AcceptWaitlistOfferRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AcceptWaitlistOfferRequest) ProtoMessage() {}
+
+func (x *AcceptWaitlistOfferRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AcceptWaitlistOfferRequest.ProtoReflect.Descriptor instead.
+func (*AcceptWaitlistOfferRequest) Descriptor() ([]byte, []int) {
+	return file_healthcare_scheduling_v1_appointment_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *AcceptWaitlistOfferRequest) GetWaitlistId() string {
+	if x != nil {
+		return x.WaitlistId
+	}
+	return ""
+}
+
+type AcceptWaitlistOfferResponse struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Entry       *WaitlistEntry         `protobuf:"bytes,1,opt,name=entry,proto3" json:"entry,omitempty"`
+	Appointment *Appointment           `protobuf:"bytes,2,opt,name=appointment,proto3" json:"appointment,omitempty"`
+	// The appointment the patient gave up, if any. Cancelled rather than left
+	// standing: two confirmed bookings is exactly what SRS-SCH-006 forbids.
+	ReplacedAppointmentId string `protobuf:"bytes,3,opt,name=replaced_appointment_id,json=replacedAppointmentId,proto3" json:"replaced_appointment_id,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *AcceptWaitlistOfferResponse) Reset() {
+	*x = AcceptWaitlistOfferResponse{}
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AcceptWaitlistOfferResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AcceptWaitlistOfferResponse) ProtoMessage() {}
+
+func (x *AcceptWaitlistOfferResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AcceptWaitlistOfferResponse.ProtoReflect.Descriptor instead.
+func (*AcceptWaitlistOfferResponse) Descriptor() ([]byte, []int) {
+	return file_healthcare_scheduling_v1_appointment_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *AcceptWaitlistOfferResponse) GetEntry() *WaitlistEntry {
+	if x != nil {
+		return x.Entry
+	}
+	return nil
+}
+
+func (x *AcceptWaitlistOfferResponse) GetAppointment() *Appointment {
+	if x != nil {
+		return x.Appointment
+	}
+	return nil
+}
+
+func (x *AcceptWaitlistOfferResponse) GetReplacedAppointmentId() string {
+	if x != nil {
+		return x.ReplacedAppointmentId
+	}
+	return ""
+}
+
+type DeclineWaitlistOfferRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	WaitlistId    string                 `protobuf:"bytes,1,opt,name=waitlist_id,json=waitlistId,proto3" json:"waitlist_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeclineWaitlistOfferRequest) Reset() {
+	*x = DeclineWaitlistOfferRequest{}
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeclineWaitlistOfferRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeclineWaitlistOfferRequest) ProtoMessage() {}
+
+func (x *DeclineWaitlistOfferRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeclineWaitlistOfferRequest.ProtoReflect.Descriptor instead.
+func (*DeclineWaitlistOfferRequest) Descriptor() ([]byte, []int) {
+	return file_healthcare_scheduling_v1_appointment_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *DeclineWaitlistOfferRequest) GetWaitlistId() string {
+	if x != nil {
+		return x.WaitlistId
+	}
+	return ""
+}
+
+type DeclineWaitlistOfferResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Entry         *WaitlistEntry         `protobuf:"bytes,1,opt,name=entry,proto3" json:"entry,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeclineWaitlistOfferResponse) Reset() {
+	*x = DeclineWaitlistOfferResponse{}
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[44]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeclineWaitlistOfferResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeclineWaitlistOfferResponse) ProtoMessage() {}
+
+func (x *DeclineWaitlistOfferResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[44]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeclineWaitlistOfferResponse.ProtoReflect.Descriptor instead.
+func (*DeclineWaitlistOfferResponse) Descriptor() ([]byte, []int) {
+	return file_healthcare_scheduling_v1_appointment_proto_rawDescGZIP(), []int{44}
+}
+
+func (x *DeclineWaitlistOfferResponse) GetEntry() *WaitlistEntry {
+	if x != nil {
+		return x.Entry
+	}
+	return nil
+}
+
+type ListWaitlistRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ResourceId    string                 `protobuf:"bytes,1,opt,name=resource_id,json=resourceId,proto3" json:"resource_id,omitempty"`
+	PageSize      int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListWaitlistRequest) Reset() {
+	*x = ListWaitlistRequest{}
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[45]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListWaitlistRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListWaitlistRequest) ProtoMessage() {}
+
+func (x *ListWaitlistRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[45]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListWaitlistRequest.ProtoReflect.Descriptor instead.
+func (*ListWaitlistRequest) Descriptor() ([]byte, []int) {
+	return file_healthcare_scheduling_v1_appointment_proto_rawDescGZIP(), []int{45}
+}
+
+func (x *ListWaitlistRequest) GetResourceId() string {
+	if x != nil {
+		return x.ResourceId
+	}
+	return ""
+}
+
+func (x *ListWaitlistRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+type ListWaitlistResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Entries       []*WaitlistEntry       `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListWaitlistResponse) Reset() {
+	*x = ListWaitlistResponse{}
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListWaitlistResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListWaitlistResponse) ProtoMessage() {}
+
+func (x *ListWaitlistResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[46]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListWaitlistResponse.ProtoReflect.Descriptor instead.
+func (*ListWaitlistResponse) Descriptor() ([]byte, []int) {
+	return file_healthcare_scheduling_v1_appointment_proto_rawDescGZIP(), []int{46}
+}
+
+func (x *ListWaitlistResponse) GetEntries() []*WaitlistEntry {
+	if x != nil {
+		return x.Entries
+	}
+	return nil
+}
+
+type ExpireWaitlistOffersRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExpireWaitlistOffersRequest) Reset() {
+	*x = ExpireWaitlistOffersRequest{}
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[47]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExpireWaitlistOffersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExpireWaitlistOffersRequest) ProtoMessage() {}
+
+func (x *ExpireWaitlistOffersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[47]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExpireWaitlistOffersRequest.ProtoReflect.Descriptor instead.
+func (*ExpireWaitlistOffersRequest) Descriptor() ([]byte, []int) {
+	return file_healthcare_scheduling_v1_appointment_proto_rawDescGZIP(), []int{47}
+}
+
+type ExpireWaitlistOffersResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Expired       int64                  `protobuf:"varint,1,opt,name=expired,proto3" json:"expired,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExpireWaitlistOffersResponse) Reset() {
+	*x = ExpireWaitlistOffersResponse{}
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[48]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExpireWaitlistOffersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExpireWaitlistOffersResponse) ProtoMessage() {}
+
+func (x *ExpireWaitlistOffersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_scheduling_v1_appointment_proto_msgTypes[48]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExpireWaitlistOffersResponse.ProtoReflect.Descriptor instead.
+func (*ExpireWaitlistOffersResponse) Descriptor() ([]byte, []int) {
+	return file_healthcare_scheduling_v1_appointment_proto_rawDescGZIP(), []int{48}
+}
+
+func (x *ExpireWaitlistOffersResponse) GetExpired() int64 {
+	if x != nil {
+		return x.Expired
+	}
+	return 0
+}
+
 var File_healthcare_scheduling_v1_appointment_proto protoreflect.FileDescriptor
 
 const file_healthcare_scheduling_v1_appointment_proto_rawDesc = "" +
@@ -2292,7 +4005,7 @@ const file_healthcare_scheduling_v1_appointment_proto_rawDesc = "" +
 	"\x02at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x02at\x12\x0e\n" +
 	"\x02by\x18\x04 \x01(\tR\x02by\x12\x16\n" +
 	"\x06reason\x18\x05 \x01(\tR\x06reason\x12\x1c\n" +
-	"\tcorrected\x18\x06 \x01(\bR\tcorrected\"\xb1\x05\n" +
+	"\tcorrected\x18\x06 \x01(\bR\tcorrected\"\xb4\x06\n" +
 	"\vAppointment\x12%\n" +
 	"\x0eappointment_id\x18\x01 \x01(\tR\rappointmentId\x12\x1f\n" +
 	"\vfacility_id\x18\x02 \x01(\tR\n" +
@@ -2314,7 +4027,13 @@ const file_healthcare_scheduling_v1_appointment_proto_rawDesc = "" +
 	"\x06reason\x18\f \x01(\tR\x06reason\x12@\n" +
 	"\ahistory\x18\r \x03(\v2&.healthcare.scheduling.v1.StatusChangeR\ahistory\x12.\n" +
 	"\x13rescheduled_from_id\x18\x0e \x01(\tR\x11rescheduledFromId\x12\x18\n" +
-	"\aversion\x18\x0f \x01(\x03R\aversion\"\xf3\x01\n" +
+	"\aversion\x18\x0f \x01(\x03R\aversion\x12\x1b\n" +
+	"\tseries_id\x18\x10 \x01(\tR\bseriesId\x12\x1e\n" +
+	"\n" +
+	"occurrence\x18\x11 \x01(\x05R\n" +
+	"occurrence\x12)\n" +
+	"\x10reschedule_count\x18\x12 \x01(\x05R\x0frescheduleCount\x12\x19\n" +
+	"\bjoin_url\x18\x13 \x01(\tR\ajoinUrl\"\xf3\x01\n" +
 	"\x15DefineResourceRequest\x12\x1f\n" +
 	"\vfacility_id\x18\x01 \x01(\tR\n" +
 	"facilityId\x12\x1e\n" +
@@ -2405,7 +4124,136 @@ const file_healthcare_scheduling_v1_appointment_proto_rawDesc = "" +
 	"\x05until\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x05until\x12\x1b\n" +
 	"\tpage_size\x18\x06 \x01(\x05R\bpageSize\"e\n" +
 	"\x18ListAppointmentsResponse\x12I\n" +
-	"\fappointments\x18\x01 \x03(\v2%.healthcare.scheduling.v1.AppointmentR\fappointments*\x82\x01\n" +
+	"\fappointments\x18\x01 \x03(\v2%.healthcare.scheduling.v1.AppointmentR\fappointments\"\xb1\x01\n" +
+	"\rPolicyOutcome\x12\x16\n" +
+	"\x06timely\x18\x01 \x01(\bR\x06timely\x120\n" +
+	"\x14notice_given_minutes\x18\x02 \x01(\x05R\x12noticeGivenMinutes\x126\n" +
+	"\x17notice_required_minutes\x18\x03 \x01(\x05R\x15noticeRequiredMinutes\x12\x1e\n" +
+	"\n" +
+	"chargeable\x18\x04 \x01(\bR\n" +
+	"chargeable\"Y\n" +
+	"\x18CancelAppointmentRequest\x12%\n" +
+	"\x0eappointment_id\x18\x01 \x01(\tR\rappointmentId\x12\x16\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\"\xa7\x01\n" +
+	"\x19CancelAppointmentResponse\x12G\n" +
+	"\vappointment\x18\x01 \x01(\v2%.healthcare.scheduling.v1.AppointmentR\vappointment\x12A\n" +
+	"\aoutcome\x18\x02 \x01(\v2'.healthcare.scheduling.v1.PolicyOutcomeR\aoutcome\"\x97\x02\n" +
+	"\x1cRescheduleAppointmentRequest\x12%\n" +
+	"\x0eappointment_id\x18\x01 \x01(\tR\rappointmentId\x12\x1f\n" +
+	"\vresource_id\x18\x02 \x01(\tR\n" +
+	"resourceId\x127\n" +
+	"\tstarts_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\bstartsAt\x12B\n" +
+	"\n" +
+	"visit_type\x18\x04 \x01(\x0e2#.healthcare.scheduling.v1.VisitTypeR\tvisitType\x12\x16\n" +
+	"\x06reason\x18\x05 \x01(\tR\x06reason\x12\x1a\n" +
+	"\boverride\x18\x06 \x01(\bR\boverride\"\xe3\x01\n" +
+	"\x1dRescheduleAppointmentResponse\x12G\n" +
+	"\vappointment\x18\x01 \x01(\v2%.healthcare.scheduling.v1.AppointmentR\vappointment\x126\n" +
+	"\x17previous_appointment_id\x18\x02 \x01(\tR\x15previousAppointmentId\x12A\n" +
+	"\aoutcome\x18\x03 \x01(\v2'.healthcare.scheduling.v1.PolicyOutcomeR\aoutcome\"\xad\x03\n" +
+	"\x10SchedulingPolicy\x12!\n" +
+	"\fnotice_hours\x18\x01 \x01(\x05R\vnoticeHours\x126\n" +
+	"\x17reschedule_notice_hours\x18\x02 \x01(\x05R\x15rescheduleNoticeHours\x12'\n" +
+	"\x0fmax_reschedules\x18\x03 \x01(\x05R\x0emaxReschedules\x120\n" +
+	"\x14chargeable_when_late\x18\x04 \x01(\bR\x12chargeableWhenLate\x12/\n" +
+	"\x13teleconsult_enabled\x18\x05 \x01(\bR\x12teleconsultEnabled\x12[\n" +
+	"\x17teleconsult_visit_types\x18\x06 \x03(\x0e2#.healthcare.scheduling.v1.VisitTypeR\x15teleconsultVisitTypes\x12U\n" +
+	"'teleconsult_requires_confirmed_identity\x18\a \x01(\bR$teleconsultRequiresConfirmedIdentity\"\x81\x01\n" +
+	"\x1aSetSchedulingPolicyRequest\x12\x1f\n" +
+	"\vfacility_id\x18\x01 \x01(\tR\n" +
+	"facilityId\x12B\n" +
+	"\x06policy\x18\x02 \x01(\v2*.healthcare.scheduling.v1.SchedulingPolicyR\x06policy\"\x1d\n" +
+	"\x1bSetSchedulingPolicyResponse\"\xaf\x02\n" +
+	"\x11BookSeriesRequest\x12\x1d\n" +
+	"\n" +
+	"patient_id\x18\x01 \x01(\tR\tpatientId\x12\x1f\n" +
+	"\vresource_id\x18\x02 \x01(\tR\n" +
+	"resourceId\x127\n" +
+	"\tstarts_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\bstartsAt\x12B\n" +
+	"\n" +
+	"visit_type\x18\x04 \x01(\x0e2#.healthcare.scheduling.v1.VisitTypeR\tvisitType\x12#\n" +
+	"\rinterval_days\x18\x05 \x01(\x05R\fintervalDays\x12 \n" +
+	"\voccurrences\x18\x06 \x01(\x05R\voccurrences\x12\x16\n" +
+	"\x06reason\x18\a \x01(\tR\x06reason\"\xba\x01\n" +
+	"\x12BookSeriesResponse\x12\x1b\n" +
+	"\tseries_id\x18\x01 \x01(\tR\bseriesId\x12I\n" +
+	"\fappointments\x18\x02 \x03(\v2%.healthcare.scheduling.v1.AppointmentR\fappointments\x12<\n" +
+	"\vunavailable\x18\x03 \x03(\v2\x1a.google.protobuf.TimestampR\vunavailable\"\xb7\x01\n" +
+	"\x13CancelSeriesRequest\x12\x1b\n" +
+	"\tseries_id\x18\x01 \x01(\tR\bseriesId\x12.\n" +
+	"\x13from_appointment_id\x18\x02 \x01(\tR\x11fromAppointmentId\x12;\n" +
+	"\x05scope\x18\x03 \x01(\x0e2%.healthcare.scheduling.v1.SeriesScopeR\x05scope\x12\x16\n" +
+	"\x06reason\x18\x04 \x01(\tR\x06reason\"R\n" +
+	"\x14CancelSeriesResponse\x12:\n" +
+	"\x19cancelled_appointment_ids\x18\x01 \x03(\tR\x17cancelledAppointmentIds\"\xdc\x04\n" +
+	"\rWaitlistEntry\x12\x1f\n" +
+	"\vwaitlist_id\x18\x01 \x01(\tR\n" +
+	"waitlistId\x12\x1d\n" +
+	"\n" +
+	"patient_id\x18\x02 \x01(\tR\tpatientId\x12\x1f\n" +
+	"\vresource_id\x18\x03 \x01(\tR\n" +
+	"resourceId\x12\x1f\n" +
+	"\vfacility_id\x18\x04 \x01(\tR\n" +
+	"facilityId\x12\x1e\n" +
+	"\vorg_unit_id\x18\x05 \x01(\tR\torgUnitId\x12B\n" +
+	"\n" +
+	"visit_type\x18\x06 \x01(\x0e2#.healthcare.scheduling.v1.VisitTypeR\tvisitType\x129\n" +
+	"\n" +
+	"not_before\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tnotBefore\x127\n" +
+	"\tnot_after\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\bnotAfter\x12%\n" +
+	"\x0eappointment_id\x18\t \x01(\tR\rappointmentId\x12@\n" +
+	"\x06status\x18\n" +
+	" \x01(\x0e2(.healthcare.scheduling.v1.WaitlistStatusR\x06status\x12B\n" +
+	"\x0foffered_slot_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\rofferedSlotAt\x12D\n" +
+	"\x10offer_expires_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\x0eofferExpiresAt\"\xf5\x02\n" +
+	"\x13JoinWaitlistRequest\x12\x1d\n" +
+	"\n" +
+	"patient_id\x18\x01 \x01(\tR\tpatientId\x12\x1f\n" +
+	"\vresource_id\x18\x02 \x01(\tR\n" +
+	"resourceId\x12\x1f\n" +
+	"\vfacility_id\x18\x03 \x01(\tR\n" +
+	"facilityId\x12\x1e\n" +
+	"\vorg_unit_id\x18\x04 \x01(\tR\torgUnitId\x12B\n" +
+	"\n" +
+	"visit_type\x18\x05 \x01(\x0e2#.healthcare.scheduling.v1.VisitTypeR\tvisitType\x129\n" +
+	"\n" +
+	"not_before\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tnotBefore\x127\n" +
+	"\tnot_after\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\bnotAfter\x12%\n" +
+	"\x0eappointment_id\x18\b \x01(\tR\rappointmentId\"U\n" +
+	"\x14JoinWaitlistResponse\x12=\n" +
+	"\x05entry\x18\x01 \x01(\v2'.healthcare.scheduling.v1.WaitlistEntryR\x05entry\"\x85\x02\n" +
+	"\x18OfferWaitlistSlotRequest\x12\x1f\n" +
+	"\vwaitlist_id\x18\x01 \x01(\tR\n" +
+	"waitlistId\x12\x1f\n" +
+	"\vresource_id\x18\x02 \x01(\tR\n" +
+	"resourceId\x127\n" +
+	"\tstarts_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\bstartsAt\x12B\n" +
+	"\n" +
+	"visit_type\x18\x04 \x01(\x0e2#.healthcare.scheduling.v1.VisitTypeR\tvisitType\x12*\n" +
+	"\x11valid_for_minutes\x18\x05 \x01(\x05R\x0fvalidForMinutes\"Z\n" +
+	"\x19OfferWaitlistSlotResponse\x12=\n" +
+	"\x05entry\x18\x01 \x01(\v2'.healthcare.scheduling.v1.WaitlistEntryR\x05entry\"=\n" +
+	"\x1aAcceptWaitlistOfferRequest\x12\x1f\n" +
+	"\vwaitlist_id\x18\x01 \x01(\tR\n" +
+	"waitlistId\"\xdd\x01\n" +
+	"\x1bAcceptWaitlistOfferResponse\x12=\n" +
+	"\x05entry\x18\x01 \x01(\v2'.healthcare.scheduling.v1.WaitlistEntryR\x05entry\x12G\n" +
+	"\vappointment\x18\x02 \x01(\v2%.healthcare.scheduling.v1.AppointmentR\vappointment\x126\n" +
+	"\x17replaced_appointment_id\x18\x03 \x01(\tR\x15replacedAppointmentId\">\n" +
+	"\x1bDeclineWaitlistOfferRequest\x12\x1f\n" +
+	"\vwaitlist_id\x18\x01 \x01(\tR\n" +
+	"waitlistId\"]\n" +
+	"\x1cDeclineWaitlistOfferResponse\x12=\n" +
+	"\x05entry\x18\x01 \x01(\v2'.healthcare.scheduling.v1.WaitlistEntryR\x05entry\"S\n" +
+	"\x13ListWaitlistRequest\x12\x1f\n" +
+	"\vresource_id\x18\x01 \x01(\tR\n" +
+	"resourceId\x12\x1b\n" +
+	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\"Y\n" +
+	"\x14ListWaitlistResponse\x12A\n" +
+	"\aentries\x18\x01 \x03(\v2'.healthcare.scheduling.v1.WaitlistEntryR\aentries\"\x1d\n" +
+	"\x1bExpireWaitlistOffersRequest\"8\n" +
+	"\x1cExpireWaitlistOffersResponse\x12\x18\n" +
+	"\aexpired\x18\x01 \x01(\x03R\aexpired*\x82\x01\n" +
 	"\fResourceType\x12\x1d\n" +
 	"\x19RESOURCE_TYPE_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aRESOURCE_TYPE_PRACTITIONER\x10\x01\x12\x16\n" +
@@ -2443,7 +4291,19 @@ const file_healthcare_scheduling_v1_appointment_proto_rawDesc = "" +
 	"$APPOINTMENT_STATUS_POST_CONSULTATION\x10\x06\x12 \n" +
 	"\x1cAPPOINTMENT_STATUS_COMPLETED\x10\a\x12\x1e\n" +
 	"\x1aAPPOINTMENT_STATUS_NO_SHOW\x10\b\x12 \n" +
-	"\x1cAPPOINTMENT_STATUS_CANCELLED\x10\t2\xae\b\n" +
+	"\x1cAPPOINTMENT_STATUS_CANCELLED\x10\t*r\n" +
+	"\vSeriesScope\x12\x1c\n" +
+	"\x18SERIES_SCOPE_UNSPECIFIED\x10\x00\x12 \n" +
+	"\x1cSERIES_SCOPE_THIS_OCCURRENCE\x10\x01\x12#\n" +
+	"\x1fSERIES_SCOPE_FUTURE_OCCURRENCES\x10\x02*\xe3\x01\n" +
+	"\x0eWaitlistStatus\x12\x1f\n" +
+	"\x1bWAITLIST_STATUS_UNSPECIFIED\x10\x00\x12\x1b\n" +
+	"\x17WAITLIST_STATUS_WAITING\x10\x01\x12\x1b\n" +
+	"\x17WAITLIST_STATUS_OFFERED\x10\x02\x12\x1c\n" +
+	"\x18WAITLIST_STATUS_ACCEPTED\x10\x03\x12\x1c\n" +
+	"\x18WAITLIST_STATUS_DECLINED\x10\x04\x12\x1b\n" +
+	"\x17WAITLIST_STATUS_EXPIRED\x10\x05\x12\x1d\n" +
+	"\x19WAITLIST_STATUS_WITHDRAWN\x10\x062\x85\x13\n" +
 	"\x12AppointmentService\x12s\n" +
 	"\x0eDefineResource\x12/.healthcare.scheduling.v1.DefineResourceRequest\x1a0.healthcare.scheduling.v1.DefineResourceResponse\x12|\n" +
 	"\x11SetResourceStatus\x122.healthcare.scheduling.v1.SetResourceStatusRequest\x1a3.healthcare.scheduling.v1.SetResourceStatusResponse\x12s\n" +
@@ -2451,7 +4311,19 @@ const file_healthcare_scheduling_v1_appointment_proto_rawDesc = "" +
 	"\vBlockPeriod\x12,.healthcare.scheduling.v1.BlockPeriodRequest\x1a-.healthcare.scheduling.v1.BlockPeriodResponse\x12p\n" +
 	"\rUnblockPeriod\x12..healthcare.scheduling.v1.UnblockPeriodRequest\x1a/.healthcare.scheduling.v1.UnblockPeriodResponse\x12j\n" +
 	"\vSearchSlots\x12,.healthcare.scheduling.v1.SearchSlotsRequest\x1a-.healthcare.scheduling.v1.SearchSlotsResponse\x12v\n" +
-	"\x0fBookAppointment\x120.healthcare.scheduling.v1.BookAppointmentRequest\x1a1.healthcare.scheduling.v1.BookAppointmentResponse\x12s\n" +
+	"\x0fBookAppointment\x120.healthcare.scheduling.v1.BookAppointmentRequest\x1a1.healthcare.scheduling.v1.BookAppointmentResponse\x12|\n" +
+	"\x11CancelAppointment\x122.healthcare.scheduling.v1.CancelAppointmentRequest\x1a3.healthcare.scheduling.v1.CancelAppointmentResponse\x12\x88\x01\n" +
+	"\x15RescheduleAppointment\x126.healthcare.scheduling.v1.RescheduleAppointmentRequest\x1a7.healthcare.scheduling.v1.RescheduleAppointmentResponse\x12\x82\x01\n" +
+	"\x13SetSchedulingPolicy\x124.healthcare.scheduling.v1.SetSchedulingPolicyRequest\x1a5.healthcare.scheduling.v1.SetSchedulingPolicyResponse\x12g\n" +
+	"\n" +
+	"BookSeries\x12+.healthcare.scheduling.v1.BookSeriesRequest\x1a,.healthcare.scheduling.v1.BookSeriesResponse\x12m\n" +
+	"\fCancelSeries\x12-.healthcare.scheduling.v1.CancelSeriesRequest\x1a..healthcare.scheduling.v1.CancelSeriesResponse\x12m\n" +
+	"\fJoinWaitlist\x12-.healthcare.scheduling.v1.JoinWaitlistRequest\x1a..healthcare.scheduling.v1.JoinWaitlistResponse\x12|\n" +
+	"\x11OfferWaitlistSlot\x122.healthcare.scheduling.v1.OfferWaitlistSlotRequest\x1a3.healthcare.scheduling.v1.OfferWaitlistSlotResponse\x12\x82\x01\n" +
+	"\x13AcceptWaitlistOffer\x124.healthcare.scheduling.v1.AcceptWaitlistOfferRequest\x1a5.healthcare.scheduling.v1.AcceptWaitlistOfferResponse\x12\x85\x01\n" +
+	"\x14DeclineWaitlistOffer\x125.healthcare.scheduling.v1.DeclineWaitlistOfferRequest\x1a6.healthcare.scheduling.v1.DeclineWaitlistOfferResponse\x12m\n" +
+	"\fListWaitlist\x12-.healthcare.scheduling.v1.ListWaitlistRequest\x1a..healthcare.scheduling.v1.ListWaitlistResponse\x12\x85\x01\n" +
+	"\x14ExpireWaitlistOffers\x125.healthcare.scheduling.v1.ExpireWaitlistOffersRequest\x1a6.healthcare.scheduling.v1.ExpireWaitlistOffersResponse\x12s\n" +
 	"\x0eGetAppointment\x12/.healthcare.scheduling.v1.GetAppointmentRequest\x1a0.healthcare.scheduling.v1.GetAppointmentResponse\x12y\n" +
 	"\x10ListAppointments\x121.healthcare.scheduling.v1.ListAppointmentsRequest\x1a2.healthcare.scheduling.v1.ListAppointmentsResponseBOZMgithub.com/ppusapati/health/code/gen/go/healthcare/scheduling/v1;schedulingv1b\x06proto3"
 
@@ -2467,112 +4339,191 @@ func file_healthcare_scheduling_v1_appointment_proto_rawDescGZIP() []byte {
 	return file_healthcare_scheduling_v1_appointment_proto_rawDescData
 }
 
-var file_healthcare_scheduling_v1_appointment_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
-var file_healthcare_scheduling_v1_appointment_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
+var file_healthcare_scheduling_v1_appointment_proto_enumTypes = make([]protoimpl.EnumInfo, 8)
+var file_healthcare_scheduling_v1_appointment_proto_msgTypes = make([]protoimpl.MessageInfo, 49)
 var file_healthcare_scheduling_v1_appointment_proto_goTypes = []any{
-	(ResourceType)(0),                 // 0: healthcare.scheduling.v1.ResourceType
-	(ResourceStatus)(0),               // 1: healthcare.scheduling.v1.ResourceStatus
-	(VisitType)(0),                    // 2: healthcare.scheduling.v1.VisitType
-	(VisitMode)(0),                    // 3: healthcare.scheduling.v1.VisitMode
-	(ExceptionKind)(0),                // 4: healthcare.scheduling.v1.ExceptionKind
-	(AppointmentStatus)(0),            // 5: healthcare.scheduling.v1.AppointmentStatus
-	(*Resource)(nil),                  // 6: healthcare.scheduling.v1.Resource
-	(*Schedule)(nil),                  // 7: healthcare.scheduling.v1.Schedule
-	(*ScheduleException)(nil),         // 8: healthcare.scheduling.v1.ScheduleException
-	(*Slot)(nil),                      // 9: healthcare.scheduling.v1.Slot
-	(*StatusChange)(nil),              // 10: healthcare.scheduling.v1.StatusChange
-	(*Appointment)(nil),               // 11: healthcare.scheduling.v1.Appointment
-	(*DefineResourceRequest)(nil),     // 12: healthcare.scheduling.v1.DefineResourceRequest
-	(*DefineResourceResponse)(nil),    // 13: healthcare.scheduling.v1.DefineResourceResponse
-	(*SetResourceStatusRequest)(nil),  // 14: healthcare.scheduling.v1.SetResourceStatusRequest
-	(*SetResourceStatusResponse)(nil), // 15: healthcare.scheduling.v1.SetResourceStatusResponse
-	(*DefineScheduleRequest)(nil),     // 16: healthcare.scheduling.v1.DefineScheduleRequest
-	(*DefineScheduleResponse)(nil),    // 17: healthcare.scheduling.v1.DefineScheduleResponse
-	(*BlockPeriodRequest)(nil),        // 18: healthcare.scheduling.v1.BlockPeriodRequest
-	(*BlockPeriodResponse)(nil),       // 19: healthcare.scheduling.v1.BlockPeriodResponse
-	(*UnblockPeriodRequest)(nil),      // 20: healthcare.scheduling.v1.UnblockPeriodRequest
-	(*UnblockPeriodResponse)(nil),     // 21: healthcare.scheduling.v1.UnblockPeriodResponse
-	(*SearchSlotsRequest)(nil),        // 22: healthcare.scheduling.v1.SearchSlotsRequest
-	(*SearchSlotsResponse)(nil),       // 23: healthcare.scheduling.v1.SearchSlotsResponse
-	(*BookAppointmentRequest)(nil),    // 24: healthcare.scheduling.v1.BookAppointmentRequest
-	(*BookAppointmentResponse)(nil),   // 25: healthcare.scheduling.v1.BookAppointmentResponse
-	(*GetAppointmentRequest)(nil),     // 26: healthcare.scheduling.v1.GetAppointmentRequest
-	(*GetAppointmentResponse)(nil),    // 27: healthcare.scheduling.v1.GetAppointmentResponse
-	(*ListAppointmentsRequest)(nil),   // 28: healthcare.scheduling.v1.ListAppointmentsRequest
-	(*ListAppointmentsResponse)(nil),  // 29: healthcare.scheduling.v1.ListAppointmentsResponse
-	(*timestamppb.Timestamp)(nil),     // 30: google.protobuf.Timestamp
+	(ResourceType)(0),                     // 0: healthcare.scheduling.v1.ResourceType
+	(ResourceStatus)(0),                   // 1: healthcare.scheduling.v1.ResourceStatus
+	(VisitType)(0),                        // 2: healthcare.scheduling.v1.VisitType
+	(VisitMode)(0),                        // 3: healthcare.scheduling.v1.VisitMode
+	(ExceptionKind)(0),                    // 4: healthcare.scheduling.v1.ExceptionKind
+	(AppointmentStatus)(0),                // 5: healthcare.scheduling.v1.AppointmentStatus
+	(SeriesScope)(0),                      // 6: healthcare.scheduling.v1.SeriesScope
+	(WaitlistStatus)(0),                   // 7: healthcare.scheduling.v1.WaitlistStatus
+	(*Resource)(nil),                      // 8: healthcare.scheduling.v1.Resource
+	(*Schedule)(nil),                      // 9: healthcare.scheduling.v1.Schedule
+	(*ScheduleException)(nil),             // 10: healthcare.scheduling.v1.ScheduleException
+	(*Slot)(nil),                          // 11: healthcare.scheduling.v1.Slot
+	(*StatusChange)(nil),                  // 12: healthcare.scheduling.v1.StatusChange
+	(*Appointment)(nil),                   // 13: healthcare.scheduling.v1.Appointment
+	(*DefineResourceRequest)(nil),         // 14: healthcare.scheduling.v1.DefineResourceRequest
+	(*DefineResourceResponse)(nil),        // 15: healthcare.scheduling.v1.DefineResourceResponse
+	(*SetResourceStatusRequest)(nil),      // 16: healthcare.scheduling.v1.SetResourceStatusRequest
+	(*SetResourceStatusResponse)(nil),     // 17: healthcare.scheduling.v1.SetResourceStatusResponse
+	(*DefineScheduleRequest)(nil),         // 18: healthcare.scheduling.v1.DefineScheduleRequest
+	(*DefineScheduleResponse)(nil),        // 19: healthcare.scheduling.v1.DefineScheduleResponse
+	(*BlockPeriodRequest)(nil),            // 20: healthcare.scheduling.v1.BlockPeriodRequest
+	(*BlockPeriodResponse)(nil),           // 21: healthcare.scheduling.v1.BlockPeriodResponse
+	(*UnblockPeriodRequest)(nil),          // 22: healthcare.scheduling.v1.UnblockPeriodRequest
+	(*UnblockPeriodResponse)(nil),         // 23: healthcare.scheduling.v1.UnblockPeriodResponse
+	(*SearchSlotsRequest)(nil),            // 24: healthcare.scheduling.v1.SearchSlotsRequest
+	(*SearchSlotsResponse)(nil),           // 25: healthcare.scheduling.v1.SearchSlotsResponse
+	(*BookAppointmentRequest)(nil),        // 26: healthcare.scheduling.v1.BookAppointmentRequest
+	(*BookAppointmentResponse)(nil),       // 27: healthcare.scheduling.v1.BookAppointmentResponse
+	(*GetAppointmentRequest)(nil),         // 28: healthcare.scheduling.v1.GetAppointmentRequest
+	(*GetAppointmentResponse)(nil),        // 29: healthcare.scheduling.v1.GetAppointmentResponse
+	(*ListAppointmentsRequest)(nil),       // 30: healthcare.scheduling.v1.ListAppointmentsRequest
+	(*ListAppointmentsResponse)(nil),      // 31: healthcare.scheduling.v1.ListAppointmentsResponse
+	(*PolicyOutcome)(nil),                 // 32: healthcare.scheduling.v1.PolicyOutcome
+	(*CancelAppointmentRequest)(nil),      // 33: healthcare.scheduling.v1.CancelAppointmentRequest
+	(*CancelAppointmentResponse)(nil),     // 34: healthcare.scheduling.v1.CancelAppointmentResponse
+	(*RescheduleAppointmentRequest)(nil),  // 35: healthcare.scheduling.v1.RescheduleAppointmentRequest
+	(*RescheduleAppointmentResponse)(nil), // 36: healthcare.scheduling.v1.RescheduleAppointmentResponse
+	(*SchedulingPolicy)(nil),              // 37: healthcare.scheduling.v1.SchedulingPolicy
+	(*SetSchedulingPolicyRequest)(nil),    // 38: healthcare.scheduling.v1.SetSchedulingPolicyRequest
+	(*SetSchedulingPolicyResponse)(nil),   // 39: healthcare.scheduling.v1.SetSchedulingPolicyResponse
+	(*BookSeriesRequest)(nil),             // 40: healthcare.scheduling.v1.BookSeriesRequest
+	(*BookSeriesResponse)(nil),            // 41: healthcare.scheduling.v1.BookSeriesResponse
+	(*CancelSeriesRequest)(nil),           // 42: healthcare.scheduling.v1.CancelSeriesRequest
+	(*CancelSeriesResponse)(nil),          // 43: healthcare.scheduling.v1.CancelSeriesResponse
+	(*WaitlistEntry)(nil),                 // 44: healthcare.scheduling.v1.WaitlistEntry
+	(*JoinWaitlistRequest)(nil),           // 45: healthcare.scheduling.v1.JoinWaitlistRequest
+	(*JoinWaitlistResponse)(nil),          // 46: healthcare.scheduling.v1.JoinWaitlistResponse
+	(*OfferWaitlistSlotRequest)(nil),      // 47: healthcare.scheduling.v1.OfferWaitlistSlotRequest
+	(*OfferWaitlistSlotResponse)(nil),     // 48: healthcare.scheduling.v1.OfferWaitlistSlotResponse
+	(*AcceptWaitlistOfferRequest)(nil),    // 49: healthcare.scheduling.v1.AcceptWaitlistOfferRequest
+	(*AcceptWaitlistOfferResponse)(nil),   // 50: healthcare.scheduling.v1.AcceptWaitlistOfferResponse
+	(*DeclineWaitlistOfferRequest)(nil),   // 51: healthcare.scheduling.v1.DeclineWaitlistOfferRequest
+	(*DeclineWaitlistOfferResponse)(nil),  // 52: healthcare.scheduling.v1.DeclineWaitlistOfferResponse
+	(*ListWaitlistRequest)(nil),           // 53: healthcare.scheduling.v1.ListWaitlistRequest
+	(*ListWaitlistResponse)(nil),          // 54: healthcare.scheduling.v1.ListWaitlistResponse
+	(*ExpireWaitlistOffersRequest)(nil),   // 55: healthcare.scheduling.v1.ExpireWaitlistOffersRequest
+	(*ExpireWaitlistOffersResponse)(nil),  // 56: healthcare.scheduling.v1.ExpireWaitlistOffersResponse
+	(*timestamppb.Timestamp)(nil),         // 57: google.protobuf.Timestamp
 }
 var file_healthcare_scheduling_v1_appointment_proto_depIdxs = []int32{
 	0,  // 0: healthcare.scheduling.v1.Resource.type:type_name -> healthcare.scheduling.v1.ResourceType
 	1,  // 1: healthcare.scheduling.v1.Resource.status:type_name -> healthcare.scheduling.v1.ResourceStatus
 	2,  // 2: healthcare.scheduling.v1.Schedule.visit_type:type_name -> healthcare.scheduling.v1.VisitType
 	3,  // 3: healthcare.scheduling.v1.Schedule.visit_mode:type_name -> healthcare.scheduling.v1.VisitMode
-	30, // 4: healthcare.scheduling.v1.Schedule.effective_from:type_name -> google.protobuf.Timestamp
-	30, // 5: healthcare.scheduling.v1.Schedule.effective_until:type_name -> google.protobuf.Timestamp
+	57, // 4: healthcare.scheduling.v1.Schedule.effective_from:type_name -> google.protobuf.Timestamp
+	57, // 5: healthcare.scheduling.v1.Schedule.effective_until:type_name -> google.protobuf.Timestamp
 	4,  // 6: healthcare.scheduling.v1.ScheduleException.kind:type_name -> healthcare.scheduling.v1.ExceptionKind
-	30, // 7: healthcare.scheduling.v1.ScheduleException.starts_at:type_name -> google.protobuf.Timestamp
-	30, // 8: healthcare.scheduling.v1.ScheduleException.ends_at:type_name -> google.protobuf.Timestamp
+	57, // 7: healthcare.scheduling.v1.ScheduleException.starts_at:type_name -> google.protobuf.Timestamp
+	57, // 8: healthcare.scheduling.v1.ScheduleException.ends_at:type_name -> google.protobuf.Timestamp
 	2,  // 9: healthcare.scheduling.v1.Slot.visit_type:type_name -> healthcare.scheduling.v1.VisitType
 	3,  // 10: healthcare.scheduling.v1.Slot.visit_mode:type_name -> healthcare.scheduling.v1.VisitMode
-	30, // 11: healthcare.scheduling.v1.Slot.starts_at:type_name -> google.protobuf.Timestamp
-	30, // 12: healthcare.scheduling.v1.Slot.ends_at:type_name -> google.protobuf.Timestamp
+	57, // 11: healthcare.scheduling.v1.Slot.starts_at:type_name -> google.protobuf.Timestamp
+	57, // 12: healthcare.scheduling.v1.Slot.ends_at:type_name -> google.protobuf.Timestamp
 	4,  // 13: healthcare.scheduling.v1.Slot.blocked_kind:type_name -> healthcare.scheduling.v1.ExceptionKind
 	5,  // 14: healthcare.scheduling.v1.StatusChange.from:type_name -> healthcare.scheduling.v1.AppointmentStatus
 	5,  // 15: healthcare.scheduling.v1.StatusChange.to:type_name -> healthcare.scheduling.v1.AppointmentStatus
-	30, // 16: healthcare.scheduling.v1.StatusChange.at:type_name -> google.protobuf.Timestamp
+	57, // 16: healthcare.scheduling.v1.StatusChange.at:type_name -> google.protobuf.Timestamp
 	2,  // 17: healthcare.scheduling.v1.Appointment.visit_type:type_name -> healthcare.scheduling.v1.VisitType
 	3,  // 18: healthcare.scheduling.v1.Appointment.visit_mode:type_name -> healthcare.scheduling.v1.VisitMode
-	30, // 19: healthcare.scheduling.v1.Appointment.starts_at:type_name -> google.protobuf.Timestamp
-	30, // 20: healthcare.scheduling.v1.Appointment.ends_at:type_name -> google.protobuf.Timestamp
+	57, // 19: healthcare.scheduling.v1.Appointment.starts_at:type_name -> google.protobuf.Timestamp
+	57, // 20: healthcare.scheduling.v1.Appointment.ends_at:type_name -> google.protobuf.Timestamp
 	5,  // 21: healthcare.scheduling.v1.Appointment.status:type_name -> healthcare.scheduling.v1.AppointmentStatus
-	10, // 22: healthcare.scheduling.v1.Appointment.history:type_name -> healthcare.scheduling.v1.StatusChange
+	12, // 22: healthcare.scheduling.v1.Appointment.history:type_name -> healthcare.scheduling.v1.StatusChange
 	0,  // 23: healthcare.scheduling.v1.DefineResourceRequest.type:type_name -> healthcare.scheduling.v1.ResourceType
-	6,  // 24: healthcare.scheduling.v1.DefineResourceResponse.resource:type_name -> healthcare.scheduling.v1.Resource
+	8,  // 24: healthcare.scheduling.v1.DefineResourceResponse.resource:type_name -> healthcare.scheduling.v1.Resource
 	1,  // 25: healthcare.scheduling.v1.SetResourceStatusRequest.status:type_name -> healthcare.scheduling.v1.ResourceStatus
 	2,  // 26: healthcare.scheduling.v1.DefineScheduleRequest.visit_type:type_name -> healthcare.scheduling.v1.VisitType
 	3,  // 27: healthcare.scheduling.v1.DefineScheduleRequest.visit_mode:type_name -> healthcare.scheduling.v1.VisitMode
-	30, // 28: healthcare.scheduling.v1.DefineScheduleRequest.effective_from:type_name -> google.protobuf.Timestamp
-	30, // 29: healthcare.scheduling.v1.DefineScheduleRequest.effective_until:type_name -> google.protobuf.Timestamp
-	7,  // 30: healthcare.scheduling.v1.DefineScheduleResponse.schedule:type_name -> healthcare.scheduling.v1.Schedule
+	57, // 28: healthcare.scheduling.v1.DefineScheduleRequest.effective_from:type_name -> google.protobuf.Timestamp
+	57, // 29: healthcare.scheduling.v1.DefineScheduleRequest.effective_until:type_name -> google.protobuf.Timestamp
+	9,  // 30: healthcare.scheduling.v1.DefineScheduleResponse.schedule:type_name -> healthcare.scheduling.v1.Schedule
 	4,  // 31: healthcare.scheduling.v1.BlockPeriodRequest.kind:type_name -> healthcare.scheduling.v1.ExceptionKind
-	30, // 32: healthcare.scheduling.v1.BlockPeriodRequest.starts_at:type_name -> google.protobuf.Timestamp
-	30, // 33: healthcare.scheduling.v1.BlockPeriodRequest.ends_at:type_name -> google.protobuf.Timestamp
-	8,  // 34: healthcare.scheduling.v1.BlockPeriodResponse.exception:type_name -> healthcare.scheduling.v1.ScheduleException
+	57, // 32: healthcare.scheduling.v1.BlockPeriodRequest.starts_at:type_name -> google.protobuf.Timestamp
+	57, // 33: healthcare.scheduling.v1.BlockPeriodRequest.ends_at:type_name -> google.protobuf.Timestamp
+	10, // 34: healthcare.scheduling.v1.BlockPeriodResponse.exception:type_name -> healthcare.scheduling.v1.ScheduleException
 	2,  // 35: healthcare.scheduling.v1.SearchSlotsRequest.visit_type:type_name -> healthcare.scheduling.v1.VisitType
 	3,  // 36: healthcare.scheduling.v1.SearchSlotsRequest.visit_mode:type_name -> healthcare.scheduling.v1.VisitMode
-	30, // 37: healthcare.scheduling.v1.SearchSlotsRequest.from:type_name -> google.protobuf.Timestamp
-	30, // 38: healthcare.scheduling.v1.SearchSlotsRequest.until:type_name -> google.protobuf.Timestamp
-	9,  // 39: healthcare.scheduling.v1.SearchSlotsResponse.slots:type_name -> healthcare.scheduling.v1.Slot
-	30, // 40: healthcare.scheduling.v1.BookAppointmentRequest.starts_at:type_name -> google.protobuf.Timestamp
+	57, // 37: healthcare.scheduling.v1.SearchSlotsRequest.from:type_name -> google.protobuf.Timestamp
+	57, // 38: healthcare.scheduling.v1.SearchSlotsRequest.until:type_name -> google.protobuf.Timestamp
+	11, // 39: healthcare.scheduling.v1.SearchSlotsResponse.slots:type_name -> healthcare.scheduling.v1.Slot
+	57, // 40: healthcare.scheduling.v1.BookAppointmentRequest.starts_at:type_name -> google.protobuf.Timestamp
 	2,  // 41: healthcare.scheduling.v1.BookAppointmentRequest.visit_type:type_name -> healthcare.scheduling.v1.VisitType
-	11, // 42: healthcare.scheduling.v1.BookAppointmentResponse.appointment:type_name -> healthcare.scheduling.v1.Appointment
-	11, // 43: healthcare.scheduling.v1.GetAppointmentResponse.appointment:type_name -> healthcare.scheduling.v1.Appointment
-	30, // 44: healthcare.scheduling.v1.ListAppointmentsRequest.from:type_name -> google.protobuf.Timestamp
-	30, // 45: healthcare.scheduling.v1.ListAppointmentsRequest.until:type_name -> google.protobuf.Timestamp
-	11, // 46: healthcare.scheduling.v1.ListAppointmentsResponse.appointments:type_name -> healthcare.scheduling.v1.Appointment
-	12, // 47: healthcare.scheduling.v1.AppointmentService.DefineResource:input_type -> healthcare.scheduling.v1.DefineResourceRequest
-	14, // 48: healthcare.scheduling.v1.AppointmentService.SetResourceStatus:input_type -> healthcare.scheduling.v1.SetResourceStatusRequest
-	16, // 49: healthcare.scheduling.v1.AppointmentService.DefineSchedule:input_type -> healthcare.scheduling.v1.DefineScheduleRequest
-	18, // 50: healthcare.scheduling.v1.AppointmentService.BlockPeriod:input_type -> healthcare.scheduling.v1.BlockPeriodRequest
-	20, // 51: healthcare.scheduling.v1.AppointmentService.UnblockPeriod:input_type -> healthcare.scheduling.v1.UnblockPeriodRequest
-	22, // 52: healthcare.scheduling.v1.AppointmentService.SearchSlots:input_type -> healthcare.scheduling.v1.SearchSlotsRequest
-	24, // 53: healthcare.scheduling.v1.AppointmentService.BookAppointment:input_type -> healthcare.scheduling.v1.BookAppointmentRequest
-	26, // 54: healthcare.scheduling.v1.AppointmentService.GetAppointment:input_type -> healthcare.scheduling.v1.GetAppointmentRequest
-	28, // 55: healthcare.scheduling.v1.AppointmentService.ListAppointments:input_type -> healthcare.scheduling.v1.ListAppointmentsRequest
-	13, // 56: healthcare.scheduling.v1.AppointmentService.DefineResource:output_type -> healthcare.scheduling.v1.DefineResourceResponse
-	15, // 57: healthcare.scheduling.v1.AppointmentService.SetResourceStatus:output_type -> healthcare.scheduling.v1.SetResourceStatusResponse
-	17, // 58: healthcare.scheduling.v1.AppointmentService.DefineSchedule:output_type -> healthcare.scheduling.v1.DefineScheduleResponse
-	19, // 59: healthcare.scheduling.v1.AppointmentService.BlockPeriod:output_type -> healthcare.scheduling.v1.BlockPeriodResponse
-	21, // 60: healthcare.scheduling.v1.AppointmentService.UnblockPeriod:output_type -> healthcare.scheduling.v1.UnblockPeriodResponse
-	23, // 61: healthcare.scheduling.v1.AppointmentService.SearchSlots:output_type -> healthcare.scheduling.v1.SearchSlotsResponse
-	25, // 62: healthcare.scheduling.v1.AppointmentService.BookAppointment:output_type -> healthcare.scheduling.v1.BookAppointmentResponse
-	27, // 63: healthcare.scheduling.v1.AppointmentService.GetAppointment:output_type -> healthcare.scheduling.v1.GetAppointmentResponse
-	29, // 64: healthcare.scheduling.v1.AppointmentService.ListAppointments:output_type -> healthcare.scheduling.v1.ListAppointmentsResponse
-	56, // [56:65] is the sub-list for method output_type
-	47, // [47:56] is the sub-list for method input_type
-	47, // [47:47] is the sub-list for extension type_name
-	47, // [47:47] is the sub-list for extension extendee
-	0,  // [0:47] is the sub-list for field type_name
+	13, // 42: healthcare.scheduling.v1.BookAppointmentResponse.appointment:type_name -> healthcare.scheduling.v1.Appointment
+	13, // 43: healthcare.scheduling.v1.GetAppointmentResponse.appointment:type_name -> healthcare.scheduling.v1.Appointment
+	57, // 44: healthcare.scheduling.v1.ListAppointmentsRequest.from:type_name -> google.protobuf.Timestamp
+	57, // 45: healthcare.scheduling.v1.ListAppointmentsRequest.until:type_name -> google.protobuf.Timestamp
+	13, // 46: healthcare.scheduling.v1.ListAppointmentsResponse.appointments:type_name -> healthcare.scheduling.v1.Appointment
+	13, // 47: healthcare.scheduling.v1.CancelAppointmentResponse.appointment:type_name -> healthcare.scheduling.v1.Appointment
+	32, // 48: healthcare.scheduling.v1.CancelAppointmentResponse.outcome:type_name -> healthcare.scheduling.v1.PolicyOutcome
+	57, // 49: healthcare.scheduling.v1.RescheduleAppointmentRequest.starts_at:type_name -> google.protobuf.Timestamp
+	2,  // 50: healthcare.scheduling.v1.RescheduleAppointmentRequest.visit_type:type_name -> healthcare.scheduling.v1.VisitType
+	13, // 51: healthcare.scheduling.v1.RescheduleAppointmentResponse.appointment:type_name -> healthcare.scheduling.v1.Appointment
+	32, // 52: healthcare.scheduling.v1.RescheduleAppointmentResponse.outcome:type_name -> healthcare.scheduling.v1.PolicyOutcome
+	2,  // 53: healthcare.scheduling.v1.SchedulingPolicy.teleconsult_visit_types:type_name -> healthcare.scheduling.v1.VisitType
+	37, // 54: healthcare.scheduling.v1.SetSchedulingPolicyRequest.policy:type_name -> healthcare.scheduling.v1.SchedulingPolicy
+	57, // 55: healthcare.scheduling.v1.BookSeriesRequest.starts_at:type_name -> google.protobuf.Timestamp
+	2,  // 56: healthcare.scheduling.v1.BookSeriesRequest.visit_type:type_name -> healthcare.scheduling.v1.VisitType
+	13, // 57: healthcare.scheduling.v1.BookSeriesResponse.appointments:type_name -> healthcare.scheduling.v1.Appointment
+	57, // 58: healthcare.scheduling.v1.BookSeriesResponse.unavailable:type_name -> google.protobuf.Timestamp
+	6,  // 59: healthcare.scheduling.v1.CancelSeriesRequest.scope:type_name -> healthcare.scheduling.v1.SeriesScope
+	2,  // 60: healthcare.scheduling.v1.WaitlistEntry.visit_type:type_name -> healthcare.scheduling.v1.VisitType
+	57, // 61: healthcare.scheduling.v1.WaitlistEntry.not_before:type_name -> google.protobuf.Timestamp
+	57, // 62: healthcare.scheduling.v1.WaitlistEntry.not_after:type_name -> google.protobuf.Timestamp
+	7,  // 63: healthcare.scheduling.v1.WaitlistEntry.status:type_name -> healthcare.scheduling.v1.WaitlistStatus
+	57, // 64: healthcare.scheduling.v1.WaitlistEntry.offered_slot_at:type_name -> google.protobuf.Timestamp
+	57, // 65: healthcare.scheduling.v1.WaitlistEntry.offer_expires_at:type_name -> google.protobuf.Timestamp
+	2,  // 66: healthcare.scheduling.v1.JoinWaitlistRequest.visit_type:type_name -> healthcare.scheduling.v1.VisitType
+	57, // 67: healthcare.scheduling.v1.JoinWaitlistRequest.not_before:type_name -> google.protobuf.Timestamp
+	57, // 68: healthcare.scheduling.v1.JoinWaitlistRequest.not_after:type_name -> google.protobuf.Timestamp
+	44, // 69: healthcare.scheduling.v1.JoinWaitlistResponse.entry:type_name -> healthcare.scheduling.v1.WaitlistEntry
+	57, // 70: healthcare.scheduling.v1.OfferWaitlistSlotRequest.starts_at:type_name -> google.protobuf.Timestamp
+	2,  // 71: healthcare.scheduling.v1.OfferWaitlistSlotRequest.visit_type:type_name -> healthcare.scheduling.v1.VisitType
+	44, // 72: healthcare.scheduling.v1.OfferWaitlistSlotResponse.entry:type_name -> healthcare.scheduling.v1.WaitlistEntry
+	44, // 73: healthcare.scheduling.v1.AcceptWaitlistOfferResponse.entry:type_name -> healthcare.scheduling.v1.WaitlistEntry
+	13, // 74: healthcare.scheduling.v1.AcceptWaitlistOfferResponse.appointment:type_name -> healthcare.scheduling.v1.Appointment
+	44, // 75: healthcare.scheduling.v1.DeclineWaitlistOfferResponse.entry:type_name -> healthcare.scheduling.v1.WaitlistEntry
+	44, // 76: healthcare.scheduling.v1.ListWaitlistResponse.entries:type_name -> healthcare.scheduling.v1.WaitlistEntry
+	14, // 77: healthcare.scheduling.v1.AppointmentService.DefineResource:input_type -> healthcare.scheduling.v1.DefineResourceRequest
+	16, // 78: healthcare.scheduling.v1.AppointmentService.SetResourceStatus:input_type -> healthcare.scheduling.v1.SetResourceStatusRequest
+	18, // 79: healthcare.scheduling.v1.AppointmentService.DefineSchedule:input_type -> healthcare.scheduling.v1.DefineScheduleRequest
+	20, // 80: healthcare.scheduling.v1.AppointmentService.BlockPeriod:input_type -> healthcare.scheduling.v1.BlockPeriodRequest
+	22, // 81: healthcare.scheduling.v1.AppointmentService.UnblockPeriod:input_type -> healthcare.scheduling.v1.UnblockPeriodRequest
+	24, // 82: healthcare.scheduling.v1.AppointmentService.SearchSlots:input_type -> healthcare.scheduling.v1.SearchSlotsRequest
+	26, // 83: healthcare.scheduling.v1.AppointmentService.BookAppointment:input_type -> healthcare.scheduling.v1.BookAppointmentRequest
+	33, // 84: healthcare.scheduling.v1.AppointmentService.CancelAppointment:input_type -> healthcare.scheduling.v1.CancelAppointmentRequest
+	35, // 85: healthcare.scheduling.v1.AppointmentService.RescheduleAppointment:input_type -> healthcare.scheduling.v1.RescheduleAppointmentRequest
+	38, // 86: healthcare.scheduling.v1.AppointmentService.SetSchedulingPolicy:input_type -> healthcare.scheduling.v1.SetSchedulingPolicyRequest
+	40, // 87: healthcare.scheduling.v1.AppointmentService.BookSeries:input_type -> healthcare.scheduling.v1.BookSeriesRequest
+	42, // 88: healthcare.scheduling.v1.AppointmentService.CancelSeries:input_type -> healthcare.scheduling.v1.CancelSeriesRequest
+	45, // 89: healthcare.scheduling.v1.AppointmentService.JoinWaitlist:input_type -> healthcare.scheduling.v1.JoinWaitlistRequest
+	47, // 90: healthcare.scheduling.v1.AppointmentService.OfferWaitlistSlot:input_type -> healthcare.scheduling.v1.OfferWaitlistSlotRequest
+	49, // 91: healthcare.scheduling.v1.AppointmentService.AcceptWaitlistOffer:input_type -> healthcare.scheduling.v1.AcceptWaitlistOfferRequest
+	51, // 92: healthcare.scheduling.v1.AppointmentService.DeclineWaitlistOffer:input_type -> healthcare.scheduling.v1.DeclineWaitlistOfferRequest
+	53, // 93: healthcare.scheduling.v1.AppointmentService.ListWaitlist:input_type -> healthcare.scheduling.v1.ListWaitlistRequest
+	55, // 94: healthcare.scheduling.v1.AppointmentService.ExpireWaitlistOffers:input_type -> healthcare.scheduling.v1.ExpireWaitlistOffersRequest
+	28, // 95: healthcare.scheduling.v1.AppointmentService.GetAppointment:input_type -> healthcare.scheduling.v1.GetAppointmentRequest
+	30, // 96: healthcare.scheduling.v1.AppointmentService.ListAppointments:input_type -> healthcare.scheduling.v1.ListAppointmentsRequest
+	15, // 97: healthcare.scheduling.v1.AppointmentService.DefineResource:output_type -> healthcare.scheduling.v1.DefineResourceResponse
+	17, // 98: healthcare.scheduling.v1.AppointmentService.SetResourceStatus:output_type -> healthcare.scheduling.v1.SetResourceStatusResponse
+	19, // 99: healthcare.scheduling.v1.AppointmentService.DefineSchedule:output_type -> healthcare.scheduling.v1.DefineScheduleResponse
+	21, // 100: healthcare.scheduling.v1.AppointmentService.BlockPeriod:output_type -> healthcare.scheduling.v1.BlockPeriodResponse
+	23, // 101: healthcare.scheduling.v1.AppointmentService.UnblockPeriod:output_type -> healthcare.scheduling.v1.UnblockPeriodResponse
+	25, // 102: healthcare.scheduling.v1.AppointmentService.SearchSlots:output_type -> healthcare.scheduling.v1.SearchSlotsResponse
+	27, // 103: healthcare.scheduling.v1.AppointmentService.BookAppointment:output_type -> healthcare.scheduling.v1.BookAppointmentResponse
+	34, // 104: healthcare.scheduling.v1.AppointmentService.CancelAppointment:output_type -> healthcare.scheduling.v1.CancelAppointmentResponse
+	36, // 105: healthcare.scheduling.v1.AppointmentService.RescheduleAppointment:output_type -> healthcare.scheduling.v1.RescheduleAppointmentResponse
+	39, // 106: healthcare.scheduling.v1.AppointmentService.SetSchedulingPolicy:output_type -> healthcare.scheduling.v1.SetSchedulingPolicyResponse
+	41, // 107: healthcare.scheduling.v1.AppointmentService.BookSeries:output_type -> healthcare.scheduling.v1.BookSeriesResponse
+	43, // 108: healthcare.scheduling.v1.AppointmentService.CancelSeries:output_type -> healthcare.scheduling.v1.CancelSeriesResponse
+	46, // 109: healthcare.scheduling.v1.AppointmentService.JoinWaitlist:output_type -> healthcare.scheduling.v1.JoinWaitlistResponse
+	48, // 110: healthcare.scheduling.v1.AppointmentService.OfferWaitlistSlot:output_type -> healthcare.scheduling.v1.OfferWaitlistSlotResponse
+	50, // 111: healthcare.scheduling.v1.AppointmentService.AcceptWaitlistOffer:output_type -> healthcare.scheduling.v1.AcceptWaitlistOfferResponse
+	52, // 112: healthcare.scheduling.v1.AppointmentService.DeclineWaitlistOffer:output_type -> healthcare.scheduling.v1.DeclineWaitlistOfferResponse
+	54, // 113: healthcare.scheduling.v1.AppointmentService.ListWaitlist:output_type -> healthcare.scheduling.v1.ListWaitlistResponse
+	56, // 114: healthcare.scheduling.v1.AppointmentService.ExpireWaitlistOffers:output_type -> healthcare.scheduling.v1.ExpireWaitlistOffersResponse
+	29, // 115: healthcare.scheduling.v1.AppointmentService.GetAppointment:output_type -> healthcare.scheduling.v1.GetAppointmentResponse
+	31, // 116: healthcare.scheduling.v1.AppointmentService.ListAppointments:output_type -> healthcare.scheduling.v1.ListAppointmentsResponse
+	97, // [97:117] is the sub-list for method output_type
+	77, // [77:97] is the sub-list for method input_type
+	77, // [77:77] is the sub-list for extension type_name
+	77, // [77:77] is the sub-list for extension extendee
+	0,  // [0:77] is the sub-list for field type_name
 }
 
 func init() { file_healthcare_scheduling_v1_appointment_proto_init() }
@@ -2585,8 +4536,8 @@ func file_healthcare_scheduling_v1_appointment_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_healthcare_scheduling_v1_appointment_proto_rawDesc), len(file_healthcare_scheduling_v1_appointment_proto_rawDesc)),
-			NumEnums:      6,
-			NumMessages:   24,
+			NumEnums:      8,
+			NumMessages:   49,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

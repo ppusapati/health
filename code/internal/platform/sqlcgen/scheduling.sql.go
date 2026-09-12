@@ -12,6 +12,25 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const cancelSeries = `-- name: CancelSeries :execrows
+UPDATE scheduling.appointment_series
+SET cancelled = true
+WHERE tenant_id = $1 AND series_id = $2 AND NOT cancelled
+`
+
+type CancelSeriesParams struct {
+	TenantID uuid.UUID
+	SeriesID uuid.UUID
+}
+
+func (q *Queries) CancelSeries(ctx context.Context, arg CancelSeriesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, cancelSeries, arg.TenantID, arg.SeriesID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const claimSlotCapacity = `-- name: ClaimSlotCapacity :one
 UPDATE scheduling.slot
 SET booked = booked + 1, updated_at = $1
@@ -231,10 +250,38 @@ func (q *Queries) EnsureSlot(ctx context.Context, arg EnsureSlotParams) error {
 	return err
 }
 
+const expireStaleOffers = `-- name: ExpireStaleOffers :execrows
+UPDATE scheduling.waitlist_entry
+SET status = 'waiting', offered_slot_at = NULL, offer_expires_at = NULL,
+    updated_at = $1
+WHERE tenant_id = $2
+  AND status = 'offered'
+  AND offer_expires_at <= $3::timestamptz
+`
+
+type ExpireStaleOffersParams struct {
+	UpdatedAt pgtype.Timestamptz
+	TenantID  uuid.UUID
+	Now       pgtype.Timestamptz
+}
+
+// Returns entries whose offer nobody answered to the waiting list.
+//
+// Back to waiting rather than to a terminal state: the patient did not answer
+// one message, which is not the same as no longer wanting an appointment.
+func (q *Queries) ExpireStaleOffers(ctx context.Context, arg ExpireStaleOffersParams) (int64, error) {
+	result, err := q.db.Exec(ctx, expireStaleOffers, arg.UpdatedAt, arg.TenantID, arg.Now)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getAppointment = `-- name: GetAppointment :one
 SELECT appointment_id, tenant_id, facility_id, resource_id, org_unit_id,
        patient_id, slot_id, visit_type, visit_mode, starts_at, ends_at,
-       status, booked_by, reason, rescheduled_from_id, created_at, updated_at, version
+       status, booked_by, reason, rescheduled_from_id, created_at, updated_at, version,
+       series_id, occurrence, reschedule_count, join_url
 FROM scheduling.appointment
 WHERE tenant_id = $1 AND appointment_id = $2
 `
@@ -266,8 +313,68 @@ func (q *Queries) GetAppointment(ctx context.Context, arg GetAppointmentParams) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Version,
+		&i.SeriesID,
+		&i.Occurrence,
+		&i.RescheduleCount,
+		&i.JoinUrl,
 	)
 	return i, err
+}
+
+const getCancellationPolicy = `-- name: GetCancellationPolicy :many
+SELECT notice_hours, reschedule_notice_hours, max_reschedules,
+       chargeable_when_late, teleconsult_enabled, teleconsult_visit_types,
+       teleconsult_requires_confirmed_identity, facility_id
+FROM scheduling.cancellation_policy
+WHERE tenant_id = $1
+  AND (facility_id IS NULL OR facility_id = $2::uuid)
+ORDER BY (facility_id IS NULL)
+`
+
+type GetCancellationPolicyParams struct {
+	TenantID   uuid.UUID
+	FacilityID pgtype.UUID
+}
+
+type GetCancellationPolicyRow struct {
+	NoticeHours                          int32
+	RescheduleNoticeHours                int32
+	MaxReschedules                       int32
+	ChargeableWhenLate                   bool
+	TeleconsultEnabled                   bool
+	TeleconsultVisitTypes                []string
+	TeleconsultRequiresConfirmedIdentity bool
+	FacilityID                           pgtype.UUID
+}
+
+// Facility-specific rows first, so the resolver takes the first it sees.
+func (q *Queries) GetCancellationPolicy(ctx context.Context, arg GetCancellationPolicyParams) ([]GetCancellationPolicyRow, error) {
+	rows, err := q.db.Query(ctx, getCancellationPolicy, arg.TenantID, arg.FacilityID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetCancellationPolicyRow{}
+	for rows.Next() {
+		var i GetCancellationPolicyRow
+		if err := rows.Scan(
+			&i.NoticeHours,
+			&i.RescheduleNoticeHours,
+			&i.MaxReschedules,
+			&i.ChargeableWhenLate,
+			&i.TeleconsultEnabled,
+			&i.TeleconsultVisitTypes,
+			&i.TeleconsultRequiresConfirmedIdentity,
+			&i.FacilityID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getResource = `-- name: GetResource :one
@@ -297,6 +404,37 @@ func (q *Queries) GetResource(ctx context.Context, arg GetResourceParams) (Sched
 		&i.TimeZone,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getSeries = `-- name: GetSeries :one
+SELECT series_id, tenant_id, patient_id, resource_id, visit_type,
+       interval_days, occurrences, starts_at, created_by, created_at, cancelled
+FROM scheduling.appointment_series
+WHERE tenant_id = $1 AND series_id = $2
+`
+
+type GetSeriesParams struct {
+	TenantID uuid.UUID
+	SeriesID uuid.UUID
+}
+
+func (q *Queries) GetSeries(ctx context.Context, arg GetSeriesParams) (SchedulingAppointmentSeries, error) {
+	row := q.db.QueryRow(ctx, getSeries, arg.TenantID, arg.SeriesID)
+	var i SchedulingAppointmentSeries
+	err := row.Scan(
+		&i.SeriesID,
+		&i.TenantID,
+		&i.PatientID,
+		&i.ResourceID,
+		&i.VisitType,
+		&i.IntervalDays,
+		&i.Occurrences,
+		&i.StartsAt,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.Cancelled,
 	)
 	return i, err
 }
@@ -331,16 +469,56 @@ func (q *Queries) GetSlot(ctx context.Context, arg GetSlotParams) (SchedulingSlo
 	return i, err
 }
 
+const getWaitlistEntry = `-- name: GetWaitlistEntry :one
+SELECT waitlist_id, tenant_id, patient_id, resource_id, facility_id, org_unit_id,
+       visit_type, not_before, not_after, appointment_id, status,
+       offered_slot_at, offer_expires_at, created_by, created_at, updated_at
+FROM scheduling.waitlist_entry
+WHERE tenant_id = $1 AND waitlist_id = $2
+`
+
+type GetWaitlistEntryParams struct {
+	TenantID   uuid.UUID
+	WaitlistID uuid.UUID
+}
+
+func (q *Queries) GetWaitlistEntry(ctx context.Context, arg GetWaitlistEntryParams) (SchedulingWaitlistEntry, error) {
+	row := q.db.QueryRow(ctx, getWaitlistEntry, arg.TenantID, arg.WaitlistID)
+	var i SchedulingWaitlistEntry
+	err := row.Scan(
+		&i.WaitlistID,
+		&i.TenantID,
+		&i.PatientID,
+		&i.ResourceID,
+		&i.FacilityID,
+		&i.OrgUnitID,
+		&i.VisitType,
+		&i.NotBefore,
+		&i.NotAfter,
+		&i.AppointmentID,
+		&i.Status,
+		&i.OfferedSlotAt,
+		&i.OfferExpiresAt,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const insertAppointment = `-- name: InsertAppointment :exec
 INSERT INTO scheduling.appointment (
     appointment_id, tenant_id, facility_id, resource_id, org_unit_id,
     patient_id, slot_id, visit_type, visit_mode, starts_at, ends_at,
-    status, booked_by, reason, rescheduled_from_id, created_at, updated_at, version
+    status, booked_by, reason, rescheduled_from_id, created_at, updated_at, version,
+    series_id, occurrence, reschedule_count, join_url
 ) VALUES (
     $1, $2, $3, $4,
     $5::uuid, $6, $7, $8, $9,
     $10, $11, $12, $13, $14,
-    $15::uuid, $16, $17, 1
+    $15::uuid, $16, $17, 1,
+    $18::uuid, $19::integer,
+    $20, $21
 )
 `
 
@@ -362,6 +540,10 @@ type InsertAppointmentParams struct {
 	RescheduledFromID pgtype.UUID
 	CreatedAt         pgtype.Timestamptz
 	UpdatedAt         pgtype.Timestamptz
+	SeriesID          pgtype.UUID
+	Occurrence        *int32
+	RescheduleCount   int32
+	JoinUrl           string
 }
 
 func (q *Queries) InsertAppointment(ctx context.Context, arg InsertAppointmentParams) error {
@@ -383,6 +565,10 @@ func (q *Queries) InsertAppointment(ctx context.Context, arg InsertAppointmentPa
 		arg.RescheduledFromID,
 		arg.CreatedAt,
 		arg.UpdatedAt,
+		arg.SeriesID,
+		arg.Occurrence,
+		arg.RescheduleCount,
+		arg.JoinUrl,
 	)
 	return err
 }
@@ -422,6 +608,49 @@ func (q *Queries) InsertException(ctx context.Context, arg InsertExceptionParams
 		arg.Overridable,
 		arg.CreatedBy,
 		arg.CreatedAt,
+	)
+	return err
+}
+
+const insertPolicyOutcome = `-- name: InsertPolicyOutcome :exec
+INSERT INTO scheduling.appointment_policy_outcome (
+    outcome_id, tenant_id, appointment_id, kind, timely,
+    notice_given_minutes, notice_required_minutes, chargeable,
+    decided_by, decided_at, reason
+) VALUES (
+    $1, $2, $3, $4, $5,
+    $6, $7, $8,
+    $9, $10, $11
+)
+`
+
+type InsertPolicyOutcomeParams struct {
+	OutcomeID             uuid.UUID
+	TenantID              uuid.UUID
+	AppointmentID         uuid.UUID
+	Kind                  string
+	Timely                bool
+	NoticeGivenMinutes    int32
+	NoticeRequiredMinutes int32
+	Chargeable            bool
+	DecidedBy             string
+	DecidedAt             pgtype.Timestamptz
+	Reason                string
+}
+
+func (q *Queries) InsertPolicyOutcome(ctx context.Context, arg InsertPolicyOutcomeParams) error {
+	_, err := q.db.Exec(ctx, insertPolicyOutcome,
+		arg.OutcomeID,
+		arg.TenantID,
+		arg.AppointmentID,
+		arg.Kind,
+		arg.Timely,
+		arg.NoticeGivenMinutes,
+		arg.NoticeRequiredMinutes,
+		arg.Chargeable,
+		arg.DecidedBy,
+		arg.DecidedAt,
+		arg.Reason,
 	)
 	return err
 }
@@ -521,6 +750,45 @@ func (q *Queries) InsertSchedule(ctx context.Context, arg InsertScheduleParams) 
 	return err
 }
 
+const insertSeries = `-- name: InsertSeries :exec
+INSERT INTO scheduling.appointment_series (
+    series_id, tenant_id, patient_id, resource_id, visit_type,
+    interval_days, occurrences, starts_at, created_by, created_at
+) VALUES (
+    $1, $2, $3, $4, $5,
+    $6, $7, $8, $9, $10
+)
+`
+
+type InsertSeriesParams struct {
+	SeriesID     uuid.UUID
+	TenantID     uuid.UUID
+	PatientID    uuid.UUID
+	ResourceID   uuid.UUID
+	VisitType    string
+	IntervalDays int32
+	Occurrences  int32
+	StartsAt     pgtype.Timestamptz
+	CreatedBy    string
+	CreatedAt    pgtype.Timestamptz
+}
+
+func (q *Queries) InsertSeries(ctx context.Context, arg InsertSeriesParams) error {
+	_, err := q.db.Exec(ctx, insertSeries,
+		arg.SeriesID,
+		arg.TenantID,
+		arg.PatientID,
+		arg.ResourceID,
+		arg.VisitType,
+		arg.IntervalDays,
+		arg.Occurrences,
+		arg.StartsAt,
+		arg.CreatedBy,
+		arg.CreatedAt,
+	)
+	return err
+}
+
 const insertStatusHistory = `-- name: InsertStatusHistory :exec
 INSERT INTO scheduling.appointment_status_history (
     history_id, tenant_id, appointment_id, from_status, to_status,
@@ -558,10 +826,62 @@ func (q *Queries) InsertStatusHistory(ctx context.Context, arg InsertStatusHisto
 	return err
 }
 
+const insertWaitlistEntry = `-- name: InsertWaitlistEntry :exec
+INSERT INTO scheduling.waitlist_entry (
+    waitlist_id, tenant_id, patient_id, resource_id, facility_id, org_unit_id,
+    visit_type, not_before, not_after, appointment_id, status,
+    created_by, created_at, updated_at
+) VALUES (
+    $1, $2, $3, $4::uuid,
+    $5::uuid, $6::uuid,
+    $7, $8::timestamptz,
+    $9::timestamptz, $10::uuid,
+    $11, $12, $13, $14
+)
+`
+
+type InsertWaitlistEntryParams struct {
+	WaitlistID    uuid.UUID
+	TenantID      uuid.UUID
+	PatientID     uuid.UUID
+	ResourceID    pgtype.UUID
+	FacilityID    pgtype.UUID
+	OrgUnitID     pgtype.UUID
+	VisitType     string
+	NotBefore     pgtype.Timestamptz
+	NotAfter      pgtype.Timestamptz
+	AppointmentID pgtype.UUID
+	Status        string
+	CreatedBy     string
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+}
+
+func (q *Queries) InsertWaitlistEntry(ctx context.Context, arg InsertWaitlistEntryParams) error {
+	_, err := q.db.Exec(ctx, insertWaitlistEntry,
+		arg.WaitlistID,
+		arg.TenantID,
+		arg.PatientID,
+		arg.ResourceID,
+		arg.FacilityID,
+		arg.OrgUnitID,
+		arg.VisitType,
+		arg.NotBefore,
+		arg.NotAfter,
+		arg.AppointmentID,
+		arg.Status,
+		arg.CreatedBy,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	return err
+}
+
 const listAppointmentsForDay = `-- name: ListAppointmentsForDay :many
 SELECT appointment_id, tenant_id, facility_id, resource_id, org_unit_id,
        patient_id, slot_id, visit_type, visit_mode, starts_at, ends_at,
-       status, booked_by, reason, rescheduled_from_id, created_at, updated_at, version
+       status, booked_by, reason, rescheduled_from_id, created_at, updated_at, version,
+       series_id, occurrence, reschedule_count, join_url
 FROM scheduling.appointment
 WHERE tenant_id = $1
   AND facility_id = $2
@@ -619,6 +939,10 @@ func (q *Queries) ListAppointmentsForDay(ctx context.Context, arg ListAppointmen
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Version,
+			&i.SeriesID,
+			&i.Occurrence,
+			&i.RescheduleCount,
+			&i.JoinUrl,
 		); err != nil {
 			return nil, err
 		}
@@ -633,7 +957,8 @@ func (q *Queries) ListAppointmentsForDay(ctx context.Context, arg ListAppointmen
 const listAppointmentsForPatient = `-- name: ListAppointmentsForPatient :many
 SELECT appointment_id, tenant_id, facility_id, resource_id, org_unit_id,
        patient_id, slot_id, visit_type, visit_mode, starts_at, ends_at,
-       status, booked_by, reason, rescheduled_from_id, created_at, updated_at, version
+       status, booked_by, reason, rescheduled_from_id, created_at, updated_at, version,
+       series_id, occurrence, reschedule_count, join_url
 FROM scheduling.appointment
 WHERE tenant_id = $1 AND patient_id = $2
 ORDER BY starts_at DESC, appointment_id
@@ -674,6 +999,10 @@ func (q *Queries) ListAppointmentsForPatient(ctx context.Context, arg ListAppoin
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Version,
+			&i.SeriesID,
+			&i.Occurrence,
+			&i.RescheduleCount,
+			&i.JoinUrl,
 		); err != nil {
 			return nil, err
 		}
@@ -728,6 +1057,117 @@ func (q *Queries) ListExceptionsForResources(ctx context.Context, arg ListExcept
 			&i.Overridable,
 			&i.CreatedBy,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOpenWaitlistEntries = `-- name: ListOpenWaitlistEntries :many
+SELECT waitlist_id, tenant_id, patient_id, resource_id, facility_id, org_unit_id,
+       visit_type, not_before, not_after, appointment_id, status,
+       offered_slot_at, offer_expires_at, created_by, created_at, updated_at
+FROM scheduling.waitlist_entry
+WHERE tenant_id = $1
+  AND status IN ('waiting', 'offered')
+  AND ($2::uuid IS NULL OR resource_id = $2::uuid)
+ORDER BY created_at, waitlist_id
+LIMIT $3
+`
+
+type ListOpenWaitlistEntriesParams struct {
+	TenantID   uuid.UUID
+	ResourceID pgtype.UUID
+	PageLimit  int32
+}
+
+// The list a scheduler works when a slot frees up. Oldest first: the person who
+// has waited longest is offered first, which is the only ordering anybody can
+// defend at the desk.
+func (q *Queries) ListOpenWaitlistEntries(ctx context.Context, arg ListOpenWaitlistEntriesParams) ([]SchedulingWaitlistEntry, error) {
+	rows, err := q.db.Query(ctx, listOpenWaitlistEntries, arg.TenantID, arg.ResourceID, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SchedulingWaitlistEntry{}
+	for rows.Next() {
+		var i SchedulingWaitlistEntry
+		if err := rows.Scan(
+			&i.WaitlistID,
+			&i.TenantID,
+			&i.PatientID,
+			&i.ResourceID,
+			&i.FacilityID,
+			&i.OrgUnitID,
+			&i.VisitType,
+			&i.NotBefore,
+			&i.NotAfter,
+			&i.AppointmentID,
+			&i.Status,
+			&i.OfferedSlotAt,
+			&i.OfferExpiresAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPolicyOutcomes = `-- name: ListPolicyOutcomes :many
+SELECT kind, timely, notice_given_minutes, notice_required_minutes,
+       chargeable, decided_by, decided_at, reason
+FROM scheduling.appointment_policy_outcome
+WHERE tenant_id = $1 AND appointment_id = $2
+ORDER BY decided_at, outcome_id
+`
+
+type ListPolicyOutcomesParams struct {
+	TenantID      uuid.UUID
+	AppointmentID uuid.UUID
+}
+
+type ListPolicyOutcomesRow struct {
+	Kind                  string
+	Timely                bool
+	NoticeGivenMinutes    int32
+	NoticeRequiredMinutes int32
+	Chargeable            bool
+	DecidedBy             string
+	DecidedAt             pgtype.Timestamptz
+	Reason                string
+}
+
+func (q *Queries) ListPolicyOutcomes(ctx context.Context, arg ListPolicyOutcomesParams) ([]ListPolicyOutcomesRow, error) {
+	rows, err := q.db.Query(ctx, listPolicyOutcomes, arg.TenantID, arg.AppointmentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPolicyOutcomesRow{}
+	for rows.Next() {
+		var i ListPolicyOutcomesRow
+		if err := rows.Scan(
+			&i.Kind,
+			&i.Timely,
+			&i.NoticeGivenMinutes,
+			&i.NoticeRequiredMinutes,
+			&i.Chargeable,
+			&i.DecidedBy,
+			&i.DecidedAt,
+			&i.Reason,
 		); err != nil {
 			return nil, err
 		}
@@ -870,6 +1310,65 @@ func (q *Queries) ListSchedulesForResources(ctx context.Context, arg ListSchedul
 	return items, nil
 }
 
+const listSeriesAppointments = `-- name: ListSeriesAppointments :many
+SELECT appointment_id, tenant_id, facility_id, resource_id, org_unit_id,
+       patient_id, slot_id, visit_type, visit_mode, starts_at, ends_at,
+       status, booked_by, reason, rescheduled_from_id, created_at, updated_at, version,
+       series_id, occurrence, reschedule_count, join_url
+FROM scheduling.appointment
+WHERE tenant_id = $1 AND series_id = $2
+ORDER BY starts_at, appointment_id
+`
+
+type ListSeriesAppointmentsParams struct {
+	TenantID uuid.UUID
+	SeriesID pgtype.UUID
+}
+
+// Every occurrence of a series, in order, so a bulk change can walk them.
+func (q *Queries) ListSeriesAppointments(ctx context.Context, arg ListSeriesAppointmentsParams) ([]SchedulingAppointment, error) {
+	rows, err := q.db.Query(ctx, listSeriesAppointments, arg.TenantID, arg.SeriesID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SchedulingAppointment{}
+	for rows.Next() {
+		var i SchedulingAppointment
+		if err := rows.Scan(
+			&i.AppointmentID,
+			&i.TenantID,
+			&i.FacilityID,
+			&i.ResourceID,
+			&i.OrgUnitID,
+			&i.PatientID,
+			&i.SlotID,
+			&i.VisitType,
+			&i.VisitMode,
+			&i.StartsAt,
+			&i.EndsAt,
+			&i.Status,
+			&i.BookedBy,
+			&i.Reason,
+			&i.RescheduledFromID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Version,
+			&i.SeriesID,
+			&i.Occurrence,
+			&i.RescheduleCount,
+			&i.JoinUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listStatusHistory = `-- name: ListStatusHistory :many
 SELECT from_status, to_status, changed_at, changed_by, reason, corrected
 FROM scheduling.appointment_status_history
@@ -942,6 +1441,38 @@ func (q *Queries) ReleaseSlotCapacity(ctx context.Context, arg ReleaseSlotCapaci
 	return result.RowsAffected(), nil
 }
 
+const setAppointmentRescheduled = `-- name: SetAppointmentRescheduled :execrows
+UPDATE scheduling.appointment
+SET reschedule_count = $1, updated_at = $2,
+    version = version + 1
+WHERE tenant_id = $3
+  AND appointment_id = $4
+  AND version = $5
+`
+
+type SetAppointmentRescheduledParams struct {
+	RescheduleCount int32
+	UpdatedAt       pgtype.Timestamptz
+	TenantID        uuid.UUID
+	AppointmentID   uuid.UUID
+	ExpectedVersion int64
+}
+
+// Records that a booking was moved, carrying the reschedule count forward.
+func (q *Queries) SetAppointmentRescheduled(ctx context.Context, arg SetAppointmentRescheduledParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setAppointmentRescheduled,
+		arg.RescheduleCount,
+		arg.UpdatedAt,
+		arg.TenantID,
+		arg.AppointmentID,
+		arg.ExpectedVersion,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setAppointmentStatus = `-- name: SetAppointmentStatus :execrows
 UPDATE scheduling.appointment
 SET status = $1, updated_at = $2, version = version + 1
@@ -999,4 +1530,101 @@ func (q *Queries) SetResourceStatus(ctx context.Context, arg SetResourceStatusPa
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const updateWaitlistEntry = `-- name: UpdateWaitlistEntry :execrows
+UPDATE scheduling.waitlist_entry
+SET status = $1,
+    offered_slot_at = $2::timestamptz,
+    offer_expires_at = $3::timestamptz,
+    updated_at = $4
+WHERE tenant_id = $5
+  AND waitlist_id = $6
+  AND status = $7
+`
+
+type UpdateWaitlistEntryParams struct {
+	Status         string
+	OfferedSlotAt  pgtype.Timestamptz
+	OfferExpiresAt pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	TenantID       uuid.UUID
+	WaitlistID     uuid.UUID
+	ExpectedStatus string
+}
+
+// Guarded on the status the caller read: two schedulers offering the same slot
+// to the same patient would otherwise both write, and the second would replace
+// the first one's offer with an expiry the patient never saw.
+func (q *Queries) UpdateWaitlistEntry(ctx context.Context, arg UpdateWaitlistEntryParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateWaitlistEntry,
+		arg.Status,
+		arg.OfferedSlotAt,
+		arg.OfferExpiresAt,
+		arg.UpdatedAt,
+		arg.TenantID,
+		arg.WaitlistID,
+		arg.ExpectedStatus,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const upsertCancellationPolicy = `-- name: UpsertCancellationPolicy :exec
+INSERT INTO scheduling.cancellation_policy (
+    policy_id, tenant_id, facility_id, notice_hours, reschedule_notice_hours,
+    max_reschedules, chargeable_when_late, teleconsult_enabled,
+    teleconsult_visit_types, teleconsult_requires_confirmed_identity,
+    created_at, updated_at
+) VALUES (
+    $1, $2, $3::uuid, $4,
+    $5, $6, $7,
+    $8, $9,
+    $10, $11, $12
+)
+ON CONFLICT (tenant_id, COALESCE(facility_id, '00000000-0000-0000-0000-000000000000'::uuid))
+DO UPDATE SET notice_hours = EXCLUDED.notice_hours,
+              reschedule_notice_hours = EXCLUDED.reschedule_notice_hours,
+              max_reschedules = EXCLUDED.max_reschedules,
+              chargeable_when_late = EXCLUDED.chargeable_when_late,
+              teleconsult_enabled = EXCLUDED.teleconsult_enabled,
+              teleconsult_visit_types = EXCLUDED.teleconsult_visit_types,
+              teleconsult_requires_confirmed_identity =
+                  EXCLUDED.teleconsult_requires_confirmed_identity,
+              updated_at = EXCLUDED.updated_at
+`
+
+type UpsertCancellationPolicyParams struct {
+	PolicyID                             uuid.UUID
+	TenantID                             uuid.UUID
+	FacilityID                           pgtype.UUID
+	NoticeHours                          int32
+	RescheduleNoticeHours                int32
+	MaxReschedules                       int32
+	ChargeableWhenLate                   bool
+	TeleconsultEnabled                   bool
+	TeleconsultVisitTypes                []string
+	TeleconsultRequiresConfirmedIdentity bool
+	CreatedAt                            pgtype.Timestamptz
+	UpdatedAt                            pgtype.Timestamptz
+}
+
+func (q *Queries) UpsertCancellationPolicy(ctx context.Context, arg UpsertCancellationPolicyParams) error {
+	_, err := q.db.Exec(ctx, upsertCancellationPolicy,
+		arg.PolicyID,
+		arg.TenantID,
+		arg.FacilityID,
+		arg.NoticeHours,
+		arg.RescheduleNoticeHours,
+		arg.MaxReschedules,
+		arg.ChargeableWhenLate,
+		arg.TeleconsultEnabled,
+		arg.TeleconsultVisitTypes,
+		arg.TeleconsultRequiresConfirmedIdentity,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	return err
 }

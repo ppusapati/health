@@ -58,6 +58,15 @@ func (r AppointmentRepo) Insert(ctx context.Context, scope authctx.TenantScope,
 	if err != nil {
 		return err
 	}
+	seriesID, err := optionalUUID(a.SeriesID)
+	if err != nil {
+		return err
+	}
+	var occurrence *int32
+	if a.Occurrence > 0 {
+		position := int32(a.Occurrence)
+		occurrence = &position
+	}
 
 	q := r.queries(ctx)
 	if err := q.InsertAppointment(ctx, sqlcgen.InsertAppointmentParams{
@@ -67,7 +76,9 @@ func (r AppointmentRepo) Insert(ctx context.Context, scope authctx.TenantScope,
 		StartsAt: timestamptz(a.StartsAt), EndsAt: timestamptz(a.EndsAt),
 		Status: string(a.Status), BookedBy: a.BookedBy, Reason: a.Reason,
 		RescheduledFromID: rescheduledFrom,
-		CreatedAt:         timestamptz(a.CreatedAt), UpdatedAt: timestamptz(a.UpdatedAt),
+		SeriesID:          seriesID, Occurrence: occurrence,
+		RescheduleCount: int32(a.RescheduleCount), JoinUrl: a.JoinURL,
+		CreatedAt: timestamptz(a.CreatedAt), UpdatedAt: timestamptz(a.UpdatedAt),
 	}); err != nil {
 		return err
 	}
@@ -260,13 +271,20 @@ func appointmentFromRow(row sqlcgen.SchedulingAppointment) *domain.Appointment {
 		Status:   domain.Status(row.Status),
 		BookedBy: row.BookedBy, Reason: row.Reason,
 		CreatedAt: row.CreatedAt.Time.UTC(), UpdatedAt: row.UpdatedAt.Time.UTC(),
-		Version: row.Version,
+		Version:         row.Version,
+		RescheduleCount: int(row.RescheduleCount), JoinURL: row.JoinUrl,
 	}
 	if row.OrgUnitID.Valid {
 		a.OrgUnitID = uuid.UUID(row.OrgUnitID.Bytes).String()
 	}
 	if row.RescheduledFromID.Valid {
 		a.RescheduledFromID = uuid.UUID(row.RescheduledFromID.Bytes).String()
+	}
+	if row.SeriesID.Valid {
+		a.SeriesID = uuid.UUID(row.SeriesID.Bytes).String()
+	}
+	if row.Occurrence != nil {
+		a.Occurrence = int(*row.Occurrence)
 	}
 	return domain.RestoreAppointment(row.AppointmentID.String(), a)
 }

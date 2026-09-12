@@ -135,6 +135,12 @@ type PatientDirectory interface {
 	// error when the patient is not in this tenant.
 	AcceptsRoutineScheduling(ctx context.Context, scope authctx.TenantScope,
 		patientID string) (bool, error)
+	// IdentityConfirmed reports whether the patient's identity has been
+	// positively established (SRS-EMPI-010). A facility may insist a first
+	// teleconsult waits for that, because identifying somebody over video is
+	// materially harder than at a desk.
+	IdentityConfirmed(ctx context.Context, scope authctx.TenantScope,
+		patientID string) (bool, error)
 }
 
 // UnitOfWork runs work in one transaction.
@@ -157,3 +163,82 @@ type IDGenerator interface{ NewID() string }
 
 // Clock reads the current time.
 type Clock interface{ Now() time.Time }
+
+// PolicyRepository reads and writes the cancellation and teleconsult rules
+// (SRS-SCH-005, SRS-SCH-015).
+type PolicyRepository interface {
+	// Resolve returns the policy in force, facility-specific first and
+	// tenant-wide second, falling back to the domain defaults when a tenant
+	// has configured nothing.
+	Resolve(ctx context.Context, scope authctx.TenantScope, facilityID string) (
+		domain.CancellationPolicy, domain.TeleconsultPolicy, error)
+	Set(ctx context.Context, scope authctx.TenantScope, facilityID string,
+		cancellation domain.CancellationPolicy, teleconsult domain.TeleconsultPolicy,
+		now time.Time) error
+	// RecordOutcome captures what the policy made of a cancellation or a
+	// reschedule, at the moment of the decision. Append-only: the record a
+	// disputed fee turns on is the one written at the time.
+	RecordOutcome(ctx context.Context, scope authctx.TenantScope, appointmentID,
+		kind string, outcome domain.CancellationOutcome, by, reason string, at time.Time) error
+	Outcomes(ctx context.Context, scope authctx.TenantScope, appointmentID string) (
+		[]PolicyOutcome, error)
+}
+
+// PolicyOutcome is a stored decision.
+type PolicyOutcome struct {
+	Kind      string
+	Outcome   domain.CancellationOutcome
+	DecidedBy string
+	DecidedAt time.Time
+	Reason    string
+}
+
+// SeriesRepository persists recurring courses (SRS-SCH-013).
+type SeriesRepository interface {
+	Insert(ctx context.Context, scope authctx.TenantScope, s domain.Series) error
+	Get(ctx context.Context, scope authctx.TenantScope, seriesID string) (domain.Series, error)
+	// Appointments returns every occurrence in order, so a bulk change can
+	// walk them.
+	Appointments(ctx context.Context, scope authctx.TenantScope,
+		seriesID string) ([]*domain.Appointment, error)
+	Cancel(ctx context.Context, scope authctx.TenantScope, seriesID string) error
+}
+
+// WaitlistRepository persists patients waiting for an earlier slot
+// (SRS-SCH-006).
+type WaitlistRepository interface {
+	Insert(ctx context.Context, scope authctx.TenantScope, w domain.WaitlistEntry) error
+	Get(ctx context.Context, scope authctx.TenantScope, waitlistID string) (domain.WaitlistEntry, error)
+	// Open returns the list a scheduler works when a slot frees up, oldest
+	// first — the only ordering anybody can defend at the desk.
+	Open(ctx context.Context, scope authctx.TenantScope, resourceID string,
+		limit int32) ([]domain.WaitlistEntry, error)
+	// Update writes the entry back, guarded on the status the caller read.
+	// Returns ErrVersionConflict when another scheduler acted first.
+	Update(ctx context.Context, scope authctx.TenantScope, w domain.WaitlistEntry,
+		expected domain.WaitlistStatus) error
+	// ExpireStale returns unanswered offers to the waiting list.
+	ExpireStale(ctx context.Context, scope authctx.TenantScope, now time.Time) (int64, error)
+}
+
+// RescheduleRecorder carries a reschedule count forward across a chain.
+type RescheduleRecorder interface {
+	SetRescheduleCount(ctx context.Context, scope authctx.TenantScope,
+		appointmentID string, count int, expectedVersion int64, at time.Time) error
+}
+
+// MeetingProvider mints the link a teleconsult happens on (SRS-SCH-015).
+//
+// A port because which video service a hospital uses is a procurement decision
+// that changes, and because the link is a credential: anybody holding it can
+// join a consultation. Keeping minting behind an interface means the production
+// adapter can issue a short-lived, per-appointment token without the scheduling
+// context knowing how.
+type MeetingProvider interface {
+	// NewMeeting returns the join link for one appointment.
+	NewMeeting(ctx context.Context, scope authctx.TenantScope,
+		appointmentID string, startsAt, endsAt time.Time) (string, error)
+	// EndMeeting revokes a link when the appointment is cancelled, so a
+	// cancelled consultation does not leave a door open.
+	EndMeeting(ctx context.Context, scope authctx.TenantScope, appointmentID string) error
+}
