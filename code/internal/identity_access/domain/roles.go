@@ -42,6 +42,11 @@ const (
 
 	// RoleClinician reads patient identity in the course of care.
 	RoleClinician Role = "clinician"
+
+	// RoleScheduler runs the diary: rosters, leave, theatre blocks, and the
+	// authority to book into a provisional block when the list is agreed
+	// (SRS-SCH-002). The Wave-1 backlog actor is "Scheduler".
+	RoleScheduler Role = "scheduler"
 )
 
 // rolePermissions is the catalogue. A role absent from this table grants
@@ -61,6 +66,22 @@ var rolePermissions = map[Role][]string{
 		// inside it are different jobs, and bundling them would put every
 		// tenant admin in the patient index.
 		"empi.patient.configure",
+		// Rosters are tenant administration for the same reason: deciding when
+		// a clinic runs is configuration, and it is deliberately not bundled
+		// with the ability to look inside the diary at who is coming.
+		"sch.schedule.configure",
+	},
+	RoleScheduler: {
+		"organization.facility.read",
+		"empi.patient.read",
+		"sch.schedule.configure",
+		"sch.schedule.read",
+		"sch.appointment.book",
+		"sch.appointment.manage",
+		// Booking into a provisional block, which is what a scheduler does
+		// when a theatre list is agreed. It never reaches annual leave: that
+		// block is not overridable at all, whoever asks.
+		"sch.schedule.override",
 	},
 	RoleFacilityViewer: {
 		"organization.facility.read",
@@ -84,6 +105,12 @@ var rolePermissions = map[Role][]string{
 		"empi.patient.update",
 		"empi.patient.manage",
 		"organization.facility.read",
+		// The front desk books, reschedules and checks patients in. It does
+		// not define rosters: a receptionist who could rewrite the clinic's
+		// availability is one mis-click from a clinician's Tuesday vanishing.
+		"sch.schedule.read",
+		"sch.appointment.book",
+		"sch.appointment.manage",
 	},
 
 	// HIM resolves identities. They hold merge and unrestricted read, because
@@ -104,6 +131,15 @@ var rolePermissions = map[Role][]string{
 		"empi.patient.read",
 		"empi.patient.read_restricted",
 		"organization.facility.read",
+		// A clinician reads their own diary and drives the queue in front of
+		// them — calling the next patient in, ending a consultation. They do
+		// not book: that is the desk's job and the patient's.
+		"sch.schedule.read",
+		"sch.appointment.manage",
+		// Reprioritising a queue on medical grounds is theirs alone
+		// (SRS-SCH-011), and a correction to a status recorded in error is a
+		// clinical judgement about what actually happened.
+		"sch.appointment.correct",
 	},
 }
 
@@ -163,6 +199,7 @@ var rolePurposes = map[Role][]authctx.PurposeOfUse{
 	RoleHIMOfficer:        {authctx.PurposeTreatment, authctx.PurposeOperations},
 	// A clinician reads a chart to treat somebody. Nothing else.
 	RoleClinician: {authctx.PurposeTreatment},
+	RoleScheduler: {authctx.PurposeTreatment, authctx.PurposeOperations},
 }
 
 // PurposesFor returns the purposes-of-use the given roles may assert,

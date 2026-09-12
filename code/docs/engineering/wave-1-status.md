@@ -13,7 +13,7 @@ What this records is which requirements have working, tested implementations.
 |---|---|---|---|
 | 1 | EMPI foundation | SRS-EMPI-001 … 009 | **Complete** |
 | 2 | EMPI completion | SRS-EMPI-010 … 018 | **Complete** |
-| 3 | Scheduling | SRS-SCH-001 … 016 | Not started |
+| 3 | Scheduling | SRS-SCH-001 … 016 | **In progress** — 001–004, 014, 016 implemented |
 | 4 | Encounter, clinical, nursing | SRS-ENC/CLN/NUR | Not started |
 | 5 | Orders, medication, billing | SRS-ORD/MED/BIL | Not started |
 
@@ -472,6 +472,111 @@ The flag now governs only the emergency path, `Check` is always enforced, and
 while the flag had that side effect: a hospital that has configured nothing must
 still be able to admit an unconscious patient, because refusing delays care or
 pushes it off-record.
+
+## Sprint 3 — scheduling
+
+| Requirement | What it asks for | State |
+|---|---|---|
+| SRS-SCH-001 | Provider/resource schedules with facility, department, visit type, slot duration, capacity, effective dates | **Implemented** |
+| SRS-SCH-002 | Leave/block/meeting/theatre/procedure exceptions; blocked capacity unbookable without override | **Implemented** |
+| SRS-SCH-003 | Slot search by specialty, provider, facility, visit type, date range and mode; only bookable capacity, paginated | **Implemented** |
+| SRS-SCH-004 | Atomic booking that cannot exceed configured capacity under concurrency | **Implemented** |
+| SRS-SCH-005 | Reschedule/cancel with cutoff policy, reason, fee/refund integration; status history retained | Not started |
+| SRS-SCH-006 | Waitlist with expiring offers and no duplicate confirmed bookings | Not started |
+| SRS-SCH-007 | Check-in with token/queue state, arrival mode | Not started |
+| SRS-SCH-008 | Nine queue states; invalid transitions rejected unless authorised correction | Domain and persistence complete; the queue RPCs arrive with 3C |
+| SRS-SCH-009 | Wait-time estimate from service rate, queue and provider status | Not started |
+| SRS-SCH-010 | Walk-in appointment/queue with reason and prioritisation | Not started |
+| SRS-SCH-011 | Medically justified queue reprioritisation, audited and visible | Not started |
+| SRS-SCH-012 | Configurable booking/reminder/reschedule/cancellation notifications | Not started |
+| SRS-SCH-013 | Recurring appointments and therapy series | Not started |
+| SRS-SCH-014 | Prevent booking an inactive provider/resource/facility, with a domain-specific error | **Implemented** |
+| SRS-SCH-015 | Teleconsult vs in-person rules driving location/link and eligibility | Partial — visit mode is on the roster and the booking; the link and eligibility half arrives with 3B |
+| SRS-SCH-016 | `appointment.booked/rescheduled/cancelled/checked_in/no_show`, idempotent and versioned | Partial — `booked` emitted; the rest arrive with their use cases |
+
+### What availability and booking enforce
+
+- **A roster is a rule; slots are generated.** A materialised diary goes stale
+  the instant a roster changes, and the stale entries are indistinguishable from
+  the good ones: a patient books a Tuesday that no longer exists and nobody
+  finds out until they arrive. Generating on read makes SRS-SCH-003's criterion
+  — "slot search reflects active roster and exceptions" — true by construction
+  rather than by a refresh job whose failure nobody notices.
+
+- **Capacity is one statement.** SRS-SCH-004's acceptance criterion is a
+  concurrency test, and the only thing that reliably satisfies it is a guarded
+  `UPDATE … WHERE booked < capacity RETURNING` taking a row lock — the same
+  reasoning as the numbering sequence behind SRS-EMPI-016. A check-then-insert
+  is a race two bookings both win, and it fails under load rather than under
+  test. A CHECK constraint holds the same invariant in the table, so a
+  migration or a future code path that forgets cannot breach it either.
+  Fault-injecting the guard makes `TestConcurrentBookingsCannotExceedCapacity`
+  fail, which is how we know it is not vacuous.
+
+- **A slot row exists only where capacity is consumed.** Written on first
+  booking with `ON CONFLICT DO NOTHING`, so two concurrent first bookings
+  converge on one row and the loser does not reset the winner's counter.
+
+- **Leave is not a permission question.** An overridable block — a provisional
+  theatre list — is visible to a scheduler and bookable by one. Annual leave is
+  neither, whoever asks: the clinician is not there, and an override that could
+  conjure them up would be a permission to book a patient in to see nobody.
+  The first version of `Available` got this wrong by asking only "is this
+  blocked" and not "by what"; the domain test caught it.
+
+- **A slot the client names is regenerated, not trusted.** A caller that could
+  supply its own instant and capacity would be defining its own roster, and the
+  first symptom would be appointments outside clinic hours.
+
+- **Time is local, stored as instants.** Sessions are built from local midnight
+  in the resource's own zone, so a daylight-saving transition moves the whole
+  clinic with the clock rather than booking half of it into the wrong hour on
+  the two days that matter most.
+
+- **Booking is not roster configuration.** The Wave-1 backlog lists SRS-SCH-004
+  under `sch.configure`, which would mean booking an appointment required the
+  authority to rewrite the clinic's roster — so every receptionist would hold
+  it. Implemented as a distinct `sch.appointment.book`; recorded below as a
+  deliberate deviation.
+
+- **Cancelled releases capacity; no-show does not.** The slot was consumed
+  whether or not the patient came. Getting this backwards either double-books
+  the clinic or leaves a morning of phantom bookings nobody can fill.
+
+### Sprint 3 evidence
+
+| Property | Test |
+|---|---|
+| Slot search reflects the roster | `TestSlotSearchReflectsTheRoster`, `TestSlotsAreGeneratedFromTheRoster` |
+| An unfiltered search is refused | `TestAnUnfilteredSlotSearchIsRefused` |
+| Booking consumes the slot and it stops being offered | `TestBookingConsumesTheSlot` |
+| Concurrent bookings cannot exceed capacity | `TestConcurrentBookingsCannotExceedCapacity` |
+| A blocked period is neither offered nor bookable | `TestABlockedPeriodIsNotOfferedOrBookable`, `TestAnExceptionRemovesCapacity` |
+| Only an overridable block can be overridden | `TestOnlyAnOverridableBlockCanBeOverridden`, `TestANonOverridableExceptionWins` |
+| Overriding needs the permission | `TestOverridingNeedsThePermission` |
+| A boundary slot is not eaten by an adjacent block | `TestAnExceptionDoesNotEatTheBoundarySlot` |
+| A facility closure removes the whole day | `TestAFacilityClosureRemovesTheWholeDay` |
+| An inactive resource is refused specifically, and offers nothing | `TestBookingAnInactiveResourceIsRefusedSpecifically`, `TestAnUnavailableResourceReportsWhy` |
+| A slot outside the roster cannot be booked | `TestASlotOutsideTheRosterCannotBeBooked` |
+| A deceased patient cannot be given a routine appointment | `TestADeceasedPatientCannotBeGivenARoutineAppointment` |
+| A clerk cannot rewrite the roster; a clinician cannot book | `TestAClerkCannotRewriteTheRoster`, `TestAClinicianCannotBook` |
+| Booking emits an event carrying no clinical or demographic detail | `TestBookingEmitsAnAppointmentBookedEvent` |
+| A diary cannot be reached across a tenant boundary | `TestASlotSearchCannotReachAnotherTenant` |
+| The ordinary clinic path is permitted; an invalid sequence is not | `TestTheOrdinaryClinicPathIsPermitted`, `TestAnInvalidSequenceIsRejected` |
+| An authorised correction can undo a mistaken no-show, and the no-show survives | `TestACorrectionCanUndoAMistakenNoShow` |
+| Cancelled releases capacity; no-show does not | `TestOnlyCancellationReleasesCapacity` |
+| A schedule refuses an unusable session | `TestAScheduleRefusesAnUnusableSession` |
+| Effective dates are honoured in both directions | `TestAScheduleAppliesOnlyWithinItsEffectiveWindow` |
+
+### Decisions taken against the backlog
+
+**SRS-SCH-004 is listed under the `sch.configure` permission.** Booking an
+appointment is what a receptionist does a hundred times a day; rewriting a
+clinic's roster is what a scheduler does occasionally and deliberately. Behind
+one permission, every receptionist could delete a clinician's Tuesday.
+Implemented as a distinct `sch.appointment.book`, with `sch.schedule.configure`
+reserved for rosters — the same shape as the SRS-EMPI-005 slip recorded above.
+Pinned by `TestAClerkCannotRewriteTheRoster`.
 
 ## Wave-0 capabilities Wave 1 consumes
 

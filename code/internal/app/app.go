@@ -17,6 +17,7 @@ import (
 	"github.com/ppusapati/health/code/gen/go/healthcare/identity_access/v1/identityaccessv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/organization/v1/organizationv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/platform_api/v1/platformapiv1connect"
+	"github.com/ppusapati/health/code/gen/go/healthcare/scheduling/v1/schedulingv1connect"
 	empipostgres "github.com/ppusapati/health/code/internal/empi/adapters/postgres"
 	empiapp "github.com/ppusapati/health/code/internal/empi/application"
 	empiports "github.com/ppusapati/health/code/internal/empi/ports"
@@ -30,6 +31,9 @@ import (
 	"github.com/ppusapati/health/code/internal/platform/store"
 	platformtransport "github.com/ppusapati/health/code/internal/platform/transport"
 	platformapitransport "github.com/ppusapati/health/code/internal/platform_api/transport"
+	schedulingpostgres "github.com/ppusapati/health/code/internal/scheduling/adapters/postgres"
+	schedulingapp "github.com/ppusapati/health/code/internal/scheduling/application"
+	schedulingtransport "github.com/ppusapati/health/code/internal/scheduling/transport"
 )
 
 // uuidGenerator mints opaque v4 identifiers. Business meaning is never encoded
@@ -112,6 +116,7 @@ type Server struct {
 	Handler      http.Handler
 	Organization *orgapp.Service
 	Patients     *empiapp.Service
+	Scheduling   *schedulingapp.Service
 	Store        *store.Store
 	RateLimiter  *platformtransport.RateLimiter
 
@@ -179,6 +184,22 @@ func New(deps Deps) *Server {
 		Clock:        systemClock{},
 	})
 
+	schedulingRepo := schedulingpostgres.New(txManager)
+	schedulingService := schedulingapp.NewService(schedulingapp.Deps{
+		UnitOfWork:   txManager,
+		Resources:    schedulingpostgres.ResourceRepo{Repository: schedulingRepo},
+		Schedules:    schedulingpostgres.ScheduleRepo{Repository: schedulingRepo},
+		Slots:        schedulingpostgres.SlotRepo{Repository: schedulingRepo},
+		Appointments: schedulingpostgres.AppointmentRepo{Repository: schedulingRepo},
+		Calendar: schedulingpostgres.NewCalendar(repo,
+			orgpostgres.FacilityRepo{Repository: repo}),
+		Patients: schedulingpostgres.NewPatients(empipostgres.PatientRepo{Repository: empiRepo}),
+		Events:   platformStore,
+		Audits:   store.AuditAppenderFunc(platformStore.AppendAudit),
+		IDs:      uuidGenerator{},
+		Clock:    systemClock{},
+	})
+
 	orgService := orgapp.NewService(orgapp.Deps{
 		UnitOfWork: txManager,
 		Tenants:    orgpostgres.TenantRepo{Repository: repo},
@@ -240,6 +261,8 @@ func New(deps Deps) *Server {
 		identitytransport.NewHandler(orgService), interceptors))
 	mux.Handle(empiv1connect.NewPatientServiceHandler(
 		empitransport.NewHandler(empiService), interceptors))
+	mux.Handle(schedulingv1connect.NewAppointmentServiceHandler(
+		schedulingtransport.NewHandler(schedulingService), interceptors))
 	mux.Handle(platformapiv1connect.NewHealthServiceHandler(
 		platformapitransport.NewHandler(deps.Build, map[string]platformapitransport.Pinger{
 			"postgres": poolPinger{pool: deps.Pool},

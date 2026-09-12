@@ -1,0 +1,335 @@
+// Scheduling: availability, appointments and the queue.
+//
+// Owning context : scheduling  (Master Engineering Registry)
+// Owning service : AppointmentService
+// Trace          : SRS-SCH-001 … SRS-SCH-016
+syntax = "proto3";
+
+package healthcare.scheduling.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ppusapati/health/code/gen/go/healthcare/scheduling/v1;schedulingv1";
+
+// What kind of thing is being booked (SRS-SCH-001).
+//
+// A clinician and an operating theatre are the same thing to a diary: something
+// with finite time that two people cannot have at once. A schedule that could
+// attach only to a person could not express "this scanner, forty minutes, one
+// patient at a time", and a hospital's scarcest resources are usually not
+// people.
+enum ResourceType {
+  RESOURCE_TYPE_UNSPECIFIED = 0;
+  RESOURCE_TYPE_PRACTITIONER = 1;
+  RESOURCE_TYPE_ROOM = 2;
+  RESOURCE_TYPE_EQUIPMENT = 3;
+}
+
+enum ResourceStatus {
+  RESOURCE_STATUS_UNSPECIFIED = 0;
+  RESOURCE_STATUS_ACTIVE = 1;
+  // Has left, is out of service, or is not yet in service. Past appointments
+  // stay: a clinician who has retired still saw the patients they saw.
+  RESOURCE_STATUS_INACTIVE = 2;
+}
+
+// What kind of appointment a slot is for.
+//
+// Part of the roster rather than the booking because the durations differ: a
+// new-patient assessment is forty minutes and a follow-up is ten, and a diary
+// that let either be booked into either would waste half the clinic or overrun
+// it.
+enum VisitType {
+  VISIT_TYPE_UNSPECIFIED = 0;
+  VISIT_TYPE_NEW = 1;
+  VISIT_TYPE_FOLLOW_UP = 2;
+  VISIT_TYPE_PROCEDURE = 3;
+  VISIT_TYPE_TELECONSULT = 4;
+  VISIT_TYPE_WALK_IN = 5;
+}
+
+// Where the appointment happens (SRS-SCH-015).
+enum VisitMode {
+  VISIT_MODE_UNSPECIFIED = 0;
+  VISIT_MODE_IN_PERSON = 1;
+  VISIT_MODE_TELECONSULT = 2;
+}
+
+// Why capacity was removed (SRS-SCH-002).
+enum ExceptionKind {
+  EXCEPTION_KIND_UNSPECIFIED = 0;
+  EXCEPTION_KIND_LEAVE = 1;
+  EXCEPTION_KIND_BLOCK = 2;
+  EXCEPTION_KIND_MEETING = 3;
+  EXCEPTION_KIND_THEATRE = 4;
+  EXCEPTION_KIND_PROCEDURE = 5;
+}
+
+// Where an appointment sits in its life (SRS-SCH-008).
+//
+// Deliberately not a total order. Triage is skipped in an outpatient clinic and
+// mandatory in an emergency department; a patient can leave before being seen;
+// a consultation can be re-entered because the clinician stepped out for a
+// result.
+enum AppointmentStatus {
+  APPOINTMENT_STATUS_UNSPECIFIED = 0;
+  APPOINTMENT_STATUS_SCHEDULED = 1;
+  APPOINTMENT_STATUS_ARRIVED = 2;
+  APPOINTMENT_STATUS_TRIAGED = 3;
+  APPOINTMENT_STATUS_WAITING_CLINICIAN = 4;
+  APPOINTMENT_STATUS_IN_CONSULTATION = 5;
+  APPOINTMENT_STATUS_POST_CONSULTATION = 6;
+  APPOINTMENT_STATUS_COMPLETED = 7;
+  APPOINTMENT_STATUS_NO_SHOW = 8;
+  APPOINTMENT_STATUS_CANCELLED = 9;
+}
+
+message Resource {
+  string resource_id = 1;
+  string facility_id = 2;
+  // The department or specialty, for the "search by specialty" half of
+  // SRS-SCH-003 — how a patient books without knowing a clinician's name.
+  string org_unit_id = 3;
+  ResourceType type = 4;
+  // The identity a practitioner's diary belongs to. Empty for a room or a
+  // machine, which are nobody.
+  string subject_id = 5;
+  string display_name = 6;
+  ResourceStatus status = 7;
+  string time_zone = 8;
+}
+
+message Schedule {
+  string schedule_id = 1;
+  string resource_id = 2;
+  string facility_id = 3;
+  VisitType visit_type = 4;
+  VisitMode visit_mode = 5;
+  // 0 is Sunday, matching Go and ISO's weekday-name ordering.
+  int32 weekday = 6;
+  // Minutes from local midnight. Minutes rather than a time, because a rule has
+  // no date and a zero date carrying a time reads as year 1 in every log.
+  int32 start_minute = 7;
+  int32 end_minute = 8;
+  int32 slot_minutes = 9;
+  // How many patients one slot holds. More than one is a group clinic or a
+  // double-booked follow-up list, both of which are real.
+  int32 capacity = 10;
+  // Local dates; until is exclusive and unset means open-ended.
+  google.protobuf.Timestamp effective_from = 11;
+  google.protobuf.Timestamp effective_until = 12;
+}
+
+message ScheduleException {
+  string exception_id = 1;
+  string resource_id = 2;
+  ExceptionKind kind = 3;
+  google.protobuf.Timestamp starts_at = 4;
+  google.protobuf.Timestamp ends_at = 5;
+  // What a colleague reads when deciding whether to ask for an override.
+  // "Blocked" with no reason gets overridden by default.
+  string reason = 6;
+  // Annual leave is not overridable; a provisional theatre block often is.
+  bool overridable = 7;
+  string created_by = 8;
+}
+
+// One bookable period. Generated from the roster on every search rather than
+// stored, so the result reflects the roster as it is now.
+message Slot {
+  string resource_id = 1;
+  string facility_id = 2;
+  string org_unit_id = 3;
+  VisitType visit_type = 4;
+  VisitMode visit_mode = 5;
+  google.protobuf.Timestamp starts_at = 6;
+  google.protobuf.Timestamp ends_at = 7;
+  int32 capacity = 8;
+  int32 booked = 9;
+  int32 remaining = 10;
+  // Present only for a caller holding the override permission, and only where
+  // the block permits an override at all. A scheduler needs to see what they
+  // are booking into and why it was blocked.
+  bool blocked = 11;
+  string blocked_reason = 12;
+  ExceptionKind blocked_kind = 13;
+}
+
+message StatusChange {
+  AppointmentStatus from = 1;
+  AppointmentStatus to = 2;
+  google.protobuf.Timestamp at = 3;
+  string by = 4;
+  string reason = 5;
+  // A transition the machine would otherwise refuse, made under the "unless
+  // authorized correction" clause of SRS-SCH-008.
+  bool corrected = 6;
+}
+
+message Appointment {
+  string appointment_id = 1;
+  string facility_id = 2;
+  string resource_id = 3;
+  string org_unit_id = 4;
+  string patient_id = 5;
+  VisitType visit_type = 6;
+  VisitMode visit_mode = 7;
+  google.protobuf.Timestamp starts_at = 8;
+  google.protobuf.Timestamp ends_at = 9;
+  AppointmentStatus status = 10;
+  string booked_by = 11;
+  // Why the patient is coming, as stated at booking. Short and non-clinical: a
+  // diagnosis belongs in the encounter, which far fewer people can see.
+  string reason = 12;
+  // Every status this appointment has held. SRS-SCH-005 requires it to be
+  // retained: a patient disputing a missed-appointment fee needs the record to
+  // show when they were marked a no-show and by whom.
+  repeated StatusChange history = 13;
+  // Chains to the appointment this one replaced, so the chronology survives a
+  // reschedule.
+  string rescheduled_from_id = 14;
+  int64 version = 15;
+}
+
+message DefineResourceRequest {
+  string facility_id = 1;
+  string org_unit_id = 2;
+  ResourceType type = 3;
+  string subject_id = 4;
+  string display_name = 5;
+  // An IANA zone. A diary is written in local time and nothing else makes sense
+  // to the people reading it.
+  string time_zone = 6;
+}
+
+message DefineResourceResponse {
+  Resource resource = 1;
+}
+
+message SetResourceStatusRequest {
+  string resource_id = 1;
+  ResourceStatus status = 2;
+}
+
+message SetResourceStatusResponse {}
+
+message DefineScheduleRequest {
+  string resource_id = 1;
+  VisitType visit_type = 2;
+  VisitMode visit_mode = 3;
+  int32 weekday = 4;
+  int32 start_minute = 5;
+  int32 end_minute = 6;
+  int32 slot_minutes = 7;
+  int32 capacity = 8;
+  google.protobuf.Timestamp effective_from = 9;
+  google.protobuf.Timestamp effective_until = 10;
+}
+
+message DefineScheduleResponse {
+  Schedule schedule = 1;
+}
+
+message BlockPeriodRequest {
+  string resource_id = 1;
+  ExceptionKind kind = 2;
+  google.protobuf.Timestamp starts_at = 3;
+  google.protobuf.Timestamp ends_at = 4;
+  string reason = 5;
+  bool overridable = 6;
+}
+
+message BlockPeriodResponse {
+  ScheduleException exception = 1;
+}
+
+message UnblockPeriodRequest {
+  string exception_id = 1;
+}
+
+message UnblockPeriodResponse {}
+
+message SearchSlotsRequest {
+  string facility_id = 1;
+  // The specialty or department, which is how a patient who does not know a
+  // clinician's name searches.
+  string org_unit_id = 2;
+  string resource_id = 3;
+  VisitType visit_type = 4;
+  VisitMode visit_mode = 5;
+  // Local dates; until is exclusive.
+  google.protobuf.Timestamp from = 6;
+  google.protobuf.Timestamp until = 7;
+  int32 page_size = 8;
+}
+
+message SearchSlotsResponse {
+  repeated Slot slots = 1;
+  // The page limit cut the result, so a client can say so rather than implying
+  // the clinic has nothing later.
+  bool truncated = 2;
+}
+
+message BookAppointmentRequest {
+  string patient_id = 1;
+  // The slot is named by resource, instant and visit type rather than by an
+  // opaque id, because slots are generated rather than stored: an id would have
+  // to be minted at search time and would be meaningless by the time the
+  // patient chose one.
+  string resource_id = 2;
+  google.protobuf.Timestamp starts_at = 3;
+  VisitType visit_type = 4;
+  string reason = 5;
+  // Book into a blocked period. Needs the override permission, and works only
+  // where the block said it was overridable.
+  bool override = 6;
+}
+
+message BookAppointmentResponse {
+  Appointment appointment = 1;
+}
+
+message GetAppointmentRequest {
+  string appointment_id = 1;
+}
+
+message GetAppointmentResponse {
+  Appointment appointment = 1;
+}
+
+message ListAppointmentsRequest {
+  string patient_id = 1;
+  string facility_id = 2;
+  string resource_id = 3;
+  google.protobuf.Timestamp from = 4;
+  google.protobuf.Timestamp until = 5;
+  int32 page_size = 6;
+}
+
+message ListAppointmentsResponse {
+  repeated Appointment appointments = 1;
+}
+
+service AppointmentService {
+  // SRS-SCH-001. Rosters are configuration: defining when a clinic runs is
+  // deliberately not bundled with looking inside the diary at who is coming.
+  rpc DefineResource(DefineResourceRequest) returns (DefineResourceResponse);
+  rpc SetResourceStatus(SetResourceStatusRequest) returns (SetResourceStatusResponse);
+  rpc DefineSchedule(DefineScheduleRequest) returns (DefineScheduleResponse);
+
+  // SRS-SCH-002. Blocked capacity cannot be booked without the override
+  // permission, and leave cannot be overridden at all.
+  rpc BlockPeriod(BlockPeriodRequest) returns (BlockPeriodResponse);
+  rpc UnblockPeriod(UnblockPeriodRequest) returns (UnblockPeriodResponse);
+
+  // SRS-SCH-003. Only bookable capacity is returned, generated from the roster
+  // as it is now rather than from a cache that goes stale the moment it changes.
+  rpc SearchSlots(SearchSlotsRequest) returns (SearchSlotsResponse);
+
+  // SRS-SCH-004. Atomic, and incapable of exceeding configured capacity under
+  // concurrency.
+  rpc BookAppointment(BookAppointmentRequest) returns (BookAppointmentResponse);
+
+  rpc GetAppointment(GetAppointmentRequest) returns (GetAppointmentResponse);
+  rpc ListAppointments(ListAppointmentsRequest) returns (ListAppointmentsResponse);
+}

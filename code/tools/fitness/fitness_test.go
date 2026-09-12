@@ -234,6 +234,7 @@ func TestFIT02_GeneratedQueriesImportedOnlyByAdapters(t *testing.T) {
 		"internal/organization/adapters/postgres",
 		"internal/identity_access/adapters/postgres",
 		"internal/empi/adapters/postgres",
+		"internal/scheduling/adapters/postgres",
 		"internal/platform/store",
 		"internal/platform/workflow",
 		"internal/platform/rules",

@@ -574,6 +574,97 @@ type PlatformWorkflowTimer struct {
 	CreatedAt  pgtype.Timestamptz
 }
 
+type SchedulingAppointment struct {
+	AppointmentID     uuid.UUID
+	TenantID          uuid.UUID
+	FacilityID        uuid.UUID
+	ResourceID        uuid.UUID
+	OrgUnitID         pgtype.UUID
+	PatientID         uuid.UUID
+	SlotID            uuid.UUID
+	VisitType         string
+	VisitMode         string
+	StartsAt          pgtype.Timestamptz
+	EndsAt            pgtype.Timestamptz
+	Status            string
+	BookedBy          string
+	Reason            string
+	RescheduledFromID pgtype.UUID
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	Version           int64
+}
+
+type SchedulingAppointmentStatusHistory struct {
+	HistoryID     uuid.UUID
+	TenantID      uuid.UUID
+	AppointmentID uuid.UUID
+	FromStatus    string
+	ToStatus      string
+	ChangedAt     pgtype.Timestamptz
+	ChangedBy     string
+	Reason        string
+	Corrected     bool
+}
+
+type SchedulingResource struct {
+	ResourceID   uuid.UUID
+	TenantID     uuid.UUID
+	FacilityID   uuid.UUID
+	OrgUnitID    pgtype.UUID
+	ResourceType string
+	SubjectID    string
+	DisplayName  string
+	Status       string
+	TimeZone     string
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+}
+
+type SchedulingSchedule struct {
+	ScheduleID     uuid.UUID
+	TenantID       uuid.UUID
+	ResourceID     uuid.UUID
+	FacilityID     uuid.UUID
+	VisitType      string
+	VisitMode      string
+	Weekday        int16
+	StartMinute    int32
+	EndMinute      int32
+	SlotMinutes    int32
+	Capacity       int32
+	EffectiveFrom  pgtype.Date
+	EffectiveUntil pgtype.Date
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type SchedulingScheduleException struct {
+	ExceptionID uuid.UUID
+	TenantID    uuid.UUID
+	ResourceID  uuid.UUID
+	Kind        string
+	StartsAt    pgtype.Timestamptz
+	EndsAt      pgtype.Timestamptz
+	Reason      string
+	Overridable bool
+	CreatedBy   string
+	CreatedAt   pgtype.Timestamptz
+}
+
+type SchedulingSlot struct {
+	SlotID     uuid.UUID
+	TenantID   uuid.UUID
+	ResourceID uuid.UUID
+	StartsAt   pgtype.Timestamptz
+	EndsAt     pgtype.Timestamptz
+	VisitType  string
+	Capacity   int32
+	Booked     int32
+	CreatedAt  pgtype.Timestamptz
+	UpdatedAt  pgtype.Timestamptz
+}
+
 type SecurityPlatformDowntimeAction struct {
 	ActionID     uuid.UUID
 	EpisodeID    uuid.UUID
