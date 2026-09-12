@@ -86,17 +86,42 @@ func (v *Verifier) Verify(_ context.Context, token string) (authctx.Session, err
 		}
 	}
 
+	// Purposes come from the role catalogue, never from the token. A token
+	// that could name its own purpose-of-use would let a caller write
+	// "treatment" into the regulated audit trail for a query they ran out of
+	// curiosity.
+	permittedPurposes := domain.PurposesFor(roles)
+
 	return authctx.Session{
 		SubjectID:   subjectID,
 		TenantID:    tenantID,
 		Roles:       roleNames,
 		Permissions: domain.PermissionsFor(roles),
-		Purpose:     authctx.PurposeOperations,
+		// The default is the narrowest purpose the credential holds, and the
+		// X-Purpose-Of-Use header narrows further. Defaulting to treatment
+		// would put the strongest clinical justification on every request
+		// nobody bothered to label.
+		Purpose: defaultPurpose(permittedPurposes),
 
 		PermittedFacilities: facilities,
-		// Wave 0 has no clinical roles, so operations is the only purpose any
-		// credential may assert. Clinical purposes arrive with the roles that
-		// justify them, and with the identity provider ADR-008 selects.
-		PermittedPurposes: []authctx.PurposeOfUse{authctx.PurposeOperations},
+		PermittedPurposes:   permittedPurposes,
 	}, nil
+}
+
+// defaultPurpose picks the purpose a request carries when it states none.
+//
+// Operations where the credential holds it, because an unlabelled request is
+// administrative until somebody says otherwise. A credential that cannot assert
+// operations — a clinician — falls back to its first permitted purpose, which
+// PurposesFor returns in a stable order.
+func defaultPurpose(permitted []authctx.PurposeOfUse) authctx.PurposeOfUse {
+	for _, p := range permitted {
+		if p == authctx.PurposeOperations {
+			return authctx.PurposeOperations
+		}
+	}
+	if len(permitted) > 0 {
+		return permitted[0]
+	}
+	return authctx.PurposeUnspecified
 }

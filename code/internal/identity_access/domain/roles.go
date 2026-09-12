@@ -30,6 +30,18 @@ const (
 	// RoleAuditor reads audit trails and cannot mutate clinical or financial
 	// records (SRS-IAM-014).
 	RoleAuditor Role = "auditor"
+
+	// RoleRegistrationClerk registers patients and corrects their details at a
+	// front desk (Wave-1 actor "Registration").
+	RoleRegistrationClerk Role = "registration_clerk"
+
+	// RoleHIMOfficer is health information management: the people who resolve
+	// duplicate identities. The Wave-1 backlog names them "Authorized HIM", and
+	// merge authority is theirs alone.
+	RoleHIMOfficer Role = "him_officer"
+
+	// RoleClinician reads patient identity in the course of care.
+	RoleClinician Role = "clinician"
 )
 
 // rolePermissions is the catalogue. A role absent from this table grants
@@ -43,6 +55,12 @@ var rolePermissions = map[Role][]string{
 		"organization.tenant.read",
 		"organization.facility.create",
 		"organization.facility.read",
+		// Configuring the demographic minimum set and the duplicate-matching
+		// thresholds is tenant administration. Note what is absent: no
+		// empi.patient.read. Tuning how the register behaves and looking
+		// inside it are different jobs, and bundling them would put every
+		// tenant admin in the patient index.
+		"empi.patient.configure",
 	},
 	RoleFacilityViewer: {
 		"organization.facility.read",
@@ -50,6 +68,41 @@ var rolePermissions = map[Role][]string{
 	RoleAuditor: {
 		"platform.audit.read",
 		"organization.tenant.read",
+		"organization.facility.read",
+	},
+
+	// A clerk registers, searches and corrects. Deliberately no merge: merging
+	// fuses two people's records, and the person who created a duplicate at a
+	// busy desk is the last one who should resolve it unreviewed.
+	//
+	// Also no read_restricted. A clerk comparing duplicates sees a masked
+	// candidate — enough to confirm the phone number the patient just read out,
+	// not enough to use the screen as a directory (SRS-EMPI-003).
+	RoleRegistrationClerk: {
+		"empi.patient.create",
+		"empi.patient.read",
+		"empi.patient.update",
+		"empi.patient.manage",
+		"organization.facility.read",
+	},
+
+	// HIM resolves identities. They hold merge and unrestricted read, because
+	// deciding whether two records are one person needs the unmasked detail
+	// that a clerk is deliberately denied.
+	RoleHIMOfficer: {
+		"empi.patient.read",
+		"empi.patient.read_restricted",
+		"empi.patient.update",
+		"empi.patient.manage",
+		"empi.patient.merge",
+		"organization.facility.read",
+	},
+
+	// A clinician reads identity to confirm they have the right patient in
+	// front of them, unmasked, and does not administer it.
+	RoleClinician: {
+		"empi.patient.read",
+		"empi.patient.read_restricted",
 		"organization.facility.read",
 	},
 }
@@ -101,6 +154,15 @@ var rolePurposes = map[Role][]authctx.PurposeOfUse{
 	// than treatment, so their reads are distinguishable in the audit trail
 	// from a clinician's.
 	RoleAuditor: {authctx.PurposeOperations, authctx.PurposeSupport},
+
+	// Registration and HIM act on the identity record in the course of
+	// delivering and administering care. Treatment because a clerk registering
+	// a patient is part of that patient receiving care; payment because the
+	// same desk resolves the identity an invoice is raised against.
+	RoleRegistrationClerk: {authctx.PurposeTreatment, authctx.PurposePayment},
+	RoleHIMOfficer:        {authctx.PurposeTreatment, authctx.PurposeOperations},
+	// A clinician reads a chart to treat somebody. Nothing else.
+	RoleClinician: {authctx.PurposeTreatment},
 }
 
 // PurposesFor returns the purposes-of-use the given roles may assert,

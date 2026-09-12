@@ -13,9 +13,13 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/ppusapati/health/code/gen/go/healthcare/empi/v1/empiv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/identity_access/v1/identityaccessv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/organization/v1/organizationv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/platform_api/v1/platformapiv1connect"
+	empipostgres "github.com/ppusapati/health/code/internal/empi/adapters/postgres"
+	empiapp "github.com/ppusapati/health/code/internal/empi/application"
+	empitransport "github.com/ppusapati/health/code/internal/empi/transport"
 	identitytransport "github.com/ppusapati/health/code/internal/identity_access/transport"
 	orgpostgres "github.com/ppusapati/health/code/internal/organization/adapters/postgres"
 	orgapp "github.com/ppusapati/health/code/internal/organization/application"
@@ -90,6 +94,7 @@ type Deps struct {
 type Server struct {
 	Handler      http.Handler
 	Organization *orgapp.Service
+	Patients     *empiapp.Service
 	Store        *store.Store
 	RateLimiter  *platformtransport.RateLimiter
 
@@ -131,6 +136,24 @@ func New(deps Deps) *Server {
 			store.NewPgBroker(platformStore, events.Notify, nil),
 			store.DefaultBatchSize)
 	}
+
+	// The patient index (SRS-EMPI). It reuses the organization context's
+	// numbering sequence for the MRN rather than minting one: that statement
+	// takes a row lock, which is what makes MRN issuance collision-free under
+	// concurrent registration (SRS-EMPI-016).
+	empiRepo := empipostgres.New(txManager)
+	empiService := empiapp.NewService(empiapp.Deps{
+		UnitOfWork:  txManager,
+		Patients:    empipostgres.PatientRepo{Repository: empiRepo},
+		Identifiers: empipostgres.IdentifierRepo{Repository: empiRepo},
+		Config:      empipostgres.ConfigRepo{Repository: empiRepo},
+		Numbers:     empipostgres.NewMRNIssuer(repo),
+		Tenants:     empipostgres.NewTenantJurisdiction(orgpostgres.TenantRepo{Repository: repo}),
+		Events:      platformStore,
+		Audits:      store.AuditAppenderFunc(platformStore.AppendAudit),
+		IDs:         uuidGenerator{},
+		Clock:       systemClock{},
+	})
 
 	orgService := orgapp.NewService(
 		txManager,
@@ -190,6 +213,8 @@ func New(deps Deps) *Server {
 		orgtransport.NewHandler(orgService), interceptors))
 	mux.Handle(identityaccessv1connect.NewIdentityServiceHandler(
 		identitytransport.NewHandler(orgService), interceptors))
+	mux.Handle(empiv1connect.NewPatientServiceHandler(
+		empitransport.NewHandler(empiService), interceptors))
 	mux.Handle(platformapiv1connect.NewHealthServiceHandler(
 		platformapitransport.NewHandler(deps.Build, map[string]platformapitransport.Pinger{
 			"postgres": poolPinger{pool: deps.Pool},
@@ -204,6 +229,7 @@ func New(deps Deps) *Server {
 	return &Server{
 		Handler:         handler,
 		Organization:    orgService,
+		Patients:        empiService,
 		Store:           platformStore,
 		RateLimiter:     rateLimiter,
 		Publisher:       publisher,

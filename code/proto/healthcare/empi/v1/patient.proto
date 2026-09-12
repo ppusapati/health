@@ -1,0 +1,323 @@
+// Enterprise master patient index: patient identity, identifiers, duplicates.
+//
+// Owning context : patient.identity  (Master Engineering Registry)
+// Owning service : PatientService
+// Trace          : SRS-EMPI-001, SRS-EMPI-002, SRS-EMPI-003, SRS-EMPI-004,
+//                  SRS-EMPI-008
+syntax = "proto3";
+
+package healthcare.empi.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ppusapati/health/code/gen/go/healthcare/empi/v1;empiv1";
+
+// Patient identity lifecycle (Wave-1 spec §6).
+enum PatientStatus {
+  PATIENT_STATUS_UNSPECIFIED = 0;
+  // Created before identity was confirmed — an unconscious admission, a portal
+  // pre-registration. A real patient who can receive care; what is missing is
+  // a confirmed identity.
+  PATIENT_STATUS_CANDIDATE = 1;
+  PATIENT_STATUS_ACTIVE = 2;
+  // Lost a merge. Never deleted: clinical records written against it still
+  // point here, and resolution to the survivor is what makes them readable.
+  PATIENT_STATUS_MERGED = 3;
+  PATIENT_STATUS_INACTIVE = 4;
+}
+
+// Administrative sex, recorded for identification and clinical safety.
+//
+// Deliberately not named Gender: this is the field a laboratory uses to pick a
+// reference range. How a person identifies is a clinical observation with its
+// own history and belongs to SRS-CLN.
+enum Sex {
+  SEX_UNSPECIFIED = 0;
+  SEX_UNKNOWN = 1;
+  SEX_FEMALE = 2;
+  SEX_MALE = 3;
+  SEX_OTHER = 4;
+}
+
+// How much of a date is actually known.
+//
+// "About forty years old" is what an emergency department has for an
+// unconscious patient. Storing it as 1 January of the implied year would be a
+// false precision that duplicate matching then treats as a strong signal, so
+// the precision travels with the value.
+enum DatePrecision {
+  DATE_PRECISION_UNSPECIFIED = 0;
+  DATE_PRECISION_DAY = 1;
+  DATE_PRECISION_MONTH = 2;
+  DATE_PRECISION_YEAR = 3;
+  // Derived from a stated age. The weakest signal a matcher can be given.
+  DATE_PRECISION_ESTIMATED = 4;
+}
+
+enum IdentifierType {
+  IDENTIFIER_TYPE_UNSPECIFIED = 0;
+  // Medical record number, issued by a facility.
+  IDENTIFIER_TYPE_MRN = 1;
+  // National or regional health identifier — ABHA, NHS number.
+  IDENTIFIER_TYPE_NATIONAL_HEALTH = 2;
+  IDENTIFIER_TYPE_GOVERNMENT = 3;
+  IDENTIFIER_TYPE_INSURANCE = 4;
+  IDENTIFIER_TYPE_EXTERNAL = 5;
+}
+
+enum IdentifierStatus {
+  IDENTIFIER_STATUS_UNSPECIFIED = 0;
+  IDENTIFIER_STATUS_ACTIVE = 1;
+  // Was correct and has been replaced. Still resolves: a discharge summary
+  // printed last week quotes it.
+  IDENTIFIER_STATUS_SUPERSEDED = 2;
+  // Was wrong. Must NOT resolve to this patient — it belongs to somebody else,
+  // or to nobody. That single difference is why there are two states here
+  // rather than one "inactive".
+  IDENTIFIER_STATUS_REVOKED = 3;
+}
+
+// A date whose precision is recorded alongside it.
+message PartialDate {
+  // Date component; time of day is ignored.
+  google.protobuf.Timestamp date = 1;
+  DatePrecision precision = 2;
+}
+
+message HumanName {
+  // Some cultures record no family name at all, so this is not universally
+  // required — the facility's demographic policy decides.
+  string family = 1;
+  repeated string given = 2;
+  string prefix = 3;
+  string suffix = 4;
+}
+
+enum ContactSystem {
+  CONTACT_SYSTEM_UNSPECIFIED = 0;
+  CONTACT_SYSTEM_PHONE = 1;
+  CONTACT_SYSTEM_EMAIL = 2;
+}
+
+message ContactPoint {
+  ContactSystem system = 1;
+  string value = 2;
+  // Distinguishes a mobile the patient answers from a landline at an address
+  // they left — which matters for contacting them and for matching.
+  string use = 3;
+}
+
+message Address {
+  repeated string lines = 1;
+  string city = 2;
+  string district = 3;
+  string state = 4;
+  string postal_code = 5;
+  // ISO 3166-1 alpha-2.
+  string country = 6;
+}
+
+message Demographics {
+  HumanName name = 1;
+  PartialDate birth_date = 2;
+  Sex sex = 3;
+  repeated ContactPoint phones = 4;
+  repeated ContactPoint emails = 5;
+  repeated Address addresses = 6;
+}
+
+// One way the outside world names this patient.
+//
+// None of these is the patient's key. SRS-EMPI-002 requires the internal
+// identifier to stay separate precisely so that these can change.
+message PatientIdentifier {
+  string identifier_id = 1;
+  IdentifierType type = 2;
+  // Namespaces the value. Two facilities both issuing "MRN 1001" are two
+  // different patients.
+  string system = 3;
+  string value = 4;
+  string assigning_authority = 5;
+  IdentifierStatus status = 6;
+  // Where this system learned the value. SRS-EMPI-011 requires link history and
+  // source to be retained.
+  string source = 7;
+  // The identifier a banner shows.
+  bool primary = 8;
+  google.protobuf.Timestamp linked_at = 9;
+  google.protobuf.Timestamp unlinked_at = 10;
+  // Explains a supersede or a revoke.
+  string reason = 11;
+}
+
+message DeceasedRecord {
+  PartialDate date = 1;
+  // Who says so: a registrar, a clinician, a national death registry feed. A
+  // feed can be wrong about the wrong patient, and reversing it needs to know
+  // what claimed it.
+  string source = 2;
+  google.protobuf.Timestamp recorded_at = 3;
+  string recorded_by = 4;
+}
+
+message Patient {
+  // Opaque, internal, immutable. Never printed, never quoted, never changed —
+  // not by a merge, not by a correction (SRS-EMPI-002).
+  string patient_id = 1;
+  string registered_facility_id = 2;
+  PatientStatus status = 3;
+  Demographics demographics = 4;
+  repeated PatientIdentifier identifiers = 5;
+  // Set only on the losing side of a merge. Resolves a reference written
+  // before it.
+  string merged_into_patient_id = 6;
+  DeceasedRecord deceased = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp updated_at = 9;
+  int64 version = 10;
+  // True when the record is fit to receive a routine appointment. The identity
+  // context answers the factual half; scheduling owns whether to warn or block
+  // (SRS-EMPI-008).
+  bool accepts_routine_scheduling = 11;
+}
+
+// What a duplicate score means operationally (SRS-EMPI-004).
+//
+// There is deliberately no outcome that means "merge". The strongest verdict
+// this system produces is that a human should look: a missed duplicate shows a
+// clinician half a history, while a wrong merge fuses two people's allergies
+// and medications into one chart.
+enum MatchOutcome {
+  MATCH_OUTCOME_UNSPECIFIED = 0;
+  MATCH_OUTCOME_DISTINCT = 1;
+  // Possible duplicate; registration continues with the candidate shown.
+  MATCH_OUTCOME_REVIEW = 2;
+  // Likely duplicate; routes to manual review. Does NOT authorise a merge.
+  MATCH_OUTCOME_PROBABLE = 3;
+  // An identifier says these are different people whatever the demographics
+  // suggest.
+  MATCH_OUTCOME_CONFLICT = 4;
+}
+
+// One signal's contribution, so a score is reviewable rather than a bare
+// number (SRS-EMPI-003).
+message MatchFieldScore {
+  string field = 1;
+  // 0..1, or negative when the signal says these are different people.
+  double similarity = 2;
+  double weight = 3;
+  // Short, non-PHI explanation such as "year only" or "names appear
+  // transposed".
+  string note = 4;
+}
+
+message PatientMatch {
+  Patient patient = 1;
+  double confidence = 2;
+  MatchOutcome outcome = 3;
+  repeated MatchFieldScore fields = 4;
+  // True when protected fields were masked for this caller. The UI says so
+  // rather than showing blanks that read as missing data.
+  bool masked = 5;
+}
+
+message RegisterPatientRequest {
+  Demographics demographics = 1;
+  // Identifiers the patient already holds — a national health identifier, a
+  // card from another facility. The MRN is issued by this system and must not
+  // be supplied here.
+  repeated PatientIdentifier identifiers = 2;
+  // Acknowledges duplicates already shown to the user. Registration refuses a
+  // probable duplicate unless the caller has seen it and said to proceed,
+  // which is what makes search-before-create a control rather than a courtesy.
+  repeated string acknowledged_duplicate_patient_ids = 3;
+}
+
+// Exactly one of these is populated.
+//
+// Finding a probable duplicate is an expected outcome of search-before-create,
+// not a failure, so it comes back as a successful response with `patient`
+// empty and `potential_duplicates` set. Returning an error instead would be
+// truthful about the outcome and useless in practice: Connect discards the
+// response body on an error, so the caller would be told to review candidates
+// it cannot see, and would have to search again to find them.
+//
+// A client checks `patient`: set means registered, empty means review the
+// candidates and either correct the details or re-send with the patient ids in
+// acknowledged_duplicate_patient_ids.
+message RegisterPatientResponse {
+  Patient patient = 1;
+  // Set when registration did not proceed because a probable duplicate needs
+  // review. Empty on success.
+  repeated PatientMatch potential_duplicates = 2;
+}
+
+message SearchPatientsRequest {
+  // Free-text name fragment, matched case-insensitively.
+  string name = 1;
+  PartialDate birth_date = 2;
+  string phone = 3;
+  // Exact identifier lookup. Finds superseded identifiers too, because a
+  // patient quoting an old card must still be found.
+  string identifier_value = 4;
+  IdentifierType identifier_type = 5;
+  // Namespaces the value. Required for every type except MRN, which is
+  // namespaced by the facility that issued it — two insurers both issue
+  // membership numbers, and without the namespace they collide.
+  string identifier_system = 6;
+  int32 page_size = 7;
+  // Opaque cursor, never a page number.
+  string page_token = 8;
+}
+
+message SearchPatientsResponse {
+  repeated PatientMatch matches = 1;
+  string next_page_token = 2;
+}
+
+message GetPatientRequest {
+  string patient_id = 1;
+  // Follows merged records to the survivor. Default false, so a caller that
+  // means "this exact record" gets it.
+  bool resolve_merged = 2;
+}
+
+message GetPatientResponse {
+  Patient patient = 1;
+  // Set when resolve_merged followed a merge, naming the record asked for.
+  string resolved_from_patient_id = 2;
+  bool masked = 3;
+}
+
+message UpdateDemographicsRequest {
+  string patient_id = 1;
+  Demographics demographics = 2;
+  // Optimistic concurrency: two clerks correcting one record at the same desk
+  // is routine.
+  int64 expected_version = 3;
+}
+
+message UpdateDemographicsResponse {
+  Patient patient = 1;
+}
+
+message ConfirmIdentityRequest {
+  string patient_id = 1;
+  int64 expected_version = 2;
+}
+
+message ConfirmIdentityResponse {
+  Patient patient = 1;
+}
+
+// Patient identity (SRS-EMPI).
+service PatientService {
+  // SRS-EMPI-001. Issues the MRN from the registering facility's sequence.
+  rpc RegisterPatient(RegisterPatientRequest) returns (RegisterPatientResponse);
+  // SRS-EMPI-003. Search before create, exact and fuzzy, with confidence.
+  rpc SearchPatients(SearchPatientsRequest) returns (SearchPatientsResponse);
+  rpc GetPatient(GetPatientRequest) returns (GetPatientResponse);
+  rpc UpdateDemographics(UpdateDemographicsRequest) returns (UpdateDemographicsResponse);
+  // Moves a candidate to active once a positive identifier has been seen.
+  rpc ConfirmIdentity(ConfirmIdentityRequest) returns (ConfirmIdentityResponse);
+}

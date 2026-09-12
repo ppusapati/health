@@ -7,15 +7,28 @@ import (
 	"github.com/ppusapati/health/code/internal/identity_access/domain"
 )
 
+// The union is exactly the two sets combined — no more, and no less.
+//
+// Asserted as a relation rather than as a literal list, so that granting a role
+// a new permission is a decision made in the catalogue rather than a test to
+// update in lockstep. What must not change is that the union invents nothing.
 func TestPermissionsForUnionsRoles(t *testing.T) {
+	admin := domain.PermissionsFor([]domain.Role{domain.RoleTenantAdmin})
+	viewer := domain.PermissionsFor([]domain.Role{domain.RoleFacilityViewer})
 	got := domain.PermissionsFor([]domain.Role{domain.RoleTenantAdmin, domain.RoleFacilityViewer})
-	want := []string{
-		"organization.facility.create",
-		"organization.facility.read",
-		"organization.tenant.read",
+
+	for _, p := range append(append([]string{}, admin...), viewer...) {
+		if !slices.Contains(got, p) {
+			t.Errorf("the union dropped %q", p)
+		}
 	}
-	if !slices.Equal(got, want) {
-		t.Fatalf("PermissionsFor() = %v, want %v", got, want)
+	for _, p := range got {
+		if !slices.Contains(admin, p) && !slices.Contains(viewer, p) {
+			t.Errorf("the union invented %q, which neither role grants", p)
+		}
+	}
+	if !slices.IsSorted(got) {
+		t.Fatalf("PermissionsFor() = %v, which is not sorted; callers cache and compare it", got)
 	}
 }
 
@@ -53,8 +66,71 @@ func TestAuditorHasNoMutatingPermission(t *testing.T) {
 }
 
 func TestPermissionsAreDeduplicated(t *testing.T) {
-	got := domain.PermissionsFor([]domain.Role{domain.RoleTenantAdmin, domain.RoleTenantAdmin})
-	if len(got) != 3 {
-		t.Fatalf("duplicate roles produced %v", got)
+	once := domain.PermissionsFor([]domain.Role{domain.RoleTenantAdmin})
+	twice := domain.PermissionsFor([]domain.Role{domain.RoleTenantAdmin, domain.RoleTenantAdmin})
+	if !slices.Equal(once, twice) {
+		t.Fatalf("the same role twice produced %v, want %v", twice, once)
+	}
+}
+
+// Patient identity role separation (Wave 1, SRS-EMPI-005).
+//
+// Merging fuses two people's records into one chart. The person who created a
+// duplicate at a busy registration desk is the last one who should resolve it
+// unreviewed, so merge authority belongs to HIM and to nobody else.
+//
+// The Wave-1 backlog lists SRS-EMPI-005 under the `empi.read` permission, which
+// would grant merging to every clerk who can search. Read as a transcription
+// slip rather than as a requirement; this test is where that reading is
+// recorded.
+func TestOnlyHIMCanMergePatients(t *testing.T) {
+	for _, r := range []domain.Role{
+		domain.RoleRegistrationClerk, domain.RoleClinician,
+		domain.RoleTenantAdmin, domain.RoleFacilityViewer, domain.RoleAuditor,
+	} {
+		if slices.Contains(domain.PermissionsFor([]domain.Role{r}), "empi.patient.merge") {
+			t.Errorf("role %q grants empi.patient.merge", r)
+		}
+	}
+	if !slices.Contains(domain.PermissionsFor([]domain.Role{domain.RoleHIMOfficer}), "empi.patient.merge") {
+		t.Fatal("him_officer does not grant empi.patient.merge")
+	}
+}
+
+// A clerk comparing duplicates sees a masked candidate: enough to confirm the
+// phone number the patient just read out, not enough to use the duplicate
+// screen as a staff directory (SRS-EMPI-003).
+func TestARegistrationClerkCannotSeeUnmaskedRecords(t *testing.T) {
+	clerk := domain.PermissionsFor([]domain.Role{domain.RoleRegistrationClerk})
+	if slices.Contains(clerk, "empi.patient.read_restricted") {
+		t.Fatal("registration_clerk grants empi.patient.read_restricted")
+	}
+	// And can still do the job.
+	for _, required := range []string{"empi.patient.create", "empi.patient.read"} {
+		if !slices.Contains(clerk, required) {
+			t.Fatalf("registration_clerk cannot %s", required)
+		}
+	}
+}
+
+// Tuning how the register behaves and looking inside it are different jobs.
+func TestConfiguringTheIndexDoesNotGrantReadingIt(t *testing.T) {
+	admin := domain.PermissionsFor([]domain.Role{domain.RoleTenantAdmin})
+	if !slices.Contains(admin, "empi.patient.configure") {
+		t.Fatal("tenant_admin cannot configure the patient index")
+	}
+	if slices.Contains(admin, "empi.patient.read") {
+		t.Fatal("tenant_admin can read patient records")
+	}
+}
+
+// A clinician reads a chart to treat somebody, and administers nothing.
+func TestAClinicianCannotMutateIdentity(t *testing.T) {
+	for _, p := range domain.PermissionsFor([]domain.Role{domain.RoleClinician}) {
+		switch p {
+		case "empi.patient.create", "empi.patient.update",
+			"empi.patient.manage", "empi.patient.merge":
+			t.Errorf("clinician grants %q", p)
+		}
 	}
 }

@@ -233,6 +233,7 @@ func TestFIT02_GeneratedQueriesImportedOnlyByAdapters(t *testing.T) {
 	allowed := []string{
 		"internal/organization/adapters/postgres",
 		"internal/identity_access/adapters/postgres",
+		"internal/empi/adapters/postgres",
 		"internal/platform/store",
 		"internal/platform/workflow",
 		"internal/platform/rules",

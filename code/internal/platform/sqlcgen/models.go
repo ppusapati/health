@@ -9,6 +9,69 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type EmpiDemographicPolicy struct {
+	PolicyID          uuid.UUID
+	TenantID          uuid.UUID
+	Jurisdiction      string
+	FacilityID        pgtype.UUID
+	RequiredFields    []string
+	AllowUnidentified bool
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+}
+
+type EmpiMatchConfig struct {
+	TenantID          uuid.UUID
+	Weights           []byte
+	ReviewThreshold   pgtype.Numeric
+	ProbableThreshold pgtype.Numeric
+	UpdatedAt         pgtype.Timestamptz
+	UpdatedBy         string
+}
+
+type EmpiPatient struct {
+	PatientID            uuid.UUID
+	TenantID             uuid.UUID
+	RegisteredFacilityID uuid.UUID
+	Status               string
+	FamilyName           string
+	GivenNames           []string
+	NamePrefix           string
+	NameSuffix           string
+	BirthDate            pgtype.Date
+	BirthDatePrecision   string
+	Sex                  string
+	Phones               []byte
+	Emails               []byte
+	Addresses            []byte
+	MergedIntoPatientID  pgtype.UUID
+	DeceasedDate         pgtype.Date
+	DeceasedPrecision    string
+	DeceasedSource       string
+	DeceasedRecordedAt   pgtype.Timestamptz
+	DeceasedRecordedBy   string
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	Version              int64
+}
+
+type EmpiPatientIdentifier struct {
+	IdentifierID       uuid.UUID
+	TenantID           uuid.UUID
+	PatientID          uuid.UUID
+	IdentifierType     string
+	System             string
+	Value              string
+	AssigningAuthority string
+	Status             string
+	Source             string
+	IsPrimary          bool
+	LinkedAt           pgtype.Timestamptz
+	UnlinkedAt         pgtype.Timestamptz
+	SupersededByID     pgtype.UUID
+	Reason             string
+}
+
 type IdentityAccessAccount struct {
 	AccountID           uuid.UUID
 	TenantID            uuid.UUID
