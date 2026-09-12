@@ -17,6 +17,7 @@ sql:
       - db/migrations/0012_empi_merge.up.sql
       - db/migrations/0013_empi_history.up.sql
       - db/migrations/0014_empi_identifier_assurance.up.sql
+      - db/migrations/0015_empi_proposals.up.sql
     gen:
       go:
         package: sqlcgen

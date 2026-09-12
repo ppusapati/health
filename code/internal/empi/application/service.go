@@ -25,6 +25,7 @@ type Service struct {
 	config      ports.ConfigRepository
 	merges      ports.MergeRepository
 	history     ports.HistoryRepository
+	proposals   ports.ProposalRepository
 	registries  ports.IdentifierRegistries
 	numbers     ports.NumberIssuer
 	tenants     ports.TenantProfile
@@ -46,6 +47,7 @@ type Deps struct {
 	Config      ports.ConfigRepository
 	Merges      ports.MergeRepository
 	History     ports.HistoryRepository
+	Proposals   ports.ProposalRepository
 	// Registries is optional. A deployment with no national identifier
 	// adapter links every identifier as asserted, which is the honest record
 	// of what it knows.
@@ -62,7 +64,7 @@ type Deps struct {
 func NewService(d Deps) *Service {
 	return &Service{
 		uow: d.UnitOfWork, patients: d.Patients, identifiers: d.Identifiers,
-		config: d.Config, merges: d.Merges, history: d.History,
+		config: d.Config, merges: d.Merges, history: d.History, proposals: d.Proposals,
 		registries: d.Registries,
 		numbers:    d.Numbers, tenants: d.Tenants,
 		events: d.Events, audits: d.Audits, ids: d.IDs, clock: d.Clock,

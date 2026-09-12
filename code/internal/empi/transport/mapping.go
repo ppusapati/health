@@ -14,6 +14,7 @@ import (
 	"github.com/ppusapati/health/code/internal/empi/application"
 	"github.com/ppusapati/health/code/internal/empi/domain"
 	"github.com/ppusapati/health/code/internal/platform/effective"
+	"github.com/ppusapati/health/code/internal/platform/rpcerr"
 )
 
 var sexToProto = map[domain.Sex]empiv1.Sex{
@@ -511,4 +512,98 @@ func humanNameFromProto(n *empiv1.HumanName) domain.HumanName {
 		Family: n.GetFamily(), Given: n.GetGiven(),
 		Prefix: n.GetPrefix(), Suffix: n.GetSuffix(),
 	}
+}
+
+// Proposed demographic changes (SRS-EMPI-012, SRS-EMPI-017).
+
+var proposalOriginToProto = map[domain.ProposalOrigin]empiv1.ProposalOrigin{
+	domain.OriginExternalSource:    empiv1.ProposalOrigin_PROPOSAL_ORIGIN_EXTERNAL_SOURCE,
+	domain.OriginCorrectionRequest: empiv1.ProposalOrigin_PROPOSAL_ORIGIN_CORRECTION_REQUEST,
+}
+
+var proposalStatusToProto = map[domain.ProposalStatus]empiv1.ProposalStatus{
+	domain.ProposalOpen:       empiv1.ProposalStatus_PROPOSAL_STATUS_OPEN,
+	domain.ProposalAccepted:   empiv1.ProposalStatus_PROPOSAL_STATUS_ACCEPTED,
+	domain.ProposalRejected:   empiv1.ProposalStatus_PROPOSAL_STATUS_REJECTED,
+	domain.ProposalWithdrawn:  empiv1.ProposalStatus_PROPOSAL_STATUS_WITHDRAWN,
+	domain.ProposalSuperseded: empiv1.ProposalStatus_PROPOSAL_STATUS_SUPERSEDED,
+}
+
+var demographicFieldToProto = map[domain.Field]empiv1.DemographicField{
+	domain.FieldFamilyName: empiv1.DemographicField_DEMOGRAPHIC_FIELD_FAMILY_NAME,
+	domain.FieldGivenName:  empiv1.DemographicField_DEMOGRAPHIC_FIELD_GIVEN_NAME,
+	domain.FieldBirthDate:  empiv1.DemographicField_DEMOGRAPHIC_FIELD_BIRTH_DATE,
+	domain.FieldSex:        empiv1.DemographicField_DEMOGRAPHIC_FIELD_SEX,
+	domain.FieldPhone:      empiv1.DemographicField_DEMOGRAPHIC_FIELD_PHONE,
+	domain.FieldEmail:      empiv1.DemographicField_DEMOGRAPHIC_FIELD_EMAIL,
+	domain.FieldAddress:    empiv1.DemographicField_DEMOGRAPHIC_FIELD_ADDRESS,
+}
+
+var demographicFieldFromProto = map[empiv1.DemographicField]domain.Field{
+	empiv1.DemographicField_DEMOGRAPHIC_FIELD_FAMILY_NAME: domain.FieldFamilyName,
+	empiv1.DemographicField_DEMOGRAPHIC_FIELD_GIVEN_NAME:  domain.FieldGivenName,
+	empiv1.DemographicField_DEMOGRAPHIC_FIELD_BIRTH_DATE:  domain.FieldBirthDate,
+	empiv1.DemographicField_DEMOGRAPHIC_FIELD_SEX:         domain.FieldSex,
+	empiv1.DemographicField_DEMOGRAPHIC_FIELD_PHONE:       domain.FieldPhone,
+	empiv1.DemographicField_DEMOGRAPHIC_FIELD_EMAIL:       domain.FieldEmail,
+	empiv1.DemographicField_DEMOGRAPHIC_FIELD_ADDRESS:     domain.FieldAddress,
+}
+
+// fieldsFromProto drops values the enum does not name.
+//
+// A request naming an unrecognised field must not silently become a request
+// naming fewer fields than the caller listed, so the caller is refused instead
+// — which is why this returns an error rather than a filtered slice.
+func fieldsFromProto(in []empiv1.DemographicField) ([]domain.Field, error) {
+	out := make([]domain.Field, 0, len(in))
+	for _, f := range in {
+		mapped, ok := demographicFieldFromProto[f]
+		if !ok {
+			return nil, rpcerr.Invalid("EMPI_UNKNOWN_FIELD",
+				"a decision named a demographic field this system does not have")
+		}
+		out = append(out, mapped)
+	}
+	return out, nil
+}
+
+func proposalToProto(p domain.Proposal) *empiv1.DemographicProposal {
+	if p.ID == "" {
+		return nil
+	}
+	out := &empiv1.DemographicProposal{
+		ProposalId: p.ID, PatientId: p.PatientID,
+		Origin: proposalOriginToProto[p.Origin], Source: p.Source,
+		ProposedBy: p.ProposedBy, Reason: p.Reason,
+		Status:         proposalStatusToProto[p.Status],
+		PatientVersion: p.PatientVersion,
+		ResolvedBy:     p.ResolvedBy, ResolutionNote: p.ResolutionNote,
+	}
+	if !p.ProposedAt.IsZero() {
+		out.ProposedAt = timestamppb.New(p.ProposedAt)
+	}
+	if !p.ResolvedAt.IsZero() {
+		out.ResolvedAt = timestamppb.New(p.ResolvedAt)
+	}
+	for _, f := range p.Fields {
+		change := &empiv1.ProposedFieldChange{
+			Field:         demographicFieldToProto[f.Field],
+			CurrentValue:  f.CurrentValue,
+			ProposedValue: f.ProposedValue,
+		}
+		if f.Accepted != nil {
+			accepted := *f.Accepted
+			change.Accepted = &accepted
+		}
+		out.Fields = append(out.Fields, change)
+	}
+	return out
+}
+
+func proposalsToProto(in []domain.Proposal) []*empiv1.DemographicProposal {
+	out := make([]*empiv1.DemographicProposal, 0, len(in))
+	for _, p := range in {
+		out = append(out, proposalToProto(p))
+	}
+	return out
 }

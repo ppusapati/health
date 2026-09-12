@@ -560,3 +560,98 @@ FROM empi.related_person
 WHERE tenant_id = @tenant_id
   AND related_patient_id = @related_patient_id
   AND patient_id = @patient_id;
+
+-- name: InsertDemographicProposal :exec
+INSERT INTO empi.demographic_proposal (
+    proposal_id, tenant_id, patient_id, origin, source, proposed_by, reason,
+    status, patient_version, proposed_at
+) VALUES (
+    @proposal_id, @tenant_id, @patient_id, @origin, @source, @proposed_by, @reason,
+    @status, @patient_version, @proposed_at
+);
+
+-- name: InsertDemographicProposalField :exec
+INSERT INTO empi.demographic_proposal_field (
+    proposal_id, tenant_id, field, current_value, proposed_value
+) VALUES (
+    @proposal_id, @tenant_id, @field, @current_value, @proposed_value
+);
+
+-- name: GetDemographicProposal :one
+SELECT proposal_id, tenant_id, patient_id, origin, source, proposed_by, reason,
+       status, patient_version, proposed_at, resolved_at, resolved_by, resolution_note
+FROM empi.demographic_proposal
+WHERE tenant_id = @tenant_id AND proposal_id = @proposal_id;
+
+-- name: FindOpenProposalBySource :one
+-- The nightly-feed case. A source that keeps disagreeing must refresh its one
+-- open item rather than add another: fifty identical items are one conflict and
+-- a reviewer who has stopped reading the queue.
+SELECT proposal_id, tenant_id, patient_id, origin, source, proposed_by, reason,
+       status, patient_version, proposed_at, resolved_at, resolved_by, resolution_note
+FROM empi.demographic_proposal
+WHERE tenant_id = @tenant_id AND patient_id = @patient_id
+  AND source = @source AND status = 'open';
+
+-- name: ListOpenDemographicProposals :many
+-- The reconciliation worklist. Oldest first: a conflict that has waited three
+-- weeks is the one most likely to have been forgotten.
+SELECT proposal_id, tenant_id, patient_id, origin, source, proposed_by, reason,
+       status, patient_version, proposed_at, resolved_at, resolved_by, resolution_note
+FROM empi.demographic_proposal
+WHERE tenant_id = @tenant_id AND status = 'open'
+ORDER BY proposed_at, proposal_id
+LIMIT @page_limit;
+
+-- name: ListProposalsForPatient :many
+-- Everything ever proposed about one patient, newest first. Includes rejections
+-- and withdrawals: that a value was offered and refused is the answer when the
+-- same value arrives again.
+SELECT proposal_id, tenant_id, patient_id, origin, source, proposed_by, reason,
+       status, patient_version, proposed_at, resolved_at, resolved_by, resolution_note
+FROM empi.demographic_proposal
+WHERE tenant_id = @tenant_id AND patient_id = @patient_id
+ORDER BY proposed_at DESC, proposal_id
+LIMIT @page_limit;
+
+-- name: ListProposalFields :many
+SELECT proposal_id, field, current_value, proposed_value, accepted
+FROM empi.demographic_proposal_field
+WHERE tenant_id = @tenant_id AND proposal_id = ANY(@proposal_ids::uuid[])
+ORDER BY proposal_id, field;
+
+-- name: ResolveDemographicProposal :execrows
+-- Guarded on status = 'open': two reviewers deciding at once would otherwise
+-- both write, and the second would silently replace the first one's decision
+-- and note.
+UPDATE empi.demographic_proposal
+SET status          = @status,
+    resolved_at     = @resolved_at,
+    resolved_by     = @resolved_by,
+    resolution_note = @resolution_note
+WHERE tenant_id = @tenant_id
+  AND proposal_id = @proposal_id
+  AND status = 'open';
+
+-- name: SetProposalFieldDecision :exec
+UPDATE empi.demographic_proposal_field
+SET accepted = @accepted
+WHERE tenant_id = @tenant_id AND proposal_id = @proposal_id AND field = @field;
+
+-- name: SupersedeOpenProposalsForPatient :execrows
+-- Closes proposals whose comparison no longer holds.
+--
+-- Run when the record changes for an unrelated reason. Leaving them open would
+-- show a reviewer "on file: X" against a record that now says Y, and accepting
+-- would overwrite Y with a value nobody compared it against — the silent
+-- overwrite SRS-EMPI-012 exists to prevent, arriving through the mechanism
+-- meant to prevent it.
+UPDATE empi.demographic_proposal
+SET status          = 'superseded',
+    resolved_at     = @resolved_at,
+    resolved_by     = @resolved_by,
+    resolution_note = 'the record changed after this was raised'
+WHERE tenant_id = @tenant_id
+  AND patient_id = @patient_id
+  AND status = 'open'
+  AND patient_version <> @patient_version;

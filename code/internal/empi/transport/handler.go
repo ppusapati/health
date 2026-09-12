@@ -6,6 +6,7 @@ import (
 	"connectrpc.com/connect"
 	empiv1 "github.com/ppusapati/health/code/gen/go/healthcare/empi/v1"
 	"github.com/ppusapati/health/code/internal/empi/application"
+	"github.com/ppusapati/health/code/internal/empi/domain"
 	platformtransport "github.com/ppusapati/health/code/internal/platform/transport"
 )
 
@@ -384,6 +385,7 @@ func (h *Handler) LinkIdentifier(
 		RegistryUnavailable:      result.RegistryUnavailable,
 		VerificationReason:       result.VerificationReason,
 		HasAuthorityDemographics: result.HasAuthorityDemographics,
+		ConflictProposalId:       result.ConflictProposalID,
 	}
 	if result.HasAuthorityDemographics {
 		out.AuthorityDemographics = demographicsToProto(result.AuthorityDemographics)
@@ -431,4 +433,115 @@ func (h *Handler) VerifyIdentifier(
 		out.AuthorityDemographics = demographicsToProto(result.AuthorityDemographics)
 	}
 	return connect.NewResponse(out), nil
+}
+
+// SubmitExternalDemographics implements SRS-EMPI-012.
+func (h *Handler) SubmitExternalDemographics(
+	ctx context.Context,
+	req *connect.Request[empiv1.SubmitExternalDemographicsRequest],
+) (*connect.Response[empiv1.SubmitExternalDemographicsResponse], error) {
+	msg := req.Msg
+
+	result, err := h.svc.SubmitExternalDemographics(ctx, application.SubmitExternalDemographicsInput{
+		PatientID:    msg.GetPatientId(),
+		Demographics: demographicsFromProto(msg.GetDemographics()),
+		Source:       msg.GetSource(),
+		FillBlanks:   msg.GetFillBlanks(),
+	})
+	if err != nil {
+		return nil, platformtransport.ToConnect(err, platformtransport.CorrelationIDFromContext(ctx))
+	}
+	// A source that agrees is a successful, empty answer rather than an error:
+	// agreement is the common case and the caller has done nothing wrong.
+	return connect.NewResponse(&empiv1.SubmitExternalDemographicsResponse{
+		Proposal:   proposalToProto(result.Proposal),
+		Conflicted: result.Conflicted,
+		Refreshed:  result.Refreshed,
+	}), nil
+}
+
+// RequestCorrection implements SRS-EMPI-017.
+func (h *Handler) RequestCorrection(
+	ctx context.Context,
+	req *connect.Request[empiv1.RequestCorrectionRequest],
+) (*connect.Response[empiv1.RequestCorrectionResponse], error) {
+	msg := req.Msg
+
+	proposal, err := h.svc.RequestCorrection(ctx, application.RequestCorrectionInput{
+		PatientID:    msg.GetPatientId(),
+		Demographics: demographicsFromProto(msg.GetDemographics()),
+		Reason:       msg.GetReason(),
+	})
+	if err != nil {
+		return nil, platformtransport.ToConnect(err, platformtransport.CorrelationIDFromContext(ctx))
+	}
+	return connect.NewResponse(&empiv1.RequestCorrectionResponse{
+		Proposal: proposalToProto(proposal),
+	}), nil
+}
+
+// ListDemographicProposals serves the reconciliation worklist and one
+// patient's proposal history.
+func (h *Handler) ListDemographicProposals(
+	ctx context.Context,
+	req *connect.Request[empiv1.ListDemographicProposalsRequest],
+) (*connect.Response[empiv1.ListDemographicProposalsResponse], error) {
+	msg := req.Msg
+
+	var (
+		proposals []domain.Proposal
+		err       error
+	)
+	if msg.GetPatientId() == "" {
+		proposals, err = h.svc.ListOpenProposals(ctx, msg.GetPageSize())
+	} else {
+		proposals, err = h.svc.ProposalsForPatient(ctx, msg.GetPatientId(), msg.GetPageSize())
+	}
+	if err != nil {
+		return nil, platformtransport.ToConnect(err, platformtransport.CorrelationIDFromContext(ctx))
+	}
+	return connect.NewResponse(&empiv1.ListDemographicProposalsResponse{
+		Proposals: proposalsToProto(proposals),
+	}), nil
+}
+
+// ResolveDemographicProposal applies or refuses a proposed change.
+func (h *Handler) ResolveDemographicProposal(
+	ctx context.Context,
+	req *connect.Request[empiv1.ResolveDemographicProposalRequest],
+) (*connect.Response[empiv1.ResolveDemographicProposalResponse], error) {
+	msg := req.Msg
+
+	accept, err := fieldsFromProto(msg.GetAccept())
+	if err != nil {
+		return nil, platformtransport.ToConnect(err, platformtransport.CorrelationIDFromContext(ctx))
+	}
+
+	result, err := h.svc.ResolveProposal(ctx, application.ResolveProposalInput{
+		ProposalID: msg.GetProposalId(),
+		Accept:     accept,
+		Note:       msg.GetNote(),
+	})
+	if err != nil {
+		return nil, platformtransport.ToConnect(err, platformtransport.CorrelationIDFromContext(ctx))
+	}
+	return connect.NewResponse(&empiv1.ResolveDemographicProposalResponse{
+		Proposal: proposalToProto(result.Proposal),
+		Patient:  patientToProto(result.Patient, nil),
+	}), nil
+}
+
+// WithdrawDemographicProposal takes back a proposal its raiser no longer
+// stands behind.
+func (h *Handler) WithdrawDemographicProposal(
+	ctx context.Context,
+	req *connect.Request[empiv1.WithdrawDemographicProposalRequest],
+) (*connect.Response[empiv1.WithdrawDemographicProposalResponse], error) {
+	proposal, err := h.svc.WithdrawProposal(ctx, req.Msg.GetProposalId(), req.Msg.GetNote())
+	if err != nil {
+		return nil, platformtransport.ToConnect(err, platformtransport.CorrelationIDFromContext(ctx))
+	}
+	return connect.NewResponse(&empiv1.WithdrawDemographicProposalResponse{
+		Proposal: proposalToProto(proposal),
+	}), nil
 }

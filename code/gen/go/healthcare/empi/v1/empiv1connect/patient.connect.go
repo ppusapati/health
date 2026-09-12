@@ -76,6 +76,21 @@ const (
 	// PatientServiceVerifyIdentifierProcedure is the fully-qualified name of the PatientService's
 	// VerifyIdentifier RPC.
 	PatientServiceVerifyIdentifierProcedure = "/healthcare.empi.v1.PatientService/VerifyIdentifier"
+	// PatientServiceSubmitExternalDemographicsProcedure is the fully-qualified name of the
+	// PatientService's SubmitExternalDemographics RPC.
+	PatientServiceSubmitExternalDemographicsProcedure = "/healthcare.empi.v1.PatientService/SubmitExternalDemographics"
+	// PatientServiceRequestCorrectionProcedure is the fully-qualified name of the PatientService's
+	// RequestCorrection RPC.
+	PatientServiceRequestCorrectionProcedure = "/healthcare.empi.v1.PatientService/RequestCorrection"
+	// PatientServiceListDemographicProposalsProcedure is the fully-qualified name of the
+	// PatientService's ListDemographicProposals RPC.
+	PatientServiceListDemographicProposalsProcedure = "/healthcare.empi.v1.PatientService/ListDemographicProposals"
+	// PatientServiceResolveDemographicProposalProcedure is the fully-qualified name of the
+	// PatientService's ResolveDemographicProposal RPC.
+	PatientServiceResolveDemographicProposalProcedure = "/healthcare.empi.v1.PatientService/ResolveDemographicProposal"
+	// PatientServiceWithdrawDemographicProposalProcedure is the fully-qualified name of the
+	// PatientService's WithdrawDemographicProposal RPC.
+	PatientServiceWithdrawDemographicProposalProcedure = "/healthcare.empi.v1.PatientService/WithdrawDemographicProposal"
 	// PatientServiceRecordNameProcedure is the fully-qualified name of the PatientService's RecordName
 	// RPC.
 	PatientServiceRecordNameProcedure = "/healthcare.empi.v1.PatientService/RecordName"
@@ -131,6 +146,19 @@ type PatientServiceClient interface {
 	UnlinkIdentifier(context.Context, *connect.Request[v1.UnlinkIdentifierRequest]) (*connect.Response[v1.UnlinkIdentifierResponse], error)
 	// Confirms an identifier linked while the issuing authority was unreachable.
 	VerifyIdentifier(context.Context, *connect.Request[v1.VerifyIdentifierRequest]) (*connect.Response[v1.VerifyIdentifierResponse], error)
+	// SRS-EMPI-012. An external source that disagrees with the record raises a
+	// proposal; it never writes. A feed that can overwrite demographics will
+	// eventually overwrite the right value with the wrong one, and nothing will
+	// record what was lost.
+	SubmitExternalDemographics(context.Context, *connect.Request[v1.SubmitExternalDemographicsRequest]) (*connect.Response[v1.SubmitExternalDemographicsResponse], error)
+	// SRS-EMPI-017. A person asks for a correction; a reviewer decides. Raising
+	// needs only read access, because the person asking is often the patient.
+	RequestCorrection(context.Context, *connect.Request[v1.RequestCorrectionRequest]) (*connect.Response[v1.RequestCorrectionResponse], error)
+	ListDemographicProposals(context.Context, *connect.Request[v1.ListDemographicProposalsRequest]) (*connect.Response[v1.ListDemographicProposalsResponse], error)
+	// Applying or refusing is where the authority lives: deciding a proposal
+	// needs the permission to change demographics, because that is what it does.
+	ResolveDemographicProposal(context.Context, *connect.Request[v1.ResolveDemographicProposalRequest]) (*connect.Response[v1.ResolveDemographicProposalResponse], error)
+	WithdrawDemographicProposal(context.Context, *connect.Request[v1.WithdrawDemographicProposalRequest]) (*connect.Response[v1.WithdrawDemographicProposalResponse], error)
 	// SRS-EMPI-007. Names, preferences and relationships, effective-dated.
 	RecordName(context.Context, *connect.Request[v1.RecordNameRequest]) (*connect.Response[v1.RecordNameResponse], error)
 	GetPatientHistory(context.Context, *connect.Request[v1.GetPatientHistoryRequest]) (*connect.Response[v1.GetPatientHistoryResponse], error)
@@ -231,6 +259,36 @@ func NewPatientServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(patientServiceMethods.ByName("VerifyIdentifier")),
 			connect.WithClientOptions(opts...),
 		),
+		submitExternalDemographics: connect.NewClient[v1.SubmitExternalDemographicsRequest, v1.SubmitExternalDemographicsResponse](
+			httpClient,
+			baseURL+PatientServiceSubmitExternalDemographicsProcedure,
+			connect.WithSchema(patientServiceMethods.ByName("SubmitExternalDemographics")),
+			connect.WithClientOptions(opts...),
+		),
+		requestCorrection: connect.NewClient[v1.RequestCorrectionRequest, v1.RequestCorrectionResponse](
+			httpClient,
+			baseURL+PatientServiceRequestCorrectionProcedure,
+			connect.WithSchema(patientServiceMethods.ByName("RequestCorrection")),
+			connect.WithClientOptions(opts...),
+		),
+		listDemographicProposals: connect.NewClient[v1.ListDemographicProposalsRequest, v1.ListDemographicProposalsResponse](
+			httpClient,
+			baseURL+PatientServiceListDemographicProposalsProcedure,
+			connect.WithSchema(patientServiceMethods.ByName("ListDemographicProposals")),
+			connect.WithClientOptions(opts...),
+		),
+		resolveDemographicProposal: connect.NewClient[v1.ResolveDemographicProposalRequest, v1.ResolveDemographicProposalResponse](
+			httpClient,
+			baseURL+PatientServiceResolveDemographicProposalProcedure,
+			connect.WithSchema(patientServiceMethods.ByName("ResolveDemographicProposal")),
+			connect.WithClientOptions(opts...),
+		),
+		withdrawDemographicProposal: connect.NewClient[v1.WithdrawDemographicProposalRequest, v1.WithdrawDemographicProposalResponse](
+			httpClient,
+			baseURL+PatientServiceWithdrawDemographicProposalProcedure,
+			connect.WithSchema(patientServiceMethods.ByName("WithdrawDemographicProposal")),
+			connect.WithClientOptions(opts...),
+		),
 		recordName: connect.NewClient[v1.RecordNameRequest, v1.RecordNameResponse](
 			httpClient,
 			baseURL+PatientServiceRecordNameProcedure,
@@ -302,6 +360,11 @@ type patientServiceClient struct {
 	linkIdentifier                *connect.Client[v1.LinkIdentifierRequest, v1.LinkIdentifierResponse]
 	unlinkIdentifier              *connect.Client[v1.UnlinkIdentifierRequest, v1.UnlinkIdentifierResponse]
 	verifyIdentifier              *connect.Client[v1.VerifyIdentifierRequest, v1.VerifyIdentifierResponse]
+	submitExternalDemographics    *connect.Client[v1.SubmitExternalDemographicsRequest, v1.SubmitExternalDemographicsResponse]
+	requestCorrection             *connect.Client[v1.RequestCorrectionRequest, v1.RequestCorrectionResponse]
+	listDemographicProposals      *connect.Client[v1.ListDemographicProposalsRequest, v1.ListDemographicProposalsResponse]
+	resolveDemographicProposal    *connect.Client[v1.ResolveDemographicProposalRequest, v1.ResolveDemographicProposalResponse]
+	withdrawDemographicProposal   *connect.Client[v1.WithdrawDemographicProposalRequest, v1.WithdrawDemographicProposalResponse]
 	recordName                    *connect.Client[v1.RecordNameRequest, v1.RecordNameResponse]
 	getPatientHistory             *connect.Client[v1.GetPatientHistoryRequest, v1.GetPatientHistoryResponse]
 	recordCommunicationPreference *connect.Client[v1.RecordCommunicationPreferenceRequest, v1.RecordCommunicationPreferenceResponse]
@@ -371,6 +434,31 @@ func (c *patientServiceClient) UnlinkIdentifier(ctx context.Context, req *connec
 // VerifyIdentifier calls healthcare.empi.v1.PatientService.VerifyIdentifier.
 func (c *patientServiceClient) VerifyIdentifier(ctx context.Context, req *connect.Request[v1.VerifyIdentifierRequest]) (*connect.Response[v1.VerifyIdentifierResponse], error) {
 	return c.verifyIdentifier.CallUnary(ctx, req)
+}
+
+// SubmitExternalDemographics calls healthcare.empi.v1.PatientService.SubmitExternalDemographics.
+func (c *patientServiceClient) SubmitExternalDemographics(ctx context.Context, req *connect.Request[v1.SubmitExternalDemographicsRequest]) (*connect.Response[v1.SubmitExternalDemographicsResponse], error) {
+	return c.submitExternalDemographics.CallUnary(ctx, req)
+}
+
+// RequestCorrection calls healthcare.empi.v1.PatientService.RequestCorrection.
+func (c *patientServiceClient) RequestCorrection(ctx context.Context, req *connect.Request[v1.RequestCorrectionRequest]) (*connect.Response[v1.RequestCorrectionResponse], error) {
+	return c.requestCorrection.CallUnary(ctx, req)
+}
+
+// ListDemographicProposals calls healthcare.empi.v1.PatientService.ListDemographicProposals.
+func (c *patientServiceClient) ListDemographicProposals(ctx context.Context, req *connect.Request[v1.ListDemographicProposalsRequest]) (*connect.Response[v1.ListDemographicProposalsResponse], error) {
+	return c.listDemographicProposals.CallUnary(ctx, req)
+}
+
+// ResolveDemographicProposal calls healthcare.empi.v1.PatientService.ResolveDemographicProposal.
+func (c *patientServiceClient) ResolveDemographicProposal(ctx context.Context, req *connect.Request[v1.ResolveDemographicProposalRequest]) (*connect.Response[v1.ResolveDemographicProposalResponse], error) {
+	return c.resolveDemographicProposal.CallUnary(ctx, req)
+}
+
+// WithdrawDemographicProposal calls healthcare.empi.v1.PatientService.WithdrawDemographicProposal.
+func (c *patientServiceClient) WithdrawDemographicProposal(ctx context.Context, req *connect.Request[v1.WithdrawDemographicProposalRequest]) (*connect.Response[v1.WithdrawDemographicProposalResponse], error) {
+	return c.withdrawDemographicProposal.CallUnary(ctx, req)
 }
 
 // RecordName calls healthcare.empi.v1.PatientService.RecordName.
@@ -445,6 +533,19 @@ type PatientServiceHandler interface {
 	UnlinkIdentifier(context.Context, *connect.Request[v1.UnlinkIdentifierRequest]) (*connect.Response[v1.UnlinkIdentifierResponse], error)
 	// Confirms an identifier linked while the issuing authority was unreachable.
 	VerifyIdentifier(context.Context, *connect.Request[v1.VerifyIdentifierRequest]) (*connect.Response[v1.VerifyIdentifierResponse], error)
+	// SRS-EMPI-012. An external source that disagrees with the record raises a
+	// proposal; it never writes. A feed that can overwrite demographics will
+	// eventually overwrite the right value with the wrong one, and nothing will
+	// record what was lost.
+	SubmitExternalDemographics(context.Context, *connect.Request[v1.SubmitExternalDemographicsRequest]) (*connect.Response[v1.SubmitExternalDemographicsResponse], error)
+	// SRS-EMPI-017. A person asks for a correction; a reviewer decides. Raising
+	// needs only read access, because the person asking is often the patient.
+	RequestCorrection(context.Context, *connect.Request[v1.RequestCorrectionRequest]) (*connect.Response[v1.RequestCorrectionResponse], error)
+	ListDemographicProposals(context.Context, *connect.Request[v1.ListDemographicProposalsRequest]) (*connect.Response[v1.ListDemographicProposalsResponse], error)
+	// Applying or refusing is where the authority lives: deciding a proposal
+	// needs the permission to change demographics, because that is what it does.
+	ResolveDemographicProposal(context.Context, *connect.Request[v1.ResolveDemographicProposalRequest]) (*connect.Response[v1.ResolveDemographicProposalResponse], error)
+	WithdrawDemographicProposal(context.Context, *connect.Request[v1.WithdrawDemographicProposalRequest]) (*connect.Response[v1.WithdrawDemographicProposalResponse], error)
 	// SRS-EMPI-007. Names, preferences and relationships, effective-dated.
 	RecordName(context.Context, *connect.Request[v1.RecordNameRequest]) (*connect.Response[v1.RecordNameResponse], error)
 	GetPatientHistory(context.Context, *connect.Request[v1.GetPatientHistoryRequest]) (*connect.Response[v1.GetPatientHistoryResponse], error)
@@ -541,6 +642,36 @@ func NewPatientServiceHandler(svc PatientServiceHandler, opts ...connect.Handler
 		connect.WithSchema(patientServiceMethods.ByName("VerifyIdentifier")),
 		connect.WithHandlerOptions(opts...),
 	)
+	patientServiceSubmitExternalDemographicsHandler := connect.NewUnaryHandler(
+		PatientServiceSubmitExternalDemographicsProcedure,
+		svc.SubmitExternalDemographics,
+		connect.WithSchema(patientServiceMethods.ByName("SubmitExternalDemographics")),
+		connect.WithHandlerOptions(opts...),
+	)
+	patientServiceRequestCorrectionHandler := connect.NewUnaryHandler(
+		PatientServiceRequestCorrectionProcedure,
+		svc.RequestCorrection,
+		connect.WithSchema(patientServiceMethods.ByName("RequestCorrection")),
+		connect.WithHandlerOptions(opts...),
+	)
+	patientServiceListDemographicProposalsHandler := connect.NewUnaryHandler(
+		PatientServiceListDemographicProposalsProcedure,
+		svc.ListDemographicProposals,
+		connect.WithSchema(patientServiceMethods.ByName("ListDemographicProposals")),
+		connect.WithHandlerOptions(opts...),
+	)
+	patientServiceResolveDemographicProposalHandler := connect.NewUnaryHandler(
+		PatientServiceResolveDemographicProposalProcedure,
+		svc.ResolveDemographicProposal,
+		connect.WithSchema(patientServiceMethods.ByName("ResolveDemographicProposal")),
+		connect.WithHandlerOptions(opts...),
+	)
+	patientServiceWithdrawDemographicProposalHandler := connect.NewUnaryHandler(
+		PatientServiceWithdrawDemographicProposalProcedure,
+		svc.WithdrawDemographicProposal,
+		connect.WithSchema(patientServiceMethods.ByName("WithdrawDemographicProposal")),
+		connect.WithHandlerOptions(opts...),
+	)
 	patientServiceRecordNameHandler := connect.NewUnaryHandler(
 		PatientServiceRecordNameProcedure,
 		svc.RecordName,
@@ -621,6 +752,16 @@ func NewPatientServiceHandler(svc PatientServiceHandler, opts ...connect.Handler
 			patientServiceUnlinkIdentifierHandler.ServeHTTP(w, r)
 		case PatientServiceVerifyIdentifierProcedure:
 			patientServiceVerifyIdentifierHandler.ServeHTTP(w, r)
+		case PatientServiceSubmitExternalDemographicsProcedure:
+			patientServiceSubmitExternalDemographicsHandler.ServeHTTP(w, r)
+		case PatientServiceRequestCorrectionProcedure:
+			patientServiceRequestCorrectionHandler.ServeHTTP(w, r)
+		case PatientServiceListDemographicProposalsProcedure:
+			patientServiceListDemographicProposalsHandler.ServeHTTP(w, r)
+		case PatientServiceResolveDemographicProposalProcedure:
+			patientServiceResolveDemographicProposalHandler.ServeHTTP(w, r)
+		case PatientServiceWithdrawDemographicProposalProcedure:
+			patientServiceWithdrawDemographicProposalHandler.ServeHTTP(w, r)
 		case PatientServiceRecordNameProcedure:
 			patientServiceRecordNameHandler.ServeHTTP(w, r)
 		case PatientServiceGetPatientHistoryProcedure:
@@ -694,6 +835,26 @@ func (UnimplementedPatientServiceHandler) UnlinkIdentifier(context.Context, *con
 
 func (UnimplementedPatientServiceHandler) VerifyIdentifier(context.Context, *connect.Request[v1.VerifyIdentifierRequest]) (*connect.Response[v1.VerifyIdentifierResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.empi.v1.PatientService.VerifyIdentifier is not implemented"))
+}
+
+func (UnimplementedPatientServiceHandler) SubmitExternalDemographics(context.Context, *connect.Request[v1.SubmitExternalDemographicsRequest]) (*connect.Response[v1.SubmitExternalDemographicsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.empi.v1.PatientService.SubmitExternalDemographics is not implemented"))
+}
+
+func (UnimplementedPatientServiceHandler) RequestCorrection(context.Context, *connect.Request[v1.RequestCorrectionRequest]) (*connect.Response[v1.RequestCorrectionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.empi.v1.PatientService.RequestCorrection is not implemented"))
+}
+
+func (UnimplementedPatientServiceHandler) ListDemographicProposals(context.Context, *connect.Request[v1.ListDemographicProposalsRequest]) (*connect.Response[v1.ListDemographicProposalsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.empi.v1.PatientService.ListDemographicProposals is not implemented"))
+}
+
+func (UnimplementedPatientServiceHandler) ResolveDemographicProposal(context.Context, *connect.Request[v1.ResolveDemographicProposalRequest]) (*connect.Response[v1.ResolveDemographicProposalResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.empi.v1.PatientService.ResolveDemographicProposal is not implemented"))
+}
+
+func (UnimplementedPatientServiceHandler) WithdrawDemographicProposal(context.Context, *connect.Request[v1.WithdrawDemographicProposalRequest]) (*connect.Response[v1.WithdrawDemographicProposalResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.empi.v1.PatientService.WithdrawDemographicProposal is not implemented"))
 }
 
 func (UnimplementedPatientServiceHandler) RecordName(context.Context, *connect.Request[v1.RecordNameRequest]) (*connect.Response[v1.RecordNameResponse], error) {

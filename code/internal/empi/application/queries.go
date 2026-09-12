@@ -412,6 +412,16 @@ func (s *Service) UpdateDemographics(ctx context.Context, in UpdateDemographicsI
 			}
 		}
 
+		// A direct edit moves the version, so every open proposal against this
+		// patient now compares against values that have changed. Leaving them
+		// open would show the next reviewer "on file: X" for a record that now
+		// says Y, and accepting one would overwrite Y with a value nobody
+		// compared against it (SRS-EMPI-012).
+		if _, err := s.proposals.SupersedeStale(ctx, scope, patient.ID(),
+			patient.Version, session.SubjectID, now); err != nil {
+			return err
+		}
+
 		// The event carries no demographic values. A correction is interesting
 		// downstream — a projection has to refresh — and what changed is not
 		// something every subscriber needs a copy of (SRS-API-009).

@@ -206,12 +206,12 @@ covered by tests.
 |---|---|---|
 | SRS-EMPI-010 | Patient photo with consent/configuration; never the sole identity proof | Not started |
 | SRS-EMPI-011 | Link ABHA and other external identifiers through an adapter, not as primary keys; link/unlink history and source retained | **Implemented** |
-| SRS-EMPI-012 | Demographic conflict from external sources routed to reconciliation, never a silent overwrite | Not started |
+| SRS-EMPI-012 | Demographic conflict from external sources routed to reconciliation, never a silent overwrite | **Implemented** |
 | SRS-EMPI-013 | Communication and privacy preferences distinct from clinical consent | **Implemented** in Sprint 1C; notification-service consumption arrives with SRS-NTF |
 | SRS-EMPI-014 | Sensitive demographic fields with configured field-level access; masked and audited | Partial — masking and audited reads exist; the *configured* per-field policy does not |
 | SRS-EMPI-015 | Temporary/unknown patient registration for emergency use, reconciled later | Partial — `candidate` status and `ConfirmIdentity` exist; unidentified registration does not |
 | SRS-EMPI-016 | Prevent duplicate MRN assignment under concurrent registration | **Implemented** |
-| SRS-EMPI-017 | Data correction request workflow retaining prior value and provenance | Not started |
+| SRS-EMPI-017 | Data correction request workflow retaining prior value and provenance | **Implemented** |
 | SRS-EMPI-018 | `patient.created`, `patient.demographics_updated`, `patient.merged`, `patient.deceased`, carrying only necessary metadata | **Implemented** |
 
 ### What the identifier lifecycle enforces
@@ -265,6 +265,59 @@ covered by tests.
   `patient.*` payload written for a tenant, not the ones the test thought to
   look at.
 
+### What reconciliation and correction enforce
+
+SRS-EMPI-012 and SRS-EMPI-017 are one model, because they prevent the same
+failure from two directions: a demographic value replaced by one nobody checked,
+with nothing left recording what it used to say. For SRS-EMPI-012 the
+replacement comes from a machine; for SRS-EMPI-017, from a person.
+
+- **A feed never writes.** `SubmitExternalDemographics` compares and raises a
+  proposal; there is no path from it to the patient row. A feed that can
+  overwrite demographics will eventually overwrite the right value with the
+  wrong one, and nothing will record what was lost.
+
+- **Both sides are held together.** The proposal stores what was on file *at the
+  time it was raised*, not a value re-read at review time. The reviewer has to
+  see the comparison the proposer saw; a value re-read later may have changed
+  for an unrelated reason and would make the proposal read as something else.
+
+- **Per field, not per submission.** A registry that agrees on the name and
+  disagrees on the birth date is offering one correction and one conflict, and a
+  reviewer must be able to take the first without the second.
+
+- **Agreement is not work.** A source that matches raises nothing, and a
+  reformatted phone number is not a disagreement — `SameContactValue` is shared
+  with the matcher precisely so the two cannot drift. A queue that fills with
+  items no human should have been asked about is a queue a reviewer stops
+  reading, and that is how a real conflict gets waved through.
+
+- **A repeat is one item.** A nightly feed that keeps disagreeing refreshes its
+  one open proposal rather than adding another, enforced by a partial unique
+  index on `(tenant_id, patient_id, source) WHERE status = 'open'`.
+
+- **A stale comparison is refused, then closed.** If the record moved after a
+  proposal was raised, accepting would overwrite a value nobody compared against
+  — the silent overwrite this requirement exists to prevent, arriving through
+  the mechanism meant to prevent it. Any write to the record supersedes the open
+  proposals it invalidates, so nobody is shown the stale comparison twice.
+
+- **Rejections are kept.** That a value was offered and refused, by whom and
+  why, is the answer when the same feed sends it a third time. Refusing
+  everything requires a note for the same reason.
+
+- **Asking and deciding are different acts.** Raising a correction request needs
+  only read access — the person asking is often the patient — while deciding one
+  needs the permission to change demographics, because that is what a decision
+  does. Withdrawing is the requester's; rejecting is the reviewer's, and the two
+  say different things about who decided the record is correct.
+
+- **An accepted change takes the ordinary path.** Applying a proposal goes
+  through `Patient.UpdateDemographics`, so the demographic policy still holds and
+  a changed legal name still opens a history window with the source recorded
+  (SRS-EMPI-007). Writing columns directly would let a proposal do what a clerk
+  cannot.
+
 ### Sprint 2 evidence
 
 | Property | Test |
@@ -287,6 +340,22 @@ covered by tests.
 | A newly commissioned facility can register immediately | `TestCommissioningAFacilityProvisionsItsMRNSequence` |
 | Re-provisioning does not reset a live MRN counter | `TestReprovisioningDoesNotResetALiveMRNSequence` |
 | No patient event carries demographics | `TestNoPatientEventCarriesDemographics` |
+| An external source cannot overwrite the record | `TestAnExternalSourceCannotOverwriteTheRecord` |
+| A source that agrees raises no work | `TestASourceThatAgreesRaisesNothing` |
+| A repeated disagreement is one queue item, not thirty | `TestARepeatedDisagreementRefreshesOneProposal` |
+| A reviewer takes one field and refuses another | `TestAReviewerTakesOneFieldAndRefusesAnother` |
+| An accepted name change opens a history window | `TestAnAcceptedNameChangeOpensAHistoryWindow` |
+| A rejection is kept with its reason and its decider | `TestARejectionIsKeptWithItsReason` |
+| Rejecting everything needs a note | `TestRejectingEverythingNeedsANote`, `TestRejectingEverythingNeedsANoteOverTheWire` |
+| A proposal cannot be applied after the record moved | `TestAProposalCannotBeAppliedAfterTheRecordMoved`, `TestAProposalIsStaleWhenTheRecordMoved` |
+| A correction can be requested without the authority to apply it | `TestACorrectionCanBeRequestedWithoutTheAuthorityToApplyIt` |
+| A correction request states a reason | `TestACorrectionRequestNeedsAReason`, `TestACorrectionRequestNeedsAReasonOverTheWire` |
+| Only the requester may withdraw | `TestOnlyTheRequesterMayWithdraw` |
+| Verifying an identifier raises a conflict rather than applying it | `TestVerifyingAnIdentifierRaisesADemographicConflict` |
+| Submitting a feed needs more than read access | `TestSubmittingAFeedNeedsMoreThanReadAccess` |
+| A proposal cannot be reached across a tenant boundary | `TestAProposalCannotBeResolvedFromAnotherTenant` |
+| Formatting and precision are not conflicts | `TestFormattingIsNotAConflict`, `TestALessPreciseDateIsStillReportedButNotAsTheSameValue` |
+| An estimated date is never read as a stated one | `TestAnEstimatedDateIsMarkedAsEstimated` |
 | sqlc sees every migration | `TestSqlcSeesEveryMigration` |
 
 ## Wave-0 capabilities Wave 1 consumes

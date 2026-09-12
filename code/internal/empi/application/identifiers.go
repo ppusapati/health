@@ -70,6 +70,22 @@ type LinkIdentifierResult struct {
 	// exists to prevent.
 	AuthorityDemographics    domain.Demographics
 	HasAuthorityDemographics bool
+	// ConflictProposalID names the proposal raised when the authority's
+	// demographics disagree with the record. Empty when they agree.
+	ConflictProposalID string
+}
+
+// registrySource names an issuing authority as a proposal source.
+//
+// The authority rather than the identifier value: two patients whose records
+// both disagree with ABDM are two conflicts from one source, and keying the
+// source on the value would make the "one open proposal per source" rule —
+// which is what stops a nightly feed filling the queue — useless.
+func registrySource(i domain.Identifier) string {
+	if i.AssigningAuthority != "" {
+		return i.AssigningAuthority
+	}
+	return i.System
 }
 
 // LinkIdentifier attaches an external identifier to an existing patient.
@@ -169,6 +185,26 @@ func (s *Service) LinkIdentifier(ctx context.Context, in LinkIdentifierInput) (L
 			VerificationReason:       verification.Reason,
 			AuthorityDemographics:    verification.Demographics,
 			HasAuthorityDemographics: verification.HasDemographics,
+		}
+
+		// The authority holds demographics that differ from the record. This is
+		// the conflict SRS-EMPI-012 is about, arriving through the most likely
+		// route: an identifier was linked, and the issuing authority disagrees
+		// about whose it is. It is never applied here — a registry can be wrong,
+		// and can be describing a different person — so it becomes a proposal a
+		// human decides.
+		if verification.HasDemographics {
+			raised, err := s.raiseProposal(ctx, session, raiseInput{
+				PatientID: patient.ID(), Incoming: verification.Demographics,
+				Origin:    domain.OriginExternalSource,
+				Source:    registrySource(identifier),
+				Fill:      domain.ProposeOnlyConflicts,
+				EventType: EventPatientDemographicConflict,
+			})
+			if err != nil {
+				return err
+			}
+			result.ConflictProposalID = raised.proposal.ID
 		}
 
 		return s.appendAudit(ctx, session, audit.Record{

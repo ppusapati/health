@@ -134,6 +134,33 @@ type IdentifierRegistries interface {
 	For(system string) (IdentifierRegistry, bool)
 }
 
+// ProposalRepository persists proposed demographic changes (SRS-EMPI-012,
+// SRS-EMPI-017).
+//
+// There is no delete. A rejected proposal is the answer when the same wrong
+// value arrives from the same feed a third time, and a deleted one answers
+// nothing.
+type ProposalRepository interface {
+	// Raise stores a proposal and its fields.
+	Raise(ctx context.Context, scope authctx.TenantScope, p domain.Proposal) error
+	Get(ctx context.Context, scope authctx.TenantScope, proposalID string) (domain.Proposal, error)
+	// OpenForSource returns the open proposal a source already has against this
+	// patient, if any. A nightly feed that keeps disagreeing refreshes that one
+	// rather than adding another.
+	OpenForSource(ctx context.Context, scope authctx.TenantScope,
+		patientID, source string) (domain.Proposal, bool, error)
+	ListOpen(ctx context.Context, scope authctx.TenantScope, limit int32) ([]domain.Proposal, error)
+	ForPatient(ctx context.Context, scope authctx.TenantScope,
+		patientID string, limit int32) ([]domain.Proposal, error)
+	// Resolve records the decision and the per-field outcomes. Returns
+	// ErrVersionConflict when another reviewer decided first.
+	Resolve(ctx context.Context, scope authctx.TenantScope, p domain.Proposal) error
+	// SupersedeStale closes open proposals raised against an older version of
+	// the record, so nobody is shown a comparison that no longer holds.
+	SupersedeStale(ctx context.Context, scope authctx.TenantScope,
+		patientID string, currentVersion int64, by string, at time.Time) (int64, error)
+}
+
 // ConfigRepository reads the tenant's registration and matching configuration.
 type ConfigRepository interface {
 	// DemographicPolicy resolves the minimum set, facility-specific first and

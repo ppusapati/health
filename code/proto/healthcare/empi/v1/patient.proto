@@ -167,6 +167,153 @@ message PatientIdentifier {
   google.protobuf.Timestamp verified_at = 13;
 }
 
+// Where a proposed demographic change came from (SRS-EMPI-012, SRS-EMPI-017).
+//
+// Not decoration: the origin decides who may raise one, what the reviewer is
+// being asked, and whether a repeat is a duplicate or a second independent
+// claim.
+enum ProposalOrigin {
+  PROPOSAL_ORIGIN_UNSPECIFIED = 0;
+  // A machine feed — a national registry, an HIE, a payer file.
+  PROPOSAL_ORIGIN_EXTERNAL_SOURCE = 1;
+  // A person asking for their record to be corrected.
+  PROPOSAL_ORIGIN_CORRECTION_REQUEST = 2;
+}
+
+enum ProposalStatus {
+  PROPOSAL_STATUS_UNSPECIFIED = 0;
+  PROPOSAL_STATUS_OPEN = 1;
+  PROPOSAL_STATUS_ACCEPTED = 2;
+  // Refused in full, and kept. That a value was offered and refused is what
+  // makes a third arrival of the same value a pattern rather than a surprise.
+  PROPOSAL_STATUS_REJECTED = 3;
+  PROPOSAL_STATUS_WITHDRAWN = 4;
+  // Overtaken: the record changed underneath, so the comparison a reviewer
+  // would be shown no longer holds.
+  PROPOSAL_STATUS_SUPERSEDED = 5;
+}
+
+// Which demographic element a proposal changes.
+enum DemographicField {
+  DEMOGRAPHIC_FIELD_UNSPECIFIED = 0;
+  DEMOGRAPHIC_FIELD_FAMILY_NAME = 1;
+  DEMOGRAPHIC_FIELD_GIVEN_NAME = 2;
+  DEMOGRAPHIC_FIELD_BIRTH_DATE = 3;
+  DEMOGRAPHIC_FIELD_SEX = 4;
+  DEMOGRAPHIC_FIELD_PHONE = 5;
+  DEMOGRAPHIC_FIELD_EMAIL = 6;
+  DEMOGRAPHIC_FIELD_ADDRESS = 7;
+}
+
+// One field's proposed change.
+//
+// Per field rather than a whole demographics message, because a registry that
+// agrees on the name and disagrees on the birth date is offering one correction
+// and one conflict, and a reviewer must be able to take the first without the
+// second.
+message ProposedFieldChange {
+  DemographicField field = 1;
+  // What was on file when the proposal was raised, stored rather than read at
+  // review time: a value re-read later may have changed for an unrelated
+  // reason, and the reviewer must see the comparison the proposer saw.
+  string current_value = 2;
+  string proposed_value = 3;
+  // Set once decided. Unset while the proposal is open.
+  optional bool accepted = 4;
+}
+
+message DemographicProposal {
+  string proposal_id = 1;
+  string patient_id = 2;
+  ProposalOrigin origin = 3;
+  // Which feed, or which person.
+  string source = 4;
+  string proposed_by = 5;
+  string reason = 6;
+  ProposalStatus status = 7;
+  repeated ProposedFieldChange fields = 8;
+  // The record's version when this was raised. A decision taken against a
+  // record that has since moved is refused rather than applied.
+  int64 patient_version = 9;
+  google.protobuf.Timestamp proposed_at = 10;
+  google.protobuf.Timestamp resolved_at = 11;
+  string resolved_by = 12;
+  string resolution_note = 13;
+}
+
+message SubmitExternalDemographicsRequest {
+  string patient_id = 1;
+  Demographics demographics = 2;
+  // Which feed is claiming this. Required — SRS-EMPI-012 is about reconciling
+  // disagreements between sources, and one with no source reconciles against
+  // nothing.
+  string source = 3;
+  // Also propose values for fields the record leaves empty. A registry
+  // offering a birth date the record lacks is filling a gap rather than
+  // contradicting anything — still a proposal, because "usually welcome" is
+  // not "always correct".
+  bool fill_blanks = 4;
+}
+
+message SubmitExternalDemographicsResponse {
+  // Set when the source disagreed. Unset when it agreed, which is the common
+  // case and is not an error.
+  DemographicProposal proposal = 1;
+  bool conflicted = 2;
+  // An existing open proposal from this source was refreshed rather than a
+  // second one added. A nightly feed that keeps disagreeing must not add a
+  // queue item every night.
+  bool refreshed = 3;
+}
+
+message RequestCorrectionRequest {
+  string patient_id = 1;
+  Demographics demographics = 2;
+  // What the reviewer is actually deciding on. "The spelling on my passport"
+  // and "I would prefer a different name" are different requests with the same
+  // proposed value.
+  string reason = 3;
+}
+
+message RequestCorrectionResponse {
+  DemographicProposal proposal = 1;
+}
+
+message ListDemographicProposalsRequest {
+  // Empty lists the open worklist; a patient id lists everything ever proposed
+  // about that patient, rejections included.
+  string patient_id = 1;
+  int32 page_size = 2;
+}
+
+message ListDemographicProposalsResponse {
+  repeated DemographicProposal proposals = 1;
+}
+
+message ResolveDemographicProposalRequest {
+  string proposal_id = 1;
+  // The fields to apply. Empty is a full rejection, which is a real decision
+  // and needs a note saying why: the same value will arrive again, and the next
+  // reviewer needs to know this one was considered rather than missed.
+  repeated DemographicField accept = 2;
+  string note = 3;
+}
+
+message ResolveDemographicProposalResponse {
+  DemographicProposal proposal = 1;
+  // Set when at least one field was applied.
+  Patient patient = 2;
+}
+
+message WithdrawDemographicProposalRequest {
+  string proposal_id = 1;
+  string note = 2;
+}
+
+message WithdrawDemographicProposalResponse {
+  DemographicProposal proposal = 1;
+}
+
 message LinkIdentifierRequest {
   string patient_id = 1;
   // The MRN is issued by this system from the facility's sequence and is not
@@ -204,6 +351,11 @@ message LinkIdentifierResponse {
   // a feed is the failure that requirement exists to prevent.
   Demographics authority_demographics = 5;
   bool has_authority_demographics = 6;
+  // Set when the authority's demographics disagreed with the record and a
+  // reconciliation proposal was raised (SRS-EMPI-012). The values are never
+  // applied here: a registry can be wrong, and can be describing a different
+  // person.
+  string conflict_proposal_id = 7;
 }
 
 message UnlinkIdentifierRequest {
@@ -729,6 +881,20 @@ service PatientService {
   rpc UnlinkIdentifier(UnlinkIdentifierRequest) returns (UnlinkIdentifierResponse);
   // Confirms an identifier linked while the issuing authority was unreachable.
   rpc VerifyIdentifier(VerifyIdentifierRequest) returns (VerifyIdentifierResponse);
+
+  // SRS-EMPI-012. An external source that disagrees with the record raises a
+  // proposal; it never writes. A feed that can overwrite demographics will
+  // eventually overwrite the right value with the wrong one, and nothing will
+  // record what was lost.
+  rpc SubmitExternalDemographics(SubmitExternalDemographicsRequest) returns (SubmitExternalDemographicsResponse);
+  // SRS-EMPI-017. A person asks for a correction; a reviewer decides. Raising
+  // needs only read access, because the person asking is often the patient.
+  rpc RequestCorrection(RequestCorrectionRequest) returns (RequestCorrectionResponse);
+  rpc ListDemographicProposals(ListDemographicProposalsRequest) returns (ListDemographicProposalsResponse);
+  // Applying or refusing is where the authority lives: deciding a proposal
+  // needs the permission to change demographics, because that is what it does.
+  rpc ResolveDemographicProposal(ResolveDemographicProposalRequest) returns (ResolveDemographicProposalResponse);
+  rpc WithdrawDemographicProposal(WithdrawDemographicProposalRequest) returns (WithdrawDemographicProposalResponse);
 
   // SRS-EMPI-007. Names, preferences and relationships, effective-dated.
   rpc RecordName(RecordNameRequest) returns (RecordNameResponse);

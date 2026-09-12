@@ -228,6 +228,44 @@ func (q *Queries) FindIdentifierHolder(ctx context.Context, arg FindIdentifierHo
 	return patient_id, err
 }
 
+const findOpenProposalBySource = `-- name: FindOpenProposalBySource :one
+SELECT proposal_id, tenant_id, patient_id, origin, source, proposed_by, reason,
+       status, patient_version, proposed_at, resolved_at, resolved_by, resolution_note
+FROM empi.demographic_proposal
+WHERE tenant_id = $1 AND patient_id = $2
+  AND source = $3 AND status = 'open'
+`
+
+type FindOpenProposalBySourceParams struct {
+	TenantID  uuid.UUID
+	PatientID uuid.UUID
+	Source    string
+}
+
+// The nightly-feed case. A source that keeps disagreeing must refresh its one
+// open item rather than add another: fifty identical items are one conflict and
+// a reviewer who has stopped reading the queue.
+func (q *Queries) FindOpenProposalBySource(ctx context.Context, arg FindOpenProposalBySourceParams) (EmpiDemographicProposal, error) {
+	row := q.db.QueryRow(ctx, findOpenProposalBySource, arg.TenantID, arg.PatientID, arg.Source)
+	var i EmpiDemographicProposal
+	err := row.Scan(
+		&i.ProposalID,
+		&i.TenantID,
+		&i.PatientID,
+		&i.Origin,
+		&i.Source,
+		&i.ProposedBy,
+		&i.Reason,
+		&i.Status,
+		&i.PatientVersion,
+		&i.ProposedAt,
+		&i.ResolvedAt,
+		&i.ResolvedBy,
+		&i.ResolutionNote,
+	)
+	return i, err
+}
+
 const findPatientByIdentifier = `-- name: FindPatientByIdentifier :many
 SELECT p.patient_id, p.tenant_id, p.registered_facility_id, p.status,
        p.family_name, p.given_names, p.name_prefix, p.name_suffix,
@@ -345,6 +383,39 @@ func (q *Queries) GetDemographicPolicy(ctx context.Context, arg GetDemographicPo
 		&i.AllowUnidentified,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getDemographicProposal = `-- name: GetDemographicProposal :one
+SELECT proposal_id, tenant_id, patient_id, origin, source, proposed_by, reason,
+       status, patient_version, proposed_at, resolved_at, resolved_by, resolution_note
+FROM empi.demographic_proposal
+WHERE tenant_id = $1 AND proposal_id = $2
+`
+
+type GetDemographicProposalParams struct {
+	TenantID   uuid.UUID
+	ProposalID uuid.UUID
+}
+
+func (q *Queries) GetDemographicProposal(ctx context.Context, arg GetDemographicProposalParams) (EmpiDemographicProposal, error) {
+	row := q.db.QueryRow(ctx, getDemographicProposal, arg.TenantID, arg.ProposalID)
+	var i EmpiDemographicProposal
+	err := row.Scan(
+		&i.ProposalID,
+		&i.TenantID,
+		&i.PatientID,
+		&i.Origin,
+		&i.Source,
+		&i.ProposedBy,
+		&i.Reason,
+		&i.Status,
+		&i.PatientVersion,
+		&i.ProposedAt,
+		&i.ResolvedAt,
+		&i.ResolvedBy,
+		&i.ResolutionNote,
 	)
 	return i, err
 }
@@ -595,6 +666,72 @@ func (q *Queries) InsertCommunicationPreference(ctx context.Context, arg InsertC
 		arg.EffectiveUntil,
 		arg.RecordedBy,
 		arg.RecordedAt,
+	)
+	return err
+}
+
+const insertDemographicProposal = `-- name: InsertDemographicProposal :exec
+INSERT INTO empi.demographic_proposal (
+    proposal_id, tenant_id, patient_id, origin, source, proposed_by, reason,
+    status, patient_version, proposed_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7,
+    $8, $9, $10
+)
+`
+
+type InsertDemographicProposalParams struct {
+	ProposalID     uuid.UUID
+	TenantID       uuid.UUID
+	PatientID      uuid.UUID
+	Origin         string
+	Source         string
+	ProposedBy     string
+	Reason         string
+	Status         string
+	PatientVersion int64
+	ProposedAt     pgtype.Timestamptz
+}
+
+func (q *Queries) InsertDemographicProposal(ctx context.Context, arg InsertDemographicProposalParams) error {
+	_, err := q.db.Exec(ctx, insertDemographicProposal,
+		arg.ProposalID,
+		arg.TenantID,
+		arg.PatientID,
+		arg.Origin,
+		arg.Source,
+		arg.ProposedBy,
+		arg.Reason,
+		arg.Status,
+		arg.PatientVersion,
+		arg.ProposedAt,
+	)
+	return err
+}
+
+const insertDemographicProposalField = `-- name: InsertDemographicProposalField :exec
+INSERT INTO empi.demographic_proposal_field (
+    proposal_id, tenant_id, field, current_value, proposed_value
+) VALUES (
+    $1, $2, $3, $4, $5
+)
+`
+
+type InsertDemographicProposalFieldParams struct {
+	ProposalID    uuid.UUID
+	TenantID      uuid.UUID
+	Field         string
+	CurrentValue  string
+	ProposedValue string
+}
+
+func (q *Queries) InsertDemographicProposalField(ctx context.Context, arg InsertDemographicProposalFieldParams) error {
+	_, err := q.db.Exec(ctx, insertDemographicProposalField,
+		arg.ProposalID,
+		arg.TenantID,
+		arg.Field,
+		arg.CurrentValue,
+		arg.ProposedValue,
 	)
 	return err
 }
@@ -958,6 +1095,56 @@ func (q *Queries) ListIdentifiersForPatients(ctx context.Context, arg ListIdenti
 	return items, nil
 }
 
+const listOpenDemographicProposals = `-- name: ListOpenDemographicProposals :many
+SELECT proposal_id, tenant_id, patient_id, origin, source, proposed_by, reason,
+       status, patient_version, proposed_at, resolved_at, resolved_by, resolution_note
+FROM empi.demographic_proposal
+WHERE tenant_id = $1 AND status = 'open'
+ORDER BY proposed_at, proposal_id
+LIMIT $2
+`
+
+type ListOpenDemographicProposalsParams struct {
+	TenantID  uuid.UUID
+	PageLimit int32
+}
+
+// The reconciliation worklist. Oldest first: a conflict that has waited three
+// weeks is the one most likely to have been forgotten.
+func (q *Queries) ListOpenDemographicProposals(ctx context.Context, arg ListOpenDemographicProposalsParams) ([]EmpiDemographicProposal, error) {
+	rows, err := q.db.Query(ctx, listOpenDemographicProposals, arg.TenantID, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []EmpiDemographicProposal{}
+	for rows.Next() {
+		var i EmpiDemographicProposal
+		if err := rows.Scan(
+			&i.ProposalID,
+			&i.TenantID,
+			&i.PatientID,
+			&i.Origin,
+			&i.Source,
+			&i.ProposedBy,
+			&i.Reason,
+			&i.Status,
+			&i.PatientVersion,
+			&i.ProposedAt,
+			&i.ResolvedAt,
+			&i.ResolvedBy,
+			&i.ResolutionNote,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOpenDuplicateCandidates = `-- name: ListOpenDuplicateCandidates :many
 SELECT candidate_id, tenant_id, patient_a_id, patient_b_id, score, outcome,
        status, detected_by, detected_at, reviewed_by, reviewed_at, resolution
@@ -1192,6 +1379,104 @@ func (q *Queries) ListPatientsByName(ctx context.Context, arg ListPatientsByName
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Version,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProposalFields = `-- name: ListProposalFields :many
+SELECT proposal_id, field, current_value, proposed_value, accepted
+FROM empi.demographic_proposal_field
+WHERE tenant_id = $1 AND proposal_id = ANY($2::uuid[])
+ORDER BY proposal_id, field
+`
+
+type ListProposalFieldsParams struct {
+	TenantID    uuid.UUID
+	ProposalIds []uuid.UUID
+}
+
+type ListProposalFieldsRow struct {
+	ProposalID    uuid.UUID
+	Field         string
+	CurrentValue  string
+	ProposedValue string
+	Accepted      *bool
+}
+
+func (q *Queries) ListProposalFields(ctx context.Context, arg ListProposalFieldsParams) ([]ListProposalFieldsRow, error) {
+	rows, err := q.db.Query(ctx, listProposalFields, arg.TenantID, arg.ProposalIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListProposalFieldsRow{}
+	for rows.Next() {
+		var i ListProposalFieldsRow
+		if err := rows.Scan(
+			&i.ProposalID,
+			&i.Field,
+			&i.CurrentValue,
+			&i.ProposedValue,
+			&i.Accepted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProposalsForPatient = `-- name: ListProposalsForPatient :many
+SELECT proposal_id, tenant_id, patient_id, origin, source, proposed_by, reason,
+       status, patient_version, proposed_at, resolved_at, resolved_by, resolution_note
+FROM empi.demographic_proposal
+WHERE tenant_id = $1 AND patient_id = $2
+ORDER BY proposed_at DESC, proposal_id
+LIMIT $3
+`
+
+type ListProposalsForPatientParams struct {
+	TenantID  uuid.UUID
+	PatientID uuid.UUID
+	PageLimit int32
+}
+
+// Everything ever proposed about one patient, newest first. Includes rejections
+// and withdrawals: that a value was offered and refused is the answer when the
+// same value arrives again.
+func (q *Queries) ListProposalsForPatient(ctx context.Context, arg ListProposalsForPatientParams) ([]EmpiDemographicProposal, error) {
+	rows, err := q.db.Query(ctx, listProposalsForPatient, arg.TenantID, arg.PatientID, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []EmpiDemographicProposal{}
+	for rows.Next() {
+		var i EmpiDemographicProposal
+		if err := rows.Scan(
+			&i.ProposalID,
+			&i.TenantID,
+			&i.PatientID,
+			&i.Origin,
+			&i.Source,
+			&i.ProposedBy,
+			&i.Reason,
+			&i.Status,
+			&i.PatientVersion,
+			&i.ProposedAt,
+			&i.ResolvedAt,
+			&i.ResolvedBy,
+			&i.ResolutionNote,
 		); err != nil {
 			return nil, err
 		}
@@ -1493,6 +1778,44 @@ func (q *Queries) RecordIdentifierVerification(ctx context.Context, arg RecordId
 	return result.RowsAffected(), nil
 }
 
+const resolveDemographicProposal = `-- name: ResolveDemographicProposal :execrows
+UPDATE empi.demographic_proposal
+SET status          = $1,
+    resolved_at     = $2,
+    resolved_by     = $3,
+    resolution_note = $4
+WHERE tenant_id = $5
+  AND proposal_id = $6
+  AND status = 'open'
+`
+
+type ResolveDemographicProposalParams struct {
+	Status         string
+	ResolvedAt     pgtype.Timestamptz
+	ResolvedBy     string
+	ResolutionNote string
+	TenantID       uuid.UUID
+	ProposalID     uuid.UUID
+}
+
+// Guarded on status = 'open': two reviewers deciding at once would otherwise
+// both write, and the second would silently replace the first one's decision
+// and note.
+func (q *Queries) ResolveDemographicProposal(ctx context.Context, arg ResolveDemographicProposalParams) (int64, error) {
+	result, err := q.db.Exec(ctx, resolveDemographicProposal,
+		arg.Status,
+		arg.ResolvedAt,
+		arg.ResolvedBy,
+		arg.ResolutionNote,
+		arg.TenantID,
+		arg.ProposalID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const retirePatientIdentifier = `-- name: RetirePatientIdentifier :execrows
 UPDATE empi.patient_identifier
 SET status          = $1,
@@ -1732,6 +2055,70 @@ func (q *Queries) SetPatientStatus(ctx context.Context, arg SetPatientStatusPara
 		arg.TenantID,
 		arg.PatientID,
 		arg.ExpectedVersion,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setProposalFieldDecision = `-- name: SetProposalFieldDecision :exec
+UPDATE empi.demographic_proposal_field
+SET accepted = $1
+WHERE tenant_id = $2 AND proposal_id = $3 AND field = $4
+`
+
+type SetProposalFieldDecisionParams struct {
+	Accepted   *bool
+	TenantID   uuid.UUID
+	ProposalID uuid.UUID
+	Field      string
+}
+
+func (q *Queries) SetProposalFieldDecision(ctx context.Context, arg SetProposalFieldDecisionParams) error {
+	_, err := q.db.Exec(ctx, setProposalFieldDecision,
+		arg.Accepted,
+		arg.TenantID,
+		arg.ProposalID,
+		arg.Field,
+	)
+	return err
+}
+
+const supersedeOpenProposalsForPatient = `-- name: SupersedeOpenProposalsForPatient :execrows
+UPDATE empi.demographic_proposal
+SET status          = 'superseded',
+    resolved_at     = $1,
+    resolved_by     = $2,
+    resolution_note = 'the record changed after this was raised'
+WHERE tenant_id = $3
+  AND patient_id = $4
+  AND status = 'open'
+  AND patient_version <> $5
+`
+
+type SupersedeOpenProposalsForPatientParams struct {
+	ResolvedAt     pgtype.Timestamptz
+	ResolvedBy     string
+	TenantID       uuid.UUID
+	PatientID      uuid.UUID
+	PatientVersion int64
+}
+
+// Closes proposals whose comparison no longer holds.
+//
+// Run when the record changes for an unrelated reason. Leaving them open would
+// show a reviewer "on file: X" against a record that now says Y, and accepting
+// would overwrite Y with a value nobody compared it against — the silent
+// overwrite SRS-EMPI-012 exists to prevent, arriving through the mechanism
+// meant to prevent it.
+func (q *Queries) SupersedeOpenProposalsForPatient(ctx context.Context, arg SupersedeOpenProposalsForPatientParams) (int64, error) {
+	result, err := q.db.Exec(ctx, supersedeOpenProposalsForPatient,
+		arg.ResolvedAt,
+		arg.ResolvedBy,
+		arg.TenantID,
+		arg.PatientID,
+		arg.PatientVersion,
 	)
 	if err != nil {
 		return 0, err

@@ -33,6 +33,31 @@ type EmpiDemographicPolicy struct {
 	UpdatedAt         pgtype.Timestamptz
 }
 
+type EmpiDemographicProposal struct {
+	ProposalID     uuid.UUID
+	TenantID       uuid.UUID
+	PatientID      uuid.UUID
+	Origin         string
+	Source         string
+	ProposedBy     string
+	Reason         string
+	Status         string
+	PatientVersion int64
+	ProposedAt     pgtype.Timestamptz
+	ResolvedAt     pgtype.Timestamptz
+	ResolvedBy     string
+	ResolutionNote string
+}
+
+type EmpiDemographicProposalField struct {
+	ProposalID    uuid.UUID
+	TenantID      uuid.UUID
+	Field         string
+	CurrentValue  string
+	ProposedValue string
+	Accepted      *bool
+}
+
 type EmpiDuplicateCandidate struct {
 	CandidateID uuid.UUID
 	TenantID    uuid.UUID

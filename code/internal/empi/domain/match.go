@@ -390,18 +390,37 @@ func compareContacts(a, b []ContactPoint) (float64, bool) {
 	}
 	for _, x := range a {
 		for _, y := range b {
-			if x.Value == y.Value {
-				return 1, true
-			}
-			// Last ten digits: the same number written with and without a
-			// country code is one number.
-			if len(x.Value) >= 10 && len(y.Value) >= 10 &&
-				x.Value[len(x.Value)-10:] == y.Value[len(y.Value)-10:] {
+			if SameContactValue(x.Value, y.Value) {
 				return 1, true
 			}
 		}
 	}
 	return 0, true
+}
+
+// SameContactValue reports whether two contact values are the same contact.
+//
+// Exported and shared with conflict detection rather than duplicated there: a
+// matcher that treats "+91 98765 43210" and "9876543210" as one number while
+// the reconciliation queue treats them as a disagreement would fill that queue
+// with items no human should ever have been asked about, and a reviewer who
+// dismisses fifty of those stops reading the fifty-first.
+func SameContactValue(a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	if a == b {
+		return true
+	}
+	// Last ten digits: the same number written with and without a country code
+	// is one number. Ten because that is the national significant length in
+	// the jurisdictions Wave 1 targets; a shorter comparison would collide
+	// numbers that merely share an exchange.
+	const significant = 10
+	if len(a) >= significant && len(b) >= significant {
+		return a[len(a)-significant:] == b[len(b)-significant:]
+	}
+	return false
 }
 
 func compareAddresses(a, b []Address) (float64, bool) {

@@ -159,6 +159,7 @@ func New(deps Deps) *Server {
 		Config:      empipostgres.ConfigRepo{Repository: empiRepo},
 		Merges:      empipostgres.MergeRepo{Repository: empiRepo},
 		History:     empipostgres.HistoryRepo{Repository: empiRepo},
+		Proposals:   empipostgres.ProposalRepo{Repository: empiRepo},
 		Registries:  deps.IdentifierRegistries,
 		Numbers:     empipostgres.NewMRNIssuer(repo),
 		Tenants:     empipostgres.NewTenantJurisdiction(orgpostgres.TenantRepo{Repository: repo}),
