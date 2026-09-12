@@ -69,15 +69,20 @@ func (s *Service) SearchPatients(ctx context.Context, in SearchPatientsInput) (S
 
 	scope := session.TenantScope()
 	pageSize := clampPageSize(in.PageSize)
-	restricted := session.HasPermission(PermPatientReadRestricted)
 
 	var result SearchPatientsResult
 	err = s.uow.WithinTx(ctx, func(ctx context.Context) error {
+		// Which fields this caller may see, resolved once per request from the
+		// tenant's configured policy (SRS-EMPI-014).
+		seen, err := s.visibilityFor(ctx, session)
+		if err != nil {
+			return err
+		}
 		// An identifier lookup is exact and conclusive, so it short-circuits
 		// the demographic path: a patient who quoted their MRN does not need
 		// to be fuzzy-matched against everyone who shares their surname.
 		if in.IdentifierValue != "" {
-			matches, err := s.searchByIdentifier(ctx, session, in, pageSize, restricted)
+			matches, err := s.searchByIdentifier(ctx, session, in, pageSize, seen)
 			if err != nil {
 				return err
 			}
@@ -86,7 +91,7 @@ func (s *Service) SearchPatients(ctx context.Context, in SearchPatientsInput) (S
 		}
 
 		if in.Name != "" {
-			matches, next, err := s.searchByName(ctx, scope, session, in, pageSize, restricted)
+			matches, next, err := s.searchByName(ctx, scope, session, in, pageSize, seen)
 			if err != nil {
 				return err
 			}
@@ -112,7 +117,7 @@ func (s *Service) SearchPatients(ctx context.Context, in SearchPatientsInput) (S
 }
 
 func (s *Service) searchByIdentifier(ctx context.Context, session authctx.Session,
-	in SearchPatientsInput, pageSize int32, restricted bool) ([]MatchedPatient, error) {
+	in SearchPatientsInput, pageSize int32, seen visibility) ([]MatchedPatient, error) {
 
 	scope := session.TenantScope()
 	identifierType := in.IdentifierType
@@ -144,7 +149,7 @@ func (s *Service) searchByIdentifier(ctx context.Context, session authctx.Sessio
 		if err != nil {
 			return nil, err
 		}
-		shown, masked := maskFor(p, restricted)
+		shown, masked := maskFor(p, seen)
 		out = append(out, MatchedPatient{
 			Patient: shown, Identifiers: held, Masked: masked,
 			// An exact identifier hit is not a fuzzy score. Reporting a
@@ -156,7 +161,7 @@ func (s *Service) searchByIdentifier(ctx context.Context, session authctx.Sessio
 }
 
 func (s *Service) searchByName(ctx context.Context, scope authctx.TenantScope,
-	session authctx.Session, in SearchPatientsInput, pageSize int32, restricted bool) (
+	session authctx.Session, in SearchPatientsInput, pageSize int32, seen visibility) (
 	[]MatchedPatient, string, error) {
 
 	cursor, err := decodeCursor(in.PageToken)
@@ -238,7 +243,7 @@ func (s *Service) searchByName(ctx context.Context, scope authctx.TenantScope,
 			PatientID: p.ID(), Demographics: scored, Identifiers: held,
 		}, weights, thresholds)
 
-		shown, masked := maskFor(p, restricted)
+		shown, masked := maskFor(p, seen)
 		out = append(out, MatchedPatient{
 			Patient: shown, Identifiers: held, Match: match, Masked: masked,
 			MatchedFormerName: former,
@@ -296,10 +301,22 @@ func (s *Service) GetPatient(ctx context.Context, patientID string, resolveMerge
 			return err
 		}
 
-		shown, masked := maskFor(patient, session.HasPermission(PermPatientReadRestricted))
+		seen, err := s.visibilityFor(ctx, session)
+		if err != nil {
+			return err
+		}
+		shown, masked := maskFor(patient, seen)
 		result.Patient, result.Identifiers, result.Masked = shown, held, masked
 
-		context, err := json.Marshal(map[string]any{"masked": masked, "resolved": result.ResolvedFrom != ""})
+		// SRS-EMPI-014 requires restricted reads to be audited, and what makes
+		// that audit worth keeping is which restricted fields were actually
+		// disclosed — not merely that somebody with the permission opened a
+		// record.
+		context, err := json.Marshal(map[string]any{
+			"masked":          masked,
+			"resolved":        result.ResolvedFrom != "",
+			"revealed_fields": fieldNamesOf(seen.revealed),
+		})
 		if err != nil {
 			return rpcerr.Internal("EMPI_AUDIT_ENCODE_FAILED", "could not encode audit context").WithCause(err)
 		}
@@ -451,7 +468,21 @@ func (s *Service) UpdateDemographics(ctx context.Context, in UpdateDemographicsI
 }
 
 // ConfirmIdentity moves a candidate to active.
-func (s *Service) ConfirmIdentity(ctx context.Context, patientID string, expectedVersion int64) (*domain.Patient, error) {
+// ConfirmIdentityInput carries what was actually checked at the bedside.
+//
+// Evidence rather than a bare "confirm": SRS-EMPI-010 requires the identity
+// workflow to include a configured positive identifier and prohibits a
+// photograph from being the sole proof, and neither is checkable against a call
+// that says only that somebody clicked a button.
+type ConfirmIdentityInput struct {
+	PatientID       string
+	ExpectedVersion int64
+	Evidence        domain.IdentityEvidence
+}
+
+// ConfirmIdentity moves a candidate to active, on stated evidence.
+func (s *Service) ConfirmIdentity(ctx context.Context, in ConfirmIdentityInput) (*domain.Patient, error) {
+	patientID, expectedVersion := in.PatientID, in.ExpectedVersion
 	session, err := authctx.FromContext(ctx)
 	if err != nil {
 		return nil, rpcerr.Unauthenticated("AUTH_NO_SESSION", "authentication required")
@@ -480,6 +511,20 @@ func (s *Service) ConfirmIdentity(ctx context.Context, patientID string, expecte
 			return rpcerr.FailedPrecondition("EMPI_VERSION_CONFLICT",
 				"the record changed since it was read")
 		}
+		// SRS-EMPI-010. A photograph is evidence a human uses, never evidence
+		// the system accepts: face comparison fails hardest for siblings,
+		// twins, an old photo, and — measurably — by skin tone and age, which
+		// concentrates its errors on the people least able to contest them. A
+		// verified identifier is required whatever else was checked.
+		held, err := s.identifiers.ForPatient(ctx, scope, patient.ID())
+		if err != nil {
+			return err
+		}
+		if err := domain.CheckIdentityEvidence(in.Evidence, held); err != nil {
+			s.auditDenied(ctx, session, PermPatientManage, "patient", patientID, err.Error())
+			return rpcerr.FailedPrecondition("EMPI_IDENTITY_NOT_POSITIVELY_ESTABLISHED", err.Error())
+		}
+
 		if err := patient.Confirm(now); err != nil {
 			return rpcerr.FailedPrecondition("EMPI_CONFIRM_REFUSED", err.Error())
 		}
@@ -502,7 +547,10 @@ func (s *Service) ConfirmIdentity(ctx context.Context, patientID string, expecte
 		return s.appendAudit(ctx, session, audit.Record{
 			TenantID: session.TenantID, Action: PermPatientManage,
 			ResourceType: "patient", ResourceID: patient.ID(),
-			Outcome: audit.OutcomeSuccess, Reason: "identity confirmed",
+			Outcome: audit.OutcomeSuccess,
+			// What was checked, so "the system confirmed identity" is never
+			// the whole answer to "on what basis".
+			Reason: "identity confirmed on " + evidenceSummary(in.Evidence),
 		}, now)
 	})
 	if err != nil {

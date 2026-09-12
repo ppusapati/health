@@ -98,6 +98,13 @@ type Deps struct {
 	// an honest record of what it actually knows. Wiring a registry is what
 	// makes verification possible, not what makes linking possible.
 	IdentifierRegistries empiports.IdentifierRegistries
+
+	// PhotoStore holds patient photograph bytes (SRS-EMPI-010).
+	//
+	// Nil is a valid deployment and the default: one that does not store
+	// patient photographs refuses to capture one rather than recording a row
+	// that points at nothing.
+	PhotoStore empiports.PhotoStore
 }
 
 // Server holds the assembled HTTP handler and the services behind it.
@@ -153,20 +160,23 @@ func New(deps Deps) *Server {
 	// concurrent registration (SRS-EMPI-016).
 	empiRepo := empipostgres.New(txManager)
 	empiService := empiapp.NewService(empiapp.Deps{
-		UnitOfWork:  txManager,
-		Patients:    empipostgres.PatientRepo{Repository: empiRepo},
-		Identifiers: empipostgres.IdentifierRepo{Repository: empiRepo},
-		Config:      empipostgres.ConfigRepo{Repository: empiRepo},
-		Merges:      empipostgres.MergeRepo{Repository: empiRepo},
-		History:     empipostgres.HistoryRepo{Repository: empiRepo},
-		Proposals:   empipostgres.ProposalRepo{Repository: empiRepo},
-		Registries:  deps.IdentifierRegistries,
-		Numbers:     empipostgres.NewMRNIssuer(repo),
-		Tenants:     empipostgres.NewTenantJurisdiction(orgpostgres.TenantRepo{Repository: repo}),
-		Events:      platformStore,
-		Audits:      store.AuditAppenderFunc(platformStore.AppendAudit),
-		IDs:         uuidGenerator{},
-		Clock:       systemClock{},
+		UnitOfWork:   txManager,
+		Patients:     empipostgres.PatientRepo{Repository: empiRepo},
+		Identifiers:  empipostgres.IdentifierRepo{Repository: empiRepo},
+		Config:       empipostgres.ConfigRepo{Repository: empiRepo},
+		Merges:       empipostgres.MergeRepo{Repository: empiRepo},
+		History:      empipostgres.HistoryRepo{Repository: empiRepo},
+		Proposals:    empipostgres.ProposalRepo{Repository: empiRepo},
+		Photos:       empipostgres.PhotoRepo{Repository: empiRepo},
+		PhotoStore:   deps.PhotoStore,
+		Unidentified: empipostgres.UnidentifiedRepo{Repository: empiRepo},
+		Registries:   deps.IdentifierRegistries,
+		Numbers:      empipostgres.NewMRNIssuer(repo),
+		Tenants:      empipostgres.NewTenantJurisdiction(orgpostgres.TenantRepo{Repository: repo}),
+		Events:       platformStore,
+		Audits:       store.AuditAppenderFunc(platformStore.AppendAudit),
+		IDs:          uuidGenerator{},
+		Clock:        systemClock{},
 	})
 
 	orgService := orgapp.NewService(orgapp.Deps{

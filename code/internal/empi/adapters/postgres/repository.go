@@ -109,16 +109,26 @@ func (r PatientRepo) Insert(ctx context.Context, scope authctx.TenantScope, p *d
 
 	return r.queries(ctx).InsertPatient(ctx, sqlcgen.InsertPatientParams{
 		PatientID: patientID, TenantID: tenantID, RegisteredFacilityID: facilityID,
-		Status:             string(p.Status),
-		FamilyName:         p.Demographics.Name.Family,
-		GivenNames:         p.Demographics.Name.Given,
+		Status:     string(p.Status),
+		FamilyName: p.Demographics.Name.Family,
+		// Coerced from nil: a text[] column that is NOT NULL rejects a nil
+		// slice, and a patient registered unidentified genuinely has no given
+		// names.
+		GivenNames:         orEmpty(p.Demographics.Name.Given),
 		NamePrefix:         p.Demographics.Name.Prefix,
 		NameSuffix:         p.Demographics.Name.Suffix,
 		BirthDate:          dateOrNull(p.Demographics.BirthDate),
 		BirthDatePrecision: string(p.Demographics.BirthDate.Precision),
 		Sex:                string(p.Demographics.Sex),
 		Phones:             phones, Emails: emails, Addresses: addresses,
-		CreatedAt: timestamptz(p.CreatedAt), UpdatedAt: timestamptz(p.UpdatedAt),
+		// Nil for an ordinary registration. The columns exist only for the
+		// emergency path, and a patient who arrived conscious has no
+		// designation to record (SRS-EMPI-015).
+		DesignationLabel:        designationLabel(p),
+		DesignationCircumstance: designationCircumstance(p),
+		DesignationApparentAge:  designationApparentAge(p),
+		CreatedAt:               timestamptz(p.CreatedAt),
+		UpdatedAt:               timestamptz(p.UpdatedAt),
 	})
 }
 
@@ -167,7 +177,7 @@ func (r PatientRepo) UpdateDemographics(ctx context.Context, scope authctx.Tenan
 	// carries the value before it.
 	rows, err := r.queries(ctx).UpdatePatientDemographics(ctx, sqlcgen.UpdatePatientDemographicsParams{
 		FamilyName:         p.Demographics.Name.Family,
-		GivenNames:         p.Demographics.Name.Given,
+		GivenNames:         orEmpty(p.Demographics.Name.Given),
 		NamePrefix:         p.Demographics.Name.Prefix,
 		NameSuffix:         p.Demographics.Name.Suffix,
 		BirthDate:          dateOrNull(p.Demographics.BirthDate),
@@ -444,6 +454,41 @@ func patientsFromRows(rows []sqlcgen.EmpiPatient) ([]*domain.Patient, error) {
 	return out, nil
 }
 
+// orEmpty renders a nil slice as an empty one, which is what a NOT NULL
+// text[] column accepts.
+func orEmpty(values []string) []string {
+	if values == nil {
+		return []string{}
+	}
+	return values
+}
+
+// Designation accessors. Separate functions rather than inline conditionals so
+// the insert reads as a list of columns rather than as three nested ifs.
+
+func designationLabel(p *domain.Patient) *string {
+	if p.Designation == nil {
+		return nil
+	}
+	label := p.Designation.Label
+	return &label
+}
+
+func designationCircumstance(p *domain.Patient) string {
+	if p.Designation == nil {
+		return ""
+	}
+	return p.Designation.Circumstance
+}
+
+func designationApparentAge(p *domain.Patient) *int32 {
+	if p.Designation == nil || p.Designation.ApparentAge == 0 {
+		return nil
+	}
+	age := int32(p.Designation.ApparentAge)
+	return &age
+}
+
 func patientFromRow(row sqlcgen.EmpiPatient) (*domain.Patient, error) {
 	d := domain.Demographics{
 		Name: domain.HumanName{
@@ -479,6 +524,21 @@ func patientFromRow(row sqlcgen.EmpiPatient) (*domain.Patient, error) {
 	}
 	if row.MergedIntoPatientID.Valid {
 		p.MergedIntoPatientID = uuid.UUID(row.MergedIntoPatientID.Bytes).String()
+	}
+	if row.DesignationLabel != nil {
+		designation := domain.TemporaryDesignation{
+			Label:        *row.DesignationLabel,
+			ApparentSex:  domain.Sex(row.Sex),
+			Circumstance: row.DesignationCircumstance,
+		}
+		if row.DesignationApparentAge != nil {
+			designation.ApparentAge = int(*row.DesignationApparentAge)
+		}
+		p.Designation = &designation
+	}
+	if row.IdentifiedAt.Valid {
+		at := row.IdentifiedAt.Time.UTC()
+		p.IdentifiedAt = &at
 	}
 	if row.DeceasedRecordedAt.Valid {
 		deceased := domain.DeceasedRecord{

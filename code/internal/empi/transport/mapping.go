@@ -250,6 +250,10 @@ func patientToProto(p *domain.Patient, identifiers domain.IdentifierSet) *empiv1
 			out.Deceased.RecordedAt = timestamppb.New(p.Deceased.RecordedAt)
 		}
 	}
+	out.Designation = designationToProto(p.Designation)
+	if p.IdentifiedAt != nil {
+		out.IdentifiedAt = timestamppb.New(*p.IdentifiedAt)
+	}
 	return out
 }
 
@@ -604,6 +608,94 @@ func proposalsToProto(in []domain.Proposal) []*empiv1.DemographicProposal {
 	out := make([]*empiv1.DemographicProposal, 0, len(in))
 	for _, p := range in {
 		out = append(out, proposalToProto(p))
+	}
+	return out
+}
+
+// Photographs, designations and field access (SRS-EMPI-010/014/015).
+
+func designationToProto(d *domain.TemporaryDesignation) *empiv1.TemporaryDesignation {
+	if d == nil {
+		return nil
+	}
+	return &empiv1.TemporaryDesignation{
+		Label:        d.Label,
+		ApparentSex:  sexToProto[d.ApparentSex],
+		ApparentAge:  int32(d.ApparentAge),
+		Circumstance: d.Circumstance,
+	}
+}
+
+func designationFromProto(p *empiv1.TemporaryDesignation) domain.TemporaryDesignation {
+	if p == nil {
+		return domain.TemporaryDesignation{}
+	}
+	return domain.TemporaryDesignation{
+		Label:        p.GetLabel(),
+		ApparentSex:  sexFromProto[p.GetApparentSex()],
+		ApparentAge:  int(p.GetApparentAge()),
+		Circumstance: p.GetCircumstance(),
+	}
+}
+
+func evidenceFromProto(p *empiv1.IdentityEvidence) domain.IdentityEvidence {
+	if p == nil {
+		return domain.IdentityEvidence{}
+	}
+	return domain.IdentityEvidence{
+		IdentifierIDs: p.GetIdentifierIds(),
+		PhotoMatched:  p.GetPhotoMatched(),
+		VouchedForBy:  p.GetVouchedForBy(),
+		Note:          p.GetNote(),
+	}
+}
+
+func consentFromProto(p *empiv1.PhotoConsent) domain.PhotoConsent {
+	if p == nil {
+		return domain.PhotoConsent{}
+	}
+	c := domain.PhotoConsent{
+		GivenBy: p.GetGivenBy(), OnBehalf: p.GetOnBehalf(), Purpose: p.GetPurpose(),
+	}
+	if p.GetGivenAt() != nil {
+		c.GivenAt = p.GetGivenAt().AsTime()
+	}
+	return c
+}
+
+// photoToProto never carries the bytes. The image travels in its own field on
+// the read response, so a photograph is not attached to every message that
+// happens to mention one.
+func photoToProto(p domain.Photo) *empiv1.PatientPhoto {
+	if p.ID == "" {
+		return nil
+	}
+	out := &empiv1.PatientPhoto{
+		PhotoId: p.ID, PatientId: p.PatientID,
+		ContentType: p.ContentType, ByteSize: p.ByteSize, Digest: p.Digest,
+		Consent: &empiv1.PhotoConsent{
+			GivenBy: p.Consent.GivenBy, OnBehalf: p.Consent.OnBehalf,
+			Purpose: p.Consent.Purpose, RecordedBy: p.Consent.RecordedBy,
+		},
+		CapturedBy:      p.CapturedBy,
+		WithdrawnReason: p.WithdrawnReason,
+	}
+	if !p.Consent.GivenAt.IsZero() {
+		out.Consent.GivenAt = timestamppb.New(p.Consent.GivenAt)
+	}
+	if !p.CapturedAt.IsZero() {
+		out.CapturedAt = timestamppb.New(p.CapturedAt)
+	}
+	if p.WithdrawnAt != nil {
+		out.WithdrawnAt = timestamppb.New(*p.WithdrawnAt)
+	}
+	return out
+}
+
+func patientsToProto(in []*domain.Patient) []*empiv1.Patient {
+	out := make([]*empiv1.Patient, 0, len(in))
+	for _, p := range in {
+		out = append(out, patientToProto(p, nil))
 	}
 	return out
 }

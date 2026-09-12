@@ -73,6 +73,17 @@ type EmpiDuplicateCandidate struct {
 	Resolution  string
 }
 
+type EmpiFieldAccessPolicy struct {
+	PolicyID           uuid.UUID
+	TenantID           uuid.UUID
+	Jurisdiction       string
+	FacilityID         pgtype.UUID
+	Field              string
+	RequiredPermission string
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+}
+
 type EmpiMatchConfig struct {
 	TenantID          uuid.UUID
 	Weights           []byte
@@ -100,29 +111,33 @@ type EmpiMergeJournal struct {
 }
 
 type EmpiPatient struct {
-	PatientID            uuid.UUID
-	TenantID             uuid.UUID
-	RegisteredFacilityID uuid.UUID
-	Status               string
-	FamilyName           string
-	GivenNames           []string
-	NamePrefix           string
-	NameSuffix           string
-	BirthDate            pgtype.Date
-	BirthDatePrecision   string
-	Sex                  string
-	Phones               []byte
-	Emails               []byte
-	Addresses            []byte
-	MergedIntoPatientID  pgtype.UUID
-	DeceasedDate         pgtype.Date
-	DeceasedPrecision    string
-	DeceasedSource       string
-	DeceasedRecordedAt   pgtype.Timestamptz
-	DeceasedRecordedBy   string
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
-	Version              int64
+	PatientID               uuid.UUID
+	TenantID                uuid.UUID
+	RegisteredFacilityID    uuid.UUID
+	Status                  string
+	FamilyName              string
+	GivenNames              []string
+	NamePrefix              string
+	NameSuffix              string
+	BirthDate               pgtype.Date
+	BirthDatePrecision      string
+	Sex                     string
+	Phones                  []byte
+	Emails                  []byte
+	Addresses               []byte
+	MergedIntoPatientID     pgtype.UUID
+	DeceasedDate            pgtype.Date
+	DeceasedPrecision       string
+	DeceasedSource          string
+	DeceasedRecordedAt      pgtype.Timestamptz
+	DeceasedRecordedBy      string
+	CreatedAt               pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
+	Version                 int64
+	DesignationLabel        *string
+	DesignationCircumstance string
+	DesignationApparentAge  *int32
+	IdentifiedAt            pgtype.Timestamptz
 }
 
 type EmpiPatientIdentifier struct {
@@ -158,6 +173,25 @@ type EmpiPatientName struct {
 	RecordedBy     string
 	RecordedAt     pgtype.Timestamptz
 	Source         string
+}
+
+type EmpiPatientPhoto struct {
+	PhotoID           uuid.UUID
+	TenantID          uuid.UUID
+	PatientID         uuid.UUID
+	StorageKey        string
+	ContentType       string
+	ByteSize          int64
+	Digest            string
+	ConsentGivenBy    string
+	ConsentOnBehalf   string
+	ConsentPurpose    string
+	ConsentGivenAt    pgtype.Timestamptz
+	ConsentRecordedBy string
+	CapturedAt        pgtype.Timestamptz
+	CapturedBy        string
+	WithdrawnAt       pgtype.Timestamptz
+	WithdrawnReason   string
 }
 
 type EmpiRelatedPerson struct {

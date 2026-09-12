@@ -11,8 +11,8 @@ What this records is which requirements have working, tested implementations.
 
 | Sprint | Scope | Requirements | State |
 |---|---|---|---|
-| 1 | EMPI foundation | SRS-EMPI-001 … 009 | **In progress** — 001–006 implemented |
-| 2 | EMPI completion | SRS-EMPI-010 … 018 | Not started |
+| 1 | EMPI foundation | SRS-EMPI-001 … 009 | **Complete** |
+| 2 | EMPI completion | SRS-EMPI-010 … 018 | **Complete** |
 | 3 | Scheduling | SRS-SCH-001 … 016 | Not started |
 | 4 | Encounter, clinical, nursing | SRS-ENC/CLN/NUR | Not started |
 | 5 | Orders, medication, billing | SRS-ORD/MED/BIL | Not started |
@@ -200,16 +200,19 @@ path instead.
 Sprint 1 is complete: SRS-EMPI-001 to SRS-EMPI-009 are implemented and
 covered by tests.
 
+Sprint 2 is complete: SRS-EMPI-010 to SRS-EMPI-018 are implemented and covered
+by tests. The EMPI family — all eighteen requirements — is closed.
+
 ## Sprint 2 — identifiers, reconciliation and correction
 
 | Requirement | What it asks for | State |
 |---|---|---|
-| SRS-EMPI-010 | Patient photo with consent/configuration; never the sole identity proof | Not started |
+| SRS-EMPI-010 | Patient photo with consent/configuration; never the sole identity proof | **Implemented** |
 | SRS-EMPI-011 | Link ABHA and other external identifiers through an adapter, not as primary keys; link/unlink history and source retained | **Implemented** |
 | SRS-EMPI-012 | Demographic conflict from external sources routed to reconciliation, never a silent overwrite | **Implemented** |
 | SRS-EMPI-013 | Communication and privacy preferences distinct from clinical consent | **Implemented** in Sprint 1C; notification-service consumption arrives with SRS-NTF |
-| SRS-EMPI-014 | Sensitive demographic fields with configured field-level access; masked and audited | Partial — masking and audited reads exist; the *configured* per-field policy does not |
-| SRS-EMPI-015 | Temporary/unknown patient registration for emergency use, reconciled later | Partial — `candidate` status and `ConfirmIdentity` exist; unidentified registration does not |
+| SRS-EMPI-014 | Sensitive demographic fields with configured field-level access; masked and audited | **Implemented** |
+| SRS-EMPI-015 | Temporary/unknown patient registration for emergency use, reconciled later | **Implemented** |
 | SRS-EMPI-016 | Prevent duplicate MRN assignment under concurrent registration | **Implemented** |
 | SRS-EMPI-017 | Data correction request workflow retaining prior value and provenance | **Implemented** |
 | SRS-EMPI-018 | `patient.created`, `patient.demographics_updated`, `patient.merged`, `patient.deceased`, carrying only necessary metadata | **Implemented** |
@@ -318,6 +321,78 @@ replacement comes from a machine; for SRS-EMPI-017, from a person.
   (SRS-EMPI-007). Writing columns directly would let a proposal do what a clerk
   cannot.
 
+### What photographs, field access and emergency registration enforce
+
+- **A photograph is evidence a human uses, never evidence the system accepts.**
+  The prohibition in SRS-EMPI-010 is not squeamishness about biometrics — a
+  nurse glancing at a screen before a transfusion catches a wrong-patient error
+  a matching name would not. It is that the failure mode of face comparison is
+  systematically worse for the people a hospital is already most likely to
+  misidentify: siblings, twins, a photo taken four years and one illness ago,
+  and measurably by skin tone and age. A system that lets a photo alone confirm
+  identity concentrates its errors on exactly the populations least able to
+  contest them. `ConfirmIdentity` requires a *sighted, verified* identifier
+  whatever else was checked.
+
+- **An asserted identifier is not positive identification either.** A number
+  read off a photocopy carries no more assurance than the photograph does, and
+  admitting it would let the prohibition be satisfied by typing. This is what
+  the assurance model from Sprint 2A was for.
+
+- **A verified identifier on file is not evidence it was checked.** The caller
+  names what was sighted, which keeps confirmation an assertion about what
+  happened at the bedside rather than a property of the record.
+
+- **Consent has a shape.** Somebody gave it, at a time, for a stated purpose.
+  A boolean records none of that, and "did this patient agree to their
+  photograph being kept" is a question somebody will be asked to answer with
+  evidence. Withdrawal deletes the bytes and keeps the row: a deletion leaving
+  nothing behind would leave nobody able to answer whether a photograph existed.
+
+- **Format is an allowlist.** A blocklist accepts SVG, which is a script
+  container, and HTML renamed to `.jpg`.
+
+- **The store is a seam.** Where patient photographs live has real consequences
+  — encryption at rest, retention, residency — and none belong in the patient
+  index. Keys are generated from `crypto/rand` and tenant-prefixed rather than
+  derived from the patient id, so the object name is not itself a patient
+  identifier to anybody who can list the bucket. The digest is verified on read:
+  a store that silently returned a different object would otherwise be
+  indistinguishable from one that returned the right one, and showing a nurse
+  the wrong patient's face is the failure the feature exists to prevent.
+
+- **Which fields are sensitive is a tenant decision.** SRS-EMPI-014's operative
+  phrase is "where configured". In a clinic treating people whose address is the
+  thing that endangers them, the street address is the most restricted field on
+  the record; in an outpatient department it is what the receptionist reads back
+  to confirm they have the right person. Same field, opposite handling, and no
+  default serves both. A policy naming a permission this system has never
+  granted restricts the field rather than opening it.
+
+- **The audit says which restricted fields were disclosed**, not merely that
+  somebody with the permission opened a record — and never the values, because
+  an audit trail holding demographics is a second, less protected copy of them.
+
+- **An unconscious patient is registered immediately, with an MRN.** The
+  alternative to registering is not "wait until we know who they are"; it is
+  notes on paper that never reach the chart. The MRN is returned with the
+  registration because a specimen leaving the room in the next minute has to
+  carry it.
+
+- **The temporary label never reaches the name index.** A record whose family
+  name is "TRAUMA ALPHA" sorts into that index, fuzzy-matches the next trauma
+  patient, and prints on a wristband looking exactly like a name.
+
+- **Chronology is preserved by the identifier never changing.** Identifying an
+  hour later is a demographic update, not a data migration, so SRS-EMPI-015's
+  "without losing encounter chronology" falls out of SRS-EMPI-002 rather than
+  needing machinery of its own. The designation is kept, because an hour of
+  records was filed under it.
+
+- **Identification runs the duplicate check registration could not.** A patient
+  brought in unconscious very often already has a record here, and this is the
+  first moment there is enough to find it.
+
 ### Sprint 2 evidence
 
 | Property | Test |
@@ -356,7 +431,47 @@ replacement comes from a machine; for SRS-EMPI-017, from a person.
 | A proposal cannot be reached across a tenant boundary | `TestAProposalCannotBeResolvedFromAnotherTenant` |
 | Formatting and precision are not conflicts | `TestFormattingIsNotAConflict`, `TestALessPreciseDateIsStillReportedButNotAsTheSameValue` |
 | An estimated date is never read as a stated one | `TestAnEstimatedDateIsMarkedAsEstimated` |
+| Identity cannot be confirmed on a photograph alone | `TestAPhotographAloneCannotConfirmIdentity`, `TestIdentityCannotBeConfirmedOnAPhotographAlone` |
+| Nor on somebody vouching, nor on an asserted identifier | `TestSomebodyVouchingAloneCannotConfirmIdentity`, `TestAnAssertedIdentifierIsNotPositiveIdentification`, `TestAnAssertedIdentifierDoesNotConfirmIdentityOverTheWire` |
+| A sighted verified identifier does confirm it | `TestASightedVerifiedIdentifierConfirmsIdentity`, `TestConfirmingIdentityActivatesTheRecord` |
+| An unchecked identifier on file is not evidence | `TestAnUncheckedIdentifierOnFileIsNotEvidence` |
+| A photograph is stored with its consent and read back intact | `TestAPhotographIsStoredWithItsConsentAndReadBack` |
+| Consent must name who gave it and what for | `TestAPhotographNeedsRecordedConsent`, `TestConsentMustStateItsPurpose`, `TestAPhotographNeedsConsentWithAPurpose` |
+| Only photograph formats are stored | `TestOnlyPhotographFormatsAreStored`, `TestOnlyPhotographFormatsAreAccepted` |
+| Withdrawal removes the image and keeps the record | `TestWithdrawingConsentKeepsTheRecord`, `TestWithdrawingConsentRemovesTheImageAndKeepsTheRecord` |
+| A deployment with no store refuses rather than recording a dangling row | `TestCapturingAPhotographNeedsAConfiguredStore` |
+| A photograph cannot be read across a tenant boundary | `TestAPhotographCannotBeReadFromAnotherTenant` |
+| Field restrictions follow tenant configuration, not a constant | `TestFieldRestrictionsAreConfigurable`, `TestFieldRestrictionsFollowTenantConfiguration` |
+| An unknown permission restricts rather than reveals | `TestAnUnknownPermissionRestrictsRatherThanReveals` |
+| A field cannot be restricted behind no permission | `TestAFieldCannotBeRestrictedBehindNoPermission`, `TestAFieldCannotBeConfiguredBehindNoPermission` |
+| Configuring field access is a tenant-administration act | `TestConfiguringFieldAccessIsRestricted` |
+| A restricted read records which fields were revealed, not their values | `TestARestrictedReadRecordsWhichFieldsWereRevealed`, `TestRevealedFieldsAreReportedForTheAudit` |
+| Masking narrows rather than blanks | `TestMaskingNarrowsRatherThanBlanks` |
+| An unconscious patient is registered and labelled, with an MRN | `TestAnUnconsciousPatientCanBeRegisteredAndLabelled` |
+| The temporary label never becomes a searchable name | `TestTheTemporaryLabelNeverBecomesAName`, `TestATemporaryLabelIsNotSearchableAsAName` |
+| An apparent age is an estimated birth date, marked as one | `TestAnApparentAgeBecomesAnEstimatedBirthDate` |
+| Identifying keeps the same record, and the emergency MRN still resolves | `TestIdentifyingKeepsTheSameRecord`, `TestIdentifyingAnEmergencyPatientKeepsTheSameRecord` |
+| Identification runs the duplicate check registration skipped | `TestIdentifyingRunsTheDuplicateCheckEmergencyRegistrationSkipped` |
+| Identification applies the full demographic policy | `TestIdentifyingAppliesTheFullPolicy`, `TestIdentifyingAppliesTheFullDemographicPolicy` |
+| Unidentified patients appear on a worklist and leave it | `TestUnidentifiedPatientsAppearOnAWorklistAndLeaveIt` |
+| A facility may refuse unidentified registration | `TestAFacilityCanRefuseUnidentifiedRegistration` |
+| Enabling emergency registration does not relax routine registration | `TestAllowingEmergencyRegistrationDoesNotRelaxRoutineRegistration` |
 | sqlc sees every migration | `TestSqlcSeesEveryMigration` |
+
+### A defect found and fixed in Sprint 2C
+
+`DemographicPolicy.AllowUnidentified` short-circuited `Check` entirely, so a
+facility that enabled emergency registration silently dropped the demographic
+minimum for **every** routine registration as well. The opposite of what
+enabling the flag says, and invisible until the index had filled with records
+nothing could match.
+
+The flag now governs only the emergency path, `Check` is always enforced, and
+`TestAllowingEmergencyRegistrationDoesNotRelaxRoutineRegistration` holds it.
+`DefaultPolicy` now permits emergency registration, which it could not safely do
+while the flag had that side effect: a hospital that has configured nothing must
+still be able to admit an unconscious patient, because refusing delays care or
+pushes it off-record.
 
 ## Wave-0 capabilities Wave 1 consumes
 

@@ -7,6 +7,7 @@ import (
 	empiv1 "github.com/ppusapati/health/code/gen/go/healthcare/empi/v1"
 	"github.com/ppusapati/health/code/internal/empi/application"
 	"github.com/ppusapati/health/code/internal/empi/domain"
+	"github.com/ppusapati/health/code/internal/platform/rpcerr"
 	platformtransport "github.com/ppusapati/health/code/internal/platform/transport"
 )
 
@@ -119,7 +120,11 @@ func (h *Handler) ConfirmIdentity(
 	ctx context.Context,
 	req *connect.Request[empiv1.ConfirmIdentityRequest],
 ) (*connect.Response[empiv1.ConfirmIdentityResponse], error) {
-	patient, err := h.svc.ConfirmIdentity(ctx, req.Msg.GetPatientId(), req.Msg.GetExpectedVersion())
+	patient, err := h.svc.ConfirmIdentity(ctx, application.ConfirmIdentityInput{
+		PatientID:       req.Msg.GetPatientId(),
+		ExpectedVersion: req.Msg.GetExpectedVersion(),
+		Evidence:        evidenceFromProto(req.Msg.GetEvidence()),
+	})
 	if err != nil {
 		return nil, platformtransport.ToConnect(err, platformtransport.CorrelationIDFromContext(ctx))
 	}
@@ -544,4 +549,145 @@ func (h *Handler) WithdrawDemographicProposal(
 	return connect.NewResponse(&empiv1.WithdrawDemographicProposalResponse{
 		Proposal: proposalToProto(proposal),
 	}), nil
+}
+
+// RegisterUnidentified implements SRS-EMPI-015.
+func (h *Handler) RegisterUnidentified(
+	ctx context.Context,
+	req *connect.Request[empiv1.RegisterUnidentifiedRequest],
+) (*connect.Response[empiv1.RegisterUnidentifiedResponse], error) {
+	result, err := h.svc.RegisterUnidentified(ctx, application.RegisterUnidentifiedInput{
+		Designation: designationFromProto(req.Msg.GetDesignation()),
+	})
+	if err != nil {
+		return nil, platformtransport.ToConnect(err, platformtransport.CorrelationIDFromContext(ctx))
+	}
+	// The MRN travels with the response: a specimen leaving the room now has to
+	// carry it, and a second round trip to fetch it prints the band late.
+	return connect.NewResponse(&empiv1.RegisterUnidentifiedResponse{
+		Patient: patientToProto(result.Patient, result.Identifiers),
+	}), nil
+}
+
+// IdentifyPatient implements SRS-EMPI-015.
+func (h *Handler) IdentifyPatient(
+	ctx context.Context,
+	req *connect.Request[empiv1.IdentifyPatientRequest],
+) (*connect.Response[empiv1.IdentifyPatientResponse], error) {
+	msg := req.Msg
+
+	result, err := h.svc.IdentifyPatient(ctx, application.IdentifyPatientInput{
+		PatientID:              msg.GetPatientId(),
+		Demographics:           demographicsFromProto(msg.GetDemographics()),
+		ExpectedVersion:        msg.GetExpectedVersion(),
+		AcknowledgedDuplicates: msg.GetAcknowledgedDuplicatePatientIds(),
+	})
+	if err != nil {
+		return nil, platformtransport.ToConnect(err, platformtransport.CorrelationIDFromContext(ctx))
+	}
+
+	// Duplicates found: a successful response carrying what to review, and no
+	// patient. An error would discard the body, leaving the client told to
+	// review candidates it cannot see.
+	if result.Patient == nil {
+		return connect.NewResponse(&empiv1.IdentifyPatientResponse{
+			PotentialDuplicates: matchesToProto(result.Duplicates),
+		}), nil
+	}
+	return connect.NewResponse(&empiv1.IdentifyPatientResponse{
+		Patient: patientToProto(result.Patient, nil),
+	}), nil
+}
+
+// ListUnidentified serves the worklist of patients still unknown.
+func (h *Handler) ListUnidentified(
+	ctx context.Context,
+	req *connect.Request[empiv1.ListUnidentifiedRequest],
+) (*connect.Response[empiv1.ListUnidentifiedResponse], error) {
+	patients, err := h.svc.ListUnidentified(ctx, req.Msg.GetPageSize())
+	if err != nil {
+		return nil, platformtransport.ToConnect(err, platformtransport.CorrelationIDFromContext(ctx))
+	}
+	return connect.NewResponse(&empiv1.ListUnidentifiedResponse{
+		Patients: patientsToProto(patients),
+	}), nil
+}
+
+// CapturePhoto implements SRS-EMPI-010.
+func (h *Handler) CapturePhoto(
+	ctx context.Context,
+	req *connect.Request[empiv1.CapturePhotoRequest],
+) (*connect.Response[empiv1.CapturePhotoResponse], error) {
+	msg := req.Msg
+
+	photo, err := h.svc.CapturePhoto(ctx, application.CapturePhotoInput{
+		PatientID:   msg.GetPatientId(),
+		ContentType: msg.GetContentType(),
+		Content:     msg.GetContent(),
+		Consent:     consentFromProto(msg.GetConsent()),
+	})
+	if err != nil {
+		return nil, platformtransport.ToConnect(err, platformtransport.CorrelationIDFromContext(ctx))
+	}
+	return connect.NewResponse(&empiv1.CapturePhotoResponse{
+		Photo: photoToProto(photo),
+	}), nil
+}
+
+// GetPhoto returns the patient's current photograph.
+func (h *Handler) GetPhoto(
+	ctx context.Context,
+	req *connect.Request[empiv1.GetPhotoRequest],
+) (*connect.Response[empiv1.GetPhotoResponse], error) {
+	result, err := h.svc.GetPhoto(ctx, req.Msg.GetPatientId())
+	if err != nil {
+		return nil, platformtransport.ToConnect(err, platformtransport.CorrelationIDFromContext(ctx))
+	}
+	// No photograph is an ordinary state, not an error: a caller rendering a
+	// banner should not have to distinguish "absent" from "failed".
+	if !result.Found {
+		return connect.NewResponse(&empiv1.GetPhotoResponse{}), nil
+	}
+	return connect.NewResponse(&empiv1.GetPhotoResponse{
+		Photo: photoToProto(result.Photo), Content: result.Content,
+	}), nil
+}
+
+// WithdrawPhotoConsent implements SRS-EMPI-010.
+func (h *Handler) WithdrawPhotoConsent(
+	ctx context.Context,
+	req *connect.Request[empiv1.WithdrawPhotoConsentRequest],
+) (*connect.Response[empiv1.WithdrawPhotoConsentResponse], error) {
+	photo, err := h.svc.WithdrawPhotoConsent(ctx, req.Msg.GetPhotoId(), req.Msg.GetReason())
+	if err != nil {
+		return nil, platformtransport.ToConnect(err, platformtransport.CorrelationIDFromContext(ctx))
+	}
+	return connect.NewResponse(&empiv1.WithdrawPhotoConsentResponse{
+		Photo: photoToProto(photo),
+	}), nil
+}
+
+// ConfigureFieldAccess implements SRS-EMPI-014.
+func (h *Handler) ConfigureFieldAccess(
+	ctx context.Context,
+	req *connect.Request[empiv1.ConfigureFieldAccessRequest],
+) (*connect.Response[empiv1.ConfigureFieldAccessResponse], error) {
+	msg := req.Msg
+
+	field, ok := demographicFieldFromProto[msg.GetField()]
+	if !ok {
+		return nil, platformtransport.ToConnect(
+			rpcerr.Invalid("EMPI_UNKNOWN_FIELD",
+				"that is not a demographic field this system has"),
+			platformtransport.CorrelationIDFromContext(ctx))
+	}
+
+	if err := h.svc.ConfigureFieldAccess(ctx, application.ConfigureFieldAccessInput{
+		FacilityID: msg.GetFacilityId(),
+		Field:      field,
+		Permission: msg.GetRequiredPermission(),
+	}); err != nil {
+		return nil, platformtransport.ToConnect(err, platformtransport.CorrelationIDFromContext(ctx))
+	}
+	return connect.NewResponse(&empiv1.ConfigureFieldAccessResponse{}), nil
 }

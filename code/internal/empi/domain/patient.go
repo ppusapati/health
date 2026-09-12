@@ -89,6 +89,14 @@ type Patient struct {
 
 	// Deceased carries date and source when recorded (SRS-EMPI-008).
 	Deceased *DeceasedRecord
+	// Designation is set only on a patient registered as unidentified
+	// (SRS-EMPI-015). Kept after identification rather than cleared: an hour of
+	// records was filed under it, and somebody reading them later needs to know
+	// what the ward was calling this person at the time.
+	Designation *TemporaryDesignation
+	// IdentifiedAt is when real demographics replaced the designation. Nil
+	// while the patient is still unknown.
+	IdentifiedAt *time.Time
 
 	CreatedAt time.Time
 	UpdatedAt time.Time

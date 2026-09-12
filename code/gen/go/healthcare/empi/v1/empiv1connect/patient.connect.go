@@ -67,6 +67,26 @@ const (
 	// PatientServiceDismissDuplicateCandidateProcedure is the fully-qualified name of the
 	// PatientService's DismissDuplicateCandidate RPC.
 	PatientServiceDismissDuplicateCandidateProcedure = "/healthcare.empi.v1.PatientService/DismissDuplicateCandidate"
+	// PatientServiceRegisterUnidentifiedProcedure is the fully-qualified name of the PatientService's
+	// RegisterUnidentified RPC.
+	PatientServiceRegisterUnidentifiedProcedure = "/healthcare.empi.v1.PatientService/RegisterUnidentified"
+	// PatientServiceIdentifyPatientProcedure is the fully-qualified name of the PatientService's
+	// IdentifyPatient RPC.
+	PatientServiceIdentifyPatientProcedure = "/healthcare.empi.v1.PatientService/IdentifyPatient"
+	// PatientServiceListUnidentifiedProcedure is the fully-qualified name of the PatientService's
+	// ListUnidentified RPC.
+	PatientServiceListUnidentifiedProcedure = "/healthcare.empi.v1.PatientService/ListUnidentified"
+	// PatientServiceCapturePhotoProcedure is the fully-qualified name of the PatientService's
+	// CapturePhoto RPC.
+	PatientServiceCapturePhotoProcedure = "/healthcare.empi.v1.PatientService/CapturePhoto"
+	// PatientServiceGetPhotoProcedure is the fully-qualified name of the PatientService's GetPhoto RPC.
+	PatientServiceGetPhotoProcedure = "/healthcare.empi.v1.PatientService/GetPhoto"
+	// PatientServiceWithdrawPhotoConsentProcedure is the fully-qualified name of the PatientService's
+	// WithdrawPhotoConsent RPC.
+	PatientServiceWithdrawPhotoConsentProcedure = "/healthcare.empi.v1.PatientService/WithdrawPhotoConsent"
+	// PatientServiceConfigureFieldAccessProcedure is the fully-qualified name of the PatientService's
+	// ConfigureFieldAccess RPC.
+	PatientServiceConfigureFieldAccessProcedure = "/healthcare.empi.v1.PatientService/ConfigureFieldAccess"
 	// PatientServiceLinkIdentifierProcedure is the fully-qualified name of the PatientService's
 	// LinkIdentifier RPC.
 	PatientServiceLinkIdentifierProcedure = "/healthcare.empi.v1.PatientService/LinkIdentifier"
@@ -139,6 +159,22 @@ type PatientServiceClient interface {
 	// SRS-EMPI-004. The manual-review worklist thresholds route to.
 	ListDuplicateCandidates(context.Context, *connect.Request[v1.ListDuplicateCandidatesRequest]) (*connect.Response[v1.ListDuplicateCandidatesResponse], error)
 	DismissDuplicateCandidate(context.Context, *connect.Request[v1.DismissDuplicateCandidateRequest]) (*connect.Response[v1.DismissDuplicateCandidateResponse], error)
+	// SRS-EMPI-015. An unconscious patient is registered immediately, with a
+	// designation instead of a name, and identified later. The internal
+	// identifier never changes, so everything written during the emergency still
+	// points at the same record — which is what "without losing encounter
+	// chronology" means in practice.
+	RegisterUnidentified(context.Context, *connect.Request[v1.RegisterUnidentifiedRequest]) (*connect.Response[v1.RegisterUnidentifiedResponse], error)
+	IdentifyPatient(context.Context, *connect.Request[v1.IdentifyPatientRequest]) (*connect.Response[v1.IdentifyPatientResponse], error)
+	ListUnidentified(context.Context, *connect.Request[v1.ListUnidentifiedRequest]) (*connect.Response[v1.ListUnidentifiedResponse], error)
+	// SRS-EMPI-010. A photograph is held with the consent it was taken under and
+	// is never sufficient to establish identity on its own.
+	CapturePhoto(context.Context, *connect.Request[v1.CapturePhotoRequest]) (*connect.Response[v1.CapturePhotoResponse], error)
+	GetPhoto(context.Context, *connect.Request[v1.GetPhotoRequest]) (*connect.Response[v1.GetPhotoResponse], error)
+	WithdrawPhotoConsent(context.Context, *connect.Request[v1.WithdrawPhotoConsentRequest]) (*connect.Response[v1.WithdrawPhotoConsentResponse], error)
+	// SRS-EMPI-014. Which demographic fields are restricted is a tenant
+	// decision, not a constant in this system.
+	ConfigureFieldAccess(context.Context, *connect.Request[v1.ConfigureFieldAccessRequest]) (*connect.Response[v1.ConfigureFieldAccessResponse], error)
 	// SRS-EMPI-011. External identifiers are linked and unlinked through an
 	// adapter; neither direction deletes a row, because link and unlink history
 	// is what makes a wrong link investigable.
@@ -239,6 +275,48 @@ func NewPatientServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+PatientServiceDismissDuplicateCandidateProcedure,
 			connect.WithSchema(patientServiceMethods.ByName("DismissDuplicateCandidate")),
+			connect.WithClientOptions(opts...),
+		),
+		registerUnidentified: connect.NewClient[v1.RegisterUnidentifiedRequest, v1.RegisterUnidentifiedResponse](
+			httpClient,
+			baseURL+PatientServiceRegisterUnidentifiedProcedure,
+			connect.WithSchema(patientServiceMethods.ByName("RegisterUnidentified")),
+			connect.WithClientOptions(opts...),
+		),
+		identifyPatient: connect.NewClient[v1.IdentifyPatientRequest, v1.IdentifyPatientResponse](
+			httpClient,
+			baseURL+PatientServiceIdentifyPatientProcedure,
+			connect.WithSchema(patientServiceMethods.ByName("IdentifyPatient")),
+			connect.WithClientOptions(opts...),
+		),
+		listUnidentified: connect.NewClient[v1.ListUnidentifiedRequest, v1.ListUnidentifiedResponse](
+			httpClient,
+			baseURL+PatientServiceListUnidentifiedProcedure,
+			connect.WithSchema(patientServiceMethods.ByName("ListUnidentified")),
+			connect.WithClientOptions(opts...),
+		),
+		capturePhoto: connect.NewClient[v1.CapturePhotoRequest, v1.CapturePhotoResponse](
+			httpClient,
+			baseURL+PatientServiceCapturePhotoProcedure,
+			connect.WithSchema(patientServiceMethods.ByName("CapturePhoto")),
+			connect.WithClientOptions(opts...),
+		),
+		getPhoto: connect.NewClient[v1.GetPhotoRequest, v1.GetPhotoResponse](
+			httpClient,
+			baseURL+PatientServiceGetPhotoProcedure,
+			connect.WithSchema(patientServiceMethods.ByName("GetPhoto")),
+			connect.WithClientOptions(opts...),
+		),
+		withdrawPhotoConsent: connect.NewClient[v1.WithdrawPhotoConsentRequest, v1.WithdrawPhotoConsentResponse](
+			httpClient,
+			baseURL+PatientServiceWithdrawPhotoConsentProcedure,
+			connect.WithSchema(patientServiceMethods.ByName("WithdrawPhotoConsent")),
+			connect.WithClientOptions(opts...),
+		),
+		configureFieldAccess: connect.NewClient[v1.ConfigureFieldAccessRequest, v1.ConfigureFieldAccessResponse](
+			httpClient,
+			baseURL+PatientServiceConfigureFieldAccessProcedure,
+			connect.WithSchema(patientServiceMethods.ByName("ConfigureFieldAccess")),
 			connect.WithClientOptions(opts...),
 		),
 		linkIdentifier: connect.NewClient[v1.LinkIdentifierRequest, v1.LinkIdentifierResponse](
@@ -357,6 +435,13 @@ type patientServiceClient struct {
 	unmergePatients               *connect.Client[v1.UnmergePatientsRequest, v1.UnmergePatientsResponse]
 	listDuplicateCandidates       *connect.Client[v1.ListDuplicateCandidatesRequest, v1.ListDuplicateCandidatesResponse]
 	dismissDuplicateCandidate     *connect.Client[v1.DismissDuplicateCandidateRequest, v1.DismissDuplicateCandidateResponse]
+	registerUnidentified          *connect.Client[v1.RegisterUnidentifiedRequest, v1.RegisterUnidentifiedResponse]
+	identifyPatient               *connect.Client[v1.IdentifyPatientRequest, v1.IdentifyPatientResponse]
+	listUnidentified              *connect.Client[v1.ListUnidentifiedRequest, v1.ListUnidentifiedResponse]
+	capturePhoto                  *connect.Client[v1.CapturePhotoRequest, v1.CapturePhotoResponse]
+	getPhoto                      *connect.Client[v1.GetPhotoRequest, v1.GetPhotoResponse]
+	withdrawPhotoConsent          *connect.Client[v1.WithdrawPhotoConsentRequest, v1.WithdrawPhotoConsentResponse]
+	configureFieldAccess          *connect.Client[v1.ConfigureFieldAccessRequest, v1.ConfigureFieldAccessResponse]
 	linkIdentifier                *connect.Client[v1.LinkIdentifierRequest, v1.LinkIdentifierResponse]
 	unlinkIdentifier              *connect.Client[v1.UnlinkIdentifierRequest, v1.UnlinkIdentifierResponse]
 	verifyIdentifier              *connect.Client[v1.VerifyIdentifierRequest, v1.VerifyIdentifierResponse]
@@ -419,6 +504,41 @@ func (c *patientServiceClient) ListDuplicateCandidates(ctx context.Context, req 
 // DismissDuplicateCandidate calls healthcare.empi.v1.PatientService.DismissDuplicateCandidate.
 func (c *patientServiceClient) DismissDuplicateCandidate(ctx context.Context, req *connect.Request[v1.DismissDuplicateCandidateRequest]) (*connect.Response[v1.DismissDuplicateCandidateResponse], error) {
 	return c.dismissDuplicateCandidate.CallUnary(ctx, req)
+}
+
+// RegisterUnidentified calls healthcare.empi.v1.PatientService.RegisterUnidentified.
+func (c *patientServiceClient) RegisterUnidentified(ctx context.Context, req *connect.Request[v1.RegisterUnidentifiedRequest]) (*connect.Response[v1.RegisterUnidentifiedResponse], error) {
+	return c.registerUnidentified.CallUnary(ctx, req)
+}
+
+// IdentifyPatient calls healthcare.empi.v1.PatientService.IdentifyPatient.
+func (c *patientServiceClient) IdentifyPatient(ctx context.Context, req *connect.Request[v1.IdentifyPatientRequest]) (*connect.Response[v1.IdentifyPatientResponse], error) {
+	return c.identifyPatient.CallUnary(ctx, req)
+}
+
+// ListUnidentified calls healthcare.empi.v1.PatientService.ListUnidentified.
+func (c *patientServiceClient) ListUnidentified(ctx context.Context, req *connect.Request[v1.ListUnidentifiedRequest]) (*connect.Response[v1.ListUnidentifiedResponse], error) {
+	return c.listUnidentified.CallUnary(ctx, req)
+}
+
+// CapturePhoto calls healthcare.empi.v1.PatientService.CapturePhoto.
+func (c *patientServiceClient) CapturePhoto(ctx context.Context, req *connect.Request[v1.CapturePhotoRequest]) (*connect.Response[v1.CapturePhotoResponse], error) {
+	return c.capturePhoto.CallUnary(ctx, req)
+}
+
+// GetPhoto calls healthcare.empi.v1.PatientService.GetPhoto.
+func (c *patientServiceClient) GetPhoto(ctx context.Context, req *connect.Request[v1.GetPhotoRequest]) (*connect.Response[v1.GetPhotoResponse], error) {
+	return c.getPhoto.CallUnary(ctx, req)
+}
+
+// WithdrawPhotoConsent calls healthcare.empi.v1.PatientService.WithdrawPhotoConsent.
+func (c *patientServiceClient) WithdrawPhotoConsent(ctx context.Context, req *connect.Request[v1.WithdrawPhotoConsentRequest]) (*connect.Response[v1.WithdrawPhotoConsentResponse], error) {
+	return c.withdrawPhotoConsent.CallUnary(ctx, req)
+}
+
+// ConfigureFieldAccess calls healthcare.empi.v1.PatientService.ConfigureFieldAccess.
+func (c *patientServiceClient) ConfigureFieldAccess(ctx context.Context, req *connect.Request[v1.ConfigureFieldAccessRequest]) (*connect.Response[v1.ConfigureFieldAccessResponse], error) {
+	return c.configureFieldAccess.CallUnary(ctx, req)
 }
 
 // LinkIdentifier calls healthcare.empi.v1.PatientService.LinkIdentifier.
@@ -526,6 +646,22 @@ type PatientServiceHandler interface {
 	// SRS-EMPI-004. The manual-review worklist thresholds route to.
 	ListDuplicateCandidates(context.Context, *connect.Request[v1.ListDuplicateCandidatesRequest]) (*connect.Response[v1.ListDuplicateCandidatesResponse], error)
 	DismissDuplicateCandidate(context.Context, *connect.Request[v1.DismissDuplicateCandidateRequest]) (*connect.Response[v1.DismissDuplicateCandidateResponse], error)
+	// SRS-EMPI-015. An unconscious patient is registered immediately, with a
+	// designation instead of a name, and identified later. The internal
+	// identifier never changes, so everything written during the emergency still
+	// points at the same record — which is what "without losing encounter
+	// chronology" means in practice.
+	RegisterUnidentified(context.Context, *connect.Request[v1.RegisterUnidentifiedRequest]) (*connect.Response[v1.RegisterUnidentifiedResponse], error)
+	IdentifyPatient(context.Context, *connect.Request[v1.IdentifyPatientRequest]) (*connect.Response[v1.IdentifyPatientResponse], error)
+	ListUnidentified(context.Context, *connect.Request[v1.ListUnidentifiedRequest]) (*connect.Response[v1.ListUnidentifiedResponse], error)
+	// SRS-EMPI-010. A photograph is held with the consent it was taken under and
+	// is never sufficient to establish identity on its own.
+	CapturePhoto(context.Context, *connect.Request[v1.CapturePhotoRequest]) (*connect.Response[v1.CapturePhotoResponse], error)
+	GetPhoto(context.Context, *connect.Request[v1.GetPhotoRequest]) (*connect.Response[v1.GetPhotoResponse], error)
+	WithdrawPhotoConsent(context.Context, *connect.Request[v1.WithdrawPhotoConsentRequest]) (*connect.Response[v1.WithdrawPhotoConsentResponse], error)
+	// SRS-EMPI-014. Which demographic fields are restricted is a tenant
+	// decision, not a constant in this system.
+	ConfigureFieldAccess(context.Context, *connect.Request[v1.ConfigureFieldAccessRequest]) (*connect.Response[v1.ConfigureFieldAccessResponse], error)
 	// SRS-EMPI-011. External identifiers are linked and unlinked through an
 	// adapter; neither direction deletes a row, because link and unlink history
 	// is what makes a wrong link investigable.
@@ -622,6 +758,48 @@ func NewPatientServiceHandler(svc PatientServiceHandler, opts ...connect.Handler
 		PatientServiceDismissDuplicateCandidateProcedure,
 		svc.DismissDuplicateCandidate,
 		connect.WithSchema(patientServiceMethods.ByName("DismissDuplicateCandidate")),
+		connect.WithHandlerOptions(opts...),
+	)
+	patientServiceRegisterUnidentifiedHandler := connect.NewUnaryHandler(
+		PatientServiceRegisterUnidentifiedProcedure,
+		svc.RegisterUnidentified,
+		connect.WithSchema(patientServiceMethods.ByName("RegisterUnidentified")),
+		connect.WithHandlerOptions(opts...),
+	)
+	patientServiceIdentifyPatientHandler := connect.NewUnaryHandler(
+		PatientServiceIdentifyPatientProcedure,
+		svc.IdentifyPatient,
+		connect.WithSchema(patientServiceMethods.ByName("IdentifyPatient")),
+		connect.WithHandlerOptions(opts...),
+	)
+	patientServiceListUnidentifiedHandler := connect.NewUnaryHandler(
+		PatientServiceListUnidentifiedProcedure,
+		svc.ListUnidentified,
+		connect.WithSchema(patientServiceMethods.ByName("ListUnidentified")),
+		connect.WithHandlerOptions(opts...),
+	)
+	patientServiceCapturePhotoHandler := connect.NewUnaryHandler(
+		PatientServiceCapturePhotoProcedure,
+		svc.CapturePhoto,
+		connect.WithSchema(patientServiceMethods.ByName("CapturePhoto")),
+		connect.WithHandlerOptions(opts...),
+	)
+	patientServiceGetPhotoHandler := connect.NewUnaryHandler(
+		PatientServiceGetPhotoProcedure,
+		svc.GetPhoto,
+		connect.WithSchema(patientServiceMethods.ByName("GetPhoto")),
+		connect.WithHandlerOptions(opts...),
+	)
+	patientServiceWithdrawPhotoConsentHandler := connect.NewUnaryHandler(
+		PatientServiceWithdrawPhotoConsentProcedure,
+		svc.WithdrawPhotoConsent,
+		connect.WithSchema(patientServiceMethods.ByName("WithdrawPhotoConsent")),
+		connect.WithHandlerOptions(opts...),
+	)
+	patientServiceConfigureFieldAccessHandler := connect.NewUnaryHandler(
+		PatientServiceConfigureFieldAccessProcedure,
+		svc.ConfigureFieldAccess,
+		connect.WithSchema(patientServiceMethods.ByName("ConfigureFieldAccess")),
 		connect.WithHandlerOptions(opts...),
 	)
 	patientServiceLinkIdentifierHandler := connect.NewUnaryHandler(
@@ -746,6 +924,20 @@ func NewPatientServiceHandler(svc PatientServiceHandler, opts ...connect.Handler
 			patientServiceListDuplicateCandidatesHandler.ServeHTTP(w, r)
 		case PatientServiceDismissDuplicateCandidateProcedure:
 			patientServiceDismissDuplicateCandidateHandler.ServeHTTP(w, r)
+		case PatientServiceRegisterUnidentifiedProcedure:
+			patientServiceRegisterUnidentifiedHandler.ServeHTTP(w, r)
+		case PatientServiceIdentifyPatientProcedure:
+			patientServiceIdentifyPatientHandler.ServeHTTP(w, r)
+		case PatientServiceListUnidentifiedProcedure:
+			patientServiceListUnidentifiedHandler.ServeHTTP(w, r)
+		case PatientServiceCapturePhotoProcedure:
+			patientServiceCapturePhotoHandler.ServeHTTP(w, r)
+		case PatientServiceGetPhotoProcedure:
+			patientServiceGetPhotoHandler.ServeHTTP(w, r)
+		case PatientServiceWithdrawPhotoConsentProcedure:
+			patientServiceWithdrawPhotoConsentHandler.ServeHTTP(w, r)
+		case PatientServiceConfigureFieldAccessProcedure:
+			patientServiceConfigureFieldAccessHandler.ServeHTTP(w, r)
 		case PatientServiceLinkIdentifierProcedure:
 			patientServiceLinkIdentifierHandler.ServeHTTP(w, r)
 		case PatientServiceUnlinkIdentifierProcedure:
@@ -823,6 +1015,34 @@ func (UnimplementedPatientServiceHandler) ListDuplicateCandidates(context.Contex
 
 func (UnimplementedPatientServiceHandler) DismissDuplicateCandidate(context.Context, *connect.Request[v1.DismissDuplicateCandidateRequest]) (*connect.Response[v1.DismissDuplicateCandidateResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.empi.v1.PatientService.DismissDuplicateCandidate is not implemented"))
+}
+
+func (UnimplementedPatientServiceHandler) RegisterUnidentified(context.Context, *connect.Request[v1.RegisterUnidentifiedRequest]) (*connect.Response[v1.RegisterUnidentifiedResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.empi.v1.PatientService.RegisterUnidentified is not implemented"))
+}
+
+func (UnimplementedPatientServiceHandler) IdentifyPatient(context.Context, *connect.Request[v1.IdentifyPatientRequest]) (*connect.Response[v1.IdentifyPatientResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.empi.v1.PatientService.IdentifyPatient is not implemented"))
+}
+
+func (UnimplementedPatientServiceHandler) ListUnidentified(context.Context, *connect.Request[v1.ListUnidentifiedRequest]) (*connect.Response[v1.ListUnidentifiedResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.empi.v1.PatientService.ListUnidentified is not implemented"))
+}
+
+func (UnimplementedPatientServiceHandler) CapturePhoto(context.Context, *connect.Request[v1.CapturePhotoRequest]) (*connect.Response[v1.CapturePhotoResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.empi.v1.PatientService.CapturePhoto is not implemented"))
+}
+
+func (UnimplementedPatientServiceHandler) GetPhoto(context.Context, *connect.Request[v1.GetPhotoRequest]) (*connect.Response[v1.GetPhotoResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.empi.v1.PatientService.GetPhoto is not implemented"))
+}
+
+func (UnimplementedPatientServiceHandler) WithdrawPhotoConsent(context.Context, *connect.Request[v1.WithdrawPhotoConsentRequest]) (*connect.Response[v1.WithdrawPhotoConsentResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.empi.v1.PatientService.WithdrawPhotoConsent is not implemented"))
+}
+
+func (UnimplementedPatientServiceHandler) ConfigureFieldAccess(context.Context, *connect.Request[v1.ConfigureFieldAccessRequest]) (*connect.Response[v1.ConfigureFieldAccessResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.empi.v1.PatientService.ConfigureFieldAccess is not implemented"))
 }
 
 func (UnimplementedPatientServiceHandler) LinkIdentifier(context.Context, *connect.Request[v1.LinkIdentifierRequest]) (*connect.Response[v1.LinkIdentifierResponse], error) {

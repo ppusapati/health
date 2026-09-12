@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -119,4 +121,88 @@ func numericToFloat(n pgtype.Numeric) (float64, error) {
 		return 0, rpcerr.Internal("EMPI_MATCH_CONFIG_INVALID", "a match threshold is not a number").WithCause(err)
 	}
 	return value.Float64, nil
+}
+
+// Configured field-level access (SRS-EMPI-014).
+
+// optionalUUID renders an empty string as SQL NULL.
+//
+// A jurisdiction-wide policy has no facility, and NULL rather than the zero
+// UUID is what the partial uniqueness index is written against.
+func optionalUUID(value string) (pgtype.UUID, error) {
+	if strings.TrimSpace(value) == "" {
+		return pgtype.UUID{}, nil
+	}
+	parsed, err := uuid.Parse(value)
+	if err != nil {
+		return pgtype.UUID{}, rpcerr.Internal("EMPI_FACILITY_ID_INVALID",
+			"facility_id must be a UUID").WithCause(err)
+	}
+	return pgtype.UUID{Bytes: parsed, Valid: true}, nil
+}
+
+// FieldAccessPolicy resolves which demographic fields are restricted.
+//
+// The query returns facility-specific rows first, so the first row seen for a
+// field is the most specific one. Falls back to the built-in default when the
+// tenant has configured nothing — a tenant that has not thought about this yet
+// still gets the masking a duplicate-review screen needs.
+func (r ConfigRepo) FieldAccessPolicy(ctx context.Context, scope authctx.TenantScope,
+	jurisdiction, facilityID string) (domain.FieldAccessPolicy, error) {
+
+	tenantID, err := scopeTenantID(scope)
+	if err != nil {
+		return domain.FieldAccessPolicy{}, err
+	}
+	facility, err := optionalUUID(facilityID)
+	if err != nil {
+		return domain.FieldAccessPolicy{}, err
+	}
+
+	rows, err := r.queries(ctx).ListFieldAccessPolicy(ctx, sqlcgen.ListFieldAccessPolicyParams{
+		TenantID: tenantID, Jurisdiction: jurisdiction, FacilityID: facility,
+	})
+	if err != nil {
+		return domain.FieldAccessPolicy{}, err
+	}
+	if len(rows) == 0 {
+		return domain.DefaultFieldAccessPolicy(jurisdiction), nil
+	}
+
+	out := domain.FieldAccessPolicy{
+		Jurisdiction: jurisdiction, FacilityID: facilityID,
+		Restricted: make(map[domain.Field]string, len(rows)),
+	}
+	for _, row := range rows {
+		field := domain.Field(row.Field)
+		if _, taken := out.Restricted[field]; taken {
+			// A facility-specific row already claimed this field, and the
+			// ordering put it first. The jurisdiction-wide row is the fallback
+			// it overrides.
+			continue
+		}
+		out.Restricted[field] = row.RequiredPermission
+	}
+	return out, nil
+}
+
+// SetFieldAccess configures one field's restriction.
+func (r ConfigRepo) SetFieldAccess(ctx context.Context, scope authctx.TenantScope,
+	p domain.FieldAccessPolicy, field domain.Field, permission string, now time.Time) error {
+
+	tenantID, err := scopeTenantID(scope)
+	if err != nil {
+		return err
+	}
+	facility, err := optionalUUID(p.FacilityID)
+	if err != nil {
+		return err
+	}
+
+	return r.queries(ctx).UpsertFieldAccessPolicy(ctx, sqlcgen.UpsertFieldAccessPolicyParams{
+		PolicyID: uuid.New(), TenantID: tenantID,
+		Jurisdiction: p.Jurisdiction, FacilityID: facility,
+		Field: string(field), RequiredPermission: permission,
+		CreatedAt: timestamptz(now), UpdatedAt: timestamptz(now),
+	})
 }

@@ -161,8 +161,58 @@ type ProposalRepository interface {
 		patientID string, currentVersion int64, by string, at time.Time) (int64, error)
 }
 
+// PhotoRepository persists patient photograph records (SRS-EMPI-010).
+//
+// Records, not bytes. The bytes live behind PhotoStore, so a deployment can put
+// them in object storage without the patient index knowing how.
+type PhotoRepository interface {
+	Insert(ctx context.Context, scope authctx.TenantScope, p domain.Photo) error
+	// Current returns the photograph a screen should show, if any.
+	Current(ctx context.Context, scope authctx.TenantScope, patientID string) (domain.Photo, bool, error)
+	Get(ctx context.Context, scope authctx.TenantScope, photoID string) (domain.Photo, error)
+	// Withdraw marks consent withdrawn. The row stays: a deletion would leave
+	// nobody able to answer whether a photograph ever existed.
+	Withdraw(ctx context.Context, scope authctx.TenantScope, p domain.Photo) error
+}
+
+// PhotoStore holds the bytes.
+//
+// A port because where patient photographs live is a deployment decision with
+// real consequences — encryption at rest, retention, residency — and none of
+// them belong in the patient index. Deleting is part of the interface because
+// withdrawn consent has to reach the bytes, not just the row.
+type PhotoStore interface {
+	// Put stores bytes under a key the store chooses and returns it.
+	Put(ctx context.Context, scope authctx.TenantScope, contentType string, content []byte) (string, error)
+	Get(ctx context.Context, scope authctx.TenantScope, key string) ([]byte, error)
+	// Delete removes the bytes. Idempotent: a withdrawal retried after a
+	// partial failure must not fail because the object is already gone.
+	Delete(ctx context.Context, scope authctx.TenantScope, key string) error
+}
+
+// UnidentifiedRepository serves the emergency-registration worklist
+// (SRS-EMPI-015).
+type UnidentifiedRepository interface {
+	// MarkIdentified records that real demographics replaced a designation.
+	MarkIdentified(ctx context.Context, scope authctx.TenantScope,
+		patientID string, at time.Time) error
+	// ListUnidentified returns who is still unknown, oldest first.
+	ListUnidentified(ctx context.Context, scope authctx.TenantScope,
+		limit int32) ([]*domain.Patient, error)
+}
+
 // ConfigRepository reads the tenant's registration and matching configuration.
 type ConfigRepository interface {
+	// FieldAccessPolicy resolves which demographic fields are restricted,
+	// facility-specific first and jurisdiction-wide second, falling back to
+	// domain.DefaultFieldAccessPolicy when the tenant has configured nothing
+	// (SRS-EMPI-014).
+	FieldAccessPolicy(ctx context.Context, scope authctx.TenantScope,
+		jurisdiction, facilityID string) (domain.FieldAccessPolicy, error)
+	// SetFieldAccess configures one field's restriction.
+	SetFieldAccess(ctx context.Context, scope authctx.TenantScope,
+		p domain.FieldAccessPolicy, field domain.Field, permission string, now time.Time) error
+
 	// DemographicPolicy resolves the minimum set, facility-specific first and
 	// jurisdiction-wide second, falling back to domain.DefaultPolicy when the
 	// tenant has configured nothing.

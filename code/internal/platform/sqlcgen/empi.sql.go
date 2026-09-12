@@ -273,7 +273,9 @@ SELECT p.patient_id, p.tenant_id, p.registered_facility_id, p.status,
        p.merged_into_patient_id,
        p.deceased_date, p.deceased_precision, p.deceased_source,
        p.deceased_recorded_at, p.deceased_recorded_by,
-       p.created_at, p.updated_at, p.version
+       p.created_at, p.updated_at, p.version,
+       p.designation_label, p.designation_circumstance, p.designation_apparent_age,
+       p.identified_at
 FROM empi.patient p
 JOIN empi.patient_identifier i
   ON i.tenant_id = p.tenant_id AND i.patient_id = p.patient_id
@@ -338,6 +340,10 @@ func (q *Queries) FindPatientByIdentifier(ctx context.Context, arg FindPatientBy
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Version,
+			&i.DesignationLabel,
+			&i.DesignationCircumstance,
+			&i.DesignationApparentAge,
+			&i.IdentifiedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -347,6 +353,43 @@ func (q *Queries) FindPatientByIdentifier(ctx context.Context, arg FindPatientBy
 		return nil, err
 	}
 	return items, nil
+}
+
+const getCurrentPatientPhoto = `-- name: GetCurrentPatientPhoto :one
+SELECT photo_id, tenant_id, patient_id, storage_key, content_type, byte_size, digest,
+       consent_given_by, consent_on_behalf, consent_purpose, consent_given_at,
+       consent_recorded_by, captured_at, captured_by, withdrawn_at, withdrawn_reason
+FROM empi.patient_photo
+WHERE tenant_id = $1 AND patient_id = $2 AND withdrawn_at IS NULL
+`
+
+type GetCurrentPatientPhotoParams struct {
+	TenantID  uuid.UUID
+	PatientID uuid.UUID
+}
+
+func (q *Queries) GetCurrentPatientPhoto(ctx context.Context, arg GetCurrentPatientPhotoParams) (EmpiPatientPhoto, error) {
+	row := q.db.QueryRow(ctx, getCurrentPatientPhoto, arg.TenantID, arg.PatientID)
+	var i EmpiPatientPhoto
+	err := row.Scan(
+		&i.PhotoID,
+		&i.TenantID,
+		&i.PatientID,
+		&i.StorageKey,
+		&i.ContentType,
+		&i.ByteSize,
+		&i.Digest,
+		&i.ConsentGivenBy,
+		&i.ConsentOnBehalf,
+		&i.ConsentPurpose,
+		&i.ConsentGivenAt,
+		&i.ConsentRecordedBy,
+		&i.CapturedAt,
+		&i.CapturedBy,
+		&i.WithdrawnAt,
+		&i.WithdrawnReason,
+	)
+	return i, err
 }
 
 const getDemographicPolicy = `-- name: GetDemographicPolicy :one
@@ -514,7 +557,9 @@ SELECT patient_id, tenant_id, registered_facility_id, status,
        merged_into_patient_id,
        deceased_date, deceased_precision, deceased_source,
        deceased_recorded_at, deceased_recorded_by,
-       created_at, updated_at, version
+       created_at, updated_at, version,
+       designation_label, designation_circumstance, designation_apparent_age,
+       identified_at
 FROM empi.patient
 WHERE tenant_id = $1 AND patient_id = $2
 `
@@ -551,6 +596,10 @@ func (q *Queries) GetPatient(ctx context.Context, arg GetPatientParams) (EmpiPat
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Version,
+		&i.DesignationLabel,
+		&i.DesignationCircumstance,
+		&i.DesignationApparentAge,
+		&i.IdentifiedAt,
 	)
 	return i, err
 }
@@ -591,6 +640,43 @@ func (q *Queries) GetPatientIdentifier(ctx context.Context, arg GetPatientIdenti
 		&i.Reason,
 		&i.Assurance,
 		&i.VerifiedAt,
+	)
+	return i, err
+}
+
+const getPatientPhoto = `-- name: GetPatientPhoto :one
+SELECT photo_id, tenant_id, patient_id, storage_key, content_type, byte_size, digest,
+       consent_given_by, consent_on_behalf, consent_purpose, consent_given_at,
+       consent_recorded_by, captured_at, captured_by, withdrawn_at, withdrawn_reason
+FROM empi.patient_photo
+WHERE tenant_id = $1 AND photo_id = $2
+`
+
+type GetPatientPhotoParams struct {
+	TenantID uuid.UUID
+	PhotoID  uuid.UUID
+}
+
+func (q *Queries) GetPatientPhoto(ctx context.Context, arg GetPatientPhotoParams) (EmpiPatientPhoto, error) {
+	row := q.db.QueryRow(ctx, getPatientPhoto, arg.TenantID, arg.PhotoID)
+	var i EmpiPatientPhoto
+	err := row.Scan(
+		&i.PhotoID,
+		&i.TenantID,
+		&i.PatientID,
+		&i.StorageKey,
+		&i.ContentType,
+		&i.ByteSize,
+		&i.Digest,
+		&i.ConsentGivenBy,
+		&i.ConsentOnBehalf,
+		&i.ConsentPurpose,
+		&i.ConsentGivenAt,
+		&i.ConsentRecordedBy,
+		&i.CapturedAt,
+		&i.CapturedBy,
+		&i.WithdrawnAt,
+		&i.WithdrawnReason,
 	)
 	return i, err
 }
@@ -784,33 +870,39 @@ INSERT INTO empi.patient (
     family_name, given_names, name_prefix, name_suffix,
     birth_date, birth_date_precision, sex,
     phones, emails, addresses,
+    designation_label, designation_circumstance, designation_apparent_age,
     created_at, updated_at, version
 ) VALUES (
     $1, $2, $3, $4,
     $5, $6, $7, $8,
     $9::date, $10, $11,
     $12, $13, $14,
-    $15, $16, 1
+    $15::text, $16,
+    $17::integer,
+    $18, $19, 1
 )
 `
 
 type InsertPatientParams struct {
-	PatientID            uuid.UUID
-	TenantID             uuid.UUID
-	RegisteredFacilityID uuid.UUID
-	Status               string
-	FamilyName           string
-	GivenNames           []string
-	NamePrefix           string
-	NameSuffix           string
-	BirthDate            pgtype.Date
-	BirthDatePrecision   string
-	Sex                  string
-	Phones               []byte
-	Emails               []byte
-	Addresses            []byte
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
+	PatientID               uuid.UUID
+	TenantID                uuid.UUID
+	RegisteredFacilityID    uuid.UUID
+	Status                  string
+	FamilyName              string
+	GivenNames              []string
+	NamePrefix              string
+	NameSuffix              string
+	BirthDate               pgtype.Date
+	BirthDatePrecision      string
+	Sex                     string
+	Phones                  []byte
+	Emails                  []byte
+	Addresses               []byte
+	DesignationLabel        *string
+	DesignationCircumstance string
+	DesignationApparentAge  *int32
+	CreatedAt               pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
 }
 
 // Enterprise master patient index (SRS-EMPI).
@@ -835,6 +927,9 @@ func (q *Queries) InsertPatient(ctx context.Context, arg InsertPatientParams) er
 		arg.Phones,
 		arg.Emails,
 		arg.Addresses,
+		arg.DesignationLabel,
+		arg.DesignationCircumstance,
+		arg.DesignationApparentAge,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
@@ -941,6 +1036,55 @@ func (q *Queries) InsertPatientName(ctx context.Context, arg InsertPatientNamePa
 	return err
 }
 
+const insertPatientPhoto = `-- name: InsertPatientPhoto :exec
+INSERT INTO empi.patient_photo (
+    photo_id, tenant_id, patient_id, storage_key, content_type, byte_size, digest,
+    consent_given_by, consent_on_behalf, consent_purpose, consent_given_at,
+    consent_recorded_by, captured_at, captured_by
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7,
+    $8, $9, $10, $11,
+    $12, $13, $14
+)
+`
+
+type InsertPatientPhotoParams struct {
+	PhotoID           uuid.UUID
+	TenantID          uuid.UUID
+	PatientID         uuid.UUID
+	StorageKey        string
+	ContentType       string
+	ByteSize          int64
+	Digest            string
+	ConsentGivenBy    string
+	ConsentOnBehalf   string
+	ConsentPurpose    string
+	ConsentGivenAt    pgtype.Timestamptz
+	ConsentRecordedBy string
+	CapturedAt        pgtype.Timestamptz
+	CapturedBy        string
+}
+
+func (q *Queries) InsertPatientPhoto(ctx context.Context, arg InsertPatientPhotoParams) error {
+	_, err := q.db.Exec(ctx, insertPatientPhoto,
+		arg.PhotoID,
+		arg.TenantID,
+		arg.PatientID,
+		arg.StorageKey,
+		arg.ContentType,
+		arg.ByteSize,
+		arg.Digest,
+		arg.ConsentGivenBy,
+		arg.ConsentOnBehalf,
+		arg.ConsentPurpose,
+		arg.ConsentGivenAt,
+		arg.ConsentRecordedBy,
+		arg.CapturedAt,
+		arg.CapturedBy,
+	)
+	return err
+}
+
 const insertRelatedPerson = `-- name: InsertRelatedPerson :exec
 INSERT INTO empi.related_person (
     relationship_id, tenant_id, patient_id, related_patient_id,
@@ -1031,6 +1175,49 @@ func (q *Queries) ListCommunicationPreferences(ctx context.Context, arg ListComm
 			&i.RecordedBy,
 			&i.RecordedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listFieldAccessPolicy = `-- name: ListFieldAccessPolicy :many
+SELECT field, required_permission, facility_id
+FROM empi.field_access_policy
+WHERE tenant_id = $1
+  AND jurisdiction = $2
+  AND (facility_id IS NULL OR facility_id = $3::uuid)
+ORDER BY (facility_id IS NULL), field
+`
+
+type ListFieldAccessPolicyParams struct {
+	TenantID     uuid.UUID
+	Jurisdiction string
+	FacilityID   pgtype.UUID
+}
+
+type ListFieldAccessPolicyRow struct {
+	Field              string
+	RequiredPermission string
+	FacilityID         pgtype.UUID
+}
+
+// Facility-specific rows first, so the resolver can take the first row it sees
+// for a field and know it is the most specific one.
+func (q *Queries) ListFieldAccessPolicy(ctx context.Context, arg ListFieldAccessPolicyParams) ([]ListFieldAccessPolicyRow, error) {
+	rows, err := q.db.Query(ctx, listFieldAccessPolicy, arg.TenantID, arg.Jurisdiction, arg.FacilityID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListFieldAccessPolicyRow{}
+	for rows.Next() {
+		var i ListFieldAccessPolicyRow
+		if err := rows.Scan(&i.Field, &i.RequiredPermission, &i.FacilityID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1301,7 +1488,9 @@ SELECT p.patient_id, p.tenant_id, p.registered_facility_id, p.status,
        p.merged_into_patient_id,
        p.deceased_date, p.deceased_precision, p.deceased_source,
        p.deceased_recorded_at, p.deceased_recorded_by,
-       p.created_at, p.updated_at, p.version
+       p.created_at, p.updated_at, p.version,
+       p.designation_label, p.designation_circumstance, p.designation_apparent_age,
+       p.identified_at
 FROM empi.patient p
 WHERE p.tenant_id = $1
   AND p.status <> 'merged'
@@ -1379,6 +1568,10 @@ func (q *Queries) ListPatientsByName(ctx context.Context, arg ListPatientsByName
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Version,
+			&i.DesignationLabel,
+			&i.DesignationCircumstance,
+			&i.DesignationApparentAge,
+			&i.IdentifiedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1596,6 +1789,81 @@ func (q *Queries) ListRelationshipsHeldBy(ctx context.Context, arg ListRelations
 	return items, nil
 }
 
+const listUnidentifiedPatients = `-- name: ListUnidentifiedPatients :many
+SELECT patient_id, tenant_id, registered_facility_id, status,
+       family_name, given_names, name_prefix, name_suffix,
+       birth_date, birth_date_precision, sex, phones, emails, addresses,
+       merged_into_patient_id,
+       deceased_date, deceased_precision, deceased_source,
+       deceased_recorded_at, deceased_recorded_by,
+       created_at, updated_at, version,
+       designation_label, designation_circumstance, designation_apparent_age,
+       identified_at
+FROM empi.patient
+WHERE tenant_id = $1
+  AND designation_label IS NOT NULL
+  AND identified_at IS NULL
+  AND status <> 'merged'
+ORDER BY created_at, patient_id
+LIMIT $2
+`
+
+type ListUnidentifiedPatientsParams struct {
+	TenantID  uuid.UUID
+	PageLimit int32
+}
+
+// The worklist a ward clerk works: who is still unknown, oldest first. A
+// patient unidentified for three days is the one most likely to have been
+// forgotten.
+func (q *Queries) ListUnidentifiedPatients(ctx context.Context, arg ListUnidentifiedPatientsParams) ([]EmpiPatient, error) {
+	rows, err := q.db.Query(ctx, listUnidentifiedPatients, arg.TenantID, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []EmpiPatient{}
+	for rows.Next() {
+		var i EmpiPatient
+		if err := rows.Scan(
+			&i.PatientID,
+			&i.TenantID,
+			&i.RegisteredFacilityID,
+			&i.Status,
+			&i.FamilyName,
+			&i.GivenNames,
+			&i.NamePrefix,
+			&i.NameSuffix,
+			&i.BirthDate,
+			&i.BirthDatePrecision,
+			&i.Sex,
+			&i.Phones,
+			&i.Emails,
+			&i.Addresses,
+			&i.MergedIntoPatientID,
+			&i.DeceasedDate,
+			&i.DeceasedPrecision,
+			&i.DeceasedSource,
+			&i.DeceasedRecordedAt,
+			&i.DeceasedRecordedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Version,
+			&i.DesignationLabel,
+			&i.DesignationCircumstance,
+			&i.DesignationApparentAge,
+			&i.IdentifiedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markMergeUndone = `-- name: MarkMergeUndone :execrows
 UPDATE empi.merge_journal
 SET undone = true, undone_by = $1, undone_at = $2, undo_reason = $3
@@ -1618,6 +1886,34 @@ func (q *Queries) MarkMergeUndone(ctx context.Context, arg MarkMergeUndoneParams
 		arg.TenantID,
 		arg.MergeID,
 	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const markPatientIdentified = `-- name: MarkPatientIdentified :execrows
+UPDATE empi.patient
+SET identified_at = $1
+WHERE tenant_id = $2
+  AND patient_id = $3
+  AND designation_label IS NOT NULL
+  AND identified_at IS NULL
+`
+
+type MarkPatientIdentifiedParams struct {
+	IdentifiedAt pgtype.Timestamptz
+	TenantID     uuid.UUID
+	PatientID    uuid.UUID
+}
+
+// Records that real demographics replaced a temporary designation.
+//
+// Separate from the demographic update it accompanies because it is a different
+// fact: the record now names somebody, and the moment it started to is what
+// ties the emergency chart to the identified one.
+func (q *Queries) MarkPatientIdentified(ctx context.Context, arg MarkPatientIdentifiedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markPatientIdentified, arg.IdentifiedAt, arg.TenantID, arg.PatientID)
 	if err != nil {
 		return 0, err
 	}
@@ -1868,7 +2164,9 @@ SELECT patient_id, tenant_id, registered_facility_id, status,
        merged_into_patient_id,
        deceased_date, deceased_precision, deceased_source,
        deceased_recorded_at, deceased_recorded_by,
-       created_at, updated_at, version
+       created_at, updated_at, version,
+       designation_label, designation_circumstance, designation_apparent_age,
+       identified_at
 FROM empi.patient
 WHERE tenant_id = $1
   -- A merged record is not a candidate: its survivor is the one to match
@@ -1946,6 +2244,10 @@ func (q *Queries) SearchPatientCandidates(ctx context.Context, arg SearchPatient
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Version,
+			&i.DesignationLabel,
+			&i.DesignationCircumstance,
+			&i.DesignationApparentAge,
+			&i.IdentifiedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -2273,6 +2575,45 @@ func (q *Queries) UpsertDuplicateCandidate(ctx context.Context, arg UpsertDuplic
 	return err
 }
 
+const upsertFieldAccessPolicy = `-- name: UpsertFieldAccessPolicy :exec
+INSERT INTO empi.field_access_policy (
+    policy_id, tenant_id, jurisdiction, facility_id, field,
+    required_permission, created_at, updated_at
+) VALUES (
+    $1, $2, $3, $4::uuid, $5,
+    $6, $7, $8
+)
+ON CONFLICT (tenant_id, jurisdiction,
+             COALESCE(facility_id, '00000000-0000-0000-0000-000000000000'::uuid), field)
+DO UPDATE SET required_permission = EXCLUDED.required_permission,
+              updated_at = EXCLUDED.updated_at
+`
+
+type UpsertFieldAccessPolicyParams struct {
+	PolicyID           uuid.UUID
+	TenantID           uuid.UUID
+	Jurisdiction       string
+	FacilityID         pgtype.UUID
+	Field              string
+	RequiredPermission string
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+}
+
+func (q *Queries) UpsertFieldAccessPolicy(ctx context.Context, arg UpsertFieldAccessPolicyParams) error {
+	_, err := q.db.Exec(ctx, upsertFieldAccessPolicy,
+		arg.PolicyID,
+		arg.TenantID,
+		arg.Jurisdiction,
+		arg.FacilityID,
+		arg.Field,
+		arg.RequiredPermission,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	return err
+}
+
 const upsertMatchConfig = `-- name: UpsertMatchConfig :exec
 INSERT INTO empi.match_config (
     tenant_id, weights, review_threshold, probable_threshold, updated_at, updated_by
@@ -2337,6 +2678,36 @@ func (q *Queries) VerifyRelatedPerson(ctx context.Context, arg VerifyRelatedPers
 		arg.VerificationNote,
 		arg.TenantID,
 		arg.RelationshipID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const withdrawPatientPhoto = `-- name: WithdrawPatientPhoto :execrows
+UPDATE empi.patient_photo
+SET withdrawn_at = $1, withdrawn_reason = $2
+WHERE tenant_id = $3
+  AND photo_id = $4
+  AND withdrawn_at IS NULL
+`
+
+type WithdrawPatientPhotoParams struct {
+	WithdrawnAt     pgtype.Timestamptz
+	WithdrawnReason string
+	TenantID        uuid.UUID
+	PhotoID         uuid.UUID
+}
+
+// Guarded on withdrawn_at IS NULL: two withdrawals would otherwise both write,
+// and the second would replace the first one's reason with its own.
+func (q *Queries) WithdrawPatientPhoto(ctx context.Context, arg WithdrawPatientPhotoParams) (int64, error) {
+	result, err := q.db.Exec(ctx, withdrawPatientPhoto,
+		arg.WithdrawnAt,
+		arg.WithdrawnReason,
+		arg.TenantID,
+		arg.PhotoID,
 	)
 	if err != nil {
 		return 0, err

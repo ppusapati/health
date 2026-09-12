@@ -47,11 +47,19 @@ type DemographicPolicy struct {
 	FacilityID string
 	// Required lists the fields a registration must carry.
 	Required []Field
-	// AllowUnidentified permits registration with none of the required fields,
-	// for the emergency case (SRS-EMPI-015). It is a separate flag rather than
-	// an empty Required list because "this facility requires nothing" and
-	// "this facility requires a name unless the patient is unconscious" are
-	// different policies, and conflating them would silently relax the second.
+	// AllowUnidentified permits the emergency registration path, where a
+	// patient arrives with no usable identity at all (SRS-EMPI-015).
+	//
+	// A separate flag rather than an empty Required list because "this facility
+	// requires nothing" and "this facility requires a name unless the patient
+	// is unconscious" are different policies, and conflating them would
+	// silently relax the second.
+	//
+	// It governs only that path. An earlier version let this flag short-circuit
+	// Check entirely, which meant a hospital enabling emergency registration
+	// also turned off the demographic minimum for every routine registration —
+	// the opposite of what enabling it says, and invisible until the index
+	// filled with records that could not be matched.
 	AllowUnidentified bool
 }
 
@@ -63,12 +71,22 @@ type DemographicPolicy struct {
 // tenant ship with an index that cannot match anybody. Sex is included because
 // it is what a lab needs to pick a reference range, and "unknown" is a
 // legitimate value for it — requiring the field does not require certainty.
+// Emergency registration is permitted by default. A hospital that has
+// configured nothing must still be able to admit an unconscious patient: the
+// failure mode of refusing is that care is delayed or happens off-record, which
+// is worse than the record existing. A facility that genuinely never registers
+// an unidentified patient turns it off.
 func DefaultPolicy(jurisdiction string) DemographicPolicy {
 	return DemographicPolicy{
-		Jurisdiction: jurisdiction,
-		Required:     []Field{FieldFamilyName, FieldSex},
+		Jurisdiction:      jurisdiction,
+		Required:          []Field{FieldFamilyName, FieldSex},
+		AllowUnidentified: true,
 	}
 }
+
+// PermitsUnidentified reports whether this facility may register a patient
+// whose identity is not yet known (SRS-EMPI-015).
+func (p DemographicPolicy) PermitsUnidentified() bool { return p.AllowUnidentified }
 
 // Validate rejects a policy that could not be applied.
 func (p DemographicPolicy) Validate() error {
@@ -108,11 +126,12 @@ func (e ErrDemographicsIncomplete) Error() string {
 }
 
 // Check reports which required fields the demographics do not supply.
+//
+// Always enforced, whatever AllowUnidentified says. The emergency path skips
+// this deliberately and explicitly, by being a different use case; a routine
+// registration at a facility that also admits unconscious patients is still a
+// routine registration.
 func (p DemographicPolicy) Check(d Demographics) error {
-	if p.AllowUnidentified {
-		return nil
-	}
-
 	var missing []Field
 	for _, field := range p.Required {
 		if !present(d, field) {

@@ -18,6 +18,7 @@ import (
 	organizationv1 "github.com/ppusapati/health/code/gen/go/healthcare/organization/v1"
 	"github.com/ppusapati/health/code/gen/go/healthcare/organization/v1/organizationv1connect"
 	"github.com/ppusapati/health/code/internal/app"
+	"github.com/ppusapati/health/code/internal/empi/domain"
 	empiports "github.com/ppusapati/health/code/internal/empi/ports"
 	"github.com/ppusapati/health/code/internal/identity_access/adapters/devauth"
 	orgpostgres "github.com/ppusapati/health/code/internal/organization/adapters/postgres"
@@ -61,6 +62,18 @@ func newEmpiHarness(t *testing.T) *empiHarness {
 // linked as asserted.
 func newEmpiHarnessWith(t *testing.T, registries empiports.IdentifierRegistries) *empiHarness {
 	t.Helper()
+	return newEmpiHarnessFull(t, registries, nil)
+}
+
+// newEmpiHarnessWithStore builds the harness with a photograph store.
+func newEmpiHarnessWithStore(t *testing.T, store empiports.PhotoStore) *empiHarness {
+	t.Helper()
+	return newEmpiHarnessFull(t, nil, store)
+}
+
+func newEmpiHarnessFull(t *testing.T, registries empiports.IdentifierRegistries,
+	photos empiports.PhotoStore) *empiHarness {
+	t.Helper()
 
 	pool := pgtest.New(t)
 	verifier, err := devauth.New(true)
@@ -71,6 +84,7 @@ func newEmpiHarnessWith(t *testing.T, registries empiports.IdentifierRegistries)
 	built := app.New(app.Deps{
 		Pool: pool, Verifier: verifier,
 		IdentifierRegistries: registries,
+		PhotoStore:           photos,
 		Build:                platformapitransport.BuildInfo{Version: "test", Commit: "test", BuiltAt: "test"},
 		RateLimit: platformtransport.RateLimitConfig{
 			RequestsPerSecond: 10000, Burst: 10000,
@@ -698,16 +712,45 @@ func TestSearchByMRNFindsThePatient(t *testing.T) {
 }
 
 // Confirming identity is the step that turns a candidate into a confirmed
-// record, and it belongs to somebody who saw a document.
+// record, and it rests on somebody having sighted a verified identifier
+// (SRS-EMPI-010).
 func TestConfirmingIdentityActivatesTheRecord(t *testing.T) {
-	h := newEmpiHarness(t)
+	dev := abhaRegistry(t)
+	dev.Seed("12-3456-7890-0200", domain.Verification{
+		Verified: true, AssigningAuthority: "ABDM",
+	})
+	h := newEmpiHarnessWith(t, registrySet(t, dev))
 
 	patient := h.mustRegister(t, h.clerkToken(),
 		demographics("Iyer", []string{"Meera"}, date(1984, 3, 12), empiv1.Sex_SEX_FEMALE, ""))
 
+	linked, err := h.patients.LinkIdentifier(context.Background(),
+		withFacility(h.himToken(), h.facility, &empiv1.LinkIdentifierRequest{
+			PatientId: patient.GetPatientId(),
+			Type:      empiv1.IdentifierType_IDENTIFIER_TYPE_NATIONAL_HEALTH,
+			System:    abhaSystem, Value: "12-3456-7890-0200",
+			Source: "registration desk", Verify: true,
+		}))
+	if err != nil {
+		t.Fatalf("LinkIdentifier: %v", err)
+	}
+
+	// Re-read: linking moved the record's version.
+	current, err := h.patients.GetPatient(context.Background(),
+		withFacility(h.clerkToken(), h.facility, &empiv1.GetPatientRequest{
+			PatientId: patient.GetPatientId(),
+		}))
+	if err != nil {
+		t.Fatalf("GetPatient: %v", err)
+	}
+
 	confirmed, err := h.patients.ConfirmIdentity(context.Background(),
 		withFacility(h.clerkToken(), h.facility, &empiv1.ConfirmIdentityRequest{
-			PatientId: patient.GetPatientId(), ExpectedVersion: patient.GetVersion(),
+			PatientId:       patient.GetPatientId(),
+			ExpectedVersion: current.Msg.GetPatient().GetVersion(),
+			Evidence: &empiv1.IdentityEvidence{
+				IdentifierIds: []string{linked.Msg.GetIdentifier().GetIdentifierId()},
+			},
 		}))
 	if err != nil {
 		t.Fatalf("ConfirmIdentity: %v", err)

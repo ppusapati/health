@@ -19,20 +19,23 @@ import (
 
 // Service is the patient index use-case façade.
 type Service struct {
-	uow         ports.UnitOfWork
-	patients    ports.PatientRepository
-	identifiers ports.IdentifierRepository
-	config      ports.ConfigRepository
-	merges      ports.MergeRepository
-	history     ports.HistoryRepository
-	proposals   ports.ProposalRepository
-	registries  ports.IdentifierRegistries
-	numbers     ports.NumberIssuer
-	tenants     ports.TenantProfile
-	events      ports.EventAppender
-	audits      ports.AuditAppender
-	ids         ports.IDGenerator
-	clock       ports.Clock
+	uow          ports.UnitOfWork
+	patients     ports.PatientRepository
+	identifiers  ports.IdentifierRepository
+	config       ports.ConfigRepository
+	merges       ports.MergeRepository
+	history      ports.HistoryRepository
+	proposals    ports.ProposalRepository
+	photos       ports.PhotoRepository
+	photoStore   ports.PhotoStore
+	unidentified ports.UnidentifiedRepository
+	registries   ports.IdentifierRegistries
+	numbers      ports.NumberIssuer
+	tenants      ports.TenantProfile
+	events       ports.EventAppender
+	audits       ports.AuditAppender
+	ids          ports.IDGenerator
+	clock        ports.Clock
 }
 
 // Deps are the collaborators the service needs.
@@ -48,6 +51,12 @@ type Deps struct {
 	Merges      ports.MergeRepository
 	History     ports.HistoryRepository
 	Proposals   ports.ProposalRepository
+	Photos      ports.PhotoRepository
+	// PhotoStore holds the bytes. Nil is a valid deployment: one that does not
+	// store patient photographs refuses to capture one rather than recording a
+	// row that points at nothing.
+	PhotoStore   ports.PhotoStore
+	Unidentified ports.UnidentifiedRepository
 	// Registries is optional. A deployment with no national identifier
 	// adapter links every identifier as asserted, which is the honest record
 	// of what it knows.
@@ -65,6 +74,7 @@ func NewService(d Deps) *Service {
 	return &Service{
 		uow: d.UnitOfWork, patients: d.Patients, identifiers: d.Identifiers,
 		config: d.Config, merges: d.Merges, history: d.History, proposals: d.Proposals,
+		photos: d.Photos, photoStore: d.PhotoStore, unidentified: d.Unidentified,
 		registries: d.Registries,
 		numbers:    d.Numbers, tenants: d.Tenants,
 		events: d.Events, audits: d.Audits, ids: d.IDs, clock: d.Clock,
@@ -354,7 +364,10 @@ func (s *Service) findDuplicates(ctx context.Context, session authctx.Session,
 		return nil, err
 	}
 
-	restricted := session.HasPermission(PermPatientReadRestricted)
+	seen, err := s.visibilityFor(ctx, session)
+	if err != nil {
+		return nil, err
+	}
 
 	out := make([]MatchedPatient, 0, len(candidates))
 	for _, c := range candidates {
@@ -369,7 +382,7 @@ func (s *Service) findDuplicates(ctx context.Context, session authctx.Session,
 			continue
 		}
 
-		shown, masked := maskFor(c, restricted)
+		shown, masked := maskFor(c, seen)
 		out = append(out, MatchedPatient{
 			Patient: shown, Identifiers: held, Match: match, Masked: masked,
 		})

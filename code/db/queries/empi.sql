@@ -11,12 +11,15 @@ INSERT INTO empi.patient (
     family_name, given_names, name_prefix, name_suffix,
     birth_date, birth_date_precision, sex,
     phones, emails, addresses,
+    designation_label, designation_circumstance, designation_apparent_age,
     created_at, updated_at, version
 ) VALUES (
     @patient_id, @tenant_id, @registered_facility_id, @status,
     @family_name, @given_names, @name_prefix, @name_suffix,
     sqlc.narg('birth_date')::date, @birth_date_precision, @sex,
     @phones, @emails, @addresses,
+    sqlc.narg('designation_label')::text, @designation_circumstance,
+    sqlc.narg('designation_apparent_age')::integer,
     @created_at, @updated_at, 1
 );
 
@@ -27,7 +30,9 @@ SELECT patient_id, tenant_id, registered_facility_id, status,
        merged_into_patient_id,
        deceased_date, deceased_precision, deceased_source,
        deceased_recorded_at, deceased_recorded_by,
-       created_at, updated_at, version
+       created_at, updated_at, version,
+       designation_label, designation_circumstance, designation_apparent_age,
+       identified_at
 FROM empi.patient
 WHERE tenant_id = @tenant_id AND patient_id = @patient_id;
 
@@ -150,7 +155,9 @@ SELECT p.patient_id, p.tenant_id, p.registered_facility_id, p.status,
        p.merged_into_patient_id,
        p.deceased_date, p.deceased_precision, p.deceased_source,
        p.deceased_recorded_at, p.deceased_recorded_by,
-       p.created_at, p.updated_at, p.version
+       p.created_at, p.updated_at, p.version,
+       p.designation_label, p.designation_circumstance, p.designation_apparent_age,
+       p.identified_at
 FROM empi.patient p
 JOIN empi.patient_identifier i
   ON i.tenant_id = p.tenant_id AND i.patient_id = p.patient_id
@@ -193,7 +200,9 @@ SELECT patient_id, tenant_id, registered_facility_id, status,
        merged_into_patient_id,
        deceased_date, deceased_precision, deceased_source,
        deceased_recorded_at, deceased_recorded_by,
-       created_at, updated_at, version
+       created_at, updated_at, version,
+       designation_label, designation_circumstance, designation_apparent_age,
+       identified_at
 FROM empi.patient
 WHERE tenant_id = @tenant_id
   -- A merged record is not a candidate: its survivor is the one to match
@@ -227,7 +236,9 @@ SELECT p.patient_id, p.tenant_id, p.registered_facility_id, p.status,
        p.merged_into_patient_id,
        p.deceased_date, p.deceased_precision, p.deceased_source,
        p.deceased_recorded_at, p.deceased_recorded_by,
-       p.created_at, p.updated_at, p.version
+       p.created_at, p.updated_at, p.version,
+       p.designation_label, p.designation_circumstance, p.designation_apparent_age,
+       p.identified_at
 FROM empi.patient p
 WHERE p.tenant_id = @tenant_id
   AND p.status <> 'merged'
@@ -655,3 +666,94 @@ WHERE tenant_id = @tenant_id
   AND patient_id = @patient_id
   AND status = 'open'
   AND patient_version <> @patient_version;
+
+-- name: MarkPatientIdentified :execrows
+-- Records that real demographics replaced a temporary designation.
+--
+-- Separate from the demographic update it accompanies because it is a different
+-- fact: the record now names somebody, and the moment it started to is what
+-- ties the emergency chart to the identified one.
+UPDATE empi.patient
+SET identified_at = @identified_at
+WHERE tenant_id = @tenant_id
+  AND patient_id = @patient_id
+  AND designation_label IS NOT NULL
+  AND identified_at IS NULL;
+
+-- name: ListUnidentifiedPatients :many
+-- The worklist a ward clerk works: who is still unknown, oldest first. A
+-- patient unidentified for three days is the one most likely to have been
+-- forgotten.
+SELECT patient_id, tenant_id, registered_facility_id, status,
+       family_name, given_names, name_prefix, name_suffix,
+       birth_date, birth_date_precision, sex, phones, emails, addresses,
+       merged_into_patient_id,
+       deceased_date, deceased_precision, deceased_source,
+       deceased_recorded_at, deceased_recorded_by,
+       created_at, updated_at, version,
+       designation_label, designation_circumstance, designation_apparent_age,
+       identified_at
+FROM empi.patient
+WHERE tenant_id = @tenant_id
+  AND designation_label IS NOT NULL
+  AND identified_at IS NULL
+  AND status <> 'merged'
+ORDER BY created_at, patient_id
+LIMIT @page_limit;
+
+-- name: UpsertFieldAccessPolicy :exec
+INSERT INTO empi.field_access_policy (
+    policy_id, tenant_id, jurisdiction, facility_id, field,
+    required_permission, created_at, updated_at
+) VALUES (
+    @policy_id, @tenant_id, @jurisdiction, sqlc.narg('facility_id')::uuid, @field,
+    @required_permission, @created_at, @updated_at
+)
+ON CONFLICT (tenant_id, jurisdiction,
+             COALESCE(facility_id, '00000000-0000-0000-0000-000000000000'::uuid), field)
+DO UPDATE SET required_permission = EXCLUDED.required_permission,
+              updated_at = EXCLUDED.updated_at;
+
+-- name: ListFieldAccessPolicy :many
+-- Facility-specific rows first, so the resolver can take the first row it sees
+-- for a field and know it is the most specific one.
+SELECT field, required_permission, facility_id
+FROM empi.field_access_policy
+WHERE tenant_id = @tenant_id
+  AND jurisdiction = @jurisdiction
+  AND (facility_id IS NULL OR facility_id = sqlc.narg('facility_id')::uuid)
+ORDER BY (facility_id IS NULL), field;
+
+-- name: InsertPatientPhoto :exec
+INSERT INTO empi.patient_photo (
+    photo_id, tenant_id, patient_id, storage_key, content_type, byte_size, digest,
+    consent_given_by, consent_on_behalf, consent_purpose, consent_given_at,
+    consent_recorded_by, captured_at, captured_by
+) VALUES (
+    @photo_id, @tenant_id, @patient_id, @storage_key, @content_type, @byte_size, @digest,
+    @consent_given_by, @consent_on_behalf, @consent_purpose, @consent_given_at,
+    @consent_recorded_by, @captured_at, @captured_by
+);
+
+-- name: GetCurrentPatientPhoto :one
+SELECT photo_id, tenant_id, patient_id, storage_key, content_type, byte_size, digest,
+       consent_given_by, consent_on_behalf, consent_purpose, consent_given_at,
+       consent_recorded_by, captured_at, captured_by, withdrawn_at, withdrawn_reason
+FROM empi.patient_photo
+WHERE tenant_id = @tenant_id AND patient_id = @patient_id AND withdrawn_at IS NULL;
+
+-- name: GetPatientPhoto :one
+SELECT photo_id, tenant_id, patient_id, storage_key, content_type, byte_size, digest,
+       consent_given_by, consent_on_behalf, consent_purpose, consent_given_at,
+       consent_recorded_by, captured_at, captured_by, withdrawn_at, withdrawn_reason
+FROM empi.patient_photo
+WHERE tenant_id = @tenant_id AND photo_id = @photo_id;
+
+-- name: WithdrawPatientPhoto :execrows
+-- Guarded on withdrawn_at IS NULL: two withdrawals would otherwise both write,
+-- and the second would replace the first one's reason with its own.
+UPDATE empi.patient_photo
+SET withdrawn_at = @withdrawn_at, withdrawn_reason = @withdrawn_reason
+WHERE tenant_id = @tenant_id
+  AND photo_id = @photo_id
+  AND withdrawn_at IS NULL;

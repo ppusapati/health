@@ -314,6 +314,146 @@ message WithdrawDemographicProposalResponse {
   DemographicProposal proposal = 1;
 }
 
+// A patient whose identity is not yet known (SRS-EMPI-015).
+//
+// Deliberately not a HumanName. A record whose family name is "TRAUMA ALPHA"
+// sorts into the name index, fuzzy-matches the next trauma patient, and prints
+// on a wristband looking exactly like a name.
+message TemporaryDesignation {
+  // What staff say out loud and what prints on the band. Site convention, not
+  // this system's invention.
+  string label = 1;
+  // What a clinician records at the bedside: an observation, not a claim about
+  // identity. Frequently wrong and still worth recording, because a lab needs a
+  // reference range before anybody knows who this is.
+  Sex apparent_sex = 2;
+  // Estimated years. Zero means nobody estimated one.
+  int32 apparent_age = 3;
+  // The free-text peg staff actually use to find the record again — "road
+  // traffic collision, brought in by ambulance 14". Deliberately unstructured:
+  // an enumeration of ways people arrive unconscious would be wrong within a
+  // week.
+  string circumstance = 4;
+}
+
+message RegisterUnidentifiedRequest {
+  TemporaryDesignation designation = 1;
+}
+
+message RegisterUnidentifiedResponse {
+  Patient patient = 1;
+}
+
+message IdentifyPatientRequest {
+  string patient_id = 1;
+  Demographics demographics = 2;
+  int64 expected_version = 3;
+  // Records the caller has been shown and judged to be different people.
+  // Identification is exactly when the duplicate check that emergency
+  // registration skipped has to happen: the patient now has a name, and an
+  // existing record for them is likely.
+  repeated string acknowledged_duplicate_patient_ids = 4;
+}
+
+message IdentifyPatientResponse {
+  // Unset when duplicates need review first.
+  Patient patient = 1;
+  repeated PatientMatch potential_duplicates = 2;
+}
+
+message ListUnidentifiedRequest {
+  int32 page_size = 1;
+}
+
+message ListUnidentifiedResponse {
+  repeated Patient patients = 1;
+}
+
+// Consent to be photographed (SRS-EMPI-010).
+//
+// Its own message because consent has a shape: somebody gave it, at a time, for
+// a stated purpose. A boolean records none of that, and "did this patient agree
+// to their photograph being kept" is a question somebody will be asked to
+// answer with evidence.
+message PhotoConsent {
+  // Who consented — the patient, or a related person holding the authority to
+  // consent for them.
+  string given_by = 1;
+  // Set when somebody consented for the patient, naming the relationship that
+  // permitted it.
+  string on_behalf = 2;
+  // What the photograph may be used for. "They agreed to a photo" is not
+  // consent to anything in particular: identification at the bedside and
+  // publication in a case report are both photographs of a patient.
+  string purpose = 3;
+  google.protobuf.Timestamp given_at = 4;
+  string recorded_by = 5;
+}
+
+message PatientPhoto {
+  string photo_id = 1;
+  string patient_id = 2;
+  string content_type = 3;
+  int64 byte_size = 4;
+  // SHA-256 of the bytes, hex-encoded, so a stored object can be shown to be
+  // the one this record describes.
+  string digest = 5;
+  PhotoConsent consent = 6;
+  google.protobuf.Timestamp captured_at = 7;
+  string captured_by = 8;
+  // Set when consent was withdrawn. The record stays and the bytes go: a
+  // deletion that left nothing behind would leave nobody able to answer whether
+  // a photograph ever existed.
+  google.protobuf.Timestamp withdrawn_at = 9;
+  string withdrawn_reason = 10;
+}
+
+message CapturePhotoRequest {
+  string patient_id = 1;
+  // image/jpeg, image/png or image/webp. An allowlist, not a blocklist: a
+  // blocklist accepts SVG, which is a script container.
+  string content_type = 2;
+  // At most 2 MiB. The bytes come from a ward tablet, and an unbounded endpoint
+  // is a way to fill a disk from the registration desk.
+  bytes content = 3;
+  PhotoConsent consent = 4;
+}
+
+message CapturePhotoResponse {
+  PatientPhoto photo = 1;
+}
+
+message GetPhotoRequest {
+  string patient_id = 1;
+}
+
+message GetPhotoResponse {
+  // Unset when the patient has no photograph, which is an ordinary state
+  // rather than an error.
+  PatientPhoto photo = 1;
+  bytes content = 2;
+}
+
+message WithdrawPhotoConsentRequest {
+  string photo_id = 1;
+  string reason = 2;
+}
+
+message WithdrawPhotoConsentResponse {
+  PatientPhoto photo = 1;
+}
+
+message ConfigureFieldAccessRequest {
+  // Empty applies to every facility in the jurisdiction; naming one overrides.
+  string facility_id = 1;
+  DemographicField field = 2;
+  // The permission that reveals this field in full. A field restricted behind
+  // no permission is restricted from everybody forever with nothing saying so.
+  string required_permission = 3;
+}
+
+message ConfigureFieldAccessResponse {}
+
 message LinkIdentifierRequest {
   string patient_id = 1;
   // The MRN is issued by this system from the facility's sequence and is not
@@ -413,6 +553,11 @@ message Patient {
   // context answers the factual half; scheduling owns whether to warn or block
   // (SRS-EMPI-008).
   bool accepts_routine_scheduling = 11;
+  // Set only on a patient registered unidentified (SRS-EMPI-015). Kept after
+  // identification rather than cleared: an hour of records was filed under it.
+  TemporaryDesignation designation = 12;
+  // When real demographics replaced the designation. Unset while still unknown.
+  google.protobuf.Timestamp identified_at = 13;
 }
 
 // What a duplicate score means operationally (SRS-EMPI-004).
@@ -540,9 +685,34 @@ message UpdateDemographicsResponse {
   Patient patient = 1;
 }
 
+// What was actually checked before confirming a patient's identity
+// (SRS-EMPI-010).
+//
+// Evidence rather than a bare confirmation: the requirement prohibits a
+// photograph from being the sole identity proof and requires the workflow to
+// include a configured positive identifier, and neither is checkable against a
+// call that says only that somebody clicked a button.
+message IdentityEvidence {
+  // The identifiers that were sighted and checked. Only a *verified* one
+  // counts: a number read off a photocopy carries no more assurance than the
+  // photograph does.
+  repeated string identifier_ids = 1;
+  // A human compared the patient with the stored photograph. Useful, and never
+  // sufficient — face comparison fails hardest for siblings, twins, an old
+  // photo, and measurably by skin tone and age, which concentrates its errors
+  // on the people least able to contest them.
+  bool photo_matched = 2;
+  // A related person identified the patient. Also never sufficient alone.
+  string vouched_for_by = 3;
+  string note = 4;
+}
+
 message ConfirmIdentityRequest {
   string patient_id = 1;
   int64 expected_version = 2;
+  // What was checked. Confirmation is refused unless it includes a sighted,
+  // verified identifier (SRS-EMPI-010).
+  IdentityEvidence evidence = 3;
 }
 
 message ConfirmIdentityResponse {
@@ -873,6 +1043,25 @@ service PatientService {
   // SRS-EMPI-004. The manual-review worklist thresholds route to.
   rpc ListDuplicateCandidates(ListDuplicateCandidatesRequest) returns (ListDuplicateCandidatesResponse);
   rpc DismissDuplicateCandidate(DismissDuplicateCandidateRequest) returns (DismissDuplicateCandidateResponse);
+
+  // SRS-EMPI-015. An unconscious patient is registered immediately, with a
+  // designation instead of a name, and identified later. The internal
+  // identifier never changes, so everything written during the emergency still
+  // points at the same record — which is what "without losing encounter
+  // chronology" means in practice.
+  rpc RegisterUnidentified(RegisterUnidentifiedRequest) returns (RegisterUnidentifiedResponse);
+  rpc IdentifyPatient(IdentifyPatientRequest) returns (IdentifyPatientResponse);
+  rpc ListUnidentified(ListUnidentifiedRequest) returns (ListUnidentifiedResponse);
+
+  // SRS-EMPI-010. A photograph is held with the consent it was taken under and
+  // is never sufficient to establish identity on its own.
+  rpc CapturePhoto(CapturePhotoRequest) returns (CapturePhotoResponse);
+  rpc GetPhoto(GetPhotoRequest) returns (GetPhotoResponse);
+  rpc WithdrawPhotoConsent(WithdrawPhotoConsentRequest) returns (WithdrawPhotoConsentResponse);
+
+  // SRS-EMPI-014. Which demographic fields are restricted is a tenant
+  // decision, not a constant in this system.
+  rpc ConfigureFieldAccess(ConfigureFieldAccessRequest) returns (ConfigureFieldAccessResponse);
 
   // SRS-EMPI-011. External identifiers are linked and unlinked through an
   // adapter; neither direction deletes a row, because link and unlink history

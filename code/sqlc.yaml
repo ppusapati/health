@@ -18,6 +18,7 @@ sql:
       - db/migrations/0013_empi_history.up.sql
       - db/migrations/0014_empi_identifier_assurance.up.sql
       - db/migrations/0015_empi_proposals.up.sql
+      - db/migrations/0016_empi_photo_access_unidentified.up.sql
     gen:
       go:
         package: sqlcgen
