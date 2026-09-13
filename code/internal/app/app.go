@@ -17,6 +17,7 @@ import (
 	"github.com/ppusapati/health/code/gen/go/healthcare/empi/v1/empiv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/encounter/v1/encounterv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/identity_access/v1/identityaccessv1connect"
+	"github.com/ppusapati/health/code/gen/go/healthcare/nursing/v1/nursingv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/organization/v1/organizationv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/platform_api/v1/platformapiv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/scheduling/v1/schedulingv1connect"
@@ -31,6 +32,10 @@ import (
 	encounterapp "github.com/ppusapati/health/code/internal/encounter/application"
 	encountertransport "github.com/ppusapati/health/code/internal/encounter/transport"
 	identitytransport "github.com/ppusapati/health/code/internal/identity_access/transport"
+	nursingpostgres "github.com/ppusapati/health/code/internal/nursing/adapters/postgres"
+	nursingapp "github.com/ppusapati/health/code/internal/nursing/application"
+	nursingports "github.com/ppusapati/health/code/internal/nursing/ports"
+	nursingtransport "github.com/ppusapati/health/code/internal/nursing/transport"
 	orgpostgres "github.com/ppusapati/health/code/internal/organization/adapters/postgres"
 	orgapp "github.com/ppusapati/health/code/internal/organization/application"
 	orgtransport "github.com/ppusapati/health/code/internal/organization/transport"
@@ -125,6 +130,15 @@ type Deps struct {
 	// service books teleconsults with no link, and the absence is visible rather
 	// than a broken URL.
 	MeetingProvider schedulingports.MeetingProvider
+
+	// MedicationOrders is the seam onto the medication context (SRS-NUR-007).
+	//
+	// Nil is the Wave-1 default until Sprint 5 delivers SRS-MED, and it refuses
+	// every administration rather than accepting one unverified: an eMAR that
+	// cannot check that a pharmacist verified the order must not pretend it
+	// has. The alternative — a stub that answers "verified" — would be a
+	// safety control that is present in the code and absent in effect.
+	MedicationOrders nursingports.MedicationOrders
 }
 
 // Server holds the assembled HTTP handler and the services behind it.
@@ -135,6 +149,7 @@ type Server struct {
 	Scheduling   *schedulingapp.Service
 	Encounters   *encounterapp.Service
 	Clinical     *clinicalapp.Service
+	Nursing      *nursingapp.Service
 	Store        *store.Store
 	RateLimiter  *platformtransport.RateLimiter
 
@@ -274,6 +289,36 @@ func New(deps Deps) *Server {
 		Clock:  systemClock{},
 	})
 
+	nursingRepo := nursingpostgres.New(txManager)
+	nursingService := nursingapp.NewService(nursingapp.Deps{
+		UnitOfWork:     txManager,
+		Assessments:    nursingpostgres.NewAssessments(nursingRepo),
+		Risks:          nursingpostgres.NewRisk(nursingRepo),
+		Flowsheet:      nursingpostgres.NewFlowsheet(nursingRepo),
+		Devices:        nursingpostgres.NewDevices(nursingRepo),
+		Administration: nursingpostgres.NewAdministrations(nursingRepo),
+		// Nil until Sprint 5 delivers SRS-MED. An eMAR that cannot check
+		// pharmacist verification refuses every administration rather than
+		// accepting one unverified (SRS-NUR-007).
+		Orders:    deps.MedicationOrders,
+		Tasks:     nursingpostgres.NewTasks(nursingRepo),
+		Plans:     nursingpostgres.NewCarePlans(nursingRepo),
+		Handovers: nursingpostgres.NewHandovers(nursingRepo),
+		Safety:    nursingpostgres.NewSafety(nursingRepo),
+		Ward:      nursingpostgres.NewWard(nursingRepo),
+		Downtime:  nursingpostgres.NewDowntime(nursingRepo),
+		Encounters: nursingpostgres.NewEncounters(
+			encounterpostgres.EncounterRepo{Repository: encounterRepo}),
+		// Whether a consent covers clinical photography is the clinical
+		// context's question to answer (SRS-NUR-012).
+		Consents: nursingpostgres.NewConsents(
+			clinicalpostgres.GovernanceRepo{Repository: clinicalRepo}, time.Now),
+		Events: platformStore,
+		Audits: store.AuditAppenderFunc(platformStore.AppendAudit),
+		IDs:    uuidGenerator{},
+		Clock:  systemClock{},
+	})
+
 	orgService := orgapp.NewService(orgapp.Deps{
 		UnitOfWork: txManager,
 		Tenants:    orgpostgres.TenantRepo{Repository: repo},
@@ -341,6 +386,8 @@ func New(deps Deps) *Server {
 		encountertransport.NewHandler(encounterService), interceptors))
 	mux.Handle(clinicalv1connect.NewClinicalServiceHandler(
 		clinicaltransport.NewHandler(clinicalService), interceptors))
+	mux.Handle(nursingv1connect.NewNursingServiceHandler(
+		nursingtransport.NewHandler(nursingService, time.Now), interceptors))
 	mux.Handle(platformapiv1connect.NewHealthServiceHandler(
 		platformapitransport.NewHandler(deps.Build, map[string]platformapitransport.Pinger{
 			"postgres": poolPinger{pool: deps.Pool},
@@ -359,6 +406,7 @@ func New(deps Deps) *Server {
 		Scheduling:      schedulingService,
 		Encounters:      encounterService,
 		Clinical:        clinicalService,
+		Nursing:         nursingService,
 		Store:           platformStore,
 		RateLimiter:     rateLimiter,
 		Publisher:       publisher,

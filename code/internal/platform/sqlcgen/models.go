@@ -700,6 +700,428 @@ type IdentityAccessStepUpProof struct {
 	ObtainedAt pgtype.Timestamptz
 }
 
+type NursingAcuityWeight struct {
+	TenantID    uuid.UUID
+	UnitID      string
+	Dependency  int32
+	OpenTask    int32
+	OverdueTask int32
+	Device      int32
+	HighRisk    int32
+	Isolation   int32
+	UpdatedBy   string
+	UpdatedAt   pgtype.Timestamptz
+}
+
+type NursingAdministration struct {
+	AdministrationID           uuid.UUID
+	TenantID                   uuid.UUID
+	PatientID                  uuid.UUID
+	EncounterID                uuid.UUID
+	OrderID                    uuid.UUID
+	MedicationSystem           string
+	MedicationVersion          string
+	MedicationCode             string
+	MedicationDisplay          string
+	ScheduledDose              float64
+	ScheduledUnit              string
+	ScheduledAt                pgtype.Timestamptz
+	GivenDose                  float64
+	GivenUnit                  string
+	GivenAt                    pgtype.Timestamptz
+	Route                      string
+	Site                       string
+	Outcome                    string
+	Reason                     string
+	ScanPerformed              bool
+	ScannedPatient             string
+	ScannedMedication          string
+	ScannedAt                  pgtype.Timestamptz
+	OverrideReason             string
+	OverrideBy                 string
+	OverrideAt                 pgtype.Timestamptz
+	OverridePatientMismatch    bool
+	OverrideMedicationMismatch bool
+	OverrideNotScanned         bool
+	IdempotencyKey             string
+	RecordedOffline            bool
+	AdministeredBy             string
+	WitnessedBy                string
+	RecordedAt                 pgtype.Timestamptz
+	Version                    int64
+}
+
+type NursingAdministrationPolicy struct {
+	TenantID         uuid.UUID
+	FacilityID       uuid.UUID
+	BarcodeRequired  bool
+	OverrideAllowed  bool
+	LateAfterSeconds int64
+	UpdatedBy        string
+	UpdatedAt        pgtype.Timestamptz
+}
+
+type NursingAssessment struct {
+	AssessmentID    uuid.UUID
+	TenantID        uuid.UUID
+	PatientID       uuid.UUID
+	EncounterID     uuid.UUID
+	Kind            string
+	TemplateID      uuid.UUID
+	TemplateVersion string
+	Answers         []byte
+	AssessedAt      pgtype.Timestamptz
+	RecordedAt      pgtype.Timestamptz
+	AssessedBy      string
+	Version         int64
+}
+
+type NursingAssessmentTemplate struct {
+	TemplateID  uuid.UUID
+	TenantID    uuid.UUID
+	Version     string
+	Name        string
+	MinAgeYears int32
+	MaxAgeYears int32
+	ServiceCode string
+	Sections    []byte
+	Retired     bool
+	CreatedBy   string
+	CreatedAt   pgtype.Timestamptz
+}
+
+type NursingAssignment struct {
+	AssignmentID  uuid.UUID
+	TenantID      uuid.UUID
+	UnitID        string
+	BedID         string
+	PatientID     pgtype.UUID
+	NurseID       string
+	Relationship  string
+	EffectiveFrom pgtype.Timestamptz
+	EffectiveTo   pgtype.Timestamptz
+	AssignedBy    string
+	EndedReason   string
+	Version       int64
+}
+
+type NursingCarePlan struct {
+	PlanID      uuid.UUID
+	TenantID    uuid.UUID
+	PatientID   uuid.UUID
+	EncounterID uuid.UUID
+	Title       string
+	Problems    []byte
+	Status      string
+	CreatedAt   pgtype.Timestamptz
+	CreatedBy   string
+	ReviewedAt  pgtype.Timestamptz
+	ReviewedBy  string
+	Evaluation  string
+	Version     int64
+}
+
+type NursingDevice struct {
+	DeviceID      uuid.UUID
+	TenantID      uuid.UUID
+	PatientID     uuid.UUID
+	EncounterID   uuid.UUID
+	Kind          string
+	Site          string
+	Laterality    string
+	Size          string
+	Lot           string
+	InsertedAt    pgtype.Timestamptz
+	InsertedBy    string
+	RemovedAt     pgtype.Timestamptz
+	RemovedBy     string
+	RemovalReason string
+	Version       int64
+}
+
+type NursingDeviceCare struct {
+	CareID      uuid.UUID
+	TenantID    uuid.UUID
+	DeviceID    uuid.UUID
+	Kind        string
+	Finding     string
+	OutputMl    float64
+	PerformedAt pgtype.Timestamptz
+	PerformedBy string
+}
+
+type NursingDowntimeEpisode struct {
+	EpisodeID    uuid.UUID
+	TenantID     uuid.UUID
+	UnitID       string
+	Reason       string
+	StartedAt    pgtype.Timestamptz
+	StartedBy    string
+	EndedAt      pgtype.Timestamptz
+	EndedBy      string
+	ReconciledAt pgtype.Timestamptz
+	ReconciledBy string
+	Version      int64
+}
+
+type NursingEducation struct {
+	EducationID   uuid.UUID
+	TenantID      uuid.UUID
+	PatientID     uuid.UUID
+	EncounterID   uuid.UUID
+	TopicSystem   string
+	TopicVersion  string
+	TopicCode     string
+	TopicDisplay  string
+	Learner       string
+	LearnerName   string
+	Method        string
+	Understanding string
+	Barriers      string
+	TaughtAt      pgtype.Timestamptz
+	TaughtBy      string
+	Version       int64
+}
+
+type NursingFlowsheetEntry struct {
+	EntryID         uuid.UUID
+	TenantID        uuid.UUID
+	PatientID       uuid.UUID
+	EncounterID     uuid.UUID
+	CodeSystem      string
+	CodeVersion     string
+	Code            string
+	CodeDisplay     string
+	ValueNumber     *float64
+	ValueUnit       string
+	ValueText       string
+	CodedSystem     string
+	CodedCode       string
+	CodedDisplay    string
+	ObservedAt      pgtype.Timestamptz
+	RecordedAt      pgtype.Timestamptz
+	Source          string
+	DeviceID        string
+	RecordedBy      string
+	LateEntryReason string
+	SupersededByID  pgtype.UUID
+	Version         int64
+}
+
+type NursingFluidEntry struct {
+	FluidID         uuid.UUID
+	TenantID        uuid.UUID
+	PatientID       uuid.UUID
+	EncounterID     uuid.UUID
+	Direction       string
+	Category        string
+	VolumeMl        float64
+	ObservedAt      pgtype.Timestamptz
+	RecordedAt      pgtype.Timestamptz
+	RecordedBy      string
+	SupersededByID  pgtype.UUID
+	SupersedesID    pgtype.UUID
+	AmendmentReason string
+	VoidedReason    string
+	Version         int64
+}
+
+type NursingHandover struct {
+	HandoverID     uuid.UUID
+	TenantID       uuid.UUID
+	PatientID      uuid.UUID
+	EncounterID    uuid.UUID
+	UnitID         string
+	FromShiftCode  string
+	FromShiftStart pgtype.Timestamptz
+	FromShiftEnd   pgtype.Timestamptz
+	ToShiftCode    string
+	ToShiftStart   pgtype.Timestamptz
+	ToShiftEnd     pgtype.Timestamptz
+	Situation      string
+	Background     string
+	Assessment     string
+	Recommendation string
+	CriticalRisks  []string
+	Outstanding    []string
+	Devices        []byte
+	PendingTasks   []byte
+	ComposedAt     pgtype.Timestamptz
+	ComposedBy     string
+	AcknowledgedAt pgtype.Timestamptz
+	AcknowledgedBy string
+	Questions      string
+	Version        int64
+}
+
+type NursingRestraint struct {
+	RestraintID         uuid.UUID
+	TenantID            uuid.UUID
+	PatientID           uuid.UUID
+	EncounterID         uuid.UUID
+	Kind                string
+	Description         string
+	AuthorizedBy        string
+	AuthorizedAt        pgtype.Timestamptz
+	ExpiresAt           pgtype.Timestamptz
+	Indication          string
+	Renewals            []byte
+	StartedAt           pgtype.Timestamptz
+	StartedBy           string
+	MonitorEverySeconds int64
+	DiscontinuedAt      pgtype.Timestamptz
+	DiscontinuedBy      string
+	DiscontinuedReason  string
+	Version             int64
+}
+
+type NursingRestraintCheck struct {
+	CheckID         uuid.UUID
+	TenantID        uuid.UUID
+	RestraintID     uuid.UUID
+	ObservedAt      pgtype.Timestamptz
+	ObservedBy      string
+	Findings        string
+	ContinuedReason string
+}
+
+type NursingRiskAssessment struct {
+	RiskID         uuid.UUID
+	TenantID       uuid.UUID
+	PatientID      uuid.UUID
+	EncounterID    uuid.UUID
+	ScaleID        uuid.UUID
+	ScaleVersion   string
+	RiskDomain     string
+	Inputs         []byte
+	Total          int32
+	Band           string
+	Escalate       bool
+	AssessedAt     pgtype.Timestamptz
+	RecordedAt     pgtype.Timestamptz
+	AssessedBy     string
+	DueAt          pgtype.Timestamptz
+	SupersededByID pgtype.UUID
+	Version        int64
+}
+
+type NursingRiskScale struct {
+	ScaleID              uuid.UUID
+	TenantID             uuid.UUID
+	Version              string
+	Name                 string
+	RiskDomain           string
+	Inputs               []byte
+	Bands                []byte
+	ReassessAfterSeconds int64
+	Retired              bool
+	CreatedBy            string
+	CreatedAt            pgtype.Timestamptz
+}
+
+type NursingTask struct {
+	TaskID            uuid.UUID
+	TenantID          uuid.UUID
+	PatientID         uuid.UUID
+	EncounterID       uuid.UUID
+	Description       string
+	Priority          string
+	DueAt             pgtype.Timestamptz
+	SourceKind        string
+	SourceID          string
+	RecurEverySeconds int64
+	RecurUntil        pgtype.Timestamptz
+	Status            string
+	Evidence          string
+	CompletedAt       pgtype.Timestamptz
+	CompletedBy       string
+	NotDoneReason     string
+	AssignedTo        string
+	EscalatedAt       pgtype.Timestamptz
+	EscalatedTo       string
+	CreatedAt         pgtype.Timestamptz
+	CreatedBy         string
+	Version           int64
+}
+
+type NursingTransfusion struct {
+	TransfusionID        uuid.UUID
+	TenantID             uuid.UUID
+	PatientID            uuid.UUID
+	EncounterID          uuid.UUID
+	UnitNumber           string
+	ProductSystem        string
+	ProductVersion       string
+	ProductCode          string
+	ProductDisplay       string
+	AboGroup             string
+	Rhd                  string
+	VolumeMl             float64
+	StartedAt            pgtype.Timestamptz
+	StartedBy            string
+	CheckedBy            string
+	Status               string
+	EndedAt              pgtype.Timestamptz
+	ReactionReportedAt   pgtype.Timestamptz
+	ReactionReportedBy   string
+	ReactionFeatures     string
+	ReactionAction       string
+	ReactionUnitReturned bool
+	Version              int64
+}
+
+type NursingTransfusionObservation struct {
+	ObservationID   uuid.UUID
+	TenantID        uuid.UUID
+	TransfusionID   uuid.UUID
+	ObservedAt      pgtype.Timestamptz
+	ObservedBy      string
+	TemperatureC    float64
+	Pulse           int32
+	SystolicBp      int32
+	RespiratoryRate int32
+	Baseline        bool
+	Notes           string
+}
+
+type NursingWoundAssessment struct {
+	WoundAssessmentID uuid.UUID
+	TenantID          uuid.UUID
+	PatientID         uuid.UUID
+	EncounterID       uuid.UUID
+	WoundID           string
+	Location          string
+	BodyMapSystem     string
+	BodyMapCode       string
+	BodyMapDisplay    string
+	Laterality        string
+	Kind              string
+	Stage             string
+	LengthMm          float64
+	WidthMm           float64
+	DepthMm           float64
+	Appearance        string
+	Exudate           string
+	SurroundingSkin   string
+	PainScore         *int32
+	AssessedAt        pgtype.Timestamptz
+	RecordedAt        pgtype.Timestamptz
+	AssessedBy        string
+	Version           int64
+}
+
+type NursingWoundImage struct {
+	ImageID           uuid.UUID
+	TenantID          uuid.UUID
+	WoundAssessmentID uuid.UUID
+	ConsentID         uuid.UUID
+	StorageKey        string
+	ContentType       string
+	CapturedAt        pgtype.Timestamptz
+	CapturedBy        string
+	Sequence          int32
+}
+
 type OrganizationDisplayLabel struct {
 	LabelID      uuid.UUID
 	TenantID     uuid.UUID

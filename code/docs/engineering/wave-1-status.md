@@ -789,7 +789,24 @@ Pinned by `TestAClerkCannotRewriteTheRoster`.
 | SRS-CLN-022 | Referral/consult request with specialty, urgency, reason and question; the response closes the loop and stays linked | **Implemented** |
 | SRS-CLN-023 | Registry references pointing at canonical clinical facts rather than copying the chart | **Implemented** |
 | SRS-CLN-024 | `clinical_document.signed`, `observation.recorded`, `problem.updated`, `allergy.updated`, `procedure.completed`, `critical_result.acknowledged` | **Implemented** |
-| SRS-NUR-001 … 018 | Nursing core | Not started — Sprint 4C |
+| SRS-NUR-001 | Admission assessment against a versioned age/service-specific template; author, time and version retained | **Implemented** |
+| SRS-NUR-002 | Nursing care plan with problems, goals, interventions, frequency and evaluation; its tasks appear in the worklist | **Implemented** |
+| SRS-NUR-003 | Flowsheet vitals with source and timestamp; a late entry is identified as late and carries the actual observation time | **Implemented** |
+| SRS-NUR-004 | Intake and output by category with a running shift/day balance; corrections use an amendment trail | **Implemented** |
+| SRS-NUR-005 | Fall, pressure-injury, pain and configured risk scores; version and inputs stored, due reassessment appears as work | **Implemented** |
+| SRS-NUR-006 | Lines, tubes, drains and catheters with insertion, site, care, output and removal; device-days from canonical dates | **Implemented** |
+| SRS-NUR-007 | Administration schedule from the medication service; only active verified orders create tasks | **Implemented** — the eMAR is written against the medication port and refuses everything while it is unwired; Sprint 5's SRS-MED supplies the adapter |
+| SRS-NUR-008 | Positive patient identification before administration; a mismatch prevents completion unless policy allows an override | **Implemented** |
+| SRS-NUR-009 | Administered/not-administered/held/refused/delayed with dose, time, route, site and reason; scheduled versus actual retained | **Implemented** |
+| SRS-NUR-010 | Shift handover with outstanding issues, critical risks, devices and pending tasks; acknowledgement and shift recorded | **Implemented** |
+| SRS-NUR-011 | Nursing tasks with priority, due time, recurrence and completion evidence; overdue critical tasks escalate | **Implemented** — escalation is raised and recorded against the task; the delivery channel is the notification port Sprint 3C established |
+| SRS-NUR-012 | Wound and skin assessment with location, body map and consented image; images versioned and access-controlled | **Implemented** — the image series, its consent and its access rules are enforced; the binary store is a port with no production adapter yet |
+| SRS-NUR-013 | Restraints with indication, authorisation, monitoring and discontinuation; an expired authorisation triggers an alert | **Implemented** |
+| SRS-NUR-014 | Transfusion monitoring linked to a blood-product episode; the reaction action runs from the bedside | **Implemented** |
+| SRS-NUR-015 | Patient and family education and discharge readiness, with topic, learner, method and understanding status | **Implemented** |
+| SRS-NUR-016 | Acuity and workload dashboard by unit, from defined inputs, never silently altering staffing decisions | **Implemented** |
+| SRS-NUR-017 | Nurse assignment by unit and bed with a care relationship; changes are effective-dated and auditable | **Implemented** |
+| SRS-NUR-018 | Downtime-safe workflows for medication and critical nursing tasks; recovery reconciliation prevents duplicate administration | **Implemented** — the duplicate guard, the offline marking and the reconciliation lifecycle are in place; the printable downtime forms are a client concern and the edge queue is the Wave-0 prototype (P0-13) |
 
 ### What the encounter context enforces
 
@@ -992,6 +1009,157 @@ Pinned by `TestAClerkCannotRewriteTheRoster`.
   surface in the system, and a diagnosis in an event payload is a diagnosis in
   every consumer's logs.
 
+### What the nursing record enforces
+
+- **Every bedside record carries two times, and they are never reconciled into
+  one.** SRS-NUR-003 requires that a late entry is identified as late and
+  carries the actual observation time, and the reason is a ward that takes
+  observations at 06:00 and reaches a terminal at 08:40. A system that stamps
+  08:40 says the patient was stable two hours after they in fact were, and the
+  deterioration in between becomes invisible. So the observation time is
+  supplied by the nurse and refused when absent, the recording time comes from
+  the server's clock and is never taken from the caller, and the chart sorts by
+  the first while the audit reads the second. A late entry also needs a reason:
+  "the nurse was busy" and "this was found on paper during downtime" lead to
+  different conclusions in a review, and a flag with no explanation says a
+  record is weak without saying why.
+- **A fluid balance is corrected by superseding, never by editing.** A running
+  total that can be edited is a total nobody can reconstruct, and the shift
+  balance that was handed over at 20:00 was computed from the entry somebody
+  later changed. So SRS-NUR-004's amendment trail is a new row that points back,
+  the original stays readable, and the balance counts only what is live. A
+  negative volume is refused outright — it is how a balance gets "corrected" by
+  a system with no amendment trail, and this one has one.
+- **Device-days come from the insertion and removal dates and from nothing
+  else.** Device-days are the denominator of the infection rates a hospital
+  publishes and is judged on. A denominator derived from how often somebody
+  documented line care falls when the ward is busy, which makes the rate rise
+  exactly when it should not. So SRS-NUR-006's "canonical dates" are a property
+  of the record: care episodes are stored because they are nursing work, and the
+  count never looks at them. The counting convention is stated in the code —
+  once per calendar day in place, insertion and removal days included, UTC
+  boundaries — because the number is only comparable between hospitals if
+  everybody counts it the same way, and a denominator that shifts with a
+  daylight-saving change produces an unexplained blip twice a year.
+- **Only an order a pharmacist has verified produces a dose to give.**
+  SRS-NUR-007 is explicit, and the gap between a doctor prescribing and a
+  pharmacist verifying is where dose and interaction errors are caught. A task
+  list built from unverified orders invites a nurse to give the dose the
+  pharmacist was about to question. The check runs when the round is built *and*
+  again when the dose is recorded, because a stale round is exactly what a nurse
+  would be acting on. Until Sprint 5 wires the medication context, the port is
+  nil and every administration is refused: an eMAR that cannot check
+  verification must not pretend it has, and a stub answering "verified" would be
+  a safety control present in the code and absent in effect.
+- **A barcode mismatch is a refusal, not a warning.** SRS-NUR-008 says a
+  mismatch prevents completion, and a warning that can be clicked through is how
+  wrong-patient administrations happen on wards that have scanners. The scan is
+  compared against the *order's* patient rather than against what the screen is
+  showing, because the screen is what the check exists to doubt. Not scanning at
+  all is a failure of the check rather than an absence of it. The override is
+  allowed where policy says so, needs a substantive reason, and is stored on the
+  administration as well as audited — the audit answers "who did this", and the
+  stored record answers "how often, on which ward, for which drugs", which is
+  the question that gets a broken scanner replaced. A facility may turn the
+  override off entirely, and a facility with no scanners turns the check off
+  deliberately: the default is on, because a safety control that has to be
+  switched on is a control that is off in the wards that most need it.
+- **The MAR keeps what was ordered and what happened, side by side.**
+  SRS-NUR-009's criterion is exactly this, and the reason is that a record
+  showing only what was given cannot answer "was it late" — the question an
+  insulin or an antibiotic review turns on. Held, refused, not-administered and
+  delayed are four different facts and stay four: holding is a clinical
+  judgement somebody is answerable for, refusing is the patient's decision and
+  not the nurse's to record as a hold, and a nurse asserting a dose was late is
+  different evidence from a report deriving it. Anything but a plain
+  administration needs a reason.
+- **The duplicate-administration guard is keyed on the dose, not the
+  submission.** SRS-NUR-018's failure is easy to produce and hard to see: during
+  downtime a ward charts on paper, and when the system returns two nurses split
+  the pile and type the same entry. A client-generated identifier does not help,
+  because the two transcriptions are genuinely separate submissions of one
+  event. What identifies the event is the order and the scheduled time, which is
+  what is written on the paper chart and therefore what both transcribers read.
+  The uniqueness lives in a partial index at the table rather than in a
+  check-then-insert, because the two submissions can be in flight at the same
+  moment. A PRN dose has no scheduled time and is *not* refused — two doses of
+  breakthrough analgesia an hour apart can be entirely correct — so there the
+  guard is an idempotency key and a report that flags near-duplicates for
+  somebody to look at.
+- **An expired restraint authorisation raises an alarm; it does not free the
+  patient.** SRS-NUR-013 asks for an alert, and note what it does not ask for.
+  The patient is still restrained when the paperwork lapses, and a system that
+  "removed" the restraint at expiry would produce a record showing a patient
+  free while they were tied to a bed. So expiry is a computed state on a
+  still-active restraint, it emits an event so the alert reaches the nurse in
+  charge rather than waiting for somebody to open a screen, and only a person
+  discontinues. The authorisation cannot be open-ended and cannot run past a
+  ceiling, because an authorisation written once on admission that never expires
+  is the failure the requirement exists to prevent. Every monitoring check must
+  say why the restraint is still needed: a check that records observations
+  without asking that question is a check that keeps patients restrained.
+- **A handover is a stored snapshot, and somebody else accepts it.**
+  SRS-NUR-010's criterion is that the acknowledgement and the shift are
+  recorded, which is a statement about what handover is for: the moment
+  responsibility moves. Rendered live, the handover acknowledged at 20:00 shows
+  something different at 23:00 and nobody can say afterwards what they were
+  told. So the devices and the outstanding work are captured by the server at
+  composition time — a handover cannot quietly omit the line that has been in
+  for nine days — and a nurse cannot acknowledge their own, because one person
+  marking their own work received is not a transfer. An unacknowledged handover
+  is visible as such: it means a patient nobody has taken responsibility for.
+- **A recurring task is scheduled from when it was due, not from when it was
+  done.** Four-hourly observations completed an hour late, rescheduled from
+  completion, drift later every round until they are happening once a shift.
+  Completion needs evidence rather than a tick, because a tick with no evidence
+  is indistinguishable from a tick to clear the list, and a task deliberately
+  not done is a different fact from one nobody did — only one of them is a gap
+  in care. Escalation is for overdue *critical* work alone: escalating every
+  overdue routine task produces a stream nobody reads, and the first thing lost
+  in an unread stream is the critical one.
+- **A risk score stores the instrument version and every input.** A Braden of 14
+  means nothing without knowing it was a Braden, and a total on its own cannot
+  be checked, explained to the patient, or recomputed when somebody asks whether
+  the scale was applied correctly. A factor left unanswered is refused rather
+  than scored zero, because zero reports a patient at lower risk than they were
+  assessed at; a total no band covers is refused rather than reported as no
+  risk, because "no risk" is the dangerous reading of a misconfigured scale. A
+  rescore supersedes rather than overwrites, and the band's escalation flag is
+  captured at the time, so retuning a scale cannot rewrite what the nurse was
+  told.
+- **A photograph of a wound is a photograph of a patient.** SRS-NUR-012 says
+  "where consented", so the image carries a consent reference rather than a
+  boolean — a boolean cannot be checked against a consent that was later
+  withdrawn — and whether that consent covers clinical photography is the
+  clinical context's question, asked across the seam and evaluated against the
+  consent's status and validity window. An image is added to a numbered series
+  and never replaced, because the series is the evidence of healing. A pressure
+  injury charted without a stage is refused: the stage drives the care plan and
+  the incident report, and one without it is a pressure injury nobody reports.
+- **The acuity dashboard reports and has no mechanism to decide.**
+  SRS-NUR-016's criterion — "never silently alters staffing decisions" — is the
+  most carefully worded in the family, and it is right to be. An acuity figure
+  is an input to a judgement made by a person who is accountable for it, and it
+  is built from proxies that are wrong in exactly the cases that matter most. So
+  the inputs are named and stored with the figure, the weights travel with the
+  score (a retune must not silently rewrite history, and two wards' numbers are
+  comparable only when computed the same way), the nurse count comes from live
+  assignments rather than from a roster — a roster says who was *meant* to be
+  there — and a unit with nobody on duty reports no per-nurse figure at all,
+  because a ward with no nurses assigned is not a ward with zero workload per
+  nurse.
+- **A nurse assignment is dated, and the question is about the past.** The
+  question an incident review asks is "who was looking after this patient at
+  03:40", and a list with no dates answers today's question and silently gives
+  the wrong answer to every question about the past. Ending an assignment closes
+  it rather than deleting it, and one live primary nurse per patient is held by
+  a partial unique index — two answers to "who is responsible" is no answer.
+- **Ending downtime and reconciling it are different facts.** The system coming
+  back and the paper being typed in are hours apart, and the gap is where the
+  record is incomplete. An episode that ended and was never reconciled is
+  somebody who never finished typing, which is a gap in the medication record
+  rather than a tidiness problem, and it stays visible until it is closed.
+
 ### Sprint 4 evidence
 
 | Property | Test |
@@ -1080,6 +1248,104 @@ Pinned by `TestAClerkCannotRewriteTheRoster`.
 | Signing emits an event carrying no clinical content | `TestSigningEmitsAnEventCarryingNoClinicalContent` |
 | The encounter closure gate reads the clinical record across the seam | `TestTheClosureGateSeesASignedNote` |
 | A note cannot be reached from another tenant | `TestANoteCannotBeReachedFromAnotherTenant` |
+| A catch-up entry is charted as late, with its real observation time | `TestACatchUpEntryIsChartedAsLateWithItsRealObservationTime`, `TestACatchUpEntryIsMarkedLate` |
+| An observation records when it was taken, not when it was typed | `TestAnObservationRecordsWhenItWasTakenNotWhenItWasTyped` |
+| A late entry must say why it is late | `TestALateEntryMustSayWhyItIsLate`, `TestALateEntryIsRefusedWithoutAnExplanation` |
+| An observation needs the time it was taken, and cannot be in the future | `TestAnObservationNeedsTheTimeItWasTaken`, `TestAnObservationCannotHaveBeenTakenInTheFuture` |
+| A charted number needs its unit, and a device reading names the device | `TestAChartedNumberNeedsItsUnit`, `TestADeviceReadingMustNameTheDevice`, `TestAChartedValueMustSayWhereItCameFrom` |
+| The flowsheet sorts by observation time, not typing time | `TestTheFlowsheetSortsByObservationTimeNotTypingTime`, `TestTheFlowsheetReadsByObservationTime` |
+| The fluid balance runs by category | `TestTheFluidBalanceRunsByCategory` |
+| Correcting a volume keeps the original and moves the balance | `TestCorrectingAVolumeKeepsTheOriginalAndMovesTheBalance` (both layers) |
+| A correction needs a substantive reason, and an entry is corrected once | `TestACorrectionNeedsASubstantiveReason`, `TestAnEntryCannotBeCorrectedTwice` |
+| A volume cannot be negative; a voided entry leaves the balance | `TestAVolumeCannotBeNegative`, `TestAVoidedEntryLeavesTheBalance` |
+| A balance is bounded by observation time | `TestABalanceIsBoundedByObservationTime` |
+| An assessment records the template version it was answered against | `TestAnAssessmentRecordsTheTemplateVersionItWasAnsweredAgainst`, `TestAnAssessmentRecordsItsTemplateVersionAndNamesEveryGap` |
+| An incomplete assessment names every missing section | `TestAnIncompleteAssessmentNamesEveryMissingSection` |
+| An optional section may be left blank | `TestAnOptionalSectionMayBeLeftBlank` |
+| A retired template cannot be answered against, and the assessments already answered stay valid | `TestARetiredTemplateCannotBeAnsweredAgainst` |
+| A template applies to an age band and a service | `TestATemplateAppliesToAnAgeBandAndAService` |
+| A template needs a version and a section to answer | `TestATemplateNeedsAVersionAndASectionToAnswer` |
+| A risk score stores its scale version and every input | `TestARiskScoreStoresItsScaleVersionAndEveryInput`, `TestARiskScoreStoresItsInputsAndARescoreSupersedes` |
+| A missing risk factor is refused rather than scored zero | `TestAMissingRiskFactorIsRefusedRatherThanScoredZero` |
+| A risk factor outside its range is refused | `TestARiskFactorOutsideItsRangeIsRefused` |
+| A risk score expires and becomes due for reassessment | `TestARiskScoreExpiresAndBecomesDue` |
+| A risk scale needs a version | `TestARiskScaleNeedsAVersion` |
+| A total outside every band is refused rather than reported as no risk | `TestATotalOutsideEveryBandIsRefusedRatherThanReportedAsNoRisk` |
+| A rescore is a new record rather than an update | `TestARescoreIsANewRecordRatherThanAnUpdate` |
+| Device-days are counted from insertion and removal, and from nothing else | `TestDeviceDaysAreCountedFromInsertionAndRemoval`, `TestDeviceDaysComeFromTheCanonicalDates` |
+| A line in and out the same day is one device-day | `TestALineInAndOutTheSameDayIsOneDeviceDay` |
+| Documenting care does not change the device-day count | `TestDocumentingCareDoesNotChangeTheDeviceDayCount` |
+| Dwell is measured to the minute, not the day | `TestDwellIsMeasuredToTheMinuteNotTheDay` |
+| Removing a device needs a reason, and happens once | `TestRemovingADeviceNeedsAReason`, `TestADeviceCannotBeRemovedTwice` |
+| A device needs the time it was inserted | `TestADeviceNeedsTheTimeItWasInserted` |
+| The surveillance device set is named rather than left to a query | `TestTheSurveillanceDeviceSetIsNamed` |
+| An unverified or held order produces no administration | `TestAnUnverifiedOrderProducesNoAdministrationTask`, `TestAHeldOrderProducesNoAdministrationTask`, `TestADoseCannotBeGivenAgainstAnUnverifiedOrder` |
+| An order outside its dates produces no task | `TestAnOrderOutsideItsDatesProducesNoTask` |
+| The MAR keeps the scheduled dose as well as the one given | `TestTheMARKeepsTheScheduledDoseAsWellAsTheOneGiven`, `TestTheMARKeepsScheduledAndActualApart` |
+| A variance across two units is not reported | `TestAVarianceAcrossUnitsIsNotReported` |
+| The wrong wristband or the wrong product stops the administration | `TestAWrongWristbandStopsTheAdministration`, `TestTheWrongWristbandStopsTheAdministration`, `TestTheWrongProductStopsTheAdministration` |
+| Not scanning is itself a failed check | `TestNotScanningIsItselfAFailedCheck` |
+| An override is stored with what it overrode, and is reportable | `TestAnOverrideIsStoredWithWhatItOverrode`, `TestAnOverrideIsRecordedAndReportable` |
+| An override needs a substantive reason | `TestAnOverrideNeedsASubstantiveReason` |
+| A facility can refuse overrides entirely, and one without scanners can still give medication | `TestAFacilityCanRefuseOverridesEntirely`, `TestAWardWithoutScannersCanStillGiveMedication` |
+| A refusal needs no barcode but needs a reason | `TestARefusalNeedsNoBarcodeButNeedsAReason`, `TestARefusedDoseNeedsAReason` |
+| Holding and not giving are different facts | `TestHoldingAndNotGivingAreDifferentFacts` |
+| A dose that was given needs its route | `TestADoseThatWasGivenNeedsItsRoute` |
+| The barcode check is on by default | `TestTheBarcodeCheckIsOnByDefault` |
+| Only a nurse can chart an administration | `TestOnlyANurseCanChartAnAdministration` |
+| The scheduled-dose key is the order and the scheduled time | `TestTheScheduledDoseKeyIsTheOrderAndTheScheduledTime` |
+| Re-keying a paper chart twice cannot duplicate a dose | `TestRekeyingAPaperChartTwiceCannotDuplicateADose` |
+| A PRN dose has no scheduled-dose key, and two close together are flagged rather than refused | `TestAPRNDoseHasNoScheduledDoseKey`, `TestTwoPRNDosesCloseTogetherAreFlaggedNotRefused`, `TestTwoPRNDosesCloseTogetherAreFlaggedRatherThanRefused` |
+| A genuine second PRN dose is not flagged | `TestAGenuineSecondPRNDoseIsNotFlagged` |
+| Scheduled doses and refusals stay out of the suspected-duplicate report | `TestScheduledDosesAreNotInTheSuspectedDuplicateReport`, `TestARefusedDoseIsNotASuspectedDuplicate` |
+| The duplicate refusal names the record that already exists | `TestTheDuplicateRefusalNamesTheRecordThatAlreadyExists` |
+| A dose transcribed from paper is visible as offline | `TestAnOfflineDoseIsVisibleAsOffline` |
+| The round shows what is still outstanding | `TestTheRoundShowsWhatIsStillOutstanding` |
+| Ending downtime is not the same as reconciling it | `TestEndingDowntimeIsNotTheSameAsReconcilingIt` (both layers) |
+| A downtime episode needs a unit and a reason | `TestADowntimeEpisodeNeedsAUnitAndAReason` |
+| A care plan's interventions generate the worklist | `TestACarePlansInterventionsGenerateTheWorklist`, `TestACarePlansInterventionsAppearInTheWorklist` |
+| A resolved problem and a closed plan generate no work | `TestAResolvedProblemAndAClosedPlanGenerateNoWork`, `TestAContinuousInterventionSchedulesNothing` |
+| A care-plan problem needs a goal | `TestACarePlanProblemNeedsAGoal` |
+| Reviewing a care plan records the evaluation | `TestReviewingACarePlanRecordsTheEvaluation` |
+| Completing a task needs evidence of what was done | `TestCompletingATaskNeedsEvidenceOfWhatWasDone`, `TestCompletingRecurringWorkNeedsEvidenceAndDoesNotDrift` |
+| Recurring work does not drift later each round | `TestRecurringWorkDoesNotDriftLaterEachRound` |
+| A one-off task produces no next occurrence, and a recurrence stops at its end | `TestAOneOffTaskProducesNoNextOccurrence`, `TestARecurrenceStopsAtItsEnd` |
+| Only overdue critical tasks escalate, and only once | `TestOnlyOverdueCriticalTasksEscalate`, `TestOnlyOverdueCriticalWorkEscalates` |
+| A deliberate omission is not the same as an undone task | `TestADeliberateOmissionIsNotTheSameAsAnUndoneTask`, `TestANotDoneTaskNeedsAReason` |
+| A task needs a due time | `TestATaskNeedsADueTime` |
+| The worklist puts the most urgent and most overdue first | `TestTheWorklistPutsTheMostUrgentAndMostOverdueFirst` |
+| A handover is acknowledged before responsibility moves, and captures the ward | `TestAHandoverIsAcknowledgedBeforeResponsibilityMoves`, `TestAHandoverCapturesTheWardAndIsAcceptedBySomebodyElse` |
+| A nurse cannot acknowledge their own handover, and a handover is acknowledged once | `TestANurseCannotAcknowledgeTheirOwnHandover`, `TestAHandoverIsAcknowledgedOnce` |
+| An unacknowledged handover is visible as such | `TestAnUnacknowledgedHandoverIsVisibleAsSuch` |
+| A handover names its shifts and says what the incoming shift should do | `TestAHandoverNamesTheShiftsItIsBetween`, `TestAHandoverNeedsWhatTheIncomingShiftShouldDo` |
+| A handover is a snapshot, not a live view | `TestAHandoverIsASnapshotNotALiveView` |
+| An expired restraint authorisation alerts without ending the restraint | `TestAnExpiredAuthorizationAlertsWithoutEndingTheRestraint`, `TestAnExpiredRestraintAuthorizationAlertsWithoutFreeingThePatient` |
+| A restraint authorisation must expire, and cannot run past the ceiling | `TestARestraintAuthorizationMustExpire`, `TestARestraintAuthorizationCannotRunPastTheCeiling` |
+| A restraint needs an indication and a named authoriser | `TestARestraintNeedsAnIndicationAndANamedAuthoriser` |
+| Renewing a restraint keeps the earlier authorisations, and must extend them | `TestRenewingARestraintKeepsTheEarlierAuthorizations`, `TestARenewalMustExtendTheAuthorization` |
+| A restraint check must say why the restraint is still needed | `TestARestraintCheckMustSayWhyTheRestraintIsStillNeeded` |
+| A restrained patient not checked in time is overdue | `TestARestrainedPatientNotCheckedInTimeIsOverdue` |
+| A discontinued restraint takes no more checks | `TestADiscontinuedRestraintTakesNoMoreChecks` |
+| A transfusion needs a baseline before it starts | `TestATransfusionNeedsABaselineBeforeItStarts` |
+| A temperature rise is reported against the baseline | `TestATemperatureRiseIsReportedAgainstTheBaseline` |
+| A transfusion needs a second person's bedside check and the pack's unit number | `TestATransfusionNeedsASecondPersonsBedsideCheck`, `TestATransfusionNeedsTheUnitNumberOfThePack` |
+| Reporting a reaction stops the transfusion | `TestReportingAReactionStopsTheTransfusion`, `TestReportingATransfusionReactionStopsIt` |
+| A reaction needs the action taken | `TestAReactionNeedsTheActionTaken` |
+| A completed transfusion is distinct from a stopped one | `TestACompletedTransfusionIsDistinctFromAStoppedOne` |
+| A wound photograph needs a consent that covers it | `TestAWoundPhotographNeedsAConsentThatCoversIt`, `TestAWoundPhotographIsRefusedWithoutConsent` |
+| Wound images are added in sequence and never replaced | `TestWoundImagesAreAddedInSequenceAndNeverReplaced` |
+| A pressure injury needs its stage, and a wound assessment says which wound | `TestAPressureInjuryNeedsItsStage` (both layers), `TestAWoundAssessmentSaysWhichWoundItIsOf` |
+| An education record stores whether the teaching was understood | `TestAnEducationRecordStoresWhetherItWasUnderstood` |
+| Teaching somebody other than the patient must name them | `TestTeachingSomebodyOtherThanThePatientMustNameThem` |
+| Discharge readiness lists everything outstanding | `TestDischargeReadinessListsEverythingOutstanding`, `TestDischargeReadinessNamesWhatIsOutstanding` |
+| A nurse assignment is answered as of a time | `TestANurseAssignmentIsAnsweredAsOfATime`, `TestWhoWasLookingAfterThePatientIsAnsweredAsOfATime` |
+| An assignment cannot end before it began, and needs a patient or a bed | `TestAnAssignmentCannotEndBeforeItBegan`, `TestAnAssignmentNeedsAPatientOrABed` |
+| An acuity score carries the weights it was computed with | `TestAnAcuityScoreCarriesTheWeightsItWasComputedWith` |
+| The acuity dashboard reports and never staffs the ward | `TestTheAcuityDashboardReportsAndNeverStaffsTheWard` |
+| A unit with nobody on duty reports no per-nurse figure | `TestAUnitWithNobodyOnDutyReportsNoPerNurseFigure` |
+| A closed encounter takes no new observations | `TestAClosedEncounterTakesNoNewObservations` |
+| Administering emits an event carrying no clinical reasoning | `TestAdministeringEmitsAnEventCarryingNoClinicalReasoning` |
+| A nursing record cannot be reached from another tenant | `TestANursingRecordCannotBeReachedFromAnotherTenant` |
 
 ### Decisions taken against the backlog
 
@@ -1127,6 +1393,58 @@ holds until the second client is written. The interpretation arrives with the
 result and carries the name of the service that assigned it; an interpretation
 with no named source is refused before it is stored, so there is no path by
 which a client could supply one. Pinned by `TestAnInterpretationMustNameItsSource`.
+
+**Nursing is a role, not a variant of clinician.** The backlog's actor list
+names "Nurse" and "Nurse Manager" separately from "Clinician", and the
+permission sets turn out to differ in both directions: a nurse gives medication
+and applies restraints, a doctor prescribes and signs clinical documents and
+records diagnoses. Folding nursing into the clinician role would hand every
+junior doctor the administration and restraint permissions and every nurse the
+diagnosis one, and both directions are wrong. Implemented as `nurse` and
+`nurse_manager` roles. The manager role deliberately does not carry
+`nur.medication.administer`: a manager who is also rostered to give medication
+holds the nurse role as well, so "who may give a drug" stays answerable from
+the roles alone.
+
+**Giving a drug is its own permission, and so is overriding the barcode
+check.** SRS-NUR-009 reads as one act, but the eMAR exists to record the moment
+a drug goes into a patient, and behind a general nursing-write permission a ward
+clerk could chart a dose under their own name. Implemented as
+`nur.medication.administer`, pinned by `TestOnlyANurseCanChartAnAdministration`.
+SRS-NUR-008's override is separated again as `nur.medication.override`, so a
+hospital can restrict it — though the control that actually bites is the
+mandatory reason and the report it feeds, not scarcity of the permission, and a
+nurse who cannot override when the trolley scanner fails at 03:00 will chart the
+dose somewhere the system cannot see.
+
+**SRS-NUR-007's medication seam is left unwired rather than stubbed.** The
+requirement's whole content is that only pharmacist-verified orders produce
+administration tasks, and a stub answering "verified" would be that safety
+control present in the code and absent in effect. The port is declared, the eMAR
+is written against it, and with nothing wired every administration is refused
+with a message naming the missing service. Sprint 5's SRS-MED supplies the
+adapter.
+
+**SRS-NUR-018's duplicate guard is a database constraint, not an application
+check.** The requirement is about reconciliation after downtime, where the same
+paper entry is genuinely submitted twice by two different people. A
+check-then-insert would let both through when they overlap, and a
+client-generated identifier cannot help because the two transcriptions are
+separate submissions by construction. Implemented as a partial unique index on
+(tenant, order, scheduled time) — the tuple that is written on the paper chart
+and read by both transcribers — with the adapter turning the constraint
+violation into a refusal that names the record already there. Pinned by
+`TestRekeyingAPaperChartTwiceCannotDuplicateADose`, and the index's necessity
+was confirmed by re-keying it on the submission identifier and watching the test
+fail.
+
+**The device-day counting convention is written down in the code.** SRS-NUR-006
+says device-days are calculated from canonical dates and stops there, but the
+convention matters as much as the source: an inclusive calendar-day count in UTC
+is not the same number as an elapsed-hours-divided-by-24 count, and an infection
+rate is only comparable between hospitals when everybody counts the same way.
+The convention, and the reason for the UTC boundary, are stated at
+`Device.DeviceDays`.
 
 ## Wave-0 capabilities Wave 1 consumes
 

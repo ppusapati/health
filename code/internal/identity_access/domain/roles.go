@@ -43,6 +43,22 @@ const (
 	// RoleClinician reads patient identity in the course of care.
 	RoleClinician Role = "clinician"
 
+	// RoleNurse delivers and records nursing care (SRS-NUR, Wave-1 actor
+	// "Nurse").
+	//
+	// A role of its own rather than a variant of clinician, because the two
+	// permission sets are genuinely different in both directions. A nurse gives
+	// medication and a doctor prescribes it; a nurse charts observations hourly
+	// and a doctor rarely does; a doctor records diagnoses and signs clinical
+	// documents and a nurse does not. Folding nursing into clinician would give
+	// every junior doctor the restraint and administration permissions and
+	// every nurse the diagnosis one, and both directions are wrong.
+	RoleNurse Role = "nurse"
+
+	// RoleNurseManager runs a ward: assignment and the acuity dashboard
+	// (SRS-NUR-016, SRS-NUR-017, Wave-1 actor "Nurse Manager").
+	RoleNurseManager Role = "nurse_manager"
+
 	// RoleScheduler runs the diary: rosters, leave, theatre blocks, and the
 	// authority to book into a provisional block when the list is agreed
 	// (SRS-SCH-002). The Wave-1 backlog actor is "Scheduler".
@@ -71,6 +87,11 @@ var rolePermissions = map[Role][]string{
 		// absent: no cln.record.read. Deciding what a note asks and reading
 		// what it says are different jobs.
 		"cln.record.configure",
+		// Assessment templates, risk scales, the administration policy and the
+		// acuity weights (SRS-NUR-001, SRS-NUR-005, SRS-NUR-008, SRS-NUR-016).
+		// Note what is absent again: no nur.record.read. Deciding what a ward
+		// measures and reading what it measured are different jobs.
+		"nur.record.configure",
 		// Rosters are tenant administration for the same reason: deciding when
 		// a clinic runs is configuration, and it is deliberately not bundled
 		// with the ability to look inside the diary at who is coming.
@@ -193,6 +214,64 @@ var rolePermissions = map[Role][]string{
 		// action (SRS-CLN-012). A permission the whole hospital held would let
 		// the desk clear the safety worklist by clicking through it.
 		"cln.result.acknowledge",
+
+		// Nursing content is readable by the medical team — a ward round is
+		// read from the flowsheet — but a doctor does not chart observations,
+		// give medication or apply restraints, so only the read is here.
+		"nur.record.read",
+	},
+
+	// A nurse delivers care. Note what is absent: no cln.document.sign and no
+	// enc.diagnosis.record. Signing a clinical document and recording a
+	// diagnosis are the medical team's assertions, and a nurse writing a
+	// nursing note does neither.
+	RoleNurse: {
+		"empi.patient.read",
+		// Nursing happens inside an encounter and needs to know it is open.
+		"enc.encounter.read",
+		// The nursing note is a clinical document; writing one is nursing work
+		// and signing it is not the same act (SRS-CLN-009).
+		"cln.record.read",
+		"cln.record.write",
+		// A nurse takes the observations a critical result is acted on by, and
+		// acknowledging one means somebody has taken clinical action
+		// (SRS-CLN-012).
+		"cln.result.acknowledge",
+
+		"nur.record.read",
+		"nur.record.write",
+		// Giving a drug is the act the whole eMAR exists to record
+		// (SRS-NUR-009). Its own permission, so the ward clerk who transcribes
+		// a note cannot chart a dose under their own name.
+		"nur.medication.administer",
+		// Completing an administration past a failed barcode check
+		// (SRS-NUR-008). Granted, because a scanner breaks at 03:00 and a
+		// medication round that stops is worse than one that is documented;
+		// the control that bites is the mandatory reason and the stored report,
+		// not scarcity of the permission.
+		"nur.medication.override",
+		// Restraints and transfusion are nursing acts carried out under a
+		// clinician's authorization, and the authorization is checked in the
+		// record rather than in the permission (SRS-NUR-013, SRS-NUR-014).
+		"nur.restraint.manage",
+		"nur.transfusion.manage",
+		// Declaring downtime and reconciling the paper chart afterwards is the
+		// ward's job, and the ward is who knows the system has gone
+		// (SRS-NUR-018).
+		"nur.downtime.manage",
+	},
+
+	// A nurse manager runs the ward rather than the bedside.
+	RoleNurseManager: {
+		"empi.patient.read",
+		"enc.encounter.read",
+		"nur.record.read",
+		// Assignment and the acuity dashboard (SRS-NUR-016, SRS-NUR-017).
+		"nur.assignment.manage",
+		// Note what is absent: no nur.medication.administer. A manager who is
+		// also rostered to give medication holds the nurse role as well; the
+		// management role does not carry it, so "who may give a drug" stays
+		// answerable from the roles alone.
 	},
 }
 

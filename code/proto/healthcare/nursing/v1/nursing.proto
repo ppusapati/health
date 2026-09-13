@@ -1,0 +1,1720 @@
+// Nursing: assessments, flowsheets, fluid balance, risk scores, devices, the
+// medication administration record, tasks, handover, restraints, transfusion,
+// education, assignment and downtime.
+//
+// Owning context : nursing  (Master Engineering Registry)
+// Owning service : NursingService
+// Trace          : SRS-NUR-001 … SRS-NUR-018
+//
+// Two rules shape this contract.
+//
+// Every bedside record carries two timestamps — when the observation was true
+// of the patient, and when it reached the record — because SRS-NUR-003 requires
+// a late entry to be identified as late and to carry the actual observation
+// time. There is no single "timestamp" field anywhere in this file.
+//
+// A dose is identified by its order and its scheduled time, not by the
+// submission that recorded it, because SRS-NUR-018 requires that re-keying a
+// downtime paper chart twice cannot produce two administrations of the same
+// dose.
+syntax = "proto3";
+
+package healthcare.nursing.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ppusapati/health/code/gen/go/healthcare/nursing/v1;nursingv1";
+
+// A coded concept from a terminology.
+//
+// System and code together, never code alone.
+message Coding {
+  string system = 1;
+  // Pins the release: codes have been reassigned between revisions.
+  string version = 2;
+  string code = 3;
+  // A bare code on a screen is a screen clinicians stop reading.
+  string display = 4;
+}
+
+// A measured value with its unit.
+//
+// Inseparable: a potassium of 5 is ordinary in mmol/L and lethal in g/L.
+message Quantity {
+  double value = 1;
+  string unit = 2;
+}
+
+// Where a charted value came from.
+//
+// A monitor artefact and a nurse's count are both "a pulse of 140" and are not
+// equally trustworthy.
+enum EntrySource {
+  ENTRY_SOURCE_UNSPECIFIED = 0;
+  ENTRY_SOURCE_MANUAL = 1;
+  ENTRY_SOURCE_DEVICE = 2;
+  // Transcribed from a downtime paper chart (SRS-NUR-018).
+  ENTRY_SOURCE_PAPER = 3;
+  // Reported by the patient — a pain score. Not a measurement.
+  ENTRY_SOURCE_PATIENT = 4;
+}
+
+// One charted observation (SRS-NUR-003).
+message FlowsheetEntry {
+  string entry_id = 1;
+  string patient_id = 2;
+  string encounter_id = 3;
+  Coding code = 4;
+  Quantity value = 5;
+  string text_value = 6;
+  Coding coded_value = 7;
+  // When the observation was true of the patient. Supplied by the nurse and
+  // never defaulted to the clock.
+  google.protobuf.Timestamp observed_at = 8;
+  // When it reached the record. Server-assigned.
+  google.protobuf.Timestamp recorded_at = 9;
+  EntrySource source = 10;
+  string device_id = 11;
+  string recorded_by = 12;
+  // Required when the entry is late, because "the nurse was busy" and "found
+  // on paper during downtime" lead to different conclusions in a review.
+  string late_entry_reason = 13;
+  // Server-computed from the two times. On the wire so a chart can mark the
+  // entry without reimplementing the threshold.
+  bool late = 14;
+  int64 version = 15;
+}
+
+message ChartObservationRequest {
+  string patient_id = 1;
+  string encounter_id = 2;
+  Coding code = 3;
+  Quantity value = 4;
+  string text_value = 5;
+  Coding coded_value = 6;
+  google.protobuf.Timestamp observed_at = 7;
+  EntrySource source = 8;
+  string device_id = 9;
+  string late_entry_reason = 10;
+}
+
+message ChartObservationResponse {
+  FlowsheetEntry entry = 1;
+}
+
+message GetFlowsheetRequest {
+  string encounter_id = 1;
+  string patient_id = 2;
+  string code = 3;
+  google.protobuf.Timestamp observed_from = 4;
+  google.protobuf.Timestamp observed_to = 5;
+  int32 page_size = 6;
+}
+
+message GetFlowsheetResponse {
+  // Ordered by observation time, oldest first: the chart is a picture of the
+  // patient, not of the typing.
+  repeated FlowsheetEntry entries = 1;
+}
+
+// Whether fluid went in or out.
+enum FluidDirection {
+  FLUID_DIRECTION_UNSPECIFIED = 0;
+  FLUID_DIRECTION_INTAKE = 1;
+  FLUID_DIRECTION_OUTPUT = 2;
+}
+
+// One recorded volume (SRS-NUR-004).
+message FluidEntry {
+  string fluid_id = 1;
+  string patient_id = 2;
+  string encounter_id = 3;
+  FluidDirection direction = 4;
+  // Oral, intravenous, urine, drain. The balance is reported by category,
+  // because "2,400 ml out" means something different when it is all drain loss.
+  string category = 5;
+  // Always millilitres, converted on the way in.
+  double volume_ml = 6;
+  google.protobuf.Timestamp observed_at = 7;
+  google.protobuf.Timestamp recorded_at = 8;
+  string recorded_by = 9;
+  // The amendment trail (SRS-NUR-004). A correction is a new entry; this one
+  // stays, because the shift total handed over was computed from it.
+  string superseded_by_id = 10;
+  string supersedes_id = 11;
+  string amendment_reason = 12;
+  string voided_reason = 13;
+  int64 version = 14;
+}
+
+message RecordFluidRequest {
+  string patient_id = 1;
+  string encounter_id = 2;
+  FluidDirection direction = 3;
+  string category = 4;
+  double volume_ml = 5;
+  google.protobuf.Timestamp observed_at = 6;
+}
+
+message RecordFluidResponse {
+  FluidEntry entry = 1;
+}
+
+// Correcting a volume produces a replacement. There is no UpdateFluidEntry:
+// the original is evidence.
+message CorrectFluidRequest {
+  string fluid_id = 1;
+  double volume_ml = 2;
+  string reason = 3;
+}
+
+message CorrectFluidResponse {
+  FluidEntry correction = 1;
+}
+
+// A running total over a period (SRS-NUR-004).
+message FluidBalance {
+  google.protobuf.Timestamp from = 1;
+  google.protobuf.Timestamp to = 2;
+  double intake_ml = 3;
+  double output_ml = 4;
+  double net_ml = 5;
+  // The breakdown, keyed "intake:oral", "output:drain".
+  map<string, double> by_category = 6;
+  int32 counted = 7;
+}
+
+message GetFluidBalanceRequest {
+  string encounter_id = 1;
+  string patient_id = 2;
+  google.protobuf.Timestamp from = 3;
+  google.protobuf.Timestamp to = 4;
+}
+
+message GetFluidBalanceResponse {
+  FluidBalance balance = 1;
+}
+
+message GetFluidTrailRequest {
+  string encounter_id = 1;
+  string patient_id = 2;
+  google.protobuf.Timestamp from = 3;
+  google.protobuf.Timestamp to = 4;
+  int32 page_size = 5;
+}
+
+message GetFluidTrailResponse {
+  // Superseded and voided entries included: this is the audit view.
+  repeated FluidEntry entries = 1;
+}
+
+// What kind of nursing assessment.
+enum AssessmentKind {
+  ASSESSMENT_KIND_UNSPECIFIED = 0;
+  ASSESSMENT_KIND_ADMISSION = 1;
+  ASSESSMENT_KIND_SHIFT = 2;
+  ASSESSMENT_KIND_FOCUSED = 3;
+  ASSESSMENT_KIND_DISCHARGE = 4;
+}
+
+// One heading and the questions under it.
+message TemplateSection {
+  string heading = 1;
+  bool required = 2;
+  repeated string prompts = 3;
+}
+
+// A versioned assessment structure (SRS-NUR-001).
+message AssessmentTemplate {
+  string template_id = 1;
+  string version = 2;
+  string name = 3;
+  // Age band and service, which is what "age/service-specific" means. A
+  // max_age_years of zero means no upper bound.
+  int32 min_age_years = 4;
+  int32 max_age_years = 5;
+  string service_code = 6;
+  repeated TemplateSection sections = 7;
+  // A retired template can be read on old assessments but not chosen for a new
+  // one.
+  bool retired = 8;
+}
+
+message DefineAssessmentTemplateRequest {
+  AssessmentTemplate template = 1;
+}
+
+message DefineAssessmentTemplateResponse {
+  AssessmentTemplate template = 1;
+}
+
+message ListAssessmentTemplatesRequest {
+  string service_code = 1;
+  bool include_retired = 2;
+  int32 page_size = 3;
+}
+
+message ListAssessmentTemplatesResponse {
+  repeated AssessmentTemplate templates = 1;
+}
+
+message RetireAssessmentTemplateRequest {
+  string template_id = 1;
+  string version = 2;
+}
+
+message RetireAssessmentTemplateResponse {}
+
+message Answer {
+  string heading = 1;
+  string prompt = 2;
+  string value = 3;
+  Coding coded = 4;
+}
+
+// One completed nursing assessment (SRS-NUR-001).
+message Assessment {
+  string assessment_id = 1;
+  string patient_id = 2;
+  string encounter_id = 3;
+  AssessmentKind kind = 4;
+  // Stored, not resolved at read time: a template edited afterwards would
+  // otherwise silently restate what was asked.
+  string template_id = 5;
+  string template_version = 6;
+  repeated Answer answers = 7;
+  google.protobuf.Timestamp assessed_at = 8;
+  google.protobuf.Timestamp recorded_at = 9;
+  string assessed_by = 10;
+  int64 version = 11;
+}
+
+message RecordAssessmentRequest {
+  string patient_id = 1;
+  string encounter_id = 2;
+  AssessmentKind kind = 3;
+  string template_id = 4;
+  string template_version = 5;
+  repeated Answer answers = 6;
+  google.protobuf.Timestamp assessed_at = 7;
+}
+
+message RecordAssessmentResponse {
+  Assessment assessment = 1;
+}
+
+message ListAssessmentsRequest {
+  string encounter_id = 1;
+  string patient_id = 2;
+  AssessmentKind kind = 3;
+  int32 page_size = 4;
+}
+
+message ListAssessmentsResponse {
+  repeated Assessment assessments = 1;
+}
+
+// What a risk scale measures.
+enum RiskDomain {
+  RISK_DOMAIN_UNSPECIFIED = 0;
+  RISK_DOMAIN_FALLS = 1;
+  RISK_DOMAIN_PRESSURE_INJURY = 2;
+  RISK_DOMAIN_PAIN = 3;
+  RISK_DOMAIN_NUTRITION = 4;
+  RISK_DOMAIN_DETERIORATION = 5;
+}
+
+// One factor a scale takes. The bounds catch a mis-keyed 40 in a 1–4 field
+// where it happens, rather than as a patient at implausible risk.
+message RiskInput {
+  string key = 1;
+  string label = 2;
+  int32 min = 3;
+  int32 max = 4;
+}
+
+// A total mapped onto a category.
+message RiskBand {
+  int32 from = 1;
+  int32 to = 2;
+  string label = 3;
+  // The band that requires action rather than observation.
+  bool escalate = 4;
+}
+
+// A named, versioned scoring instrument (SRS-NUR-005).
+message RiskScale {
+  string scale_id = 1;
+  string version = 2;
+  string name = 3;
+  RiskDomain domain = 4;
+  repeated RiskInput inputs = 5;
+  repeated RiskBand bands = 6;
+  // How long a score stays current. A Braden from four days ago is not an
+  // assessment of today's patient.
+  int64 reassess_after_seconds = 7;
+  bool retired = 8;
+}
+
+message DefineRiskScaleRequest {
+  RiskScale scale = 1;
+}
+
+message DefineRiskScaleResponse {
+  RiskScale scale = 1;
+}
+
+// One scored assessment (SRS-NUR-005).
+message RiskAssessment {
+  string risk_id = 1;
+  string patient_id = 2;
+  string encounter_id = 3;
+  string scale_id = 4;
+  string scale_version = 5;
+  RiskDomain domain = 6;
+  // The inputs as answered. Stored with the total, because a total on its own
+  // cannot be checked, explained or recomputed.
+  map<string, int32> inputs = 7;
+  int32 total = 8;
+  string band = 9;
+  // The band's flag captured at the time: a retune must not rewrite what the
+  // nurse was told.
+  bool escalate = 10;
+  google.protobuf.Timestamp assessed_at = 11;
+  google.protobuf.Timestamp recorded_at = 12;
+  string assessed_by = 13;
+  // When the score stops being current.
+  google.protobuf.Timestamp due_at = 14;
+  // A recalculation never overwrites.
+  string superseded_by_id = 15;
+  int64 version = 16;
+}
+
+message ScoreRiskRequest {
+  string patient_id = 1;
+  string encounter_id = 2;
+  string scale_id = 3;
+  string scale_version = 4;
+  map<string, int32> inputs = 5;
+  google.protobuf.Timestamp assessed_at = 6;
+}
+
+message ScoreRiskResponse {
+  RiskAssessment assessment = 1;
+}
+
+message ListRiskAssessmentsRequest {
+  string patient_id = 1;
+  RiskDomain domain = 2;
+  int32 page_size = 3;
+}
+
+message ListRiskAssessmentsResponse {
+  repeated RiskAssessment assessments = 1;
+}
+
+message ListDueReassessmentsRequest {
+  string encounter_id = 1;
+  int32 page_size = 2;
+}
+
+message ListDueReassessmentsResponse {
+  repeated RiskAssessment assessments = 1;
+}
+
+// What was inserted.
+enum DeviceKind {
+  DEVICE_KIND_UNSPECIFIED = 0;
+  DEVICE_KIND_CENTRAL_LINE = 1;
+  DEVICE_KIND_PERIPHERAL_LINE = 2;
+  DEVICE_KIND_URINARY_CATHETER = 3;
+  DEVICE_KIND_DRAIN = 4;
+  DEVICE_KIND_FEEDING_TUBE = 5;
+  DEVICE_KIND_ENDOTRACHEAL_TUBE = 6;
+  DEVICE_KIND_CHEST_TUBE = 7;
+}
+
+enum Laterality {
+  LATERALITY_UNSPECIFIED = 0;
+  LATERALITY_LEFT = 1;
+  LATERALITY_RIGHT = 2;
+  LATERALITY_BILATERAL = 3;
+  LATERALITY_NOT_APPLICABLE = 4;
+}
+
+// One episode of looking after a device. Never a proxy for the device being in
+// place.
+message DeviceCare {
+  string care_id = 1;
+  string kind = 2;
+  string finding = 3;
+  double output_ml = 4;
+  google.protobuf.Timestamp performed_at = 5;
+  string performed_by = 6;
+}
+
+// One line, tube, drain or catheter (SRS-NUR-006).
+message Device {
+  string device_id = 1;
+  string patient_id = 2;
+  string encounter_id = 3;
+  DeviceKind kind = 4;
+  string site = 5;
+  Laterality laterality = 6;
+  string size = 7;
+  // Identifies the product, so a recall can find the patients.
+  string lot = 8;
+  // The canonical dates. Device-days are computed from these and nothing else.
+  google.protobuf.Timestamp inserted_at = 9;
+  string inserted_by = 10;
+  google.protobuf.Timestamp removed_at = 11;
+  string removed_by = 12;
+  string removal_reason = 13;
+  repeated DeviceCare care = 14;
+  // Server-computed. The denominator of a published infection rate, counted
+  // once per calendar day the device was in place, insertion and removal days
+  // included.
+  int32 device_days = 15;
+  // Dwell to the minute, because a 72-hour cannula limit rounded to days lets a
+  // line sit two days past it.
+  int64 dwell_seconds = 16;
+  // Whether this kind counts towards a published infection rate.
+  bool surveillance_device = 17;
+  int64 version = 18;
+}
+
+message InsertDeviceRequest {
+  string patient_id = 1;
+  string encounter_id = 2;
+  DeviceKind kind = 3;
+  string site = 4;
+  Laterality laterality = 5;
+  string size = 6;
+  string lot = 7;
+  google.protobuf.Timestamp inserted_at = 8;
+}
+
+message InsertDeviceResponse {
+  Device device = 1;
+}
+
+message RemoveDeviceRequest {
+  string device_id = 1;
+  google.protobuf.Timestamp removed_at = 2;
+  string reason = 3;
+}
+
+message RemoveDeviceResponse {
+  Device device = 1;
+}
+
+message RecordDeviceCareRequest {
+  string device_id = 1;
+  string kind = 2;
+  string finding = 3;
+  double output_ml = 4;
+  google.protobuf.Timestamp performed_at = 5;
+}
+
+message RecordDeviceCareResponse {}
+
+message ListDevicesRequest {
+  string encounter_id = 1;
+  string patient_id = 2;
+  bool in_place_only = 3;
+  int32 page_size = 4;
+}
+
+message ListDevicesResponse {
+  repeated Device devices = 1;
+}
+
+// Where a medication order stands.
+enum OrderStatus {
+  ORDER_STATUS_UNSPECIFIED = 0;
+  ORDER_STATUS_DRAFT = 1;
+  ORDER_STATUS_ACTIVE = 2;
+  ORDER_STATUS_HELD = 3;
+  ORDER_STATUS_COMPLETED = 4;
+  ORDER_STATUS_CANCELLED = 5;
+}
+
+// What the nursing context needs to know about an order.
+//
+// A projection of the medication context, not a copy: nursing needs what to
+// give, when, and whether a pharmacist has verified it.
+message MedicationOrder {
+  string order_id = 1;
+  string patient_id = 2;
+  string encounter_id = 3;
+  Coding medication = 4;
+  Quantity dose = 5;
+  string route = 6;
+  string frequency = 7;
+  OrderStatus status = 8;
+  // The pharmacist's check. A separate field rather than a status value,
+  // because an order can be active and unverified and that distinction is what
+  // SRS-NUR-007 is about.
+  bool verified = 9;
+  string verified_by = 10;
+  google.protobuf.Timestamp verified_at = 11;
+  // As-needed: no schedule, which is why duplicate protection needs a second
+  // mechanism.
+  bool prn = 12;
+  google.protobuf.Timestamp starts_at = 13;
+  google.protobuf.Timestamp ends_at = 14;
+}
+
+// What happened to a scheduled dose (SRS-NUR-009).
+enum AdministrationOutcome {
+  ADMINISTRATION_OUTCOME_UNSPECIFIED = 0;
+  ADMINISTRATION_OUTCOME_ADMINISTERED = 1;
+  // Not given and will not be: the order was stopped, the drug unavailable.
+  ADMINISTRATION_OUTCOME_NOT_ADMINISTERED = 2;
+  // A clinical decision to withhold this dose. Distinct from not-administered
+  // because holding is an act of judgement somebody is answerable for.
+  ADMINISTRATION_OUTCOME_HELD = 3;
+  // The patient's decision, which is not the nurse's to record as a hold.
+  ADMINISTRATION_OUTCOME_REFUSED = 4;
+  // Given, outside the window. Its own outcome because the nurse asserting it
+  // was late is different evidence from a report deriving it.
+  ADMINISTRATION_OUTCOME_DELAYED = 5;
+}
+
+// The barcode check (SRS-NUR-008).
+message Verification {
+  // Read from the wristband, compared against the order's patient rather than
+  // against what the screen is showing — the screen is what the check exists to
+  // doubt.
+  string patient_scanned = 1;
+  string medication_scanned = 2;
+  // Distinguishes "the workflow ran and matched" from "the workflow did not
+  // run", which a pair of empty strings cannot.
+  bool performed = 3;
+  google.protobuf.Timestamp scanned_at = 4;
+}
+
+// An administration completed despite a failed or absent check (SRS-NUR-008).
+//
+// Stored as well as audited: the audit trail answers "who did this", and this
+// answers "how often, on which ward, for which drugs".
+message Override {
+  string reason = 1;
+  string by = 2;
+  google.protobuf.Timestamp at = 3;
+  // What did not match, captured at the time. The wristband gets reprinted; the
+  // report must still show what the nurse was looking at.
+  bool patient_mismatch = 4;
+  bool medication_mismatch = 5;
+  bool not_scanned = 6;
+}
+
+// One dose's record (SRS-NUR-009).
+message Administration {
+  string administration_id = 1;
+  string patient_id = 2;
+  string encounter_id = 3;
+  string order_id = 4;
+  Coding medication = 5;
+  // What the order asked for.
+  Quantity scheduled_dose = 6;
+  google.protobuf.Timestamp scheduled_at = 7;
+  // What actually happened. Both kept, which is the whole of SRS-NUR-009.
+  Quantity given_dose = 8;
+  google.protobuf.Timestamp given_at = 9;
+  string route = 10;
+  string site = 11;
+  AdministrationOutcome outcome = 12;
+  string reason = 13;
+  Verification verification = 14;
+  Override override = 15;
+  // Deduplicates a replayed PRN submission during downtime reconciliation,
+  // where there is no scheduled time to key on (SRS-NUR-018).
+  string idempotency_key = 16;
+  // A record reconstructed from paper hours later is weaker evidence than one
+  // charted at the bedside, and a reviewer should see which they are reading.
+  bool recorded_offline = 17;
+  string administered_by = 18;
+  string witnessed_by = 19;
+  google.protobuf.Timestamp recorded_at = 20;
+  // Server-computed from the scheduled and actual times against the facility's
+  // policy.
+  bool late = 21;
+  int64 version = 22;
+}
+
+// What a facility requires before a dose is completed (SRS-NUR-008).
+message AdministrationPolicy {
+  // On by default: a safety control that has to be switched on is a control
+  // that is off in the wards that most need it.
+  bool barcode_required = 1;
+  // A facility that turns this off has decided a mismatch is never given
+  // through, which is a defensible position the system must be able to hold.
+  bool override_allowed = 2;
+  int64 late_after_seconds = 3;
+}
+
+// One entry on the medication round (SRS-NUR-007).
+message DueDose {
+  MedicationOrder order = 1;
+  google.protobuf.Timestamp scheduled_at = 2;
+  // What has already been given. A round that does not show this invites the
+  // dose being given twice.
+  Administration given = 3;
+  bool outstanding = 4;
+  bool overdue = 5;
+}
+
+message GetMedicationRoundRequest {
+  string encounter_id = 1;
+  string patient_id = 2;
+  string facility_id = 3;
+  google.protobuf.Timestamp from = 4;
+  google.protobuf.Timestamp to = 5;
+}
+
+message GetMedicationRoundResponse {
+  repeated DueDose doses = 1;
+  AdministrationPolicy policy = 2;
+}
+
+message AdministerRequest {
+  string order_id = 1;
+  string facility_id = 2;
+  google.protobuf.Timestamp scheduled_at = 3;
+  Quantity given_dose = 4;
+  google.protobuf.Timestamp given_at = 5;
+  string route = 6;
+  string site = 7;
+  AdministrationOutcome outcome = 8;
+  string reason = 9;
+  Verification verification = 10;
+  // Supplied only when the nurse has decided to proceed past a failed or absent
+  // check. Its presence changes which permission is required.
+  string override_reason = 11;
+  string witnessed_by = 12;
+  string idempotency_key = 13;
+  bool offline = 14;
+}
+
+message AdministerResponse {
+  Administration administration = 1;
+}
+
+message ListAdministrationsRequest {
+  string encounter_id = 1;
+  string patient_id = 2;
+  string order_id = 3;
+  int32 page_size = 4;
+}
+
+message ListAdministrationsResponse {
+  repeated Administration administrations = 1;
+}
+
+message GetOverrideReportRequest {
+  google.protobuf.Timestamp from = 1;
+  google.protobuf.Timestamp to = 2;
+  int32 page_size = 3;
+}
+
+message GetOverrideReportResponse {
+  repeated Administration administrations = 1;
+}
+
+message SetAdministrationPolicyRequest {
+  string facility_id = 1;
+  AdministrationPolicy policy = 2;
+}
+
+message SetAdministrationPolicyResponse {}
+
+// How urgent a piece of nursing work is.
+enum TaskPriority {
+  TASK_PRIORITY_UNSPECIFIED = 0;
+  TASK_PRIORITY_ROUTINE = 1;
+  TASK_PRIORITY_URGENT = 2;
+  // The tier that escalates. Reserved for work where being late is itself
+  // harm.
+  TASK_PRIORITY_CRITICAL = 3;
+}
+
+enum TaskStatus {
+  TASK_STATUS_UNSPECIFIED = 0;
+  TASK_STATUS_PENDING = 1;
+  TASK_STATUS_DONE = 2;
+  // Deliberately not carried out. Distinct from pending, because a task nobody
+  // did and a task somebody decided against are different facts.
+  TASK_STATUS_NOT_DONE = 3;
+  TASK_STATUS_CANCELLED = 4;
+}
+
+// One piece of nursing work (SRS-NUR-011).
+message NursingTask {
+  string task_id = 1;
+  string patient_id = 2;
+  string encounter_id = 3;
+  string description = 4;
+  TaskPriority priority = 5;
+  google.protobuf.Timestamp due_at = 6;
+  // Where the task came from, so completing it can close what raised it.
+  string source_kind = 7;
+  string source_id = 8;
+  int64 recur_every_seconds = 9;
+  google.protobuf.Timestamp recur_until = 10;
+  TaskStatus status = 11;
+  // What was observed or done, not merely that a box was ticked.
+  string evidence = 12;
+  google.protobuf.Timestamp completed_at = 13;
+  string completed_by = 14;
+  string not_done_reason = 15;
+  string assigned_to = 16;
+  google.protobuf.Timestamp escalated_at = 17;
+  string escalated_to = 18;
+  bool overdue = 19;
+  int64 version = 20;
+}
+
+message CreateTaskRequest {
+  string patient_id = 1;
+  string encounter_id = 2;
+  string description = 3;
+  TaskPriority priority = 4;
+  google.protobuf.Timestamp due_at = 5;
+  int64 recur_every_seconds = 6;
+  google.protobuf.Timestamp recur_until = 7;
+  string assigned_to = 8;
+}
+
+message CreateTaskResponse {
+  NursingTask task = 1;
+}
+
+message CompleteTaskRequest {
+  string task_id = 1;
+  string evidence = 2;
+}
+
+message CompleteTaskResponse {
+  // The next occurrence, where the task recurs. Absent for a one-off.
+  NursingTask next = 1;
+}
+
+message SkipTaskRequest {
+  string task_id = 1;
+  string reason = 2;
+}
+
+message SkipTaskResponse {}
+
+message GetWorklistRequest {
+  string encounter_id = 1;
+  string assigned_to = 2;
+  bool pending_only = 3;
+  int32 page_size = 4;
+}
+
+message GetWorklistResponse {
+  // Most urgent first, then by how overdue.
+  repeated NursingTask tasks = 1;
+}
+
+message EscalateOverdueWorkRequest {
+  string escalate_to = 1;
+  int32 page_size = 2;
+}
+
+message EscalateOverdueWorkResponse {
+  repeated NursingTask escalated = 1;
+}
+
+// A measurable target.
+message PlanGoal {
+  string goal_id = 1;
+  string description = 2;
+  google.protobuf.Timestamp target_date = 3;
+  bool met = 4;
+  string evaluation = 5;
+}
+
+// A planned nursing action. The frequency is what turns the plan into work.
+message Intervention {
+  string intervention_id = 1;
+  string description = 2;
+  // Zero means continuous or as-needed, and schedules nothing.
+  int64 every_seconds = 3;
+  TaskPriority priority = 4;
+  string owner = 5;
+}
+
+message PlanProblem {
+  string problem_id = 1;
+  string description = 2;
+  Coding coded = 3;
+  repeated PlanGoal goals = 4;
+  repeated Intervention interventions = 5;
+  bool resolved = 6;
+}
+
+enum PlanStatus {
+  PLAN_STATUS_UNSPECIFIED = 0;
+  PLAN_STATUS_ACTIVE = 1;
+  PLAN_STATUS_COMPLETED = 2;
+  PLAN_STATUS_CANCELLED = 3;
+}
+
+// A nursing plan of care (SRS-NUR-002).
+message CarePlan {
+  string plan_id = 1;
+  string patient_id = 2;
+  string encounter_id = 3;
+  string title = 4;
+  repeated PlanProblem problems = 5;
+  PlanStatus status = 6;
+  google.protobuf.Timestamp created_at = 7;
+  string created_by = 8;
+  google.protobuf.Timestamp reviewed_at = 9;
+  string reviewed_by = 10;
+  string evaluation = 11;
+  int64 version = 12;
+}
+
+message CreateCarePlanRequest {
+  string patient_id = 1;
+  string encounter_id = 2;
+  string title = 3;
+  repeated PlanProblem problems = 4;
+  // How far ahead to schedule the plan's work. A shift by default; a week at
+  // most.
+  google.protobuf.Timestamp schedule_until = 5;
+}
+
+message CreateCarePlanResponse {
+  CarePlan plan = 1;
+}
+
+message ReviewCarePlanRequest {
+  string plan_id = 1;
+  string evaluation = 2;
+}
+
+message ReviewCarePlanResponse {
+  CarePlan plan = 1;
+}
+
+message ListCarePlansRequest {
+  string encounter_id = 1;
+  string patient_id = 2;
+  bool active_only = 3;
+  int32 page_size = 4;
+}
+
+message ListCarePlansResponse {
+  repeated CarePlan plans = 1;
+}
+
+// The working period a handover runs between.
+message Shift {
+  string code = 1;
+  google.protobuf.Timestamp starts_at = 2;
+  google.protobuf.Timestamp ends_at = 3;
+}
+
+message HandoverDevice {
+  string device_id = 1;
+  DeviceKind kind = 2;
+  string site = 3;
+  google.protobuf.Timestamp inserted_at = 4;
+  int32 device_days = 5;
+}
+
+message HandoverTask {
+  string task_id = 1;
+  string description = 2;
+  TaskPriority priority = 3;
+  google.protobuf.Timestamp due_at = 4;
+  bool overdue = 5;
+}
+
+// One shift's handover for one patient (SRS-NUR-010).
+//
+// A stored snapshot rather than a live view: rendered live, the handover
+// acknowledged at 20:00 shows something different at 23:00.
+message Handover {
+  string handover_id = 1;
+  string patient_id = 2;
+  string encounter_id = 3;
+  string unit_id = 4;
+  Shift from_shift = 5;
+  Shift to_shift = 6;
+  string situation = 7;
+  string background = 8;
+  string assessment = 9;
+  // The part the incoming nurse acts on.
+  string recommendation = 10;
+  repeated string critical_risks = 11;
+  repeated string outstanding = 12;
+  // Captured by the server from the ward's state, so a handover cannot quietly
+  // omit the line that has been in for nine days.
+  repeated HandoverDevice devices = 13;
+  repeated HandoverTask pending_tasks = 14;
+  google.protobuf.Timestamp composed_at = 15;
+  string composed_by = 16;
+  // The acceptance criterion, and the reason this is a record rather than a
+  // report.
+  google.protobuf.Timestamp acknowledged_at = 17;
+  string acknowledged_by = 18;
+  string questions = 19;
+  int64 version = 20;
+}
+
+message ComposeHandoverRequest {
+  string patient_id = 1;
+  string encounter_id = 2;
+  string unit_id = 3;
+  Shift from_shift = 4;
+  Shift to_shift = 5;
+  string situation = 6;
+  string background = 7;
+  string assessment = 8;
+  string recommendation = 9;
+  repeated string critical_risks = 10;
+  repeated string outstanding = 11;
+}
+
+message ComposeHandoverResponse {
+  Handover handover = 1;
+}
+
+message AcknowledgeHandoverRequest {
+  string handover_id = 1;
+  string questions = 2;
+}
+
+message AcknowledgeHandoverResponse {
+  Handover handover = 1;
+}
+
+message ListHandoversRequest {
+  string encounter_id = 1;
+  bool unacknowledged_only = 2;
+  int32 page_size = 3;
+}
+
+message ListHandoversResponse {
+  repeated Handover handovers = 1;
+}
+
+enum RestraintKind {
+  RESTRAINT_KIND_UNSPECIFIED = 0;
+  RESTRAINT_KIND_PHYSICAL = 1;
+  RESTRAINT_KIND_CHEMICAL = 2;
+  RESTRAINT_KIND_SECLUSION = 3;
+}
+
+// The clinician's order for a restraint (SRS-NUR-013).
+//
+// Time-bounded by construction: expires_at is not optional.
+message RestraintAuthorization {
+  string authorized_by = 1;
+  google.protobuf.Timestamp authorized_at = 2;
+  google.protobuf.Timestamp expires_at = 3;
+  // The behaviour that justified it. "Agitated" is not an indication.
+  string indication = 4;
+}
+
+message RestraintCheck {
+  string check_id = 1;
+  google.protobuf.Timestamp observed_at = 2;
+  string observed_by = 3;
+  // Circulation, skin integrity, hydration, toileting and behaviour.
+  string findings = 4;
+  // A check that never asks whether the restraint is still needed keeps
+  // patients restrained.
+  string continued_reason = 5;
+}
+
+// One episode of restraint (SRS-NUR-013).
+message Restraint {
+  string restraint_id = 1;
+  string patient_id = 2;
+  string encounter_id = 3;
+  RestraintKind kind = 4;
+  string description = 5;
+  RestraintAuthorization authorization = 6;
+  // Appended, because how many times a restraint has been renewed is the
+  // number a review board asks for.
+  repeated RestraintAuthorization renewals = 7;
+  google.protobuf.Timestamp started_at = 8;
+  string started_by = 9;
+  int64 monitor_every_seconds = 10;
+  repeated RestraintCheck monitoring = 11;
+  google.protobuf.Timestamp discontinued_at = 12;
+  string discontinued_by = 13;
+  string discontinued_reason = 14;
+  // An expired authorization does not make the restraint inactive: the patient
+  // is still restrained, and what has lapsed is the permission.
+  bool authorization_expired = 15;
+  bool monitoring_overdue = 16;
+  int64 version = 17;
+}
+
+message ApplyRestraintRequest {
+  string patient_id = 1;
+  string encounter_id = 2;
+  RestraintKind kind = 3;
+  string description = 4;
+  RestraintAuthorization authorization = 5;
+  google.protobuf.Timestamp started_at = 6;
+  int64 monitor_every_seconds = 7;
+}
+
+message ApplyRestraintResponse {
+  Restraint restraint = 1;
+}
+
+message RenewRestraintRequest {
+  string restraint_id = 1;
+  RestraintAuthorization authorization = 2;
+}
+
+message RenewRestraintResponse {
+  Restraint restraint = 1;
+}
+
+message CheckRestraintRequest {
+  string restraint_id = 1;
+  google.protobuf.Timestamp observed_at = 2;
+  string findings = 3;
+  string continued_reason = 4;
+}
+
+message CheckRestraintResponse {}
+
+message DiscontinueRestraintRequest {
+  string restraint_id = 1;
+  google.protobuf.Timestamp discontinued_at = 2;
+  string reason = 3;
+}
+
+message DiscontinueRestraintResponse {
+  Restraint restraint = 1;
+}
+
+message ListRestraintsRequest {
+  string encounter_id = 1;
+  bool active_only = 2;
+  int32 page_size = 3;
+}
+
+message ListRestraintsResponse {
+  repeated Restraint restraints = 1;
+}
+
+message GetRestraintAlertsRequest {
+  int32 page_size = 1;
+}
+
+message GetRestraintAlertsResponse {
+  // Still-active restraints whose authorization has lapsed.
+  repeated Restraint restraints = 1;
+}
+
+enum TransfusionStatus {
+  TRANSFUSION_STATUS_UNSPECIFIED = 0;
+  TRANSFUSION_STATUS_IN_PROGRESS = 1;
+  TRANSFUSION_STATUS_COMPLETED = 2;
+  // Halted for a suspected reaction. Distinct from completed: the unit did not
+  // go in, and the remainder goes back to the laboratory.
+  TRANSFUSION_STATUS_STOPPED = 3;
+}
+
+// One set of monitoring observations (SRS-NUR-014).
+message TransfusionObservation {
+  string observation_id = 1;
+  google.protobuf.Timestamp observed_at = 2;
+  string observed_by = 3;
+  double temperature_c = 4;
+  int32 pulse = 5;
+  int32 systolic_bp = 6;
+  int32 respiratory_rate = 7;
+  // The pre-transfusion set, without which a temperature of 38.1 cannot be read
+  // as a rise.
+  bool baseline = 8;
+  string notes = 9;
+}
+
+message TransfusionReaction {
+  google.protobuf.Timestamp reported_at = 1;
+  string reported_by = 2;
+  string features = 3;
+  // The first action — stop, keep the line open — is the one that matters.
+  string action_taken = 4;
+  // The step that gets forgotten and the one the investigation needs.
+  bool unit_returned = 5;
+}
+
+// One blood-product episode (SRS-NUR-014).
+message Transfusion {
+  string transfusion_id = 1;
+  string patient_id = 2;
+  string encounter_id = 3;
+  // The pack's own identifier, which links this to the blood bank and forward
+  // to a look-back investigation.
+  string unit_number = 4;
+  Coding product = 5;
+  // As issued, not as the patient's record says: what matters in a reaction
+  // investigation is what was hung.
+  string abo_group = 6;
+  string rhd = 7;
+  double volume_ml = 8;
+  google.protobuf.Timestamp started_at = 9;
+  string started_by = 10;
+  // The second person at the bedside check.
+  string checked_by = 11;
+  repeated TransfusionObservation observations = 12;
+  TransfusionStatus status = 13;
+  google.protobuf.Timestamp ended_at = 14;
+  TransfusionReaction reaction = 15;
+  int64 version = 16;
+}
+
+message StartTransfusionRequest {
+  string patient_id = 1;
+  string encounter_id = 2;
+  string unit_number = 3;
+  Coding product = 4;
+  string abo_group = 5;
+  string rhd = 6;
+  double volume_ml = 7;
+  google.protobuf.Timestamp started_at = 8;
+  string checked_by = 9;
+  TransfusionObservation baseline = 10;
+}
+
+message StartTransfusionResponse {
+  Transfusion transfusion = 1;
+}
+
+message ObserveTransfusionRequest {
+  string transfusion_id = 1;
+  TransfusionObservation observation = 2;
+}
+
+message ObserveTransfusionResponse {
+  Transfusion transfusion = 1;
+}
+
+// Stopping and reporting are one operation, because they are one act at the
+// bedside and splitting them creates a window in which the system believes
+// blood is still running into a patient having a reaction.
+message ReportTransfusionReactionRequest {
+  string transfusion_id = 1;
+  string features = 2;
+  string action_taken = 3;
+  bool unit_returned = 4;
+}
+
+message ReportTransfusionReactionResponse {
+  Transfusion transfusion = 1;
+}
+
+message CompleteTransfusionRequest {
+  string transfusion_id = 1;
+  google.protobuf.Timestamp ended_at = 2;
+}
+
+message CompleteTransfusionResponse {
+  Transfusion transfusion = 1;
+}
+
+enum WoundKind {
+  WOUND_KIND_UNSPECIFIED = 0;
+  WOUND_KIND_PRESSURE_INJURY = 1;
+  WOUND_KIND_SURGICAL = 2;
+  WOUND_KIND_TRAUMA = 3;
+  WOUND_KIND_BURN = 4;
+  WOUND_KIND_ULCER = 5;
+  WOUND_KIND_OTHER = 6;
+}
+
+// A photograph of a wound is a photograph of a patient (SRS-NUR-012).
+message WoundImage {
+  string image_id = 1;
+  // Points at the clinical consent covering photography. Not a boolean: a
+  // boolean cannot be checked against a consent that was later withdrawn.
+  string consent_id = 2;
+  // Addresses the bytes. The bytes never travel through this contract.
+  string storage_key = 3;
+  string content_type = 4;
+  google.protobuf.Timestamp captured_at = 5;
+  string captured_by = 6;
+  // A series of images is the evidence of healing, so an image is added and
+  // never replaced.
+  int32 sequence = 7;
+}
+
+// One assessment of a wound or pressure area (SRS-NUR-012).
+message WoundAssessment {
+  string wound_assessment_id = 1;
+  string patient_id = 2;
+  string encounter_id = 3;
+  // Groups the assessments of one wound over time.
+  string wound_id = 4;
+  string location = 5;
+  Coding body_map_code = 6;
+  Laterality laterality = 7;
+  WoundKind kind = 8;
+  // Required for a pressure injury: one charted without a stage is one nobody
+  // reports.
+  string stage = 9;
+  double length_mm = 10;
+  double width_mm = 11;
+  double depth_mm = 12;
+  string appearance = 13;
+  string exudate = 14;
+  string surrounding_skin = 15;
+  int32 pain_score = 16;
+  bool pain_score_recorded = 17;
+  repeated WoundImage images = 18;
+  double area_mm2 = 19;
+  google.protobuf.Timestamp assessed_at = 20;
+  google.protobuf.Timestamp recorded_at = 21;
+  string assessed_by = 22;
+  int64 version = 23;
+}
+
+message AssessWoundRequest {
+  string patient_id = 1;
+  string encounter_id = 2;
+  string wound_id = 3;
+  string location = 4;
+  Coding body_map_code = 5;
+  Laterality laterality = 6;
+  WoundKind kind = 7;
+  string stage = 8;
+  double length_mm = 9;
+  double width_mm = 10;
+  double depth_mm = 11;
+  string appearance = 12;
+  string exudate = 13;
+  string surrounding_skin = 14;
+  int32 pain_score = 15;
+  bool pain_score_recorded = 16;
+  google.protobuf.Timestamp assessed_at = 17;
+}
+
+message AssessWoundResponse {
+  WoundAssessment assessment = 1;
+}
+
+message AttachWoundImageRequest {
+  string wound_assessment_id = 1;
+  // Checked against the clinical consent record rather than taken on trust.
+  string consent_id = 2;
+  string storage_key = 3;
+  string content_type = 4;
+  google.protobuf.Timestamp captured_at = 5;
+}
+
+message AttachWoundImageResponse {
+  WoundAssessment assessment = 1;
+}
+
+message GetWoundHistoryRequest {
+  string patient_id = 1;
+  string wound_id = 2;
+  int32 page_size = 3;
+}
+
+message GetWoundHistoryResponse {
+  repeated WoundAssessment assessments = 1;
+}
+
+enum Learner {
+  LEARNER_UNSPECIFIED = 0;
+  LEARNER_PATIENT = 1;
+  LEARNER_FAMILY = 2;
+  LEARNER_CARER = 3;
+}
+
+// How well the teaching landed. The outcome, and the reason the record exists:
+// teaching delivered is not teaching received.
+enum Understanding {
+  UNDERSTANDING_UNSPECIFIED = 0;
+  // The strongest: the learner did it back.
+  UNDERSTANDING_DEMONSTRATED = 1;
+  UNDERSTANDING_VERBALISED = 2;
+  // Not a failure; the finding that schedules the next session.
+  UNDERSTANDING_NEEDS_REINFORCEMENT = 3;
+  UNDERSTANDING_UNABLE_TO_ASSESS = 4;
+}
+
+// One episode of patient or family teaching (SRS-NUR-015).
+message EducationRecord {
+  string education_id = 1;
+  string patient_id = 2;
+  string encounter_id = 3;
+  Coding topic = 4;
+  Learner learner = 5;
+  string learner_name = 6;
+  string method = 7;
+  Understanding understanding = 8;
+  string barriers = 9;
+  google.protobuf.Timestamp taught_at = 10;
+  string taught_by = 11;
+  int64 version = 12;
+}
+
+message RecordEducationRequest {
+  string patient_id = 1;
+  string encounter_id = 2;
+  Coding topic = 3;
+  Learner learner = 4;
+  string learner_name = 5;
+  string method = 6;
+  Understanding understanding = 7;
+  string barriers = 8;
+  google.protobuf.Timestamp taught_at = 9;
+}
+
+message RecordEducationResponse {
+  EducationRecord record = 1;
+}
+
+message ReadinessCriterion {
+  string key = 1;
+  string label = 2;
+  bool met = 3;
+  string note = 4;
+}
+
+// The nursing view of whether a patient can go home (SRS-NUR-015).
+//
+// Assembled from the record rather than from a checklist somebody ticks, so a
+// criterion cannot be marked met by asserting it.
+message DischargeReadiness {
+  repeated ReadinessCriterion criteria = 1;
+  bool ready = 2;
+  google.protobuf.Timestamp assessed_at = 3;
+  string assessed_by = 4;
+}
+
+message GetDischargeReadinessRequest {
+  string encounter_id = 1;
+  string patient_id = 2;
+}
+
+message GetDischargeReadinessResponse {
+  DischargeReadiness readiness = 1;
+}
+
+// The kind of nursing responsibility. Authorization asks about the
+// relationship, not merely the presence of a row.
+enum CareRelationship {
+  CARE_RELATIONSHIP_UNSPECIFIED = 0;
+  CARE_RELATIONSHIP_PRIMARY = 1;
+  CARE_RELATIONSHIP_ASSOCIATE = 2;
+  CARE_RELATIONSHIP_COVERING = 3;
+  CARE_RELATIONSHIP_IN_CHARGE = 4;
+}
+
+// One nurse's responsibility for one patient (SRS-NUR-017).
+message NurseAssignment {
+  string assignment_id = 1;
+  string unit_id = 2;
+  string bed_id = 3;
+  string patient_id = 4;
+  string nurse_id = 5;
+  CareRelationship relationship = 6;
+  google.protobuf.Timestamp effective_from = 7;
+  google.protobuf.Timestamp effective_to = 8;
+  string assigned_by = 9;
+  string ended_reason = 10;
+  int64 version = 11;
+}
+
+message AssignNurseRequest {
+  string unit_id = 1;
+  string bed_id = 2;
+  string patient_id = 3;
+  string nurse_id = 4;
+  CareRelationship relationship = 5;
+  google.protobuf.Timestamp effective_from = 6;
+}
+
+message AssignNurseResponse {
+  NurseAssignment assignment = 1;
+}
+
+message EndAssignmentRequest {
+  string assignment_id = 1;
+  google.protobuf.Timestamp effective_to = 2;
+  string reason = 3;
+}
+
+message EndAssignmentResponse {}
+
+// Answered as of a time, because the question an incident review asks is "who
+// was looking after this patient at 03:40".
+message ListAssignmentsRequest {
+  string unit_id = 1;
+  string patient_id = 2;
+  string nurse_id = 3;
+  google.protobuf.Timestamp as_of = 4;
+  int32 page_size = 5;
+}
+
+message ListAssignmentsResponse {
+  repeated NurseAssignment assignments = 1;
+}
+
+// The named factors a workload figure is built from (SRS-NUR-016).
+message AcuityInputs {
+  int32 dependency_score = 1;
+  int32 open_tasks = 2;
+  int32 overdue_tasks = 3;
+  int32 devices = 4;
+  int32 high_risk = 5;
+  // Adds the time cost of donning and doffing, which is substantial and
+  // invisible in every other measure.
+  bool isolation = 6;
+}
+
+message AcuityWeights {
+  int32 dependency = 1;
+  int32 open_task = 2;
+  int32 overdue_task = 3;
+  int32 device = 4;
+  int32 high_risk = 5;
+  int32 isolation = 6;
+}
+
+message PatientAcuity {
+  string patient_id = 1;
+  AcuityInputs inputs = 2;
+  int32 score = 3;
+  // Carried with the figure, so two wards' numbers are comparable only when
+  // they were computed the same way.
+  AcuityWeights weights = 4;
+}
+
+// A ward's workload picture (SRS-NUR-016).
+//
+// A report, and nothing more. It carries no staffing recommendation and
+// triggers no assignment.
+message UnitAcuity {
+  string unit_id = 1;
+  google.protobuf.Timestamp as_of = 2;
+  // Busiest first: the list exists to direct attention.
+  repeated PatientAcuity patients = 3;
+  // Counted from live assignments, not from a roster: a roster says who was
+  // meant to be there.
+  int32 nurses_on_duty = 4;
+  int32 total = 5;
+  double per_nurse = 6;
+  // False when nobody is on duty. A ward with no nurses assigned is not a ward
+  // with zero workload per nurse.
+  bool per_nurse_available = 7;
+}
+
+message AcuityPatientInput {
+  string patient_id = 1;
+  string encounter_id = 2;
+  // Assessed rather than derived, so the caller supplies them; everything else
+  // is counted from the record.
+  int32 dependency_score = 3;
+  bool isolation = 4;
+}
+
+message GetUnitAcuityRequest {
+  string unit_id = 1;
+  repeated AcuityPatientInput patients = 2;
+}
+
+message GetUnitAcuityResponse {
+  UnitAcuity acuity = 1;
+}
+
+message SetAcuityWeightsRequest {
+  // Empty applies the weights to every unit in the tenant.
+  string unit_id = 1;
+  AcuityWeights weights = 2;
+}
+
+message SetAcuityWeightsResponse {}
+
+// One period during which a unit worked on paper (SRS-NUR-018).
+message DowntimeEpisode {
+  string episode_id = 1;
+  string unit_id = 2;
+  string reason = 3;
+  google.protobuf.Timestamp started_at = 4;
+  string started_by = 5;
+  google.protobuf.Timestamp ended_at = 6;
+  string ended_by = 7;
+  // Separate from ended_at, because the system coming back and the paper being
+  // typed in are hours apart and the gap is where the record is incomplete.
+  google.protobuf.Timestamp reconciled_at = 8;
+  string reconciled_by = 9;
+  int64 version = 10;
+}
+
+message DeclareDowntimeRequest {
+  string unit_id = 1;
+  string reason = 2;
+  google.protobuf.Timestamp started_at = 3;
+}
+
+message DeclareDowntimeResponse {
+  DowntimeEpisode episode = 1;
+}
+
+message EndDowntimeRequest {
+  string episode_id = 1;
+  google.protobuf.Timestamp ended_at = 2;
+}
+
+message EndDowntimeResponse {
+  DowntimeEpisode episode = 1;
+}
+
+message ReconcileDowntimeRequest {
+  string episode_id = 1;
+}
+
+message ReconcileDowntimeResponse {
+  string episode_id = 1;
+  string unit_id = 2;
+  google.protobuf.Timestamp run_at = 3;
+}
+
+message ListDowntimeRequest {
+  string unit_id = 1;
+  bool unreconciled_only = 2;
+  int32 page_size = 3;
+}
+
+message ListDowntimeResponse {
+  repeated DowntimeEpisode episodes = 1;
+}
+
+// A pair of unscheduled doses that may be one event typed twice.
+//
+// Reported, never rejected: two doses of PRN morphine an hour apart can be
+// entirely correct.
+message SuspectedDuplicate {
+  string first_id = 1;
+  string second_id = 2;
+  string order_id = 3;
+  int64 apart_seconds = 4;
+}
+
+message GetSuspectedDuplicatesRequest {
+  string encounter_id = 1;
+  string patient_id = 2;
+}
+
+message GetSuspectedDuplicatesResponse {
+  repeated SuspectedDuplicate duplicates = 1;
+}
+
+service NursingService {
+  // The bedside chart (SRS-NUR-003, SRS-NUR-004).
+  rpc ChartObservation(ChartObservationRequest) returns (ChartObservationResponse);
+  rpc GetFlowsheet(GetFlowsheetRequest) returns (GetFlowsheetResponse);
+  rpc RecordFluid(RecordFluidRequest) returns (RecordFluidResponse);
+  rpc CorrectFluid(CorrectFluidRequest) returns (CorrectFluidResponse);
+  rpc GetFluidBalance(GetFluidBalanceRequest) returns (GetFluidBalanceResponse);
+  rpc GetFluidTrail(GetFluidTrailRequest) returns (GetFluidTrailResponse);
+
+  // Assessments and risk scores (SRS-NUR-001, SRS-NUR-005).
+  rpc DefineAssessmentTemplate(DefineAssessmentTemplateRequest)
+      returns (DefineAssessmentTemplateResponse);
+  rpc ListAssessmentTemplates(ListAssessmentTemplatesRequest)
+      returns (ListAssessmentTemplatesResponse);
+  rpc RetireAssessmentTemplate(RetireAssessmentTemplateRequest)
+      returns (RetireAssessmentTemplateResponse);
+  rpc RecordAssessment(RecordAssessmentRequest) returns (RecordAssessmentResponse);
+  rpc ListAssessments(ListAssessmentsRequest) returns (ListAssessmentsResponse);
+  rpc DefineRiskScale(DefineRiskScaleRequest) returns (DefineRiskScaleResponse);
+  rpc ScoreRisk(ScoreRiskRequest) returns (ScoreRiskResponse);
+  rpc ListRiskAssessments(ListRiskAssessmentsRequest)
+      returns (ListRiskAssessmentsResponse);
+  rpc ListDueReassessments(ListDueReassessmentsRequest)
+      returns (ListDueReassessmentsResponse);
+
+  // Devices (SRS-NUR-006).
+  rpc InsertDevice(InsertDeviceRequest) returns (InsertDeviceResponse);
+  rpc RemoveDevice(RemoveDeviceRequest) returns (RemoveDeviceResponse);
+  rpc RecordDeviceCare(RecordDeviceCareRequest) returns (RecordDeviceCareResponse);
+  rpc ListDevices(ListDevicesRequest) returns (ListDevicesResponse);
+
+  // The medication administration record
+  // (SRS-NUR-007, SRS-NUR-008, SRS-NUR-009).
+  rpc GetMedicationRound(GetMedicationRoundRequest)
+      returns (GetMedicationRoundResponse);
+  rpc Administer(AdministerRequest) returns (AdministerResponse);
+  rpc ListAdministrations(ListAdministrationsRequest)
+      returns (ListAdministrationsResponse);
+  rpc GetOverrideReport(GetOverrideReportRequest) returns (GetOverrideReportResponse);
+  rpc SetAdministrationPolicy(SetAdministrationPolicyRequest)
+      returns (SetAdministrationPolicyResponse);
+
+  // Care plans and the worklist (SRS-NUR-002, SRS-NUR-011).
+  rpc CreateCarePlan(CreateCarePlanRequest) returns (CreateCarePlanResponse);
+  rpc ReviewCarePlan(ReviewCarePlanRequest) returns (ReviewCarePlanResponse);
+  rpc ListCarePlans(ListCarePlansRequest) returns (ListCarePlansResponse);
+  rpc CreateTask(CreateTaskRequest) returns (CreateTaskResponse);
+  rpc CompleteTask(CompleteTaskRequest) returns (CompleteTaskResponse);
+  rpc SkipTask(SkipTaskRequest) returns (SkipTaskResponse);
+  rpc GetWorklist(GetWorklistRequest) returns (GetWorklistResponse);
+  rpc EscalateOverdueWork(EscalateOverdueWorkRequest)
+      returns (EscalateOverdueWorkResponse);
+
+  // Handover (SRS-NUR-010).
+  rpc ComposeHandover(ComposeHandoverRequest) returns (ComposeHandoverResponse);
+  rpc AcknowledgeHandover(AcknowledgeHandoverRequest)
+      returns (AcknowledgeHandoverResponse);
+  rpc ListHandovers(ListHandoversRequest) returns (ListHandoversResponse);
+
+  // Restraints and transfusion (SRS-NUR-013, SRS-NUR-014).
+  rpc ApplyRestraint(ApplyRestraintRequest) returns (ApplyRestraintResponse);
+  rpc RenewRestraint(RenewRestraintRequest) returns (RenewRestraintResponse);
+  rpc CheckRestraint(CheckRestraintRequest) returns (CheckRestraintResponse);
+  rpc DiscontinueRestraint(DiscontinueRestraintRequest)
+      returns (DiscontinueRestraintResponse);
+  rpc ListRestraints(ListRestraintsRequest) returns (ListRestraintsResponse);
+  rpc GetRestraintAlerts(GetRestraintAlertsRequest)
+      returns (GetRestraintAlertsResponse);
+  rpc StartTransfusion(StartTransfusionRequest) returns (StartTransfusionResponse);
+  rpc ObserveTransfusion(ObserveTransfusionRequest)
+      returns (ObserveTransfusionResponse);
+  rpc ReportTransfusionReaction(ReportTransfusionReactionRequest)
+      returns (ReportTransfusionReactionResponse);
+  rpc CompleteTransfusion(CompleteTransfusionRequest)
+      returns (CompleteTransfusionResponse);
+
+  // Wounds, education and discharge (SRS-NUR-012, SRS-NUR-015).
+  rpc AssessWound(AssessWoundRequest) returns (AssessWoundResponse);
+  rpc AttachWoundImage(AttachWoundImageRequest) returns (AttachWoundImageResponse);
+  rpc GetWoundHistory(GetWoundHistoryRequest) returns (GetWoundHistoryResponse);
+  rpc RecordEducation(RecordEducationRequest) returns (RecordEducationResponse);
+  rpc GetDischargeReadiness(GetDischargeReadinessRequest)
+      returns (GetDischargeReadinessResponse);
+
+  // Assignment and acuity (SRS-NUR-016, SRS-NUR-017).
+  rpc AssignNurse(AssignNurseRequest) returns (AssignNurseResponse);
+  rpc EndAssignment(EndAssignmentRequest) returns (EndAssignmentResponse);
+  rpc ListAssignments(ListAssignmentsRequest) returns (ListAssignmentsResponse);
+  rpc GetUnitAcuity(GetUnitAcuityRequest) returns (GetUnitAcuityResponse);
+  rpc SetAcuityWeights(SetAcuityWeightsRequest) returns (SetAcuityWeightsResponse);
+
+  // Downtime (SRS-NUR-018).
+  rpc DeclareDowntime(DeclareDowntimeRequest) returns (DeclareDowntimeResponse);
+  rpc EndDowntime(EndDowntimeRequest) returns (EndDowntimeResponse);
+  rpc ReconcileDowntime(ReconcileDowntimeRequest) returns (ReconcileDowntimeResponse);
+  rpc ListDowntime(ListDowntimeRequest) returns (ListDowntimeResponse);
+  rpc GetSuspectedDuplicates(GetSuspectedDuplicatesRequest)
+      returns (GetSuspectedDuplicatesResponse);
+}
