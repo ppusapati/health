@@ -16,6 +16,7 @@ What this records is which requirements have working, tested implementations.
 | 3 | Scheduling | SRS-SCH-001 … 016 | **Complete** |
 | 4 | Encounter, clinical, nursing | SRS-ENC/CLN/NUR | **Complete** |
 | 5 | Orders, medication, billing | SRS-ORD/MED/BIL | **Complete** |
+| 6 | Platform blob storage | SRS-DAT-007 (and SRS-EMPI-010, CLN-014, NUR-012) | **Complete** |
 
 ## Sprint 1 — patient identity
 
@@ -2191,6 +2192,163 @@ and the pricing result names the package rather than the tariff. An exclusion wa
 simply never part of the bundle, so it keeps the tariff it would have had
 anyway. Getting these the same way round would either lose the negotiated rate or
 apply it to things nobody negotiated.
+
+
+## Sprint 6 — platform blob storage
+
+One package decides where every piece of binary content lives, and the three
+contexts that hold content — the patient index, the clinical record, nursing —
+stop each answering the question differently.
+
+Design record: [ADR-W1-009](../adr/0009-object-storage-is-one-configured-routing-table.md).
+
+| Requirement | What it asks for | State |
+|---|---|---|
+| SRS-DAT-007 | Object content in an encrypted object store; PostgreSQL keeps metadata, hash, classification, reference; missing or tampered object is detectable | **Complete**, with a bounded deviation — see below |
+| SRS-SEC-002 | Managed key recorded per object | **Complete** — every backend reports the KMS alias it encrypts under, and "" when it encrypts nothing rather than a field that implies it does |
+| SRS-EMPI-010 | Patient photograph | **Rewired** — the Sprint 2C filesystem adapter is now a class binding on the shared store |
+| SRS-CLN-014 | Clinical attachment | **Closed** — the server now stores the bytes; it previously recorded a key, size and digest the caller supplied |
+| SRS-NUR-012 | Wound image | **Closed** — same change, and the consent is now checked before the bytes are written rather than after |
+
+### What the store enforces
+
+- **Routing is by content class**, with a per-tenant override for residency that
+  outranks the class. A tenant whose contract says its records stay in one
+  jurisdiction cannot have one class of them written somewhere else because a
+  class default changed.
+- **Reads follow the key.** The backend is in the reference, so repointing a
+  class leaves everything written before the change readable.
+- **The digest is in the reference**, and every read re-hashes and refuses to
+  return content that does not match — no bytes come back alongside the error.
+- **Keys are minted by the store**: 128 random bits, tenant-prefixed, derived
+  from nothing. A key computed from the patient would leak the patient in every
+  log line carrying it; a content-addressed key would give two patients with
+  identical content one shared object, and withdrawing one consent would delete
+  the other patient's photograph.
+- **Another tenant's reference is NOT_FOUND**, not PERMISSION_DENIED, so a probe
+  cannot confirm that an object exists somewhere it cannot read.
+- **A caller cannot choose where anything points.** `AttachFile` and
+  `AttachWoundImage` refuse a supplied key, size or digest rather than ignoring
+  them.
+- **Misconfiguration is a boot failure**, including a class whose size limit
+  exceeds what the backend it routes to accepts, and including that check
+  applied to every tenant override.
+- **The filesystem backend writes through a temporary file and renames.** A
+  truncated object is one that exists, reads as the wrong content, and fails its
+  digest check for a reason nobody can distinguish from tampering.
+- **SigV4 is pinned to the published AWS test vector**, so a mistake in the
+  signing is a red test rather than a 403 in an environment nobody can debug
+  from outside.
+
+### Evidence
+
+| Behaviour | Test |
+|---|---|
+| Content comes back the way it went in | `TestContentComesBackTheWayItWentIn` |
+| A reference reveals nothing and repeats never | `TestAReferenceRevealsNothingAndRepeatsNever` |
+| Tampered content is refused and not returned | `TestTamperedContentIsRefusedAndNotReturned` |
+| An object stays readable after its class is repointed | `TestAnObjectStaysReadableAfterItsClassIsRepointed` |
+| A tenant pin outranks the class default | `TestATenantPinOutranksTheClassDefault` |
+| Another tenant's reference is not found rather than forbidden | `TestAnotherTenantsReferenceIsNotFoundRatherThanForbidden` |
+| A crafted reference cannot reach outside the store | `TestACraftedReferenceCannotReachOutsideTheStore` |
+| A class refuses content it does not hold | `TestAClassRefusesContentItDoesNotHold` |
+| Deleting twice succeeds twice | `TestDeletingTwiceSucceedsTwice` |
+| An object whose backend is gone says so | `TestAnObjectWhoseBackendIsGoneSaysSo` |
+| A misconfigured vault refuses to start | `TestAMisconfiguredVaultRefusesToStart` |
+| A backend name cannot forge a reference | `TestABackendNameCannotForgeAReference` |
+| A class too large for its backend fails at boot | `TestAClassTooLargeForItsBackendFailsAtBoot` |
+| Route agrees with what Put does | `TestRouteAgreesWithWhatPutDoes` |
+| A store needs a tenant scope | `TestAStoreNeedsATenantScope` |
+| Stored files are not readable by anybody else | `TestStoredFilesAreNotReadableByAnybodyElse` |
+| No partial files survive a write | `TestNoPartialFilesSurviveAWrite` |
+| SigV4 matches the published example | `TestSignV4MatchesThePublishedExample` |
+| The empty payload hash is right | `TestTheEmptyPayloadHashIsRight` |
+| URI encoding follows the signing rules | `TestURIEncodingFollowsTheSigningRules` |
+| An already-escaped path is not escaped twice | `TestAnAlreadyEscapedPathIsNotEscapedTwice` |
+| Host is always signed | `TestHostIsAlwaysSigned` |
+| A session token is signed | `TestASessionTokenIsSigned` |
+| An object round-trips through an S3-compatible store | `TestAnObjectRoundTripsThroughAnS3CompatibleStore` |
+| Encryption headers are sent and signed | `TestEncryptionHeadersAreSentAndSigned` |
+| Bucket addressing follows configuration | `TestBucketAddressingFollowsConfiguration` |
+| An overlong response is refused | `TestAnOverlongResponseIsRefused` |
+| A misconfigured S3 backend refuses to start | `TestAMisconfiguredS3BackendRefusesToStart` |
+| A signature round-trips through the database | `TestASignatureRoundTripsThroughTheDatabase` |
+| Oversized content is refused rather than redirected | `TestOversizedContentIsRefusedRatherThanRedirected` |
+| The inline cap cannot be raised by configuration | `TestTheInlineCapCannotBeRaisedByConfiguration` |
+| Inlined content shares the caller's transaction | `TestInlinedContentSharesTheCallersTransaction` |
+| Writing the same key twice succeeds | `TestWritingTheSameKeyTwiceSucceeds` |
+| The documented configuration assembles | `TestTheDocumentedConfigurationAssembles` |
+| No backends configured is not an error | `TestNoBackendsConfiguredIsNotAnError` |
+| Bad configuration is refused at startup | `TestBadConfigurationIsRefusedAtStartup` |
+| Configured limits are the ones enforced | `TestConfiguredLimitsAreTheOnesEnforced` |
+| No vault yields a nil store | `TestNoVaultYieldsANilStore` |
+| An attached file is stored by the server and described by what it stored | `TestAnAttachedFileIsStoredByTheServerAndDescribedByWhatItStored` |
+| A caller cannot choose where an attachment points | `TestACallerCannotChooseWhereAnAttachmentPoints` |
+| A consented wound photograph is stored by the server | `TestAConsentedWoundPhotographIsStoredByTheServer` |
+| A nurse cannot choose where a wound photograph points | `TestANurseCannotChooseWhereAWoundPhotographPoints` |
+| Object content stays out of the relational schema | `TestNoBlobContentInRelationalSchema` |
+
+### Decisions taken against the backlog
+
+**A bounded, documented deviation from SRS-DAT-007.** The requirement is a MUST,
+and the PostgreSQL backend breaks it: content up to 64 KiB is stored in a
+`bytea` column. The deviation is deliberate and it is capped. The rule's actual
+concern is operational — a scanned report or a radiograph in a `bytea` column
+takes the database's whole profile with it, backups grow from minutes to hours,
+replication lag becomes a function of how many studies were taken today, and a
+restore drill nobody can finish inside a maintenance window stops being run.
+None of that follows from a two-kilobyte signature, and for content that small
+the argument runs the other way: an object store is a second system that can be
+unavailable and can be restored to a different instant than the database, and a
+consent signature restored to a different instant than the consent it signs is a
+record that silently disagrees with itself.
+
+The cap is enforced three times because a limit is lost in three different ways:
+by the backend, so the error says what to do instead; by `NewVault`, so a class
+routed there whose limit exceeds it fails at boot; and by a `CHECK` constraint
+in the migration, so raising it takes a migration and a review rather than an
+environment variable. `NewPostgres` refuses a configured limit above the
+constraint outright, so there is no configuration that passes the boot check and
+then fails on the constraint. The `content bytea` column is allowlisted in
+`TestNoBlobContentInRelationalSchema` by migration *and* column name — the bare
+word "content" is the obvious name for exactly what that rule exists to forbid,
+and an entry for the word alone would silently permit every future migration
+that reached for it.
+
+**Reads resolve the backend from the reference, not from configuration.** This
+is the decision that makes changing a backend a safe operation rather than a
+migration. Without it, repointing wound images from the filesystem to S3 makes
+every image taken before the change report as missing, while the bytes sit
+untouched on the disk — and "missing" is how that gets escalated as data loss.
+The cost is that the backend name is baked into every stored reference and
+renaming a backend strands everything written under the old name, which is why
+`NewVault` refuses a name containing the reference separator and why the name is
+documented as permanent.
+
+**Signing is implemented rather than imported.** The client makes three requests
+against an endpoint the deployment names. The AWS SDK would bring a large
+dependency tree with its own retry, credential-chain and endpoint resolution for
+that, on its own release cadence. The signing algorithm is small, has been
+stable since 2012, and is published with test vectors — and it is pinned here by
+one of them, which is the difference between a signer that agrees with itself
+and one that is correct. It also makes MinIO and Ceph behave identically to AWS,
+which a system that has to run in a hospital's own rack needs. The cost is named
+in the ADR: SigV4A and credentials from IRSA or IMDS are work rather than a
+dependency bump, and either is a reason to revisit.
+
+**Attachments travel in the request; imaging will not.** A unary call carrying
+an 8 MiB scan is acceptable and a presigned upload would be better; a unary call
+carrying a CT series is not acceptable at any size limit. This package buffers
+deliberately — every current caller holds the content in memory already — and
+says so rather than offering an `io.Reader` that three backends would read to
+the end anyway. When imaging arrives it gets a streaming port and presigned
+uploads, not a larger message.
+
+**The consent is checked before the bytes are written.** `CanAttachImage` was
+split out of `AttachImage` for this. Writing an unconsented photograph of a
+patient and deleting it again on refusal leaves the bytes on a disk, in a
+bucket's version history or in a replica — which is precisely what the consent
+was about.
 
 ## Wave-0 capabilities Wave 1 consumes
 

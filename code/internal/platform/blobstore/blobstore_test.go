@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ppusapati/health/code/internal/platform/authctx"
 	"github.com/ppusapati/health/code/internal/platform/blobstore"
 )
 
@@ -70,41 +69,6 @@ func TestTruncatedContentIsRejected(t *testing.T) {
 
 	if _, err := blobstore.Verify(m, bytes.NewReader(content[:5])); !errors.Is(err, blobstore.ErrDigestMismatch) {
 		t.Fatalf("want ErrDigestMismatch for truncated content, got %v", err)
-	}
-}
-
-// The tenant is the first path segment so a bucket policy can grant access per
-// tenant prefix — defence behind the application's own scoping.
-func TestKeyIsTenantPrefixedAndNotClientChosen(t *testing.T) {
-	scope := authctx.NewSession(authctx.Session{
-		SubjectID: "clerk", TenantID: "tenant-a",
-	}).TenantScope()
-
-	key := blobstore.Key(scope, "consent_form", "obj-1")
-	if !strings.HasPrefix(key, "tenant-a/") {
-		t.Fatalf("key %q does not start with the tenant prefix", key)
-	}
-	if !strings.HasSuffix(key, "/obj-1") {
-		t.Fatalf("key %q does not end with the object id", key)
-	}
-
-	// An owner type carrying path syntax must not escape the tenant prefix.
-	// Traversal here would put one tenant's object under another's prefix,
-	// which is exactly what the bucket policy relies on not happening.
-	hostile := blobstore.Key(scope, "../../other-tenant", "obj-2")
-	if strings.Contains(hostile, "..") {
-		t.Fatalf("path traversal survived sanitisation: %q", hostile)
-	}
-	if !strings.HasPrefix(hostile, "tenant-a/") {
-		t.Fatalf("a crafted owner type escaped the tenant prefix: %q", hostile)
-	}
-
-	// Two tenants uploading the same owner type and id never collide.
-	otherScope := authctx.NewSession(authctx.Session{
-		SubjectID: "clerk", TenantID: "tenant-b",
-	}).TenantScope()
-	if blobstore.Key(otherScope, "consent_form", "obj-1") == key {
-		t.Fatal("two tenants produced the same object key")
 	}
 }
 

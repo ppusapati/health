@@ -17,6 +17,7 @@ import (
 	"github.com/ppusapati/health/code/gen/go/healthcare/platform_api/v1/platformapiv1connect"
 	"github.com/ppusapati/health/code/internal/app"
 	"github.com/ppusapati/health/code/internal/identity_access/adapters/devauth"
+	"github.com/ppusapati/health/code/internal/platform/blobstore"
 	"github.com/ppusapati/health/code/internal/platform/pgtest"
 	platformtransport "github.com/ppusapati/health/code/internal/platform/transport"
 	platformapitransport "github.com/ppusapati/health/code/internal/platform_api/transport"
@@ -59,6 +60,7 @@ func newHarnessWithRateLimit(t *testing.T, limit platformtransport.RateLimitConf
 	built := app.New(app.Deps{
 		Pool:      pool,
 		Verifier:  verifier,
+		Blobs:     testBlobs(t),
 		Build:     platformapitransport.BuildInfo{Version: "test", Commit: "test", BuiltAt: "test"},
 		RateLimit: limit,
 	})
@@ -141,4 +143,27 @@ func errorDetail(t *testing.T, err error) *commonv1.ErrorDetail {
 
 func errorAs(err error, target **connect.Error) bool {
 	return errors.As(err, target)
+}
+
+// testBlobs is a real blob store on a filesystem backend under the test's own
+// directory.
+//
+// A real one rather than a double: attaching a file and photographing a wound
+// go through the same routing, class allowlists, tenant prefixing and digest
+// check that production uses, so a change that breaks them fails here instead
+// of in an environment.
+func testBlobs(t *testing.T) *blobstore.Vault {
+	t.Helper()
+
+	backend, err := blobstore.NewFilesystem(blobstore.FilesystemOptions{
+		Name: "local", Root: t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("blobstore.NewFilesystem: %v", err)
+	}
+	vault, err := blobstore.NewVault(blobstore.Config{}, backend)
+	if err != nil {
+		t.Fatalf("blobstore.NewVault: %v", err)
+	}
+	return vault
 }

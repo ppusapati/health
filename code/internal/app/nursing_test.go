@@ -9,6 +9,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	clinicalv1 "github.com/ppusapati/health/code/gen/go/healthcare/clinical/v1"
+	"github.com/ppusapati/health/code/gen/go/healthcare/clinical/v1/clinicalv1connect"
 	empiv1 "github.com/ppusapati/health/code/gen/go/healthcare/empi/v1"
 	"github.com/ppusapati/health/code/gen/go/healthcare/empi/v1/empiv1connect"
 	encounterv1 "github.com/ppusapati/health/code/gen/go/healthcare/encounter/v1"
@@ -100,6 +102,7 @@ var errNoSuchOrder = orderError{message: "no such medication order"}
 type nurHarness struct {
 	pool       *pgxpool.Pool
 	nursing    nursingv1connect.NursingServiceClient
+	clinical   clinicalv1connect.ClinicalServiceClient
 	encounters encounterv1connect.EncounterServiceClient
 	patients   empiv1connect.PatientServiceClient
 	org        organizationv1connect.OrganizationServiceClient
@@ -119,7 +122,7 @@ func newNurHarness(t *testing.T) *nurHarness {
 
 	orders := &stubOrders{orders: map[string]nursingdomain.MedicationOrder{}}
 	built := app.New(app.Deps{
-		Pool: pool, Verifier: verifier,
+		Pool: pool, Verifier: verifier, Blobs: testBlobs(t),
 		Build: platformapitransport.BuildInfo{Version: "test", Commit: "test", BuiltAt: "test"},
 		RateLimit: platformtransport.RateLimitConfig{
 			RequestsPerSecond: 10000, Burst: 10000,
@@ -134,6 +137,7 @@ func newNurHarness(t *testing.T) *nurHarness {
 	h := &nurHarness{
 		pool:       pool,
 		nursing:    nursingv1connect.NewNursingServiceClient(server.Client(), server.URL),
+		clinical:   clinicalv1connect.NewClinicalServiceClient(server.Client(), server.URL),
 		encounters: encounterv1connect.NewEncounterServiceClient(server.Client(), server.URL),
 		patients:   empiv1connect.NewPatientServiceClient(server.Client(), server.URL),
 		org:        organizationv1connect.NewOrganizationServiceClient(server.Client(), server.URL),
@@ -1257,8 +1261,8 @@ func TestAWoundPhotographIsRefusedWithoutConsent(t *testing.T) {
 		withFacility(h.nurseToken(), h.facility,
 			&nursingv1.AttachWoundImageRequest{
 				WoundAssessmentId: assessment.GetWoundAssessmentId(),
-				StorageKey:        "s3://wounds/image-1",
-				ContentType:       "image/jpeg",
+				Content:           onePixelPNG,
+				ContentType:       "image/png",
 				CapturedAt:        timestamppb.New(time.Now().UTC()),
 			})); err == nil {
 		t.Fatal("an unconsented photograph of a patient was attached")
@@ -1270,8 +1274,8 @@ func TestAWoundPhotographIsRefusedWithoutConsent(t *testing.T) {
 			&nursingv1.AttachWoundImageRequest{
 				WoundAssessmentId: assessment.GetWoundAssessmentId(),
 				ConsentId:         uuid.NewString(),
-				StorageKey:        "s3://wounds/image-1",
-				ContentType:       "image/jpeg",
+				Content:           onePixelPNG,
+				ContentType:       "image/png",
 				CapturedAt:        timestamppb.New(time.Now().UTC()),
 			})); err == nil {
 		t.Fatal("a photograph was attached under a consent that does not exist")
@@ -1778,5 +1782,115 @@ func TestAdministeringEmitsAnEventCarryingNoClinicalReasoning(t *testing.T) {
 	}
 	if !strings.Contains(payload, "order_id") {
 		t.Fatalf("the event does not reference the order: %s", payload)
+	}
+}
+
+// SRS-NUR-012 and SRS-DAT-007 together: a consented photograph is stored by the
+// server, and what the assessment records is where the server put it.
+//
+// The series is the evidence of healing, so an image is added and never
+// replaced — two photographs of the same wound get different references even
+// when the bytes are identical, which is what makes withdrawing consent for one
+// a thing that can be done at all.
+func TestAConsentedWoundPhotographIsStoredByTheServer(t *testing.T) {
+	h := newNurHarness(t)
+	patient, encounter := h.ward(t, "Iyer", "9876543210")
+
+	consented, err := h.clinical.RecordConsent(context.Background(),
+		withFacility(h.clinicianToken(), h.facility, &clinicalv1.RecordConsentRequest{
+			PatientId: patient, EncounterId: encounter,
+			Kind:    clinicalv1.ConsentKind_CONSENT_KIND_PHOTOGRAPHY,
+			Status:  clinicalv1.ConsentStatus_CONSENT_STATUS_GIVEN,
+			GivenBy: clinicalv1.ConsentGiver_CONSENT_GIVER_PATIENT,
+			Note:    "photography of the sacral wound for healing review",
+		}))
+	if err != nil {
+		t.Fatalf("RecordConsent: %v", err)
+	}
+	consentID := consented.Msg.GetConsent().GetConsentId()
+
+	assessed, err := h.nursing.AssessWound(context.Background(),
+		withFacility(h.nurseToken(), h.facility, &nursingv1.AssessWoundRequest{
+			PatientId: patient, EncounterId: encounter,
+			WoundId: "wound-1", Location: "sacrum",
+			Kind: nursingv1.WoundKind_WOUND_KIND_PRESSURE_INJURY, Stage: "2",
+			LengthMm: 40, WidthMm: 25, DepthMm: 3,
+			Appearance: "shallow open ulcer, pink wound bed",
+			AssessedAt: timestamppb.New(time.Now().UTC().Add(-10 * time.Minute)),
+		}))
+	if err != nil {
+		t.Fatalf("AssessWound: %v", err)
+	}
+	assessmentID := assessed.Msg.GetAssessment().GetWoundAssessmentId()
+
+	attach := func() *nursingv1.WoundAssessment {
+		t.Helper()
+		out, err := h.nursing.AttachWoundImage(context.Background(),
+			withFacility(h.nurseToken(), h.facility, &nursingv1.AttachWoundImageRequest{
+				WoundAssessmentId: assessmentID, ConsentId: consentID,
+				Content: onePixelPNG, ContentType: "image/png",
+				CapturedAt: timestamppb.New(time.Now().UTC()),
+			}))
+		if err != nil {
+			t.Fatalf("AttachWoundImage: %v", err)
+		}
+		return out.Msg.GetAssessment()
+	}
+
+	first := attach()
+	if len(first.GetImages()) != 1 {
+		t.Fatalf("the assessment carries %d images, want 1", len(first.GetImages()))
+	}
+	key := first.GetImages()[0].GetStorageKey()
+	if key == "" {
+		t.Fatal("no storage key was recorded")
+	}
+	// Not the patient, not a filename: the reference appears in log lines, and
+	// one that named the patient would be a disclosure in every one of them.
+	if strings.Contains(key, patient) {
+		t.Errorf("the storage key carries the patient identifier: %q", key)
+	}
+
+	second := attach()
+	if len(second.GetImages()) != 2 {
+		t.Fatalf("the assessment carries %d images, want 2", len(second.GetImages()))
+	}
+	if second.GetImages()[1].GetStorageKey() == key {
+		t.Error("two photographs share one reference; withdrawing one would delete the other")
+	}
+	if second.GetImages()[1].GetSequence() != 2 {
+		t.Errorf("sequence = %d, want 2", second.GetImages()[1].GetSequence())
+	}
+}
+
+// A caller-supplied key can address another tenant's object or nothing at all,
+// and the assessment would still read as a complete series. Refused rather than
+// ignored, so a client that believes it placed the bytes itself is told.
+func TestANurseCannotChooseWhereAWoundPhotographPoints(t *testing.T) {
+	h := newNurHarness(t)
+	patient, encounter := h.ward(t, "Iyer", "9876543210")
+
+	assessed, err := h.nursing.AssessWound(context.Background(),
+		withFacility(h.nurseToken(), h.facility, &nursingv1.AssessWoundRequest{
+			PatientId: patient, EncounterId: encounter,
+			WoundId: "wound-1", Location: "sacrum",
+			Kind: nursingv1.WoundKind_WOUND_KIND_PRESSURE_INJURY, Stage: "2",
+			LengthMm: 40, WidthMm: 25, DepthMm: 3,
+			Appearance: "shallow open ulcer",
+			AssessedAt: timestamppb.New(time.Now().UTC().Add(-10 * time.Minute)),
+		}))
+	if err != nil {
+		t.Fatalf("AssessWound: %v", err)
+	}
+
+	if _, err := h.nursing.AttachWoundImage(context.Background(),
+		withFacility(h.nurseToken(), h.facility, &nursingv1.AttachWoundImageRequest{
+			WoundAssessmentId: assessed.Msg.GetAssessment().GetWoundAssessmentId(),
+			ConsentId:         uuid.NewString(),
+			StorageKey:        "local:other-tenant/wound-image/aaaa/" + strings.Repeat("0", 64),
+			Content:           onePixelPNG, ContentType: "image/png",
+			CapturedAt: timestamppb.New(time.Now().UTC()),
+		})); err == nil {
+		t.Fatal("a caller-supplied storage key was accepted")
 	}
 }

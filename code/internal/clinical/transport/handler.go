@@ -608,8 +608,14 @@ func (h *Handler) AttachFile(
 	attachment, err := h.svc.AttachFile(ctx, application.AttachFileInput{
 		ParentType: msg.GetParentType(), ParentID: msg.GetParentId(),
 		PatientID: msg.GetPatientId(), Kind: attachmentKindFromProto[msg.GetKind()],
-		ContentType: msg.GetContentType(), StorageKey: msg.GetStorageKey(),
-		SizeBytes: msg.GetSizeBytes(), Digest: msg.GetDigest(),
+		ContentType: msg.GetContentType(), Content: msg.GetContent(),
+		// Read and passed on so the service can refuse them by name. A client
+		// still sending a storage key believes this record will point at bytes
+		// it placed itself, and quietly substituting the server's own key
+		// would leave it believing that.
+		StorageKey:      msg.GetStorageKey(), //nolint:staticcheck // deprecated on purpose; refused below
+		SizeBytes:       msg.GetSizeBytes(),  //nolint:staticcheck // deprecated on purpose; refused below
+		Digest:          msg.GetDigest(),     //nolint:staticcheck // deprecated on purpose; refused below
 		Description:     msg.GetDescription(),
 		Confidentiality: confidentialityFromProto[msg.GetConfidentiality()],
 		CapturedAt:      fromTimestamp(msg.GetCapturedAt()),

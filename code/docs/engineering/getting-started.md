@@ -31,6 +31,24 @@ make run
 `AUTH_MODE` has no default. Starting without it is a hard failure, so there is
 no insecure fallback to drift into — see ADR-W0-003.
 
+### Storing files locally
+
+Photographs, attachments and wound images go wherever `BLOB_BACKENDS` says. With
+nothing set the service starts, logs a warning and refuses to store binary
+content — which is a real deployment, and better than inventing a temporary
+directory that works until the process restarts. For local work:
+
+```bash
+export BLOB_BACKENDS=local
+export BLOB_BACKEND_LOCAL_KIND=filesystem
+export BLOB_BACKEND_LOCAL_ROOT=/tmp/health-blobs
+```
+
+The startup log prints the routing table, one line per content class. The full
+set of variables, including S3-compatible and inline-PostgreSQL backends, is in
+the package documentation for `internal/platform/blobstore` and the reasoning is
+in [ADR-W1-009](../adr/0009-object-storage-is-one-configured-routing-table.md).
+
 ### Development tokens
 
 The development verifier accepts `tenantId:subjectId:role[,role]`. The tenant

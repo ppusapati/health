@@ -1,4 +1,5 @@
-// Package blobstore keeps binary content out of the relational database.
+// Package blobstore keeps binary content out of the relational database, and
+// gives the whole system one place that decides where that content lives.
 //
 // SRS-DAT-007: object and blob content lives in an encrypted object store;
 // PostgreSQL holds the metadata and the content hash. The separation is not
@@ -12,12 +13,38 @@
 // belongs to which record, who uploaded it, and the digest that says the bytes
 // are the ones that were uploaded. The object store keeps the bytes.
 //
-// The digest is the load-bearing field. Object stores are eventually
-// consistent, replicated across regions and administered by a different set of
-// people; the hash recorded in the transaction is what lets a reader detect
-// that the bytes it got back are not the bytes that were written, whether
-// through corruption, a failed multipart upload, or someone with write access
-// to the bucket.
+// # One package, several backends
+//
+// Where the bytes actually go is a deployment decision, and different content
+// classes in the same deployment reasonably want different answers: wound
+// photographs to S3, a captured signature inline in PostgreSQL because it is
+// two kilobytes and wants the same backup as the row that references it, and
+// everything on a single filesystem on a district hospital's one server. So
+// the backend is chosen per content class from configuration, with a per-tenant
+// override for data residency, and the modules that own the records — EMPI,
+// clinical, nursing — never learn which backend answered.
+//
+// # Reads follow the key, not the configuration
+//
+// The backend that holds an object is recorded in the object's own reference.
+// Reading resolves the backend from the reference rather than from today's
+// configuration, because the alternative is that changing a class from
+// filesystem to S3 silently orphans every object written before the change —
+// the rows still point somewhere, the bytes are still there, and every read
+// returns "not found" from a backend that was never asked to hold them.
+//
+// # The digest is load-bearing
+//
+// Object stores are eventually consistent, replicated across regions and
+// administered by a different set of people; the hash is what lets a reader
+// detect that the bytes it got back are not the bytes that were written,
+// whether through corruption, a failed multipart upload, or someone with write
+// access to the bucket. Here the digest is carried inside the reference, so
+// every read is verified without each calling module having to remember to
+// pass one — SRS-DAT-007's "missing/tampered object is detectable" becomes a
+// property of this package rather than a discipline.
+//
+// Trace: SRS-DAT-007, SRS-SEC-002, SRS-EMPI-010, SRS-CLN-014, SRS-NUR-012.
 package blobstore
 
 import (
@@ -27,7 +54,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"path"
 	"strings"
 	"time"
 
@@ -44,6 +70,18 @@ var (
 	ErrInvalidObject = errors.New("blobstore: invalid object metadata")
 	// ErrNotFound reports an object the store does not hold.
 	ErrNotFound = errors.New("blobstore: object not found")
+	// ErrTooLarge reports content a backend refuses on size grounds.
+	ErrTooLarge = errors.New("blobstore: content is larger than this backend accepts")
+	// ErrUnsupportedContentType reports content whose media type the class does
+	// not hold. Distinct from ErrInvalidObject so a caller can say "that is not
+	// a format this holds" without also saying it about an empty upload or a
+	// missing tenant scope — three different things to fix, and one message for
+	// all three sends the reader to the wrong one.
+	ErrUnsupportedContentType = errors.New("blobstore: content type is not one this class holds")
+	// ErrNoBackend reports a reference naming a backend this process has not
+	// been configured with — the usual cause is a backend removed from
+	// configuration while objects written to it are still referenced.
+	ErrNoBackend = errors.New("blobstore: no such backend")
 )
 
 // MaxInlineBytes is the largest content this package will buffer in memory
@@ -57,8 +95,8 @@ const MaxInlineBytes = 8 << 20 // 8 MiB
 type ObjectMetadata struct {
 	ObjectID string
 	TenantID string
-	// Key is the path within the bucket. Derived, never client-supplied — see
-	// Key below.
+	// Key is the reference returned by Vault.Put. Derived, never
+	// client-supplied — see Reference.
 	Key string
 	// OwnerType and OwnerID tie the object to the record it belongs to, so an
 	// orphan sweep can find objects whose record is gone.
@@ -78,43 +116,39 @@ type ObjectMetadata struct {
 	KMSKeyAlias string
 }
 
-// Store is the object-store port. Narrow on purpose: a wider interface invites
-// an adapter that exposes bucket-level operations, and the application has no
-// business enumerating a bucket.
-type Store interface {
-	// Put writes content and returns its size and digest.
-	Put(ctx context.Context, key, contentType string, content io.Reader) (size int64, sha256Hex string, err error)
-	// Get returns the content at a key.
-	Get(ctx context.Context, key string) (io.ReadCloser, error)
-	// Delete removes the content. Metadata deletion is the caller's
-	// transaction, and must happen after this succeeds — the other order
-	// leaves an object nothing references, which no sweep can attribute.
+// Backend is what a deployment plugs in: keyed byte storage and nothing else.
+//
+// Narrow on purpose. A wider interface invites an adapter that exposes
+// bucket-level operations, and no part of this system has business enumerating
+// a bucket. It knows nothing of tenants, classes or digests — the Vault above
+// it owns all three, so a new backend is a small amount of I/O rather than a
+// re-implementation of the policy.
+//
+// Content is []byte rather than an io.Reader because every caller in this
+// system holds a photograph, a signature or a scanned form already in memory,
+// bounded by MaxInlineBytes. A streaming port that every implementation
+// buffered anyway would be a promise the package does not keep; when something
+// genuinely larger arrives — imaging — it gets a streaming port of its own
+// rather than a reader that three backends quietly read to the end.
+type Backend interface {
+	// Name is the identifier recorded in a reference. Stable for the life of
+	// the stored objects: renaming a backend strands everything written under
+	// the old name.
+	Name() string
+	// Put writes content at key. Overwrite is not expected — keys are minted
+	// per object and objects are immutable — but must not error if it happens,
+	// because a retried upload after an ambiguous failure is normal.
+	Put(ctx context.Context, key, contentType string, content []byte) error
+	// Get returns the content at key, or ErrNotFound.
+	Get(ctx context.Context, key string) ([]byte, error)
+	// Delete removes the content. Idempotent: a consent withdrawal retried
+	// after a partial failure must not fail because the object is already
+	// gone, or the withdrawal can never complete.
 	Delete(ctx context.Context, key string) error
-}
-
-// Key builds the object-store path for a piece of content.
-//
-// The tenant is the first path segment, so a bucket policy can grant access
-// per tenant prefix — defence in depth behind the application's own scoping,
-// and the thing that makes a misconfigured client fail rather than read
-// somebody else's records.
-//
-// The object id is the last segment and the caller never chooses the key.
-// A client-supplied key is a path traversal waiting to be written, and a
-// key derived from a filename collides the moment two wards both upload
-// "consent.pdf".
-func Key(scope authctx.TenantScope, ownerType, objectID string) string {
-	return path.Join(scope.TenantID(), sanitiseSegment(ownerType), objectID)
-}
-
-func sanitiseSegment(s string) string {
-	s = strings.TrimSpace(s)
-	s = strings.ReplaceAll(s, "/", "_")
-	s = strings.ReplaceAll(s, "..", "_")
-	if s == "" {
-		return "unclassified"
-	}
-	return s
+	// KMSKeyAlias names the managed key this backend encrypts under, or "" if
+	// it does not encrypt at rest. Recorded with the metadata so a key
+	// rotation can find what needs re-wrapping.
+	KMSKeyAlias() string
 }
 
 // Digest computes the hex SHA-256 of content.
@@ -182,4 +216,13 @@ func Verify(m ObjectMetadata, content io.Reader) ([]byte, error) {
 			ErrInvalidObject, m.SizeBytes, len(body))
 	}
 	return body, nil
+}
+
+// tenantOf returns the tenant a scope carries, or an error.
+func tenantOf(scope authctx.TenantScope) (string, error) {
+	id := scope.TenantID()
+	if strings.TrimSpace(id) == "" {
+		return "", fmt.Errorf("%w: a stored object needs a tenant scope", ErrInvalidObject)
+	}
+	return id, nil
 }

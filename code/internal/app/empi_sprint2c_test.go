@@ -7,6 +7,7 @@ import (
 
 	empiv1 "github.com/ppusapati/health/code/gen/go/healthcare/empi/v1"
 	"github.com/ppusapati/health/code/internal/empi/adapters/photostore"
+	"github.com/ppusapati/health/code/internal/platform/blobstore"
 )
 
 // Photographs, configured field access and emergency registration
@@ -27,11 +28,20 @@ var onePixelPNG = []byte{
 func photoHarness(t *testing.T) *empiHarness {
 	t.Helper()
 
-	store, err := photostore.NewFilesystem(t.TempDir())
+	// The real routing, not a stand-in: a filesystem backend behind the same
+	// vault production uses, so the class allowlist, the tenant prefix and the
+	// digest check on read are all exercised on the way through.
+	backend, err := blobstore.NewFilesystem(blobstore.FilesystemOptions{
+		Name: "local", Root: t.TempDir(),
+	})
 	if err != nil {
-		t.Fatalf("photostore.NewFilesystem: %v", err)
+		t.Fatalf("blobstore.NewFilesystem: %v", err)
 	}
-	return newEmpiHarnessWithStore(t, store)
+	vault, err := blobstore.NewVault(blobstore.Config{}, backend)
+	if err != nil {
+		t.Fatalf("blobstore.NewVault: %v", err)
+	}
+	return newEmpiHarnessWithStore(t, photostore.New(vault))
 }
 
 func consentMsg() *empiv1.PhotoConsent {

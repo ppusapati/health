@@ -69,21 +69,22 @@ const (
 
 // Service is the clinical use-case façade.
 type Service struct {
-	uow        ports.UnitOfWork
-	documents  ports.DocumentRepository
-	templates  ports.TemplateRepository
-	records    ports.RecordRepository
-	governance ports.GovernanceRepository
-	decisions  ports.DecisionRepository
-	phrases    ports.SmartPhraseRepository
-	timeline   ports.TimelineRepository
-	encounters ports.EncounterDirectory
-	patients   ports.PatientSummary
-	escalation domain.EscalationPolicy
-	events     ports.EventAppender
-	audits     ports.AuditAppender
-	ids        ports.IDGenerator
-	clock      ports.Clock
+	uow         ports.UnitOfWork
+	documents   ports.DocumentRepository
+	templates   ports.TemplateRepository
+	records     ports.RecordRepository
+	governance  ports.GovernanceRepository
+	decisions   ports.DecisionRepository
+	phrases     ports.SmartPhraseRepository
+	timeline    ports.TimelineRepository
+	encounters  ports.EncounterDirectory
+	patients    ports.PatientSummary
+	escalation  domain.EscalationPolicy
+	attachments ports.AttachmentStore
+	events      ports.EventAppender
+	audits      ports.AuditAppender
+	ids         ports.IDGenerator
+	clock       ports.Clock
 }
 
 // Deps are the collaborators the service needs.
@@ -107,10 +108,15 @@ type Deps struct {
 	// Escalation is when an unacknowledged critical result escalates
 	// (SRS-CLN-012). The zero value takes the domain default.
 	Escalation domain.EscalationPolicy
-	Events     ports.EventAppender
-	Audits     ports.AuditAppender
-	IDs        ports.IDGenerator
-	Clock      ports.Clock
+	// Attachments holds the bytes of attached files (SRS-CLN-014). Nil is a
+	// valid deployment and the default: one that stores no binary content
+	// refuses to attach a file rather than recording an attachment pointing at
+	// nothing.
+	Attachments ports.AttachmentStore
+	Events      ports.EventAppender
+	Audits      ports.AuditAppender
+	IDs         ports.IDGenerator
+	Clock       ports.Clock
 }
 
 // NewService wires the use cases to their ports.
@@ -124,7 +130,7 @@ func NewService(d Deps) *Service {
 		uow: d.UnitOfWork, documents: d.Documents, templates: d.Templates,
 		records: d.Records, governance: d.Governance, decisions: d.Decisions,
 		phrases: d.Phrases, timeline: d.Timeline, encounters: d.Encounters,
-		patients: d.Patients, escalation: escalation,
+		patients: d.Patients, escalation: escalation, attachments: d.Attachments,
 		events: d.Events, audits: d.Audits, ids: d.IDs, clock: d.Clock,
 	}
 }

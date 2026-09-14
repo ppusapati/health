@@ -2,6 +2,8 @@ package app_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -58,7 +60,7 @@ func newClnHarness(t *testing.T) *clnHarness {
 	}
 
 	built := app.New(app.Deps{
-		Pool: pool, Verifier: verifier,
+		Pool: pool, Verifier: verifier, Blobs: testBlobs(t),
 		Build: platformapitransport.BuildInfo{Version: "test", Commit: "test", BuiltAt: "test"},
 		RateLimit: platformtransport.RateLimitConfig{
 			RequestsPerSecond: 10000, Burst: 10000,
@@ -733,5 +735,108 @@ func TestANoteCannotBeReachedFromAnotherTenant(t *testing.T) {
 	if !strings.Contains(strings.ToLower(err.Error()), "not_found") &&
 		!strings.Contains(strings.ToLower(err.Error()), "no such") {
 		t.Fatalf("the refusal confirms the note exists elsewhere: %v", err)
+	}
+}
+
+// SRS-CLN-014. The server holds the bytes and derives the metadata, so the
+// attachment record describes content the server has actually seen. It used to
+// take the storage key, the size and the digest from the caller — which made
+// the digest, the one field a reader trusts to say the content has not been
+// altered, an assertion by whoever supplied the content.
+func TestAnAttachedFileIsStoredByTheServerAndDescribedByWhatItStored(t *testing.T) {
+	h := newClnHarness(t)
+	patient, encounter := h.chart(t, "Rao", "9876500011")
+	note := h.draft(t, patient, encounter, "outside imaging report received")
+
+	pdf := []byte("%PDF-1.7 outside hospital discharge summary")
+	attached, err := h.clinical.AttachFile(context.Background(),
+		withFacility(h.clinicianToken(), h.facility, &clinicalv1.AttachFileRequest{
+			ParentType: "document", ParentId: note.GetDocumentId(),
+			PatientId: patient, Kind: clinicalv1.AttachmentKind_ATTACHMENT_KIND_DOCUMENT,
+			ContentType: "application/pdf", Content: pdf,
+			Description: "discharge summary, District Hospital",
+		}))
+	if err != nil {
+		t.Fatalf("AttachFile: %v", err)
+	}
+
+	attachment := attached.Msg.GetAttachment()
+	if attachment.GetSizeBytes() != int64(len(pdf)) {
+		t.Errorf("size_bytes = %d, want %d", attachment.GetSizeBytes(), len(pdf))
+	}
+	sum := sha256.Sum256(pdf)
+	if attachment.GetDigest() != hex.EncodeToString(sum[:]) {
+		t.Errorf("digest = %q; it does not describe the content that was sent", attachment.GetDigest())
+	}
+	// The key is the store's, and it is not a filename, a patient identifier or
+	// anything else that would be a disclosure in the log line that carries it.
+	key := attachment.GetStorageKey()
+	if key == "" {
+		t.Fatal("no storage key was recorded")
+	}
+	if strings.Contains(key, patient) || strings.Contains(key, "discharge") {
+		t.Errorf("the storage key leaks what it points at: %q", key)
+	}
+
+	listed, err := h.clinical.ListAttachments(context.Background(),
+		withFacility(h.clinicianToken(), h.facility, &clinicalv1.ListAttachmentsRequest{
+			ParentType: "document", ParentId: note.GetDocumentId(),
+		}))
+	if err != nil {
+		t.Fatalf("ListAttachments: %v", err)
+	}
+	if len(listed.Msg.GetAttachments()) != 1 {
+		t.Fatalf("listed %d attachments, want 1", len(listed.Msg.GetAttachments()))
+	}
+	if listed.Msg.GetAttachments()[0].GetStorageKey() != key {
+		t.Error("the attachment came back pointing somewhere else")
+	}
+}
+
+// A caller-supplied storage key is a caller-supplied path: it can address
+// another tenant's object, something outside the store, or nothing at all, and
+// the record would still read as complete. Refused rather than ignored, so a
+// client that still believes it placed the bytes itself is told.
+func TestACallerCannotChooseWhereAnAttachmentPoints(t *testing.T) {
+	h := newClnHarness(t)
+	patient, encounter := h.chart(t, "Rao", "9876500011")
+	note := h.draft(t, patient, encounter, "outside imaging report received")
+
+	base := func() *clinicalv1.AttachFileRequest {
+		return &clinicalv1.AttachFileRequest{
+			ParentType: "document", ParentId: note.GetDocumentId(),
+			PatientId: patient, Kind: clinicalv1.AttachmentKind_ATTACHMENT_KIND_DOCUMENT,
+			ContentType: "application/pdf", Content: []byte("%PDF-1.7"),
+		}
+	}
+
+	withKey := base()
+	withKey.StorageKey = "local:other-tenant/clinical-attachment/aaaa/" + strings.Repeat("0", 64)
+	if _, err := h.clinical.AttachFile(context.Background(),
+		withFacility(h.clinicianToken(), h.facility, withKey)); err == nil {
+		t.Fatal("a caller-supplied storage key was accepted")
+	}
+
+	withDigest := base()
+	withDigest.Digest = strings.Repeat("0", 64)
+	if _, err := h.clinical.AttachFile(context.Background(),
+		withFacility(h.clinicianToken(), h.facility, withDigest)); err == nil {
+		t.Fatal("a caller-supplied digest was accepted")
+	}
+
+	empty := base()
+	empty.Content = nil
+	if _, err := h.clinical.AttachFile(context.Background(),
+		withFacility(h.clinicianToken(), h.facility, empty)); err == nil {
+		t.Fatal("an attachment with no content was accepted")
+	}
+
+	// The class allowlist reaches this path too: an executable dressed as a
+	// referral letter is not a referral letter.
+	wrongType := base()
+	wrongType.ContentType = "application/x-msdownload"
+	if _, err := h.clinical.AttachFile(context.Background(),
+		withFacility(h.clinicianToken(), h.facility, wrongType)); err == nil {
+		t.Fatal("a content type outside the class allowlist was accepted")
 	}
 }

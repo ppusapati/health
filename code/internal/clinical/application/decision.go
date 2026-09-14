@@ -2,6 +2,9 @@ package application
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"strings"
 	"time"
 
 	"github.com/ppusapati/health/code/internal/clinical/domain"
@@ -131,11 +134,18 @@ func (s *Service) ListConsents(ctx context.Context, patientID string,
 
 // AttachFileInput records a file held against a clinical record.
 type AttachFileInput struct {
-	ParentType      string
-	ParentID        string
-	PatientID       string
-	Kind            domain.AttachmentKind
-	ContentType     string
+	ParentType  string
+	ParentID    string
+	PatientID   string
+	Kind        domain.AttachmentKind
+	ContentType string
+	// Content is the file itself. The server stores it, chooses the key and
+	// computes the size and digest, so the attachment's metadata describes
+	// content the server has actually seen.
+	Content []byte
+	// StorageKey, SizeBytes and Digest are what a caller used to assert. They
+	// are still read so that a client still sending them is told, rather than
+	// having its values quietly replaced by the server's.
 	StorageKey      string
 	SizeBytes       int64
 	Digest          string
@@ -148,10 +158,15 @@ type AttachFileInput struct {
 
 // AttachFile records an attachment (SRS-CLN-014).
 //
-// The bytes live in object storage; this records what they are and who may see
+// The bytes go to the blob store; this records what they are and who may see
 // them. Access follows the parent record *and* the attachment's own class: a
 // photograph of an injury attached to an ordinary note can be more sensitive
 // than the note.
+//
+// The server stores the content and derives the key, the size and the digest
+// from what it received. It used to take all three from the caller, which made
+// the digest — the one field a reader trusts to say the content has not been
+// altered — an assertion by whoever supplied the content.
 func (s *Service) AttachFile(ctx context.Context, in AttachFileInput) (
 	domain.Attachment, error) {
 
@@ -160,6 +175,28 @@ func (s *Service) AttachFile(ctx context.Context, in AttachFileInput) (
 	if err != nil {
 		return domain.Attachment{}, err
 	}
+	if strings.TrimSpace(in.StorageKey) != "" || in.SizeBytes != 0 || strings.TrimSpace(in.Digest) != "" {
+		// Refused rather than ignored. A client still sending these believes
+		// it has put the bytes somewhere and that this record will point at
+		// them; silently substituting the server's own values would leave it
+		// believing that while the attachment pointed elsewhere.
+		return domain.Attachment{}, rpcerr.Invalid("CLINICAL_ATTACHMENT_KEY_NOT_ACCEPTED",
+			"send the file in content; the server stores it and records its key, size and digest")
+	}
+	if s.attachments == nil {
+		return domain.Attachment{}, rpcerr.FailedPrecondition("CLINICAL_ATTACHMENT_STORE_NOT_CONFIGURED",
+			"this deployment does not store attached files")
+	}
+	// Bounded before anything else. The bytes came off a network, and the
+	// domain's check would run only after they were in memory and hashed.
+	if len(in.Content) == 0 {
+		return domain.Attachment{}, rpcerr.Invalid("CLINICAL_ATTACHMENT_EMPTY",
+			"an empty attachment is not an attachment")
+	}
+	if int64(len(in.Content)) > domain.MaxAttachmentBytes {
+		return domain.Attachment{}, rpcerr.Invalid("CLINICAL_ATTACHMENT_TOO_LARGE",
+			"the attachment is larger than this system stores in one request")
+	}
 
 	now := s.clock.Now()
 	confidentiality := in.Confidentiality
@@ -167,21 +204,32 @@ func (s *Service) AttachFile(ctx context.Context, in AttachFileInput) (
 		confidentiality = domain.ConfidentialityNormal
 	}
 
+	digest := sha256.Sum256(in.Content)
+
 	var out domain.Attachment
 	err = s.uow.WithinTx(ctx, func(ctx context.Context) error {
+		storageKey, err := s.attachments.Put(ctx, scope, in.ContentType, in.Content)
+		if err != nil {
+			return err
+		}
+
 		attachment, err := domain.NewAttachment(s.ids.NewID(), scope.TenantID(),
 			domain.NewAttachmentInput{
 				ParentType: in.ParentType, ParentID: in.ParentID,
 				PatientID: in.PatientID, Kind: in.Kind,
-				ContentType: in.ContentType, StorageKey: in.StorageKey,
-				SizeBytes: in.SizeBytes, Digest: in.Digest,
+				ContentType: in.ContentType, StorageKey: storageKey,
+				SizeBytes: int64(len(in.Content)), Digest: hex.EncodeToString(digest[:]),
 				Description: in.Description, Confidentiality: confidentiality,
 				CapturedAt: in.CapturedAt, SourceSystem: in.SourceSystem,
 			}, session.SubjectID, now)
 		if err != nil {
+			// The bytes are already in the store. Removing them keeps a
+			// rejected attachment from leaving an orphan nothing references.
+			_ = s.attachments.Delete(ctx, scope, storageKey)
 			return clinicalError(err)
 		}
 		if err := s.governance.InsertAttachment(ctx, scope, attachment); err != nil {
+			_ = s.attachments.Delete(ctx, scope, storageKey)
 			return err
 		}
 

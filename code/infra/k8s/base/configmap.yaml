@@ -14,3 +14,10 @@ data:
   # are set per overlay so a non-production value cannot reach production by
   # inheriting a base default, and DATABASE_URL is a secret sourced from the
   # managed store (see encryption.yaml).
+  #
+  # Also deliberately absent: every BLOB_* variable. Where patient photographs,
+  # scanned records and wound images are written is a per-environment decision
+  # with legal consequences — which bucket, which region, which managed key —
+  # and a base default would be the value a new overlay silently inherits. A
+  # deployment with none set refuses to store binary content and says so at
+  # startup, which is the safe failure. See ADR-W1-009.

@@ -20,6 +20,12 @@ Four programme ADRs were open at the start of Wave 0. All four are now closed:
 | ADR-007 | Rules engine | A11 | **Closed** — [0007](0007-rules-engine.md) |
 | ADR-008 | Enterprise identity provider | A5 | **Closed** — [0008](0008-enterprise-identity-provider.md) |
 
+Wave-1 implementation decisions the programme register does not cover:
+
+| ADR | Decision | Requirements |
+|---|---|---|
+| ADR-W1-009 | Object storage is one configured routing table, with a bounded database exception | SRS-DAT-007, SRS-SEC-002 |
+
 Each was built behind a **seam** rather than a vendor choice, and every closure
 confirmed the seam held: ADR-008 changed the composition root and the
 `AUTH_MODE` switch, ADR-005 added one `store.Broker` implementation, and

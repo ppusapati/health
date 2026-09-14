@@ -286,6 +286,27 @@ type BannerFacts struct {
 	Deceased    bool
 }
 
+// AttachmentStore holds attachment bytes.
+//
+// A port because where a scanned referral lives is a deployment decision —
+// encryption at rest, retention, residency — and none of it belongs in the
+// clinical record. The record keeps the key, the size and the digest; the
+// store keeps the bytes (SRS-DAT-007).
+//
+// The store chooses the key. A key the caller supplied is a path the caller
+// supplied, and an attachment pointing at another tenant's object or at
+// nothing at all still reads as a complete record.
+type AttachmentStore interface {
+	// Put stores bytes under a key the store chooses and returns it.
+	Put(ctx context.Context, scope authctx.TenantScope, contentType string,
+		content []byte) (string, error)
+	// Get returns the bytes, verified against the recorded digest.
+	Get(ctx context.Context, scope authctx.TenantScope, key string) ([]byte, error)
+	// Delete removes the bytes. Idempotent, so a cleanup after a rejected
+	// upload can be retried.
+	Delete(ctx context.Context, scope authctx.TenantScope, key string) error
+}
+
 // UnitOfWork runs work in one transaction.
 type UnitOfWork interface {
 	WithinTx(ctx context.Context, fn func(ctx context.Context) error) error

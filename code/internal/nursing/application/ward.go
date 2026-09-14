@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/ppusapati/health/code/internal/nursing/domain"
@@ -485,12 +486,27 @@ func (s *Service) AssessWound(ctx context.Context,
 // trust: a photograph of a wound is a photograph of a patient, and a consent
 // identifier a caller made up is not a consent.
 func (s *Service) AttachWoundImage(ctx context.Context, assessmentID string,
-	img domain.WoundImage) (*domain.WoundAssessment, error) {
+	img domain.WoundImage, content []byte) (*domain.WoundAssessment, error) {
 
 	session, scope, err := s.authorize(ctx, PermNursingWrite, "wound_assessment",
 		assessmentID, true)
 	if err != nil {
 		return nil, err
+	}
+	if strings.TrimSpace(img.StorageKey) != "" {
+		// Refused rather than ignored. A client sending a key believes this
+		// assessment will point at bytes it placed itself, and quietly
+		// substituting the server's own key would leave it believing that
+		// while the record pointed somewhere else.
+		return nil, rpcerr.Invalid("NURSING_WOUND_IMAGE_KEY_NOT_ACCEPTED",
+			"send the photograph in content; the server stores it and records where")
+	}
+	if s.images == nil {
+		return nil, rpcerr.FailedPrecondition("NURSING_WOUND_IMAGE_STORE_NOT_CONFIGURED",
+			"this deployment does not store wound photographs")
+	}
+	if len(content) == 0 {
+		return nil, rpcerr.Invalid("NURSING_WOUND_IMAGE_EMPTY", "a photograph needs content")
 	}
 
 	assessment, err := s.ward.GetWound(ctx, scope, assessmentID)
@@ -512,7 +528,24 @@ func (s *Service) AttachWoundImage(ctx context.Context, assessmentID string,
 	if img.CapturedBy == "" {
 		img.CapturedBy = session.SubjectID
 	}
+
+	// Everything but the storage key is checked before the bytes are written.
+	// A photograph of a patient taken without consent must not reach the store
+	// even briefly: writing it and deleting it again on refusal leaves the
+	// bytes on a disk, in a bucket's version history or in a replica, which is
+	// precisely what the consent was about.
+	if err := assessment.CanAttachImage(img, covers, now); err != nil {
+		return nil, nursingError(err)
+	}
+
+	storageKey, err := s.images.Put(ctx, scope, img.ContentType, content)
+	if err != nil {
+		return nil, err
+	}
+	img.StorageKey = storageKey
+
 	if err := assessment.AttachImage(img, covers, now); err != nil {
+		_ = s.images.Delete(ctx, scope, storageKey)
 		return nil, nursingError(err)
 	}
 	stored := assessment.Images[len(assessment.Images)-1]
@@ -529,6 +562,7 @@ func (s *Service) AttachWoundImage(ctx context.Context, assessmentID string,
 		}, now)
 	})
 	if err != nil {
+		_ = s.images.Delete(ctx, scope, storageKey)
 		return nil, mapConflict(err)
 	}
 	return assessment, nil

@@ -8305,17 +8305,48 @@ type AttachFileRequest struct {
 	PatientId   string                 `protobuf:"bytes,3,opt,name=patient_id,json=patientId,proto3" json:"patient_id,omitempty"`
 	Kind        AttachmentKind         `protobuf:"varint,4,opt,name=kind,proto3,enum=healthcare.clinical.v1.AttachmentKind" json:"kind,omitempty"`
 	ContentType string                 `protobuf:"bytes,5,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
-	// The bytes live in object storage; this records what they are.
-	StorageKey      string                 `protobuf:"bytes,6,opt,name=storage_key,json=storageKey,proto3" json:"storage_key,omitempty"`
-	SizeBytes       int64                  `protobuf:"varint,7,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	// Superseded by content, and refused rather than ignored if set.
+	//
+	// These were the caller's word for where it had already put the bytes and
+	// what they were. A caller-supplied storage key is a caller-supplied path:
+	// it can address another tenant's object, something outside the store, or
+	// nothing at all, and the attachment record would still look complete. A
+	// caller-supplied digest is worse — it is the field a reader trusts to tell
+	// it the content has not been altered, asserted by whoever supplied the
+	// content.
+	//
+	// Kept on the wire rather than removed so an old client gets an error that
+	// names the problem instead of a field number that has quietly changed
+	// meaning.
+	//
+	// Deprecated: Marked as deprecated in healthcare/clinical/v1/clinical.proto.
+	StorageKey string `protobuf:"bytes,6,opt,name=storage_key,json=storageKey,proto3" json:"storage_key,omitempty"`
+	// Deprecated: Marked as deprecated in healthcare/clinical/v1/clinical.proto.
+	SizeBytes int64 `protobuf:"varint,7,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	// Deprecated: Marked as deprecated in healthcare/clinical/v1/clinical.proto.
 	Digest          string                 `protobuf:"bytes,8,opt,name=digest,proto3" json:"digest,omitempty"`
 	Description     string                 `protobuf:"bytes,9,opt,name=description,proto3" json:"description,omitempty"`
 	Confidentiality Confidentiality        `protobuf:"varint,10,opt,name=confidentiality,proto3,enum=healthcare.clinical.v1.Confidentiality" json:"confidentiality,omitempty"`
 	CapturedAt      *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=captured_at,json=capturedAt,proto3" json:"captured_at,omitempty"`
 	SourceSystem    string                 `protobuf:"bytes,12,opt,name=source_system,json=sourceSystem,proto3" json:"source_system,omitempty"`
 	Provenance      *Provenance            `protobuf:"bytes,13,opt,name=provenance,proto3" json:"provenance,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// The file itself.
+	//
+	// The bytes, not a key naming where the caller already put them. A
+	// caller-supplied storage key is a caller-supplied path: it can point at
+	// another tenant's object, at something outside the store, or at nothing at
+	// all, and the record would still look complete. The server writes the
+	// bytes, chooses the key and computes the size and the digest, so the
+	// attachment's own metadata is a statement about content the server has
+	// actually seen.
+	//
+	// Attachments are bounded (see MaxAttachmentBytes and the configured class
+	// limit) and travel in the request. When something genuinely large arrives —
+	// imaging — it gets a presigned upload of its own rather than a bigger
+	// message.
+	Content       []byte `protobuf:"bytes,14,opt,name=content,proto3" json:"content,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AttachFileRequest) Reset() {
@@ -8383,6 +8414,7 @@ func (x *AttachFileRequest) GetContentType() string {
 	return ""
 }
 
+// Deprecated: Marked as deprecated in healthcare/clinical/v1/clinical.proto.
 func (x *AttachFileRequest) GetStorageKey() string {
 	if x != nil {
 		return x.StorageKey
@@ -8390,6 +8422,7 @@ func (x *AttachFileRequest) GetStorageKey() string {
 	return ""
 }
 
+// Deprecated: Marked as deprecated in healthcare/clinical/v1/clinical.proto.
 func (x *AttachFileRequest) GetSizeBytes() int64 {
 	if x != nil {
 		return x.SizeBytes
@@ -8397,6 +8430,7 @@ func (x *AttachFileRequest) GetSizeBytes() int64 {
 	return 0
 }
 
+// Deprecated: Marked as deprecated in healthcare/clinical/v1/clinical.proto.
 func (x *AttachFileRequest) GetDigest() string {
 	if x != nil {
 		return x.Digest
@@ -8435,6 +8469,13 @@ func (x *AttachFileRequest) GetSourceSystem() string {
 func (x *AttachFileRequest) GetProvenance() *Provenance {
 	if x != nil {
 		return x.Provenance
+	}
+	return nil
+}
+
+func (x *AttachFileRequest) GetContent() []byte {
+	if x != nil {
+		return x.Content
 	}
 	return nil
 }
@@ -10702,7 +10743,7 @@ const file_healthcare_clinical_v1_clinical_proto_rawDesc = "" +
 	"\x04kind\x18\x02 \x01(\x0e2#.healthcare.clinical.v1.ConsentKindR\x04kind\x12\x1b\n" +
 	"\tpage_size\x18\x03 \x01(\x05R\bpageSize\"[\n" +
 	"\x14ListConsentsResponse\x12C\n" +
-	"\bconsents\x18\x01 \x03(\v2'.healthcare.clinical.v1.ClinicalConsentR\bconsents\"\xc2\x04\n" +
+	"\bconsents\x18\x01 \x03(\v2'.healthcare.clinical.v1.ClinicalConsentR\bconsents\"\xe8\x04\n" +
 	"\x11AttachFileRequest\x12\x1f\n" +
 	"\vparent_type\x18\x01 \x01(\tR\n" +
 	"parentType\x12\x1b\n" +
@@ -10710,12 +10751,12 @@ const file_healthcare_clinical_v1_clinical_proto_rawDesc = "" +
 	"\n" +
 	"patient_id\x18\x03 \x01(\tR\tpatientId\x12:\n" +
 	"\x04kind\x18\x04 \x01(\x0e2&.healthcare.clinical.v1.AttachmentKindR\x04kind\x12!\n" +
-	"\fcontent_type\x18\x05 \x01(\tR\vcontentType\x12\x1f\n" +
-	"\vstorage_key\x18\x06 \x01(\tR\n" +
-	"storageKey\x12\x1d\n" +
+	"\fcontent_type\x18\x05 \x01(\tR\vcontentType\x12#\n" +
+	"\vstorage_key\x18\x06 \x01(\tB\x02\x18\x01R\n" +
+	"storageKey\x12!\n" +
 	"\n" +
-	"size_bytes\x18\a \x01(\x03R\tsizeBytes\x12\x16\n" +
-	"\x06digest\x18\b \x01(\tR\x06digest\x12 \n" +
+	"size_bytes\x18\a \x01(\x03B\x02\x18\x01R\tsizeBytes\x12\x1a\n" +
+	"\x06digest\x18\b \x01(\tB\x02\x18\x01R\x06digest\x12 \n" +
 	"\vdescription\x18\t \x01(\tR\vdescription\x12Q\n" +
 	"\x0fconfidentiality\x18\n" +
 	" \x01(\x0e2'.healthcare.clinical.v1.ConfidentialityR\x0fconfidentiality\x12;\n" +
@@ -10724,7 +10765,8 @@ const file_healthcare_clinical_v1_clinical_proto_rawDesc = "" +
 	"\rsource_system\x18\f \x01(\tR\fsourceSystem\x12B\n" +
 	"\n" +
 	"provenance\x18\r \x01(\v2\".healthcare.clinical.v1.ProvenanceR\n" +
-	"provenance\"X\n" +
+	"provenance\x12\x18\n" +
+	"\acontent\x18\x0e \x01(\fR\acontent\"X\n" +
 	"\x12AttachFileResponse\x12B\n" +
 	"\n" +
 	"attachment\x18\x01 \x01(\v2\".healthcare.clinical.v1.AttachmentR\n" +

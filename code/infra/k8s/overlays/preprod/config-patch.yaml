@@ -12,3 +12,11 @@ data:
   # environment that forgets to set it is the one least likely to notice a
   # plaintext channel (SRS-SEC-001).
   TLS_MODE: "mesh"
+  # BLOB_* is deliberately not set here. Which bucket, which region and which
+  # managed key hold patient photographs and scanned records is a decision with
+  # legal consequences per environment, and a value committed to this repository
+  # is one a new environment inherits without anybody choosing it. The object
+  # store's endpoint, bucket, region and KMS alias are supplied alongside the
+  # database credential from the managed secret store, the same way DATABASE_URL
+  # is; the service prints its routing table at startup and warns loudly if it
+  # was given none. See ADR-W1-009.

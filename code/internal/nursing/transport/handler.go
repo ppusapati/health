@@ -961,10 +961,14 @@ func (h *Handler) AttachWoundImage(
 		domain.WoundImage{
 			// Checked against the clinical consent record rather than taken on
 			// trust: a consent identifier a caller made up is not a consent.
-			ConsentID: msg.GetConsentId(), StorageKey: msg.GetStorageKey(),
+			ConsentID: msg.GetConsentId(),
+			// Read and passed on so the service can refuse it by name. A
+			// client still sending a key believes the record will point at
+			// bytes it placed itself.
+			StorageKey:  msg.GetStorageKey(), //nolint:staticcheck // deprecated on purpose; refused below
 			ContentType: msg.GetContentType(),
 			CapturedAt:  goTime(msg.GetCapturedAt()),
-		})
+		}, msg.GetContent())
 	if err != nil {
 		return nil, fail(ctx, err)
 	}

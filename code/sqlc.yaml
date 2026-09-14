@@ -28,6 +28,7 @@ sql:
       - db/migrations/0023_orders.up.sql
       - db/migrations/0024_medication.up.sql
       - db/migrations/0025_billing.up.sql
+      - db/migrations/0026_platform_blob.up.sql
     gen:
       go:
         package: sqlcgen

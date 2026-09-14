@@ -1114,15 +1114,42 @@ message AttachFileRequest {
   string patient_id = 3;
   AttachmentKind kind = 4;
   string content_type = 5;
-  // The bytes live in object storage; this records what they are.
-  string storage_key = 6;
-  int64 size_bytes = 7;
-  string digest = 8;
+  // Superseded by content, and refused rather than ignored if set.
+  //
+  // These were the caller's word for where it had already put the bytes and
+  // what they were. A caller-supplied storage key is a caller-supplied path:
+  // it can address another tenant's object, something outside the store, or
+  // nothing at all, and the attachment record would still look complete. A
+  // caller-supplied digest is worse — it is the field a reader trusts to tell
+  // it the content has not been altered, asserted by whoever supplied the
+  // content.
+  //
+  // Kept on the wire rather than removed so an old client gets an error that
+  // names the problem instead of a field number that has quietly changed
+  // meaning.
+  string storage_key = 6 [deprecated = true];
+  int64 size_bytes = 7 [deprecated = true];
+  string digest = 8 [deprecated = true];
   string description = 9;
   Confidentiality confidentiality = 10;
   google.protobuf.Timestamp captured_at = 11;
   string source_system = 12;
   Provenance provenance = 13;
+  // The file itself.
+  //
+  // The bytes, not a key naming where the caller already put them. A
+  // caller-supplied storage key is a caller-supplied path: it can point at
+  // another tenant's object, at something outside the store, or at nothing at
+  // all, and the record would still look complete. The server writes the
+  // bytes, chooses the key and computes the size and the digest, so the
+  // attachment's own metadata is a statement about content the server has
+  // actually seen.
+  //
+  // Attachments are bounded (see MaxAttachmentBytes and the configured class
+  // limit) and travel in the request. When something genuinely large arrives —
+  // imaging — it gets a presigned upload of its own rather than a bigger
+  // message.
+  bytes content = 14;
 }
 
 message AttachFileResponse {

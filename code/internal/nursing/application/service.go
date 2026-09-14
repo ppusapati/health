@@ -95,6 +95,7 @@ type Service struct {
 	downtime       ports.DowntimeRepository
 	encounters     ports.Encounters
 	consents       ports.Consents
+	images         ports.ImageStore
 	events         ports.EventAppender
 	audits         ports.AuditAppender
 	ids            ports.IDGenerator
@@ -124,6 +125,11 @@ type Deps struct {
 	// patient it belongs to. Nil accepts everything, which is correct only
 	// where no encounter context exists.
 	Encounters ports.Encounters
+	// Images holds wound photograph bytes (SRS-NUR-012). Nil is a valid
+	// deployment and the default: one that stores no binary content refuses to
+	// attach a photograph rather than recording an image pointing at nothing.
+	Images ports.ImageStore
+
 	// Consents answers whether a consent covers clinical photography
 	// (SRS-NUR-012). Nil refuses every image, which is the safe direction.
 	Consents ports.Consents
@@ -141,7 +147,7 @@ func NewService(d Deps) *Service {
 		administration: d.Administration, orders: d.Orders,
 		tasks: d.Tasks, plans: d.Plans, handovers: d.Handovers,
 		safety: d.Safety, ward: d.Ward, downtime: d.Downtime,
-		encounters: d.Encounters, consents: d.Consents,
+		encounters: d.Encounters, consents: d.Consents, images: d.Images,
 		events: d.Events, audits: d.Audits, ids: d.IDs, clock: d.Clock,
 	}
 }

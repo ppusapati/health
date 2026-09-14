@@ -23,6 +23,7 @@ import (
 	"github.com/ppusapati/health/code/internal/identity_access/adapters/devauth"
 	oidcadapter "github.com/ppusapati/health/code/internal/identity_access/adapters/oidc"
 	identitypostgres "github.com/ppusapati/health/code/internal/identity_access/adapters/postgres"
+	"github.com/ppusapati/health/code/internal/platform/blobstore"
 	"github.com/ppusapati/health/code/internal/platform/obs"
 	"github.com/ppusapati/health/code/internal/platform/pgtx"
 	platformtransport "github.com/ppusapati/health/code/internal/platform/transport"
@@ -103,9 +104,29 @@ func run() error {
 		return err
 	}
 
+	// Where binary content lives, decided once from configuration
+	// (SRS-DAT-007). A misconfigured routing table fails here rather than at
+	// the first photograph somebody tries to take.
+	blobs, err := blobstore.Build(os.Getenv, pgtx.NewManager(pool))
+	if err != nil {
+		return err
+	}
+	if blobs != nil {
+		for _, route := range blobs.Describe() {
+			slog.Info("blob storage route", slog.String("route", route))
+		}
+	} else {
+		// Said out loud, because the consequence is that capturing a
+		// photograph or attaching a document will be refused, and an operator
+		// should learn that from the startup log rather than from a ward.
+		slog.Warn("no blob storage backends configured; " +
+			"this deployment will refuse to store binary content")
+	}
+
 	server := app.New(app.Deps{
 		Pool:     pool,
 		Verifier: verifier,
+		Blobs:    blobs,
 		Build: platformapitransport.BuildInfo{
 			Version: version, Commit: commit, BuiltAt: builtAt,
 		},

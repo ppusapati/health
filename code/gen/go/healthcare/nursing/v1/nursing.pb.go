@@ -10640,10 +10640,24 @@ type AttachWoundImageRequest struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	WoundAssessmentId string                 `protobuf:"bytes,1,opt,name=wound_assessment_id,json=woundAssessmentId,proto3" json:"wound_assessment_id,omitempty"`
 	// Checked against the clinical consent record rather than taken on trust.
-	ConsentId     string                 `protobuf:"bytes,2,opt,name=consent_id,json=consentId,proto3" json:"consent_id,omitempty"`
-	StorageKey    string                 `protobuf:"bytes,3,opt,name=storage_key,json=storageKey,proto3" json:"storage_key,omitempty"`
-	ContentType   string                 `protobuf:"bytes,4,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
-	CapturedAt    *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=captured_at,json=capturedAt,proto3" json:"captured_at,omitempty"`
+	ConsentId string `protobuf:"bytes,2,opt,name=consent_id,json=consentId,proto3" json:"consent_id,omitempty"`
+	// Superseded by content, and refused rather than ignored if set. A
+	// caller-supplied key can address another tenant's object or nothing at all,
+	// and the assessment would still look complete. Kept on the wire so an old
+	// client gets an error naming the problem rather than a field number that
+	// quietly changed meaning.
+	//
+	// Deprecated: Marked as deprecated in healthcare/nursing/v1/nursing.proto.
+	StorageKey  string                 `protobuf:"bytes,3,opt,name=storage_key,json=storageKey,proto3" json:"storage_key,omitempty"`
+	ContentType string                 `protobuf:"bytes,4,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
+	CapturedAt  *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=captured_at,json=capturedAt,proto3" json:"captured_at,omitempty"`
+	// The photograph itself.
+	//
+	// The bytes, not a key naming where the caller already put them: a
+	// caller-supplied key can address another tenant's object or nothing at all,
+	// and the assessment would still look complete. The server writes the bytes
+	// and chooses the key, so the image on the record is one it has seen.
+	Content       []byte `protobuf:"bytes,6,opt,name=content,proto3" json:"content,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -10692,6 +10706,7 @@ func (x *AttachWoundImageRequest) GetConsentId() string {
 	return ""
 }
 
+// Deprecated: Marked as deprecated in healthcare/nursing/v1/nursing.proto.
 func (x *AttachWoundImageRequest) GetStorageKey() string {
 	if x != nil {
 		return x.StorageKey
@@ -10709,6 +10724,13 @@ func (x *AttachWoundImageRequest) GetContentType() string {
 func (x *AttachWoundImageRequest) GetCapturedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.CapturedAt
+	}
+	return nil
+}
+
+func (x *AttachWoundImageRequest) GetContent() []byte {
+	if x != nil {
+		return x.Content
 	}
 	return nil
 }
@@ -14082,16 +14104,17 @@ const file_healthcare_nursing_v1_nursing_proto_rawDesc = "" +
 	"\x13AssessWoundResponse\x12F\n" +
 	"\n" +
 	"assessment\x18\x01 \x01(\v2&.healthcare.nursing.v1.WoundAssessmentR\n" +
-	"assessment\"\xe9\x01\n" +
+	"assessment\"\x87\x02\n" +
 	"\x17AttachWoundImageRequest\x12.\n" +
 	"\x13wound_assessment_id\x18\x01 \x01(\tR\x11woundAssessmentId\x12\x1d\n" +
 	"\n" +
-	"consent_id\x18\x02 \x01(\tR\tconsentId\x12\x1f\n" +
-	"\vstorage_key\x18\x03 \x01(\tR\n" +
+	"consent_id\x18\x02 \x01(\tR\tconsentId\x12#\n" +
+	"\vstorage_key\x18\x03 \x01(\tB\x02\x18\x01R\n" +
 	"storageKey\x12!\n" +
 	"\fcontent_type\x18\x04 \x01(\tR\vcontentType\x12;\n" +
 	"\vcaptured_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"capturedAt\"b\n" +
+	"capturedAt\x12\x18\n" +
+	"\acontent\x18\x06 \x01(\fR\acontent\"b\n" +
 	"\x18AttachWoundImageResponse\x12F\n" +
 	"\n" +
 	"assessment\x18\x01 \x01(\v2&.healthcare.nursing.v1.WoundAssessmentR\n" +

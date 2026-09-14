@@ -27,9 +27,11 @@ import (
 	billingpostgres "github.com/ppusapati/health/code/internal/billing/adapters/postgres"
 	billingapp "github.com/ppusapati/health/code/internal/billing/application"
 	billingtransport "github.com/ppusapati/health/code/internal/billing/transport"
+	"github.com/ppusapati/health/code/internal/clinical/adapters/attachmentstore"
 	clinicalpostgres "github.com/ppusapati/health/code/internal/clinical/adapters/postgres"
 	clinicalapp "github.com/ppusapati/health/code/internal/clinical/application"
 	clinicaltransport "github.com/ppusapati/health/code/internal/clinical/transport"
+	"github.com/ppusapati/health/code/internal/empi/adapters/photostore"
 	empipostgres "github.com/ppusapati/health/code/internal/empi/adapters/postgres"
 	empiapp "github.com/ppusapati/health/code/internal/empi/application"
 	empiports "github.com/ppusapati/health/code/internal/empi/ports"
@@ -42,6 +44,7 @@ import (
 	medicationpostgres "github.com/ppusapati/health/code/internal/medication/adapters/postgres"
 	medicationapp "github.com/ppusapati/health/code/internal/medication/application"
 	medicationtransport "github.com/ppusapati/health/code/internal/medication/transport"
+	"github.com/ppusapati/health/code/internal/nursing/adapters/imagestore"
 	nursingmedication "github.com/ppusapati/health/code/internal/nursing/adapters/medication"
 	nursingpostgres "github.com/ppusapati/health/code/internal/nursing/adapters/postgres"
 	nursingapp "github.com/ppusapati/health/code/internal/nursing/application"
@@ -53,6 +56,7 @@ import (
 	orgpostgres "github.com/ppusapati/health/code/internal/organization/adapters/postgres"
 	orgapp "github.com/ppusapati/health/code/internal/organization/application"
 	orgtransport "github.com/ppusapati/health/code/internal/organization/transport"
+	"github.com/ppusapati/health/code/internal/platform/blobstore"
 	"github.com/ppusapati/health/code/internal/platform/eventbus"
 	"github.com/ppusapati/health/code/internal/platform/pgtx"
 	"github.com/ppusapati/health/code/internal/platform/store"
@@ -131,11 +135,19 @@ type Deps struct {
 	// makes verification possible, not what makes linking possible.
 	IdentifierRegistries empiports.IdentifierRegistries
 
-	// PhotoStore holds patient photograph bytes (SRS-EMPI-010).
+	// Blobs is the platform blob store: one configured routing table deciding
+	// where every class of binary content lives (SRS-DAT-007).
 	//
-	// Nil is a valid deployment and the default: one that does not store
-	// patient photographs refuses to capture one rather than recording a row
-	// that points at nothing.
+	// Nil is a valid deployment and the default. One that stores no binary
+	// content refuses to capture a photograph rather than recording a row that
+	// points at nothing, and inventing a scratch directory for it would give it
+	// a store that works until the pod restarts.
+	Blobs *blobstore.Vault
+
+	// PhotoStore overrides where patient photograph bytes go (SRS-EMPI-010).
+	//
+	// Left nil it is derived from Blobs, which is what a deployment does. It is
+	// here for tests that want to watch or fail the store itself.
 	PhotoStore empiports.PhotoStore
 
 	// MeetingProvider mints teleconsult join links (SRS-SCH-015).
@@ -195,6 +207,15 @@ func New(deps Deps) *Server {
 
 	txManager := pgtx.NewManager(deps.Pool)
 
+	// Where patient photographs go is the blob store's routing decision, not
+	// the patient index's. photostore.New returns a nil interface for a nil
+	// vault, so "this deployment stores no binary content" stays a single
+	// condition rather than one repeated at every call site.
+	photoStore := deps.PhotoStore
+	if photoStore == nil {
+		photoStore = photostore.New(deps.Blobs)
+	}
+
 	repo := orgpostgres.New(txManager)
 	platformStore := store.New(txManager)
 
@@ -224,7 +245,7 @@ func New(deps Deps) *Server {
 		History:      empipostgres.HistoryRepo{Repository: empiRepo},
 		Proposals:    empipostgres.ProposalRepo{Repository: empiRepo},
 		Photos:       empipostgres.PhotoRepo{Repository: empiRepo},
-		PhotoStore:   deps.PhotoStore,
+		PhotoStore:   photoStore,
 		Unidentified: empipostgres.UnidentifiedRepo{Repository: empiRepo},
 		Registries:   deps.IdentifierRegistries,
 		Numbers:      empipostgres.NewMRNIssuer(repo),
@@ -293,9 +314,13 @@ func New(deps Deps) *Server {
 		Templates:  clinicalpostgres.TemplateRepo{Repository: clinicalRepo},
 		Records:    clinicalpostgres.RecordRepo{Repository: clinicalRepo},
 		Governance: clinicalpostgres.GovernanceRepo{Repository: clinicalRepo},
-		Decisions:  clinicalpostgres.DecisionRepo{Repository: clinicalRepo},
-		Phrases:    clinicalpostgres.SmartPhraseRepo{Repository: clinicalRepo},
-		Timeline:   clinicalTimeline,
+		// Attached files go to the blob store's clinical-attachment class
+		// (SRS-CLN-014). Nil vault, nil port: a deployment that stores no
+		// binary content refuses to attach a file.
+		Attachments: attachmentstore.New(deps.Blobs),
+		Decisions:   clinicalpostgres.DecisionRepo{Repository: clinicalRepo},
+		Phrases:     clinicalpostgres.SmartPhraseRepo{Repository: clinicalRepo},
+		Timeline:    clinicalTimeline,
 		Encounters: clinicalpostgres.NewEncounters(
 			encounterpostgres.EncounterRepo{Repository: encounterRepo}),
 		Patients: clinicalpostgres.NewPatients(
@@ -377,8 +402,11 @@ func New(deps Deps) *Server {
 
 	nursingRepo := nursingpostgres.New(txManager)
 	nursingService := nursingapp.NewService(nursingapp.Deps{
-		UnitOfWork:     txManager,
-		Assessments:    nursingpostgres.NewAssessments(nursingRepo),
+		UnitOfWork:  txManager,
+		Assessments: nursingpostgres.NewAssessments(nursingRepo),
+		// Wound photographs go to the blob store's wound-image class
+		// (SRS-NUR-012).
+		Images:         imagestore.New(deps.Blobs),
 		Risks:          nursingpostgres.NewRisk(nursingRepo),
 		Flowsheet:      nursingpostgres.NewFlowsheet(nursingRepo),
 		Devices:        nursingpostgres.NewDevices(nursingRepo),

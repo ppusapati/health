@@ -188,21 +188,19 @@ func NewWoundAssessment(id, tenantID string, in NewWoundAssessmentInput,
 // from.
 func (w *WoundAssessment) AreaMM2() float64 { return w.LengthMM * w.WidthMM }
 
-// AttachImage adds a photograph, which requires a consent that covers it
-// (SRS-NUR-012).
+// CanAttachImage reports whether this image may be attached, ignoring where
+// its bytes live.
 //
-// The consent is checked by the caller against the clinical context's consent
-// record and passed in as a decision. This context refuses an image with no
-// consent reference, so there is no path by which an unconsented photograph is
-// stored — including for a caller that simply forgot to look.
-func (w *WoundAssessment) AttachImage(img WoundImage, consentCovers bool,
+// Split out from AttachImage so the application can ask before it writes
+// anything. A photograph of a patient taken without consent must not reach the
+// store even briefly: writing it and deleting it again on refusal leaves the
+// bytes on a disk, in a bucket's version history or in a replica, which is
+// precisely what the consent was about.
+func (w *WoundAssessment) CanAttachImage(img WoundImage, consentCovers bool,
 	now time.Time) error {
 
 	if strings.TrimSpace(img.ImageID) == "" {
 		return invalidf("an image needs an identifier")
-	}
-	if strings.TrimSpace(img.StorageKey) == "" {
-		return invalidf("an image needs somewhere to read its bytes from")
 	}
 	if strings.TrimSpace(img.ConsentID) == "" {
 		return notAllowedf(
@@ -227,10 +225,30 @@ func (w *WoundAssessment) AttachImage(img WoundImage, consentCovers bool,
 			return notAllowedf("this image is already attached")
 		}
 	}
+	return nil
+}
+
+// AttachImage adds a photograph, which requires a consent that covers it
+// (SRS-NUR-012).
+//
+// The consent is checked by the caller against the clinical context's consent
+// record and passed in as a decision. This context refuses an image with no
+// consent reference, so there is no path by which an unconsented photograph is
+// stored — including for a caller that simply forgot to look.
+func (w *WoundAssessment) AttachImage(img WoundImage, consentCovers bool,
+	now time.Time) error {
+
+	if err := w.CanAttachImage(img, consentCovers, now); err != nil {
+		return err
+	}
+	if strings.TrimSpace(img.StorageKey) == "" {
+		return invalidf("an image needs somewhere to read its bytes from")
+	}
 	img.CapturedAt = img.CapturedAt.UTC()
 	img.Sequence = int32(len(w.Images)) + 1
 	w.Images = append(w.Images, img)
 	w.Version++
+
 	return nil
 }
 

@@ -12,3 +12,10 @@ data:
   # environment that forgets to set it is the one least likely to notice a
   # plaintext channel (SRS-SEC-001).
   TLS_MODE: "mesh"
+  # Binary content goes to a filesystem in development. Not replicated and not
+  # encrypted by the process — honest for a single pod, and wrong for anything
+  # with a second availability zone, which is why production names an object
+  # store instead (ADR-W1-009).
+  BLOB_BACKENDS: "local"
+  BLOB_BACKEND_LOCAL_KIND: "filesystem"
+  BLOB_BACKEND_LOCAL_ROOT: "/var/lib/health/blobs"

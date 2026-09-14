@@ -1312,9 +1312,21 @@ message AttachWoundImageRequest {
   string wound_assessment_id = 1;
   // Checked against the clinical consent record rather than taken on trust.
   string consent_id = 2;
-  string storage_key = 3;
+  // Superseded by content, and refused rather than ignored if set. A
+  // caller-supplied key can address another tenant's object or nothing at all,
+  // and the assessment would still look complete. Kept on the wire so an old
+  // client gets an error naming the problem rather than a field number that
+  // quietly changed meaning.
+  string storage_key = 3 [deprecated = true];
   string content_type = 4;
   google.protobuf.Timestamp captured_at = 5;
+  // The photograph itself.
+  //
+  // The bytes, not a key naming where the caller already put them: a
+  // caller-supplied key can address another tenant's object or nothing at all,
+  // and the assessment would still look complete. The server writes the bytes
+  // and chooses the key, so the image on the record is one it has seen.
+  bytes content = 6;
 }
 
 message AttachWoundImageResponse {

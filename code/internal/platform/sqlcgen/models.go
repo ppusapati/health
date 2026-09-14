@@ -1817,6 +1817,14 @@ type OrganizationTenant struct {
 	Version           int64
 }
 
+type PlatformBlobObject struct {
+	ObjectKey   string
+	ContentType string
+	SizeBytes   int64
+	Content     []byte
+	WrittenAt   pgtype.Timestamptz
+}
+
 type PlatformDataAuditRecord struct {
 	AuditID       uuid.UUID
 	TenantID      uuid.UUID

@@ -1,179 +1,113 @@
-// Package photostore holds patient photograph bytes.
+// Package photostore adapts the platform blob store onto the patient index.
 //
-// A separate package behind ports.PhotoStore because where patient photographs
-// live is a deployment decision with real consequences — encryption at rest,
-// retention, data residency — and none of them belong in the patient index.
-// The production adapter is object storage; this one is a filesystem, which is
-// enough for development and for a single-node edge deployment and is honest
-// about being neither replicated nor encrypted.
+// All this does is bind a content class and translate errors. Where patient
+// photographs actually live — a filesystem, an S3-compatible bucket, a
+// different bucket for one tenant because of a residency clause — is a
+// deployment decision configured once in internal/platform/blobstore, and the
+// patient index has no business knowing which answer this deployment gave.
+//
+// The translation is the other half. The blob store speaks sentinel errors,
+// because it is a platform package and platform packages do not decide what a
+// caller's API returns; the patient index speaks rpcerr codes, because a
+// clinician's screen has to say something useful. Doing it here means an
+// object that has been tampered with surfaces as EMPI_PHOTO_CORRUPT rather
+// than as an opaque internal error.
 package photostore
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
-	"fmt"
-	"io/fs"
-	"os"
-	"path/filepath"
-	"strings"
 
 	"github.com/ppusapati/health/code/internal/empi/ports"
 	"github.com/ppusapati/health/code/internal/platform/authctx"
+	"github.com/ppusapati/health/code/internal/platform/blobstore"
 	"github.com/ppusapati/health/code/internal/platform/rpcerr"
 )
 
-// Filesystem stores photographs under a root directory.
+// Store holds patient photographs in the platform blob store.
+type Store struct {
+	vault *blobstore.Vault
+}
+
+// New binds a vault to the patient-photograph class.
 //
-// Keys are tenant-prefixed and generated here rather than supplied by the
-// caller. A caller-chosen key is a path traversal waiting to happen, and a key
-// derived from the patient id would make the object name itself a patient
-// identifier visible to anybody who can list the bucket.
-type Filesystem struct {
-	root string
-}
-
-// extensions maps a content type to the suffix a key gets.
+// A nil vault yields a nil store, so a deployment that configured no blob
+// backends stays one that refuses to capture a photograph rather than one that
+// records a row pointing at nothing. The application layer already treats a
+// nil PhotoStore that way; this keeps the composition root from having to
+// spell the same condition out again.
 //
-// Allowlisted rather than derived from the content type string: a suffix taken
-// from caller input is how "image/jpeg; ../../etc/passwd" becomes a filename.
-var extensions = map[string]string{
-	"image/jpeg": ".jpg",
-	"image/png":  ".png",
-	"image/webp": ".webp",
+// It returns the interface rather than *Store precisely because of that. A
+// (*Store)(nil) assigned into a ports.PhotoStore is an interface value that is
+// not nil, so the application's "no store configured" branch would be skipped
+// and the first photograph would panic on a nil pointer instead. Returning the
+// interface here is the one place that can be got right once.
+func New(vault *blobstore.Vault) ports.PhotoStore {
+	if vault == nil {
+		return nil
+	}
+	return &Store{vault: vault}
 }
 
-// NewFilesystem prepares a store rooted at dir.
-func NewFilesystem(dir string) (*Filesystem, error) {
-	if strings.TrimSpace(dir) == "" {
-		return nil, errors.New("photostore: a filesystem store needs a root directory")
-	}
-	absolute, err := filepath.Abs(dir)
-	if err != nil {
-		return nil, fmt.Errorf("photostore: resolving %q: %w", dir, err)
-	}
-	// 0o700: photographs of patients. Group and other have no business here,
-	// and a store created world-readable is not something anybody notices.
-	if err := os.MkdirAll(absolute, 0o700); err != nil {
-		return nil, fmt.Errorf("photostore: creating %q: %w", absolute, err)
-	}
-	return &Filesystem{root: absolute}, nil
-}
-
-// Put writes the bytes under a newly generated key.
-func (f *Filesystem) Put(ctx context.Context, scope authctx.TenantScope,
+// Put stores the bytes and returns the reference to keep on the photo record.
+func (s *Store) Put(ctx context.Context, scope authctx.TenantScope,
 	contentType string, content []byte) (string, error) {
 
-	if err := ctx.Err(); err != nil {
-		return "", err
-	}
-	tenantID := scope.TenantID()
-	if tenantID == "" {
-		return "", rpcerr.Internal("EMPI_NO_TENANT_SCOPE", "a photograph needs a tenant scope")
-	}
-	extension, ok := extensions[contentType]
-	if !ok {
-		return "", rpcerr.Invalid("EMPI_PHOTO_TYPE_UNSUPPORTED",
-			"that is not a photograph format this store holds")
-	}
-
-	// 128 bits from crypto/rand. Unguessable, because a key that could be
-	// enumerated would let anybody who can reach the store walk every
-	// photograph in it.
-	var raw [16]byte
-	if _, err := rand.Read(raw[:]); err != nil {
-		return "", fmt.Errorf("photostore: generating a key: %w", err)
-	}
-	key := tenantID + "/" + hex.EncodeToString(raw[:]) + extension
-
-	path, err := f.resolve(key)
+	object, err := s.vault.Put(ctx, scope, blobstore.ClassPatientPhoto, contentType, content)
 	if err != nil {
-		return "", err
+		return "", photoError(err)
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return "", fmt.Errorf("photostore: creating tenant directory: %w", err)
-	}
-	if err := os.WriteFile(path, content, 0o600); err != nil {
-		return "", fmt.Errorf("photostore: writing %q: %w", key, err)
-	}
-	return key, nil
+	return object.Reference, nil
 }
 
-// Get reads the bytes back.
-func (f *Filesystem) Get(ctx context.Context, scope authctx.TenantScope, key string) ([]byte, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	if err := f.ownedBy(scope, key); err != nil {
-		return nil, err
-	}
-	path, err := f.resolve(key)
+// Get reads the bytes back, verified against the digest in the reference.
+func (s *Store) Get(ctx context.Context, scope authctx.TenantScope, key string) ([]byte, error) {
+	content, err := s.vault.Get(ctx, scope, key)
 	if err != nil {
-		return nil, err
-	}
-	content, err := os.ReadFile(path)
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil, rpcerr.NotFound("EMPI_PHOTO_MISSING", "the photograph is not in the store")
-	}
-	if err != nil {
-		return nil, fmt.Errorf("photostore: reading %q: %w", key, err)
+		return nil, photoError(err)
 	}
 	return content, nil
 }
 
-// Delete removes the bytes.
-//
-// Idempotent: a withdrawal retried after a partial failure must not fail
-// because the object is already gone, or consent stays un-withdrawable.
-func (f *Filesystem) Delete(ctx context.Context, scope authctx.TenantScope, key string) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	if err := f.ownedBy(scope, key); err != nil {
-		return err
-	}
-	path, err := f.resolve(key)
-	if err != nil {
-		return err
-	}
-	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return fmt.Errorf("photostore: deleting %q: %w", key, err)
+// Delete removes the bytes. Idempotent, so a withdrawal retried after a
+// partial failure completes rather than sticking.
+func (s *Store) Delete(ctx context.Context, scope authctx.TenantScope, key string) error {
+	if err := s.vault.Delete(ctx, scope, key); err != nil {
+		return photoError(err)
 	}
 	return nil
 }
 
-// ownedBy refuses a key belonging to another tenant.
-//
-// The key prefix is the tenant, so this is checkable without a database read.
-// Belt and braces: the repository already scopes every lookup, and a store that
-// served any key it was handed would turn one leaked key into cross-tenant
-// access.
-func (f *Filesystem) ownedBy(scope authctx.TenantScope, key string) error {
-	tenantID := scope.TenantID()
-	if tenantID == "" {
-		return rpcerr.Internal("EMPI_NO_TENANT_SCOPE", "a photograph needs a tenant scope")
-	}
-	if !strings.HasPrefix(key, tenantID+"/") {
-		// Not found rather than forbidden: a probe must not be able to confirm
-		// that a key exists in another tenant.
+// photoError translates a blob store failure into what a clinician's screen
+// should say.
+func photoError(err error) error {
+	switch {
+	case errors.Is(err, blobstore.ErrNotFound):
+		// Not found rather than forbidden, including for another tenant's
+		// reference: a probe must not be able to confirm that a photograph
+		// exists somewhere it cannot read.
 		return rpcerr.NotFound("EMPI_PHOTO_MISSING", "the photograph is not in the store")
+	case errors.Is(err, blobstore.ErrDigestMismatch):
+		// The bytes in the store are not the bytes that were captured. Never
+		// shown: a photograph used to identify a patient at the bedside is
+		// exactly the thing that must not be quietly wrong.
+		return rpcerr.Internal("EMPI_PHOTO_CORRUPT",
+			"the stored photograph does not match its recorded digest").WithCause(err)
+	case errors.Is(err, blobstore.ErrTooLarge):
+		return rpcerr.Invalid("EMPI_PHOTO_TOO_LARGE", "that photograph is too large to store")
+	case errors.Is(err, blobstore.ErrUnsupportedContentType):
+		return rpcerr.Invalid("EMPI_PHOTO_TYPE_UNSUPPORTED",
+			"that is not a photograph format this store holds")
+	case errors.Is(err, blobstore.ErrInvalidObject):
+		return rpcerr.Invalid("EMPI_PHOTO_INVALID", "that photograph cannot be stored").WithCause(err)
+	case errors.Is(err, blobstore.ErrNoBackend):
+		// A configuration mistake, not a missing photograph. Saying so is what
+		// keeps it from being diagnosed as data loss.
+		return rpcerr.Internal("EMPI_PHOTO_STORE_NOT_CONFIGURED",
+			"the store holding this photograph is not configured in this deployment").WithCause(err)
+	default:
+		return err
 	}
-	return nil
 }
 
-// resolve turns a key into a path inside the root.
-//
-// The containment check is not redundant with key generation: Get and Delete
-// take a key read back from the database, and a row written by an earlier
-// version — or by anything else with table access — must not be able to reach
-// outside the store.
-func (f *Filesystem) resolve(key string) (string, error) {
-	cleaned := filepath.Clean(filepath.Join(f.root, filepath.FromSlash(key)))
-	if cleaned != f.root && !strings.HasPrefix(cleaned, f.root+string(os.PathSeparator)) {
-		return "", rpcerr.NotFound("EMPI_PHOTO_MISSING", "the photograph is not in the store")
-	}
-	return cleaned, nil
-}
-
-var _ ports.PhotoStore = (*Filesystem)(nil)
+var _ ports.PhotoStore = (*Store)(nil)

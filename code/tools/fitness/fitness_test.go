@@ -151,6 +151,7 @@ var schemaOwners = map[string]string{
 	"platform_rules":    "internal/platform/rules",
 	"platform_edge":     "internal/edge/cloudstore",
 	"security_platform": "internal/security/adapters/postgres",
+	"platform_blob":     "internal/platform/blobstore",
 }
 
 // TestSQLSchemaRefDetectorWorks guards the guard.
@@ -246,6 +247,7 @@ func TestFIT02_GeneratedQueriesImportedOnlyByAdapters(t *testing.T) {
 		"internal/platform/rules",
 		"internal/edge/cloudstore",
 		"internal/security/adapters/postgres",
+		"internal/platform/blobstore",
 	}
 
 	var importers int
@@ -644,8 +646,20 @@ func TestNoBlobContentInRelationalSchema(t *testing.T) {
 	// bytea is legitimate for small fixed-size cryptographic material — a
 	// nonce, a digest, a signature. It is not legitimate for content. The
 	// distinction cannot be drawn from the type, so it is drawn from the
-	// column name, and an allowlist carries the exceptions with their reasons.
-	allowedByteaColumns := map[string]string{}
+	// column, and an allowlist carries the exceptions with their reasons.
+	//
+	// Keyed on migration and column together rather than on the column name
+	// alone. "content" is the obvious name for the thing this rule exists to
+	// forbid, and an allowlist entry for the bare word would silently permit
+	// every future migration that reached for it.
+	allowedByteaColumns := map[string]string{
+		"0026_platform_blob.up.sql:content": "SRS-DAT-007 deviation, bounded and deliberate: " +
+			"content inlined here is capped at 64 KiB by a CHECK constraint in the same " +
+			"migration, which is what keeps the rule's actual concern — a database whose " +
+			"backup and replication profile is set by how many studies were taken today — " +
+			"from applying. Raising that cap needs a migration and this comment re-read. " +
+			"See db/migrations/0026_platform_blob.up.sql.",
+	}
 
 	byteaColumn := regexp.MustCompile(`(?mi)^\s*(\w+)\s+bytea\b`)
 
@@ -656,7 +670,7 @@ func TestNoBlobContentInRelationalSchema(t *testing.T) {
 		}
 		for _, match := range byteaColumn.FindAllStringSubmatch(stripSQLComments(string(raw)), -1) {
 			column := match[1]
-			if _, ok := allowedByteaColumns[column]; ok {
+			if _, ok := allowedByteaColumns[filepath.Base(path)+":"+column]; ok {
 				continue
 			}
 			t.Errorf("%s: column %q is bytea. Object content belongs in the object "+
