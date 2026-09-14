@@ -14,8 +14,8 @@ What this records is which requirements have working, tested implementations.
 | 1 | EMPI foundation | SRS-EMPI-001 … 009 | **Complete** |
 | 2 | EMPI completion | SRS-EMPI-010 … 018 | **Complete** |
 | 3 | Scheduling | SRS-SCH-001 … 016 | **Complete** |
-| 4 | Encounter, clinical, nursing | SRS-ENC/CLN/NUR | **In progress** — SRS-ENC complete |
-| 5 | Orders, medication, billing | SRS-ORD/MED/BIL | Not started |
+| 4 | Encounter, clinical, nursing | SRS-ENC/CLN/NUR | **Complete** |
+| 5 | Orders, medication, billing | SRS-ORD/MED/BIL | **Complete** |
 
 ## Sprint 1 — patient identity
 
