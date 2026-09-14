@@ -43,6 +43,16 @@ const (
 	// RoleClinician reads patient identity in the course of care.
 	RoleClinician Role = "clinician"
 
+	// RolePerformingService is a downstream context's service account
+	// (SRS-ORD-006).
+	//
+	// A role rather than an exemption, because a laboratory information system
+	// advancing an order is a subject like any other and its actions belong in
+	// the same audit trail. Note what it cannot do: place an order. A
+	// performing service that could place one could manufacture the work it
+	// then bills for.
+	RolePerformingService Role = "performing_service"
+
 	// RoleNurse delivers and records nursing care (SRS-NUR, Wave-1 actor
 	// "Nurse").
 	//
@@ -87,6 +97,11 @@ var rolePermissions = map[Role][]string{
 		// absent: no cln.record.read. Deciding what a note asks and reading
 		// what it says are different jobs.
 		"cln.record.configure",
+		// Order sets, the order policy and the duplicate rules (SRS-ORD-003,
+		// SRS-ORD-007, SRS-ORD-009). Institutional governance, and again not
+		// bundled with reading the orders themselves: deciding what a set
+		// offers and looking at who was ordered what are different jobs.
+		"ord.order.configure",
 		// Assessment templates, risk scales, the administration policy and the
 		// acuity weights (SRS-NUR-001, SRS-NUR-005, SRS-NUR-008, SRS-NUR-016).
 		// Note what is absent again: no nur.record.read. Deciding what a ward
@@ -166,6 +181,12 @@ var rolePermissions = map[Role][]string{
 		"empi.patient.manage",
 		"empi.patient.merge",
 		"organization.facility.read",
+		// Marking an order entered-in-error (SRS-ORD-005). Health information
+		// management's, not the ward's: saying a record was never true is a
+		// statement about the record rather than about the patient, and it is
+		// the same authority that resolves a merge.
+		"ord.order.read",
+		"ord.order.retract",
 	},
 
 	// A clinician reads identity to confirm they have the right patient in
@@ -215,6 +236,19 @@ var rolePermissions = map[Role][]string{
 		// the desk clear the safety worklist by clicking through it.
 		"cln.result.acknowledge",
 
+		// Orders (SRS-ORD). Placing is the clinical act the whole CPOE
+		// framework exists to record, and cancelling one's own mistake comes
+		// with it.
+		"ord.order.read",
+		"ord.order.place",
+		"ord.order.cancel",
+		// Blood products are gated separately (SRS-ORD-002's requester
+		// privilege): a unit of blood is traced unit by unit, and a hospital
+		// that wants the authority restricted to senior staff must be able to
+		// say so. Granted here because a consultant is who orders one; a
+		// tenant that disagrees withholds it from the role.
+		"ord.blood_product.order",
+
 		// Nursing content is readable by the medical team — a ward round is
 		// read from the flowsheet — but a doctor does not chart observations,
 		// give medication or apply restraints, so only the read is here.
@@ -238,6 +272,13 @@ var rolePermissions = map[Role][]string{
 		// (SRS-CLN-012).
 		"cln.result.acknowledge",
 
+		// A nurse reads the order list — it is what the ward round works
+		// from — and does not place orders. Deliberately no ord.order.place:
+		// a nurse taking a verbal order records it under the doctor's name
+		// through the entered-by field, which keeps who is answerable separate
+		// from who typed it.
+		"ord.order.read",
+
 		"nur.record.read",
 		"nur.record.write",
 		// Giving a drug is the act the whole eMAR exists to record
@@ -259,6 +300,16 @@ var rolePermissions = map[Role][]string{
 		// ward's job, and the ward is who knows the system has gone
 		// (SRS-NUR-018).
 		"nur.downtime.manage",
+	},
+
+	// A downstream service moves orders through their lifecycle and does
+	// nothing else (SRS-ORD-006).
+	RolePerformingService: {
+		"ord.order.read",
+		"ord.order.acknowledge",
+		// Deliberately no ord.order.place and no patient read: a laboratory
+		// system needs to know what was asked of it, not who the patient is.
+		// The dispatch carries the identifiers it needs.
 	},
 
 	// A nurse manager runs the ward rather than the bedside.

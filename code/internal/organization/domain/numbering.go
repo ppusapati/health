@@ -30,6 +30,12 @@ const (
 	ScopeEncounter NumberScope = "encounter"
 	ScopeInvoice   NumberScope = "invoice"
 	ScopeReceipt   NumberScope = "receipt"
+	// ScopeOrder numbers clinical orders (SRS-ORD-001). The number a ward reads
+	// down a phone to a laboratory, which is why it comes from here rather than
+	// from a counter of the order context's own: atomic, collision-free and
+	// gapless are exactly the properties it needs, and a second implementation
+	// would be a second set of bugs.
+	ScopeOrder NumberScope = "order"
 )
 
 // NumberSequence is the configuration of one counter.

@@ -274,6 +274,10 @@ func TestAFailedDeliveryIsRetried(t *testing.T) {
 // with no chance to record anything, is recovered by lease expiry and is
 // tested against the database in internal/platform/store, where the lease
 // clock can be controlled.
+// errShutdownMidDelivery is what a handler reports when the process is going
+// away with the delivery still in its hands.
+var errShutdownMidDelivery = errors.New("shutting down mid-delivery")
+
 func TestAnEventSurvivesTheConsumerRestarting(t *testing.T) {
 	blocked := make(chan struct{})
 	claimed := make(chan struct{}, 1)
@@ -290,7 +294,12 @@ func TestAnEventSurvivesTheConsumerRestarting(t *testing.T) {
 		case <-blocked:
 		case <-ctx.Done():
 		}
-		return ctx.Err()
+		// Unconditionally unfinished. Returning ctx.Err() would be nil in the
+		// race where the handler notices the stop signal before the worker's
+		// context is cancelled, and the worker would acknowledge a delivery
+		// nobody handled — which is exactly the stranding this test exists to
+		// rule out, passed off as a success.
+		return errShutdownMidDelivery
 	}
 
 	h := newBusHarness(t, eventbus.Registration{

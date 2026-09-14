@@ -1,0 +1,506 @@
+// Orders and CPOE: one framework across nine order types, order sets,
+// favourites, duplicate detection and downstream routing.
+//
+// Owning context : orders  (Master Engineering Registry)
+// Owning service : OrderService
+// Trace          : SRS-ORD-001 … SRS-ORD-012
+//
+// Two shapes in this contract are deliberate and worth reading before using it.
+//
+// PlaceOrderResponse returns an order *or* a duplicate warning, never both.
+// SRS-ORD-009 requires a warning "rather than arbitrary suppression", so a
+// first attempt comes back with the live orders that already exist and places
+// nothing; a second, carrying the clinician's reason, places the order.
+//
+// CancelOrderResponse says whether the order was withdrawn or a cancellation
+// was *requested*. SRS-ORD-004 rejects cancelling an order the performing
+// service has already started, and converts it to a request the service
+// answers — so a client that assumed cancellation always succeeds would tell a
+// ward that a transfusion had stopped when it had not.
+syntax = "proto3";
+
+package healthcare.orders.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ppusapati/health/code/gen/go/healthcare/orders/v1;ordersv1";
+
+// A coded concept from a terminology.
+message Coding {
+  string system = 1;
+  // Pins the release: codes have been reassigned between revisions.
+  string version = 2;
+  string code = 3;
+  // A bare code on a screen is a screen clinicians stop reading.
+  string display = 4;
+}
+
+// What kind of order this is (SRS-ORD-001).
+enum OrderType {
+  ORDER_TYPE_UNSPECIFIED = 0;
+  ORDER_TYPE_LABORATORY = 1;
+  ORDER_TYPE_IMAGING = 2;
+  ORDER_TYPE_MEDICATION = 3;
+  ORDER_TYPE_PROCEDURE = 4;
+  ORDER_TYPE_DIET = 5;
+  ORDER_TYPE_NURSING = 6;
+  ORDER_TYPE_BLOOD_PRODUCT = 7;
+  ORDER_TYPE_REFERRAL = 8;
+  ORDER_TYPE_ALLIED_HEALTH = 9;
+}
+
+// Where an order stands (SRS-ORD-005).
+enum OrderStatus {
+  ORDER_STATUS_UNSPECIFIED = 0;
+  // Composed and not submitted. An order set is assembled before any of it is
+  // placed, and a basket downstream could see is one somebody acts on.
+  ORDER_STATUS_DRAFT = 1;
+  ORDER_STATUS_REQUESTED = 2;
+  ORDER_STATUS_ACCEPTED = 3;
+  ORDER_STATUS_SCHEDULED = 4;
+  // The boundary SRS-ORD-004 turns on: past here something has happened in the
+  // physical world and the order cannot simply be withdrawn.
+  ORDER_STATUS_IN_PROGRESS = 5;
+  ORDER_STATUS_COMPLETED = 6;
+  ORDER_STATUS_CANCELLED = 7;
+  // Never true — placed on the wrong patient. Distinct from cancelled, which
+  // was a real intention withdrawn.
+  ORDER_STATUS_ENTERED_IN_ERROR = 8;
+}
+
+enum Priority {
+  PRIORITY_UNSPECIFIED = 0;
+  PRIORITY_ROUTINE = 1;
+  PRIORITY_URGENT = 2;
+  // "Now". Reserved, because an escalation tier everybody uses is not one.
+  PRIORITY_STAT = 3;
+  // At a particular moment rather than as fast as possible. A laboratory that
+  // treats this as stat produces a useless trough level.
+  PRIORITY_TIMING_CRITICAL = 4;
+}
+
+// When an order should happen (SRS-ORD-008).
+//
+// Structured rather than a sentence: the acceptance criterion is that
+// downstream receives normalized timing, and a laboratory that parses
+// "6 hourly starting tomorrow" will parse it differently from the pharmacy.
+message Timing {
+  google.protobuf.Timestamp start_at = 1;
+  // Zero means open-ended, which is valid for a standing order.
+  google.protobuf.Timestamp end_at = 2;
+  // How often, in seconds. Zero means once.
+  int64 frequency_seconds = 3;
+  // Bounds a repeat by number rather than by time: "three doses".
+  int32 count = 4;
+  // 0-6 from Sunday. Empty means every day.
+  repeated int32 days_of_week = 5;
+  // Minutes after midnight in the facility's zone. A four-times-daily drug is
+  // given on the ward round, not every six hours from whenever it was
+  // prescribed — and the difference matters for a drug that must not be given
+  // overnight.
+  repeated int32 times_of_day = 6;
+  // As-needed: no schedule.
+  bool prn = 7;
+  // How long each occurrence runs, for an order that is not instantaneous.
+  int64 duration_seconds = 8;
+}
+
+// A clinician proceeding past a duplicate warning (SRS-ORD-009).
+message DuplicateOverride {
+  // The live orders the requester was shown. Stored rather than recomputed:
+  // they usually complete afterwards, and a recomputing report would show every
+  // override as having overridden nothing.
+  repeated string against_order_ids = 1;
+  string reason = 2;
+  string by = 3;
+  google.protobuf.Timestamp at = 4;
+}
+
+// One step in an order's life (SRS-ORD-005, SRS-ORD-010).
+message StatusChange {
+  string change_id = 1;
+  OrderStatus from = 2;
+  OrderStatus to = 3;
+  // A downstream service is a subject like any other, so an acceptance by the
+  // laboratory names its analyser.
+  string by = 4;
+  string reason = 5;
+  google.protobuf.Timestamp occurred_at = 6;
+}
+
+// One request for something to be done (SRS-ORD-001).
+message Order {
+  string order_id = 1;
+  // The human-readable identifier a ward reads down a phone.
+  string number = 2;
+  OrderType type = 3;
+  string patient_id = 4;
+  string encounter_id = 5;
+  string facility_id = 6;
+  // Who is answerable, and who typed it. Not always the same person: a verbal
+  // order taken by a nurse.
+  string requester_id = 7;
+  string entered_by_id = 8;
+  // Derived from the type and stored, so a routing-table change does not
+  // re-route orders already in flight.
+  string target_service = 9;
+
+  Coding code = 10;
+  string detail = 11;
+  // Why (SRS-ORD-007). Required by policy for the types a tenant configures.
+  string indication = 12;
+  Coding indication_code = 13;
+
+  Priority priority = 14;
+  Timing timing = 15;
+  // "If the potassium is under 3.5" — named separately so a receiver cannot
+  // mistake a condition for an instruction.
+  string conditional_instruction = 16;
+
+  OrderStatus status = 17;
+  repeated StatusChange history = 18;
+
+  // SRS-ORD-003's provenance. The version is stored, not referenced: a set
+  // edited afterwards must not restate what was ordered.
+  string order_set_id = 19;
+  string order_set_version = 20;
+  string favourite_id = 21;
+
+  // SRS-ORD-004's corrective workflow. A request, not a status: the order stays
+  // where the performing service put it.
+  google.protobuf.Timestamp cancellation_requested_at = 22;
+  string cancellation_requested_by = 23;
+  string cancellation_reason = 24;
+
+  DuplicateOverride duplicate_override = 25;
+
+  google.protobuf.Timestamp created_at = 26;
+  google.protobuf.Timestamp updated_at = 27;
+  int64 version = 28;
+}
+
+// What a clinician is shown when an order repeats a live one (SRS-ORD-009).
+message DuplicateWarning {
+  // Shown in full rather than counted: "a duplicate exists" without saying
+  // which one is a warning nobody can act on.
+  repeated Order existing = 1;
+  // Whether proceeding is allowed at all.
+  bool overridable = 2;
+  int64 window_seconds = 3;
+}
+
+message PlaceOrderRequest {
+  OrderType type = 1;
+  string patient_id = 2;
+  string encounter_id = 3;
+  Coding code = 4;
+  string detail = 5;
+  string indication = 6;
+  Coding indication_code = 7;
+  Priority priority = 8;
+  Timing timing = 9;
+  string conditional_instruction = 10;
+  // Names the person at the keyboard where that differs from the requester.
+  string entered_by_id = 11;
+  // The clinician answering a duplicate warning. Empty means they have not been
+  // shown one, and a duplicate is reported rather than placed.
+  string acknowledge_duplicates = 12;
+}
+
+message PlaceOrderResponse {
+  // Exactly one of these is set. A warning means nothing was placed.
+  Order order = 1;
+  DuplicateWarning warning = 2;
+}
+
+message GetOrderRequest {
+  string order_id = 1;
+}
+
+message GetOrderResponse {
+  Order order = 1;
+}
+
+message ListOrdersRequest {
+  string patient_id = 1;
+  string encounter_id = 2;
+  OrderType type = 3;
+  // Hides finished orders. Off by default: a chart shows what was ordered, not
+  // only what is outstanding.
+  bool live_only = 4;
+  int32 page_size = 5;
+}
+
+message ListOrdersResponse {
+  repeated Order orders = 1;
+}
+
+message GetWorklistRequest {
+  // The performing service: laboratory, imaging, pharmacy, blood_bank,
+  // dietetics, nursing, procedures, referrals, allied_health.
+  string service = 1;
+  string facility_id = 2;
+  int32 page_size = 3;
+}
+
+message GetWorklistResponse {
+  // Most urgent first.
+  repeated Order orders = 1;
+}
+
+message CancelOrderRequest {
+  string order_id = 1;
+  string reason = 2;
+}
+
+message CancelOrderResponse {
+  Order order = 1;
+  // True where the order was already executing and the cancellation became a
+  // request for the performing service to answer (SRS-ORD-004). A client that
+  // ignored this would tell a ward that a transfusion had stopped when it had
+  // not.
+  bool cancellation_requested = 2;
+}
+
+message RetractOrderRequest {
+  string order_id = 1;
+  string reason = 2;
+}
+
+message RetractOrderResponse {
+  Order order = 1;
+}
+
+// A performing service reporting what it did (SRS-ORD-006).
+message AcknowledgeOrderRequest {
+  string order_id = 1;
+  // Checked against the order's target, so the kitchen cannot accept a
+  // blood-product order.
+  string service = 2;
+  // The bus's identifier for this delivery, and the deduplication key: the same
+  // delivery replayed carries the same identifier. Without it, a replay is
+  // indistinguishable from a new acknowledgement.
+  string delivery_id = 3;
+  OrderStatus status = 4;
+  string reason = 5;
+  // The person or system inside the service. An analyser is a legitimate
+  // answer.
+  string performer_id = 6;
+  google.protobuf.Timestamp occurred_at = 7;
+}
+
+message AcknowledgeOrderResponse {
+  Order order = 1;
+}
+
+// One order a set offers (SRS-ORD-003).
+message Component {
+  string component_id = 1;
+  OrderType type = 2;
+  Coding code = 3;
+  // The visible defaults. Defaults rather than fixed values: a clinician may
+  // change any of them.
+  string detail = 4;
+  string indication = 5;
+  Priority priority = 6;
+  Timing timing = 7;
+  // Whether the box is ticked when the set opens. An unticked component is
+  // offered; a ticked one is what the institution recommends.
+  bool selected_by_default = 8;
+  // Cannot be unticked — a group-and-save with a blood-product order. Rare and
+  // deliberate: a set where everything is mandatory has no selection at all.
+  bool mandatory = 9;
+}
+
+// An institutional bundle of orders (SRS-ORD-003).
+message OrderSet {
+  string set_id = 1;
+  string version = 2;
+  string name = 3;
+  string specialty = 4;
+  repeated Component components = 5;
+  bool retired = 6;
+  string created_by = 7;
+  google.protobuf.Timestamp created_at = 8;
+}
+
+message DefineOrderSetRequest {
+  OrderSet set = 1;
+}
+
+message DefineOrderSetResponse {
+  OrderSet set = 1;
+}
+
+message ListOrderSetsRequest {
+  string specialty = 1;
+  bool include_retired = 2;
+  int32 page_size = 3;
+}
+
+message ListOrderSetsResponse {
+  repeated OrderSet sets = 1;
+}
+
+message RetireOrderSetRequest {
+  string set_id = 1;
+  string version = 2;
+}
+
+message RetireOrderSetResponse {}
+
+// What a clinician chose from a set.
+message Selection {
+  string component_id = 1;
+  // Empty fields keep the set's suggestion.
+  string detail = 2;
+  string indication = 3;
+  Priority priority = 4;
+  Timing timing = 5;
+}
+
+message PlaceFromOrderSetRequest {
+  string set_id = 1;
+  string set_version = 2;
+  string patient_id = 3;
+  string encounter_id = 4;
+  repeated Selection selections = 5;
+  // Answers the duplicate warning for every component at once. One reason for
+  // the basket: a clinician working through a fifteen-item admission set who
+  // had to justify each duplicate separately would stop reading the warnings.
+  string acknowledge_duplicates = 6;
+  string entered_by_id = 7;
+}
+
+message PlaceFromOrderSetResponse {
+  repeated Order placed = 1;
+  // The components that duplicate something live, keyed by code. Reported
+  // alongside what was placed, because a clinician needs to see which two of
+  // the fifteen need a decision — not have the whole basket refused.
+  map<string, DuplicateWarning> warnings = 2;
+}
+
+// One clinician's saved order (SRS-ORD-012).
+//
+// Never shared: a shared shortcut with no review is an order set that escaped
+// governance. There is deliberately no owner field on the wire — a favourite is
+// always the caller's own.
+message Favourite {
+  string favourite_id = 1;
+  string name = 2;
+  OrderType type = 3;
+  Coding code = 4;
+  string detail = 5;
+  string indication = 6;
+  Priority priority = 7;
+  Timing timing = 8;
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp updated_at = 10;
+}
+
+message SaveFavouriteRequest {
+  Favourite favourite = 1;
+}
+
+message SaveFavouriteResponse {
+  Favourite favourite = 1;
+}
+
+message ListFavouritesRequest {
+  OrderType type = 1;
+  int32 page_size = 2;
+}
+
+message ListFavouritesResponse {
+  repeated Favourite favourites = 1;
+}
+
+message DeleteFavouriteRequest {
+  string favourite_id = 1;
+}
+
+message DeleteFavouriteResponse {}
+
+// Applies a favourite and places the order. The favourite supplies values and
+// the policy still applies, so a shortcut saved before the tenant made
+// indications mandatory is refused rather than quietly placed (SRS-ORD-012).
+message PlaceFromFavouriteRequest {
+  string favourite_id = 1;
+  string patient_id = 2;
+  string encounter_id = 3;
+  // The caller may still override what the favourite suggests.
+  string detail = 4;
+  string indication = 5;
+  Priority priority = 6;
+  string acknowledge_duplicates = 7;
+  string entered_by_id = 8;
+}
+
+message PlaceFromFavouriteResponse {
+  Order order = 1;
+  DuplicateWarning warning = 2;
+}
+
+// What a tenant requires before an order of this type may be placed
+// (SRS-ORD-002, SRS-ORD-007).
+message SetOrderPolicyRequest {
+  OrderType type = 1;
+  // Per type, because the answer genuinely differs: an indication for a CT scan
+  // justifies a radiation dose a national body audits, and one for a diet order
+  // is a field nobody fills in honestly once it is mandatory.
+  bool indication_required = 2;
+  bool structured_timing_required = 3;
+  // The privilege a requester needs, or empty for none.
+  string required_privilege = 4;
+}
+
+message SetOrderPolicyResponse {}
+
+// How a tenant decides two orders are the same (SRS-ORD-009).
+message SetDuplicateRuleRequest {
+  OrderType type = 1;
+  // Zero disables the check for this type.
+  int64 within_seconds = 2;
+  // Off means any order of this type in the window counts, which is right for a
+  // diet order — a patient has one diet — and wrong for a laboratory order.
+  bool same_code_only = 3;
+  // False refuses outright. Note that the requirement says the system shows a
+  // warning "rather than arbitrary suppression", so a tenant setting this to
+  // false is choosing a stricter policy than the requirement describes.
+  bool overridable = 4;
+}
+
+message SetDuplicateRuleResponse {}
+
+service OrderService {
+  // Placing and reading (SRS-ORD-001, SRS-ORD-002, SRS-ORD-009).
+  rpc PlaceOrder(PlaceOrderRequest) returns (PlaceOrderResponse);
+  rpc GetOrder(GetOrderRequest) returns (GetOrderResponse);
+  rpc ListOrders(ListOrdersRequest) returns (ListOrdersResponse);
+  rpc GetWorklist(GetWorklistRequest) returns (GetWorklistResponse);
+
+  // Stopping (SRS-ORD-004, SRS-ORD-005).
+  rpc CancelOrder(CancelOrderRequest) returns (CancelOrderResponse);
+  rpc RetractOrder(RetractOrderRequest) returns (RetractOrderResponse);
+
+  // The performing service's side (SRS-ORD-006).
+  rpc AcknowledgeOrder(AcknowledgeOrderRequest) returns (AcknowledgeOrderResponse);
+
+  // Order sets (SRS-ORD-003).
+  rpc DefineOrderSet(DefineOrderSetRequest) returns (DefineOrderSetResponse);
+  rpc ListOrderSets(ListOrderSetsRequest) returns (ListOrderSetsResponse);
+  rpc RetireOrderSet(RetireOrderSetRequest) returns (RetireOrderSetResponse);
+  rpc PlaceFromOrderSet(PlaceFromOrderSetRequest)
+      returns (PlaceFromOrderSetResponse);
+
+  // Favourites (SRS-ORD-012).
+  rpc SaveFavourite(SaveFavouriteRequest) returns (SaveFavouriteResponse);
+  rpc ListFavourites(ListFavouritesRequest) returns (ListFavouritesResponse);
+  rpc DeleteFavourite(DeleteFavouriteRequest) returns (DeleteFavouriteResponse);
+  rpc PlaceFromFavourite(PlaceFromFavouriteRequest)
+      returns (PlaceFromFavouriteResponse);
+
+  // Configuration (SRS-ORD-002, SRS-ORD-007, SRS-ORD-009).
+  rpc SetOrderPolicy(SetOrderPolicyRequest) returns (SetOrderPolicyResponse);
+  rpc SetDuplicateRule(SetDuplicateRuleRequest) returns (SetDuplicateRuleResponse);
+}

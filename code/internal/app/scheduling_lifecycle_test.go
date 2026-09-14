@@ -544,7 +544,7 @@ func TestATeleconsultIsRefusedWhereNotEnabled(t *testing.T) {
 	h := newSchedHarness(t)
 	patient := h.registerPatient(t, "Iyer", "Meera", "9876543210")
 
-	day := nextWeekday(time.Wednesday)
+	day := nextWeekday(time.Wednesday, 1)
 	if _, err := h.sched.DefineSchedule(context.Background(),
 		withFacility(h.schedulerToken(), h.facility, &schedulingv1.DefineScheduleRequest{
 			ResourceId:  h.resource,

@@ -18,6 +18,7 @@ import (
 	"github.com/ppusapati/health/code/gen/go/healthcare/encounter/v1/encounterv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/identity_access/v1/identityaccessv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/nursing/v1/nursingv1connect"
+	"github.com/ppusapati/health/code/gen/go/healthcare/orders/v1/ordersv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/organization/v1/organizationv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/platform_api/v1/platformapiv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/scheduling/v1/schedulingv1connect"
@@ -36,6 +37,9 @@ import (
 	nursingapp "github.com/ppusapati/health/code/internal/nursing/application"
 	nursingports "github.com/ppusapati/health/code/internal/nursing/ports"
 	nursingtransport "github.com/ppusapati/health/code/internal/nursing/transport"
+	orderspostgres "github.com/ppusapati/health/code/internal/orders/adapters/postgres"
+	ordersapp "github.com/ppusapati/health/code/internal/orders/application"
+	orderstransport "github.com/ppusapati/health/code/internal/orders/transport"
 	orgpostgres "github.com/ppusapati/health/code/internal/organization/adapters/postgres"
 	orgapp "github.com/ppusapati/health/code/internal/organization/application"
 	orgtransport "github.com/ppusapati/health/code/internal/organization/transport"
@@ -150,6 +154,7 @@ type Server struct {
 	Encounters   *encounterapp.Service
 	Clinical     *clinicalapp.Service
 	Nursing      *nursingapp.Service
+	Orders       *ordersapp.Service
 	Store        *store.Store
 	RateLimiter  *platformtransport.RateLimiter
 
@@ -319,6 +324,30 @@ func New(deps Deps) *Server {
 		Clock:  systemClock{},
 	})
 
+	ordersRepo := orderspostgres.New(txManager)
+	ordersService := ordersapp.NewService(ordersapp.Deps{
+		UnitOfWork: txManager,
+		Orders:     orderspostgres.NewOrders(ordersRepo),
+		Acks:       orderspostgres.NewAcknowledgements(ordersRepo),
+		Catalogue:  orderspostgres.NewCatalogue(ordersRepo),
+		// Order numbers come from the platform's sequence (SRS-PLT-014) rather
+		// than a counter of this context's own: atomic, collision-free and
+		// gapless are exactly what a number a ward reads down a phone needs.
+		Numbers: orderspostgres.NewNumbers(repo),
+		Encounters: orderspostgres.NewEncounters(
+			encounterpostgres.EncounterRepo{Repository: encounterRepo},
+			orgpostgres.FacilityRepo{Repository: repo}),
+		// SRS-ORD-006: the performing service hears about an order on the bus,
+		// never by reading the orders schema — which is what lets the two be
+		// released independently.
+		Dispatcher: orderspostgres.NewDispatcher(platformStore, uuidGenerator{},
+			systemClock{}),
+		Events: platformStore,
+		Audits: store.AuditAppenderFunc(platformStore.AppendAudit),
+		IDs:    uuidGenerator{},
+		Clock:  systemClock{},
+	})
+
 	orgService := orgapp.NewService(orgapp.Deps{
 		UnitOfWork: txManager,
 		Tenants:    orgpostgres.TenantRepo{Repository: repo},
@@ -388,6 +417,8 @@ func New(deps Deps) *Server {
 		clinicaltransport.NewHandler(clinicalService), interceptors))
 	mux.Handle(nursingv1connect.NewNursingServiceHandler(
 		nursingtransport.NewHandler(nursingService, time.Now), interceptors))
+	mux.Handle(ordersv1connect.NewOrderServiceHandler(
+		orderstransport.NewHandler(ordersService), interceptors))
 	mux.Handle(platformapiv1connect.NewHealthServiceHandler(
 		platformapitransport.NewHandler(deps.Build, map[string]platformapitransport.Pinger{
 			"postgres": poolPinger{pool: deps.Pool},
@@ -407,6 +438,7 @@ func New(deps Deps) *Server {
 		Encounters:      encounterService,
 		Clinical:        clinicalService,
 		Nursing:         nursingService,
+		Orders:          ordersService,
 		Store:           platformStore,
 		RateLimiter:     rateLimiter,
 		Publisher:       publisher,

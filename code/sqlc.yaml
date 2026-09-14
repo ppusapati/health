@@ -25,6 +25,7 @@ sql:
       - db/migrations/0020_encounter.up.sql
       - db/migrations/0021_clinical.up.sql
       - db/migrations/0022_nursing.up.sql
+      - db/migrations/0023_orders.up.sql
     gen:
       go:
         package: sqlcgen

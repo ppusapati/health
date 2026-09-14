@@ -158,15 +158,29 @@ func (h *schedHarness) defineResource(t *testing.T, name string) string {
 //
 // Relative to now rather than a fixed date so the tests do not start failing
 // when a hardcoded Tuesday drifts into the past.
-func nextWeekday(w time.Weekday) time.Time {
+// nextWeekday returns the next occurrence of a weekday, at least minDays away.
+//
+// The minimum is load-bearing rather than cosmetic. Some scheduling rules are
+// expressed as a lead time — a 24-hour reminder, a notice period — and a test
+// that books "the next Tuesday" gets an appointment anywhere from one to seven
+// days out depending on which day the suite happens to run. A reminder test
+// needs at least two days so the 24-hour lead fits; a late-cancellation test
+// needs fewer than seven so the notice period is missed. Taking the immediate
+// next occurrence for both made one of them fail on one day in seven, and a
+// test whose outcome depends on the day it runs is a test nobody trusts the
+// next time it goes red.
+func nextWeekday(w time.Weekday, minDays int) time.Time {
+	if minDays < 1 {
+		minDays = 1
+	}
 	today := time.Now().UTC().Truncate(24 * time.Hour)
-	for i := 1; i <= 7; i++ {
+	for i := minDays; i < minDays+7; i++ {
 		candidate := today.AddDate(0, 0, i)
 		if candidate.Weekday() == w {
 			return candidate
 		}
 	}
-	return today
+	return today.AddDate(0, 0, minDays)
 }
 
 // defineClinic rosters a four-hour clinic with the given slot length and
@@ -174,8 +188,16 @@ func nextWeekday(w time.Weekday) time.Time {
 func (h *schedHarness) defineClinic(t *testing.T, weekday time.Weekday,
 	slotMinutes, capacity int32) time.Time {
 	t.Helper()
+	return h.defineClinicIn(t, weekday, slotMinutes, capacity, 1)
+}
 
-	day := nextWeekday(weekday)
+// defineClinicIn rosters a clinic on the next occurrence of a weekday that is
+// at least minDays away, for the tests whose rule is a lead time.
+func (h *schedHarness) defineClinicIn(t *testing.T, weekday time.Weekday,
+	slotMinutes, capacity int32, minDays int) time.Time {
+	t.Helper()
+
+	day := nextWeekday(weekday, minDays)
 	if _, err := h.sched.DefineSchedule(context.Background(),
 		withFacility(h.schedulerToken(), h.facility, &schedulingv1.DefineScheduleRequest{
 			ResourceId:    h.resource,
@@ -244,7 +266,7 @@ func TestSlotSearchReflectsTheRoster(t *testing.T) {
 // report, not a booking screen.
 func TestAnUnfilteredSlotSearchIsRefused(t *testing.T) {
 	h := newSchedHarness(t)
-	day := nextWeekday(time.Tuesday)
+	day := nextWeekday(time.Tuesday, 1)
 
 	_, err := h.sched.SearchSlots(context.Background(),
 		withFacility(h.clerkToken(), h.facility, &schedulingv1.SearchSlotsRequest{
@@ -764,7 +786,7 @@ func TestASlotSearchCannotReachAnotherTenant(t *testing.T) {
 		t.Fatalf("InsertEntitlement: %v", err)
 	}
 
-	day := nextWeekday(time.Tuesday)
+	day := nextWeekday(time.Tuesday, 1)
 	found, err := h.sched.SearchSlots(context.Background(),
 		withFacility(neighbourID+":scheduler-2:scheduler:"+neighbourFacility,
 			neighbourFacility, &schedulingv1.SearchSlotsRequest{

@@ -1122,6 +1122,131 @@ type NursingWoundImage struct {
 	Sequence          int32
 }
 
+type OrdersClinicalOrder struct {
+	OrderID                  uuid.UUID
+	TenantID                 uuid.UUID
+	Number                   string
+	OrderType                string
+	PatientID                uuid.UUID
+	EncounterID              uuid.UUID
+	FacilityID               uuid.UUID
+	RequesterID              string
+	EnteredByID              string
+	TargetService            string
+	CodeSystem               string
+	CodeVersion              string
+	Code                     string
+	CodeDisplay              string
+	Detail                   string
+	Indication               string
+	IndicationSystem         string
+	IndicationCode           string
+	IndicationDisplay        string
+	Priority                 string
+	TimingStartAt            pgtype.Timestamptz
+	TimingEndAt              pgtype.Timestamptz
+	TimingFrequencySeconds   int64
+	TimingCount              int32
+	TimingTimesOfDay         []int32
+	TimingDaysOfWeek         []int32
+	TimingPrn                bool
+	TimingDurationSeconds    int64
+	ConditionalInstruction   string
+	Status                   string
+	OrderSetID               pgtype.UUID
+	OrderSetVersion          string
+	FavouriteID              pgtype.UUID
+	CancellationRequestedAt  pgtype.Timestamptz
+	CancellationRequestedBy  string
+	CancellationReason       string
+	DuplicateOverrideReason  string
+	DuplicateOverrideBy      string
+	DuplicateOverrideAt      pgtype.Timestamptz
+	DuplicateOverrideAgainst []uuid.UUID
+	CreatedAt                pgtype.Timestamptz
+	UpdatedAt                pgtype.Timestamptz
+	Version                  int64
+}
+
+type OrdersDuplicateRule struct {
+	TenantID      uuid.UUID
+	OrderType     string
+	WithinSeconds int64
+	SameCodeOnly  bool
+	Overridable   bool
+	UpdatedBy     string
+	UpdatedAt     pgtype.Timestamptz
+}
+
+type OrdersOrderAcknowledgement struct {
+	TenantID    uuid.UUID
+	OrderID     uuid.UUID
+	Service     string
+	DeliveryID  string
+	ToStatus    string
+	Reason      string
+	PerformerID string
+	OccurredAt  pgtype.Timestamptz
+	ReceivedAt  pgtype.Timestamptz
+	Applied     bool
+}
+
+type OrdersOrderFavourite struct {
+	FavouriteID            uuid.UUID
+	TenantID               uuid.UUID
+	OwnerID                string
+	Name                   string
+	OrderType              string
+	CodeSystem             string
+	CodeVersion            string
+	Code                   string
+	CodeDisplay            string
+	Detail                 string
+	Indication             string
+	Priority               string
+	TimingStartAt          pgtype.Timestamptz
+	TimingFrequencySeconds int64
+	TimingCount            int32
+	TimingTimesOfDay       []int32
+	TimingDaysOfWeek       []int32
+	TimingPrn              bool
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+}
+
+type OrdersOrderPolicy struct {
+	TenantID                 uuid.UUID
+	OrderType                string
+	IndicationRequired       bool
+	StructuredTimingRequired bool
+	RequiredPrivilege        string
+	UpdatedBy                string
+	UpdatedAt                pgtype.Timestamptz
+}
+
+type OrdersOrderSet struct {
+	SetID      uuid.UUID
+	TenantID   uuid.UUID
+	Version    string
+	Name       string
+	Specialty  string
+	Components []byte
+	Retired    bool
+	CreatedBy  string
+	CreatedAt  pgtype.Timestamptz
+}
+
+type OrdersOrderStatusChange struct {
+	ChangeID   uuid.UUID
+	TenantID   uuid.UUID
+	OrderID    uuid.UUID
+	FromStatus string
+	ToStatus   string
+	ChangedBy  string
+	Reason     string
+	OccurredAt pgtype.Timestamptz
+}
+
 type OrganizationDisplayLabel struct {
 	LabelID      uuid.UUID
 	TenantID     uuid.UUID

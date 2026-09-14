@@ -472,7 +472,10 @@ func TestAPatientWhoHasNotArrivedCannotBeReprioritised(t *testing.T) {
 // told from one who was.
 func TestBookingRecordsAConfirmationAndAReminder(t *testing.T) {
 	h := newSchedHarness(t)
-	day := h.defineClinic(t, time.Tuesday, 15, 1)
+	// At least two days out, so the policy's 24-hour reminder lead lands in the
+	// future: a reminder due before now is correctly not scheduled, and a test
+	// that booked for tomorrow would be asserting the opposite of the rule.
+	day := h.defineClinicIn(t, time.Tuesday, 15, 1, 2)
 	patient := h.registerPatient(t, "Iyer", "Meera", "9876543210")
 
 	// The patient agreed to hear about appointments by SMS.

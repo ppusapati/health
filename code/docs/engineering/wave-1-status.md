@@ -1446,6 +1446,239 @@ rate is only comparable between hospitals when everybody counts the same way.
 The convention, and the reason for the UTC boundary, are stated at
 `Device.DeviceDays`.
 
+## Sprint 5 — orders, medication and billing
+
+| Requirement | What it asks for | State |
+|---|---|---|
+| SRS-ORD-001 | Laboratory, imaging, medication, procedure, diet, nursing, blood-product, referral and allied-health orders through one common framework | **Implemented** |
+| SRS-ORD-002 | Validation against patient/encounter state, requester privilege and required fields, returning structured field errors | **Implemented** |
+| SRS-ORD-003 | Order sets with individually selectable components and visible defaults; set version and provenance stored on the resulting orders | **Implemented** |
+| SRS-ORD-004 | Modify and cancel only per downstream execution status; cancellation after execution rejected or converted to a corrective workflow | **Implemented** |
+| SRS-ORD-005 | Domain-validated state machine: requested → accepted → scheduled/in-progress → completed, cancelled or entered-in-error | **Implemented** |
+| SRS-ORD-006 | Routing to the owning context by event or RPC without database coupling; downstream acknowledges idempotently | **Implemented** — the dispatch goes through the outbox and no performing context reads this schema; a deployment whose laboratory speaks HL7 supplies a different `Dispatcher` |
+| SRS-ORD-007 | Clinical indication required by order type, blocking submit until provided | **Implemented** |
+| SRS-ORD-008 | Structured timing, frequency, priority and conditional instructions; downstream receives normalised timing | **Implemented** |
+| SRS-ORD-009 | Duplicate detection by configurable type-specific rules, shown as a warning rather than arbitrary suppression, with review and override | **Implemented** |
+| SRS-ORD-010 | Audit of placement, modification and cancellation with reason, linked to the originating user and client | **Implemented** |
+| SRS-ORD-011 | `order.placed/accepted/in_progress/completed/cancelled`, versioned and idempotent | **Implemented** |
+| SRS-ORD-012 | Personal favourites and panels that cannot bypass institutional order-set governance or mandatory rules | **Implemented** |
+| SRS-MED-001 … 014 | Medication management | Not started — Sprint 5B |
+| SRS-BIL-001 … 016 | Billing, tariffs and patient revenue | Not started — Sprint 5C |
+
+### What the order framework enforces
+
+- **One framework, nine order types.** Everything downstream — a laboratory, a
+  radiology department, a pharmacy, a kitchen — receives an order, and if each
+  type were its own aggregate then the state machine, the duplicate check, the
+  audit trail and the event contract would be written nine times and would drift
+  eight ways. The differences between a blood test and a diet order are rules
+  about one thing, not nine things. The target service is *derived* from the
+  type and then stored: a caller that could name its own target could route a
+  blood-product order to the kitchen, and storing it means a routing-table
+  change cannot re-route orders already in flight.
+- **A cancellation after execution is a request, not a state change.**
+  SRS-ORD-004 is the sprint's sharpest requirement. Before the performing
+  service starts, cancelling costs nothing. After it, something has happened in
+  the physical world — a specimen drawn, a unit of blood issued, a scan
+  performed — and an order that simply disappeared would leave that
+  attributable to nobody. So the cancellation is refused, the refusal *names the
+  corrective action* for that order type (returning a blood unit is not the same
+  act as abandoning a physiotherapy course), and the clinician's intention is
+  recorded as a request the service answers. The order stays in the state the
+  service put it in, because showing it as cancelled while a laboratory is still
+  running the test would tell the ward the wrong thing — and the wire contract
+  reports which of the two happened, so a client cannot quietly imply a
+  transfusion has stopped when it has not.
+- **A duplicate warns and shows its working.** SRS-ORD-009 says "warning rather
+  than arbitrary suppression", and the reason is that the system is wrong often
+  enough to matter: a repeat potassium four hours later is a duplicate on a
+  medical ward and correct management on a renal unit. So the check returns the
+  live orders in full — "a duplicate exists" without saying which one is a
+  warning nobody can act on — nothing is written on the first attempt, and the
+  second attempt carries the clinician's reason. What was overridden is captured
+  at the time rather than recomputed: the existing orders usually complete
+  afterwards, and a recomputing report would show every override as having
+  overridden nothing. The rules are per type because the answer genuinely
+  differs — two chest X-rays an hour apart is almost always a mistake, two
+  physiotherapy referrals in a week is how a hospital works.
+- **Timing is expanded, not described.** SRS-ORD-008's criterion is that
+  downstream receives *normalized* timing, and the reason is that a laboratory
+  parsing "6 hourly starting tomorrow morning" will parse it differently from
+  the pharmacy, and the two will then disagree about when the patient is due. So
+  the dispatch carries explicit times. They are computed in the facility's own
+  zone: a four-times-daily drug is given on the ward round at 06:00, 12:00,
+  18:00 and 22:00, not every six hours from whenever it was prescribed, and a
+  schedule computed in UTC is an hour out twice a year — which is how a dose
+  lands at 01:00. A dose already past on the day of prescribing is not given
+  retroactively. A standing order is bounded rather than infinite, because a
+  dispatch carrying an unbounded list is one nobody can send.
+- **The delivery key is what makes a redelivery survivable.** SRS-ORD-006 asks
+  for idempotent acknowledgement, and the case that actually bites is not the
+  obvious one. A bus redelivering "accepted" while the order is still accepted
+  is harmless either way. What breaks a consumer is a redelivery arriving *after*
+  the order has moved on: in-progress → accepted is not a legal transition, so
+  without the key it reaches the domain as an error the consumer retries
+  forever. So the delivery is claimed by primary key *before* the order is
+  touched — a replay becomes a clean no-op, while a genuinely new delivery
+  carrying an impossible transition is still refused. The uniqueness lives at the
+  table rather than in a check-then-apply, because two deliveries can be in
+  flight at the same moment.
+- **Governance is structural, not remembered.** SRS-ORD-012 says personal
+  preferences cannot bypass mandatory rules, and the way to hold that is to have
+  one path from a composed order to a placed one. A favourite supplies values
+  and then takes exactly the same route as a hand-typed order, so a shortcut
+  saved before the tenant made indications mandatory is refused rather than
+  quietly placed. An order set does the same. A favourite is deliberately a
+  different type from an order set rather than a private variant: an order set is
+  institutional governance — reviewed, versioned, retired by a committee — and a
+  favourite is somebody's shortcut, so a favourite is never shared, and asking
+  for a colleague's comes back not-found rather than forbidden.
+- **An order set offers rather than imposes.** A set that places all fifteen
+  components as a unit is a set clinicians stop using, because the one they did
+  not want is the one that gets performed. So components are individually
+  selectable with visible defaults, the handful that are genuinely not optional
+  are marked mandatory and come anyway, and a mandatory component that started
+  unticked is refused as the contradiction it is. The set's *version* travels
+  onto each order rather than a reference to it, because a set edited afterwards
+  must not restate what was ordered.
+- **A refusal names every field at once.** SRS-ORD-002 asks for structured
+  field errors, and the reason is the same one the encounter closure gate gives:
+  a clinician told about one missing field, who fills it in and is then told
+  about another, stops reading the message. The violations travel as data so a
+  client highlights the right box rather than parsing a sentence.
+- **Who asked and who typed are different columns.** A verbal order taken by a
+  nurse is the doctor's order; the audit answers "who keyed this" and the record
+  answers "who is answerable for it". A single field would conflate the two, and
+  the question an investigation asks is always the second one.
+- **The events carry identifiers and no reasoning.** SRS-ORD-011's payloads name
+  the order, the patient, the code and the status, and say nothing about the
+  indication — the sentence that says what the clinician suspects. An event
+  stream is read by more systems, by more people and under fewer controls than
+  the record it describes (SRS-API-009). The dispatch to the performing service
+  is a separate, narrower message: a projection rather than the order, so a
+  downstream context cannot quietly grow a dependency on a field this one may
+  want to change.
+
+### Evidence
+
+| Property | Test |
+|---|---|
+| An order routes to the service its type implies, and the caller cannot choose | `TestAnOrderRoutesToTheServiceItsTypeImplies`, `TestAPlacedOrderCarriesItsIdentityAndRoutesItself` |
+| An order carries everything the requirement names | `TestAnOrderCarriesEverythingTheRequirementNames` |
+| An order needs a patient, an encounter and a requester | `TestAnOrderNeedsAPatientAnEncounterAndARequester` |
+| Who asked and who typed are kept apart | `TestAnOrderKeepsWhoAskedAndWhoTypedItApart` |
+| An order cannot be both immediate and conditional | `TestAnOrderCannotBeBothImmediateAndConditional` |
+| The lifecycle is walked in the domain, and an impossible change is refused | `TestAnOrderFollowsItsLifecycle`, `TestAnImpossibleStateChangeIsRefused` |
+| Repeating a status change is harmless | `TestRepeatingAStatusChangeIsHarmless` |
+| An order is submitted once | `TestAnOrderIsSubmittedOnce` |
+| An unstarted order is cancelled outright | `TestAnUnstartedOrderIsCancelledDirectly`, `TestAnUnstartedOrderIsCancelledOutright` |
+| Cancelling needs a reason | `TestCancellingNeedsAReason` |
+| Cancelling an executing order is refused and names the alternative | `TestCancellingAnExecutingOrderIsRefusedAndNamesTheAlternative`, `TestCancellingAnExecutingOrderBecomesARequestTheServiceAnswers` |
+| The corrective action depends on what is being stopped | `TestTheCorrectiveActionDependsOnWhatIsBeingStopped` |
+| A cancellation request does not pretend the order is cancelled | `TestACancellationRequestDoesNotPretendTheOrderIsCancelled` |
+| A cancellation request before execution is refused | `TestACancellationRequestBeforeExecutionIsRefused` |
+| A pending cancellation travels to the performing service | `TestAPendingCancellationTravelsToThePerformingService` |
+| Cancelled and entered-in-error stay distinct | `TestCancelledAndEnteredInErrorStayDistinct` |
+| A completed order can still be retracted, and retraction is HIM's call | `TestACompletedOrderCanStillBeRetracted`, `TestRetractingIsSeparateFromCancellingAndIsHIMsCall` |
+| Retracting needs a reason | `TestRetractingNeedsAReason` |
+| An imaging order cannot be placed without an indication, and a laboratory one needs none | `TestAnImagingOrderCannotBePlacedWithoutAnIndication`, `TestALaboratoryOrderNeedsNoIndicationByDefault`, `TestAnImagingOrderWithoutAnIndicationIsRefusedByField` |
+| An incomplete order names every missing field at once | `TestAnIncompleteOrderNamesEveryMissingField` |
+| A one-off medication order with a start time is structured enough | `TestAOneOffMedicationOrderWithAStartTimeIsStructuredEnough` |
+| Four-times-daily expands to ward-round times, not every six hours | `TestFourTimesDailyExpandsToWardRoundTimesNotEverySixHours` |
+| A schedule picks up from when it was prescribed | `TestASchedulePicksUpFromWhenItWasPrescribed` |
+| A schedule pins to the ward's clock, not UTC | `TestASchedulePinsToTheWardsClockNotUTC`, `TestTheDispatchCarriesNormalisedTimesInTheWardsZone` |
+| A six-hourly order repeats from when it starts | `TestASixHourlyOrderRepeatsFromWhenItStarts` |
+| A count bounds a repeating order, and an open-ended one is bounded rather than infinite | `TestACountBoundsARepeatingOrder`, `TestAnOpenEndedOrderIsBoundedRatherThanInfinite` |
+| An as-needed order cannot also have a schedule, and dispatches no occurrences | `TestAnAsNeededOrderCannotAlsoHaveASchedule`, `TestAnAsNeededDispatchCarriesNoOccurrences` |
+| Timing cannot end before it begins | `TestTimingCannotEndBeforeItBegins` |
+| A repeat can be narrowed to particular days | `TestARepeatCanBeNarrowedToParticularDays` |
+| A duplicate produces a warning rather than a refusal, and places nothing | `TestADuplicateProducesAWarningRatherThanARefusal`, `TestADuplicateWarnsWithTheExistingOrderAndPlacesNothing` |
+| Acknowledging a duplicate places it and records what was overridden | `TestAcknowledgingADuplicatePlacesItAndRecordsWhatWasOverridden`, `TestADuplicateOverrideRecordsWhatItOverrode` |
+| A finished order is not a duplicate, nor is one outside the window | `TestAFinishedOrderIsNotADuplicate`, `TestAnOrderOutsideTheWindowIsNotADuplicate`, `TestAFinishedOrderDoesNotWarn` |
+| The duplicate rule depends on the order type, and a tenant can retune it | `TestTheDuplicateRuleDependsOnTheOrderType`, `TestATenantCanRetuneTheDuplicateRule`, `TestATypeWithNoRuleIsNotChecked` |
+| The owning service advances the order | `TestTheOwningServiceAdvancesTheOrder` |
+| A replayed acknowledgement changes nothing | `TestAReplayedAcknowledgementChangesNothing`, `TestAReplayedAcknowledgementIsANoOp` |
+| A stale redelivery is a no-op rather than an error | `TestAStaleRedeliveryIsANoOpRatherThanAnError` |
+| A new delivery carrying an impossible transition is still refused | `TestANewDeliveryWithAnImpossibleTransitionIsRefused` |
+| A service cannot acknowledge somebody else's order | `TestAServiceCannotAcknowledgeSomebodyElsesOrder`, `TestAServiceCannotAcknowledgeAnotherServicesOrder` |
+| An acknowledgement for a different order is refused, and needs a delivery identifier | `TestAnAcknowledgementForADifferentOrderIsRefused`, `TestAnAcknowledgementNeedsADeliveryIdentifier` |
+| A service cannot mark an order entered-in-error, and cancelling needs a reason | `TestAServiceCannotMarkAnOrderEnteredInError`, `TestAServiceCancellingNeedsAReason` |
+| The dispatch carries what the service needs and nothing else | `TestTheDispatchCarriesWhatTheServiceNeedsAndNothingElse`, `TestPlacingAnOrderDispatchesItToItsService` |
+| An order set places only what was selected plus what is mandatory | `TestAnOrderSetPlacesOnlyWhatWasSelectedPlusWhatIsMandatory`, `TestAnOrderSetPlacesWhatWasSelectedAndStampsItsVersion` |
+| The set's version travels onto every order it places | `TestAnOrderSetsVersionTravelsOntoEveryOrderItPlaces` |
+| A clinician can override the set's defaults | `TestAClinicianCanOverrideTheSetsDefaults` |
+| An empty selection is refused, and so is a component that does not exist | `TestAnEmptySelectionFromASetIsRefused`, `TestSelectingAComponentThatDoesNotExistIsRefused` |
+| An order set needs a version and a component | `TestAnOrderSetNeedsAVersionAndAComponent` |
+| A mandatory component must be selected by default | `TestAMandatoryComponentMustBeSelectedByDefault` |
+| A retired order set cannot be used | `TestARetiredOrderSetCannotBeUsed` |
+| A favourite cannot bypass a mandatory indication | `TestAFavouriteCannotBypassAMandatoryIndication` (both layers) |
+| A favourite belongs to one clinician and needs a name | `TestAFavouriteBelongsToSomebodyAndNeedsAName`, `TestAFavouriteBelongsToOneClinician` |
+| The policy names which types need a privilege, and a blood-product order needs its own | `TestThePolicyNamesWhichTypesNeedAPrivilege`, `TestABloodProductOrderNeedsItsOwnPrivilege` |
+| A closed encounter takes no new orders | `TestAClosedEncounterTakesNoNewOrders` |
+| The worklist shows a service's outstanding work, most urgent first | `TestTheWorklistShowsAServicesOutstandingWorkMostUrgentFirst` |
+| The order events carry no clinical reasoning | `TestTheOrderEventsCarryNoClinicalReasoning` |
+| An order cannot be reached from another tenant | `TestAnOrderCannotBeReachedFromAnotherTenant` |
+
+### Decisions taken against the backlog
+
+**The performing service is a role, not a user.** SRS-ORD-006 says downstream
+acknowledges, and the question that decides the design is *who* acknowledges. A
+laboratory information system is not a clinician, and giving its service account
+a clinician's role would give a machine integration the right to place orders
+and read the clinical record. `RolePerformingService` holds exactly two
+permissions — read the orders addressed to it, and acknowledge them — so a
+compromised integration credential can move the orders it was already told
+about and nothing else.
+
+**The target service is derived from the type and then stored.** The requirement
+does not say where routing comes from, and the tempting shape is a field the
+caller supplies. Two things are wrong with that: a caller that names its own
+target can route a blood-product order to the kitchen, and a routing table
+edited next year would silently re-address orders already in flight. So the
+service is computed at placement from the order type and written onto the row.
+Pinned by `TestAnOrderRoutesToTheServiceItsTypeImplies`.
+
+**The delivery is claimed before the order is touched.** The ordering here is
+the whole of the idempotency guarantee, and it was found by fault injection
+rather than by reading the requirement. Applying the acknowledgement first and
+recording the delivery afterwards handles the easy replay — the same status
+arriving twice — but a redelivery arriving *after* the order has moved on
+reaches the domain as an impossible transition, comes back as an error, and the
+consumer retries it forever. Claiming `(tenant, order, service, delivery)` by
+primary key first turns that into a clean no-op while leaving a genuinely new
+delivery with an illegal transition refused. Pinned by
+`TestAStaleRedeliveryIsANoOpRatherThanAnError` and
+`TestANewDeliveryWithAnImpossibleTransitionIsRefused`.
+
+**A favourite is a different type from an order set, not a private variant of
+one.** SRS-ORD-012 mentions both in one sentence, which invites one table with
+an owner column that is null for institutional sets. They are different things:
+an order set is governance — reviewed, versioned, retired by a committee, and
+its version is evidence about what was ordered — while a favourite is somebody's
+shortcut with no standing at all. Keeping them apart is what makes "a favourite
+is never shared" structural rather than a query filter somebody can forget; a
+colleague's favourite comes back not-found rather than forbidden, because
+whether a doctor keeps a shortcut is not a fact the system should disclose.
+
+**Order numbers reuse the platform's numbering sequence rather than a second
+counter.** SRS-PLT-014 already provides atomic, gapless, collision-free
+numbering, and a second implementation would be a second set of concurrency
+bugs. Orders were added as a scope (`ScopeOrder`) alongside MRNs. The sequence is
+provisioned at *facility* creation rather than tenant creation, because that is
+the call that already carries a verified `authctx.TenantScope`; provisioning it
+at tenant creation meant minting a session inside the organization service,
+which the `TestOnlyTransportMintsSessions` fitness test refuses — correctly, and
+it caught this before review did.
+
+**A pre-existing date-dependent test failure was fixed rather than worked
+around.** `TestBookingRecordsAConfirmationAndAReminder` from Sprint 3 booked
+into "next Tuesday", which on a Monday is 22 hours away — inside the 24-hour
+reminder lead, so no reminder is due and the test was wrong one day in seven.
+The obvious fix, always booking at least two days out, broke
+`TestALateCancellationIsChargeableOnlyWhereConfigured`, which needs an
+appointment *inside* a seven-day notice period. The helper now takes a minimum
+lead so both requirements are stated rather than balanced against each other.
+
 ## Wave-0 capabilities Wave 1 consumes
 
 Sprint 1 wrote no new platform capability. It consumed:

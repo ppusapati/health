@@ -290,6 +290,15 @@ func (s *Service) provisionMRNSequence(ctx context.Context, scope authctx.Tenant
 		return nil
 	}
 
+	// The tenant's clinical-order counter goes in alongside (SRS-ORD-001).
+	// Here rather than at tenant creation, because this is where a verified
+	// tenant scope exists — a service that minted one for itself would hold an
+	// unforgeable credential, which is what ADR-001 and FIT-03 exist to
+	// prevent — and because a tenant with no facility places no orders.
+	if err := s.provisionOrderSequence(ctx, scope, now); err != nil {
+		return err
+	}
+
 	// EnsureSequence is ON CONFLICT DO NOTHING, so re-commissioning a facility
 	// code that once existed cannot reset a live counter back to 1 and re-issue
 	// an MRN already printed on a wristband.
@@ -304,6 +313,39 @@ func (s *Service) provisionMRNSequence(ctx context.Context, scope authctx.Tenant
 		PeriodKey:  "",
 		CreatedAt:  now,
 		UpdatedAt:  now,
+	})
+}
+
+// DefaultOrderPadWidth zero-pads an order number to eight digits.
+//
+// Wide enough that a busy group does not reach it, and fixed-width so the
+// numbers sort and line up on a requisition.
+const DefaultOrderPadWidth = 8
+
+// provisionOrderSequence gives a tenant its clinical-order counter
+// (SRS-ORD-001, SRS-PLT-014).
+//
+// Per tenant rather than per facility, unlike the MRN: a laboratory serving
+// three sites reads order numbers off requisitions from all three, and
+// per-facility counters would put two different orders under one number on the
+// bench. ON CONFLICT DO NOTHING, so commissioning a second facility is a no-op
+// and cannot reset a live counter back to 1 and re-issue an order number a
+// laboratory already holds.
+func (s *Service) provisionOrderSequence(ctx context.Context,
+	scope authctx.TenantScope, now time.Time) error {
+
+	if s.numbers == nil {
+		return nil
+	}
+	return s.numbers.EnsureSequence(ctx, scope, domain.NumberSequence{
+		ID:        s.ids.NewID(),
+		TenantID:  scope.TenantID(),
+		Scope:     domain.ScopeOrder,
+		Prefix:    "ORD-",
+		PadWidth:  DefaultOrderPadWidth,
+		NextValue: 1,
+		CreatedAt: now,
+		UpdatedAt: now,
 	})
 }
 
