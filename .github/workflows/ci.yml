@@ -200,6 +200,18 @@ jobs:
           cache: true
       - run: flutter pub get
         working-directory: code/apps/mobile
+      # The Dart client is a build artifact of proto/, never hand-edited
+      # (SRS-API-001, Gate A9). It drifted silently through all of Wave 1
+      # because nothing regenerated it, so the check lives beside the toolchain
+      # that can actually run it rather than in the Go generated-code job.
+      - uses: bufbuild/buf-setup-action@v1
+        with:
+          version: ${{ env.BUF_VERSION }}
+      - run: dart pub global activate protoc_plugin
+      - run: echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
+      - name: Regenerate the Dart client and diff
+        run: make mobile-generate-check
+        working-directory: code
       - run: flutter analyze
         working-directory: code/apps/mobile
       - run: flutter test
@@ -217,6 +229,14 @@ jobs:
           cache-dependency-path: code/apps/web/package-lock.json
       - run: npm ci
         working-directory: code/apps/web
+      # Same reason as the mobile job: the TypeScript client is generated from
+      # proto/ and nothing was regenerating it.
+      - uses: bufbuild/buf-setup-action@v1
+        with:
+          version: ${{ env.BUF_VERSION }}
+      - name: Regenerate the TypeScript client and diff
+        run: make web-generate-check
+        working-directory: code
       - run: npm run check
         working-directory: code/apps/web
       - run: npm test

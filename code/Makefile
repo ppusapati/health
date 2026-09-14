@@ -164,6 +164,18 @@ db-stop: ## Stop the local PostgreSQL cluster
 web-install: ## Install web workspace dependencies
 	cd apps/web && npm install
 
+.PHONY: web-generate
+web-generate: ## Regenerate the TypeScript client from proto/
+	cd apps/web && npm run generate
+
+.PHONY: web-generate-check
+web-generate-check: web-generate ## Fail if the TypeScript client is stale
+	@if [ -n "$$(git status --porcelain apps/web/src/lib/gen)" ]; then \
+		echo "the web client is out of date; run 'make web-generate' and commit the result"; \
+		git --no-pager diff --stat apps/web/src/lib/gen; \
+		exit 1; \
+	fi
+
 .PHONY: web-check
 web-check: ## Type-check the web workspace
 	cd apps/web && npm run check
@@ -175,6 +187,18 @@ web-test: ## Run web workspace tests
 .PHONY: mobile-get
 mobile-get: ## Install Flutter workspace dependencies
 	cd apps/mobile && flutter pub get
+
+.PHONY: mobile-generate
+mobile-generate: ## Regenerate the Dart client from proto/
+	cd apps/mobile && buf generate --template buf.gen.dart.yaml
+
+.PHONY: mobile-generate-check
+mobile-generate-check: mobile-generate ## Fail if the Dart client is stale
+	@if [ -n "$$(git status --porcelain apps/mobile/lib/src/gen)" ]; then \
+		echo "the Dart client is out of date; run 'make mobile-generate' and commit the result"; \
+		git --no-pager diff --stat apps/mobile/lib/src/gen; \
+		exit 1; \
+	fi
 
 .PHONY: mobile-analyze
 mobile-analyze: ## Analyze the Flutter workspace
