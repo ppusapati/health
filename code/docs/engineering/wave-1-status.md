@@ -17,6 +17,55 @@ What this records is which requirements have working, tested implementations.
 | 4 | Encounter, clinical, nursing | SRS-ENC/CLN/NUR | **Complete** |
 | 5 | Orders, medication, billing | SRS-ORD/MED/BIL | **Complete** |
 | 6 | Platform blob storage | SRS-DAT-007 (and SRS-EMPI-010, CLN-014, NUR-012) | **Complete** |
+| 7 | Role workspaces (UX-W1-01 … 06) | Wave-1 UX exit criterion | **Not started** |
+
+All 130 requirements are implemented server-side. The wave is not finished: see
+[What is not built](#what-is-not-built).
+
+## What is not built
+
+All 130 requirements in the coverage register are implemented server-side, and
+every one is listed with its evidence in the sprint sections below. The Wave-1
+exit criteria are wider than that register, and two of them are not met.
+
+**The six role workspaces (UX-W1-01 … UX-W1-06) do not exist.** The web
+workspace is still the Wave-0 shell: an `AppShell`, an `ErrorBanner`, a
+`StatusChip` and a facilities page. Reception/Registration, the Doctor OPD
+workspace, Nursing/triage, the Order Composer and Results Inbox, the
+Medication/Prescription workspace and the Billing/Payment workspace are all
+unbuilt, and with them the required states the spec names for each — default,
+loading, empty, error, permission, conflict, and offline or stale where it
+applies. The Flutter app is likewise the Wave-0 shell. Every RPC those screens
+need exists, is authorized and is tested through the ConnectRPC boundary; what
+is missing is the client.
+
+**The web and mobile generated clients are stale.** `buf.gen.web.yaml` and
+`buf.gen.dart.yaml` read the whole `proto/` directory, but the committed output
+under `apps/web/src/lib/gen` and `apps/mobile/lib/src/gen` covers only the four
+Wave-0 packages. The eight Wave-1 services have Go clients and no TypeScript or
+Dart ones. This is a regeneration rather than a design problem — `npm run
+generate` in `apps/web` and the Dart equivalent produce them — but it is not
+done, and `make generate` does not cover the client workspaces, so nothing
+fails while they drift.
+
+Both are client-side work. Neither changes a contract, a schema, an
+authorization rule or a domain invariant, which is why the server-side sprints
+could be called complete without them; but a wave whose exit outcome is "first
+production-ready OPD/ambulatory vertical slice" is not finished while the slice
+has no front end.
+
+### Deliberately out of scope, and why
+
+These appear as qualifiers on individual requirement rows below. They are
+recorded here so that "Implemented, but" is not mistaken for "not done".
+
+| Deferred to | Affects | What is here instead |
+|---|---|---|
+| SRS-NTF (notification delivery, later wave) | SRS-EMPI-013, SRS-SCH-012, SRS-CLN-012, SRS-NUR-011 | Each context records that a message is owed, to whom, and what came back. Nothing sends. |
+| A licensed drug database | SRS-MED-002 | A tenant-configured terminology mapping table behind a port. A deployment that licenses one replaces a single adapter. |
+| A speech-recognition vendor | SRS-CLN-016 | Dictated content is marked, and a transcriber's signature does not finalise the note. The recogniser is a seam. |
+| A laboratory speaking HL7 | SRS-ORD-006 | Dispatch goes through the outbox and no performing context reads the orders schema. A different `Dispatcher` is one implementation. |
+| The client, for printable downtime forms | SRS-NUR-018 | The duplicate guard, offline marking and reconciliation lifecycle are server-side and tested; the edge queue is the Wave-0 prototype (P0-13). |
 
 ## Sprint 1 — patient identity
 
@@ -779,7 +828,7 @@ Pinned by `TestAClerkCannotRewriteTheRoster`.
 | SRS-CLN-011 | Abnormal/critical flags come from the authoritative diagnostic service; the UI must not infer criticality | **Implemented** |
 | SRS-CLN-012 | Critical-result acknowledgement with timestamp and action; unacknowledged alerts escalate | **Implemented** — escalation is computed and due alerts are listed; the delivery channel is the notification port Sprint 3C established |
 | SRS-CLN-013 | Clinical and procedure-specific consents, not conflated with privacy consents | **Implemented** |
-| SRS-CLN-014 | Attachments and images with type, source, timestamp and confidentiality class | **Implemented** — metadata, classification and access follow the parent record; the binary store is a port with no production adapter yet |
+| SRS-CLN-014 | Attachments and images with type, source, timestamp and confidentiality class | **Implemented** — metadata, classification and access follow the parent record. *Sprint 6 closed the rest:* the server now stores the bytes and derives the key, size and digest; it previously recorded the three the caller supplied. |
 | SRS-CLN-015 | Smart phrases with user-visible expansion; the signed note stores the expanded text | **Implemented** |
 | SRS-CLN-016 | Dictation as draft input; the clinician reviews and signs | **Implemented** — dictated content is marked and a transcriber's signature does not finalise; the speech-recognition vendor is a seam |
 | SRS-CLN-017 | Patient-context lock and warning across multiple open charts | **Implemented** |
@@ -801,7 +850,7 @@ Pinned by `TestAClerkCannotRewriteTheRoster`.
 | SRS-NUR-009 | Administered/not-administered/held/refused/delayed with dose, time, route, site and reason; scheduled versus actual retained | **Implemented** |
 | SRS-NUR-010 | Shift handover with outstanding issues, critical risks, devices and pending tasks; acknowledgement and shift recorded | **Implemented** |
 | SRS-NUR-011 | Nursing tasks with priority, due time, recurrence and completion evidence; overdue critical tasks escalate | **Implemented** — escalation is raised and recorded against the task; the delivery channel is the notification port Sprint 3C established |
-| SRS-NUR-012 | Wound and skin assessment with location, body map and consented image; images versioned and access-controlled | **Implemented** — the image series, its consent and its access rules are enforced; the binary store is a port with no production adapter yet |
+| SRS-NUR-012 | Wound and skin assessment with location, body map and consented image; images versioned and access-controlled | **Implemented** — the image series, its consent and its access rules are enforced. *Sprint 6 closed the rest:* the server stores the bytes, and the consent is checked before they are written rather than after. |
 | SRS-NUR-013 | Restraints with indication, authorisation, monitoring and discontinuation; an expired authorisation triggers an alert | **Implemented** |
 | SRS-NUR-014 | Transfusion monitoring linked to a blood-product episode; the reaction action runs from the bedside | **Implemented** |
 | SRS-NUR-015 | Patient and family education and discharge readiness, with topic, learner, method and understanding status | **Implemented** |
