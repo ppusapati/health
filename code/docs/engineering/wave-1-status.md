@@ -771,7 +771,7 @@ Pinned by `TestAClerkCannotRewriteTheRoster`.
 | SRS-CLN-004 | Allergy/intolerance with substance, reaction, severity, certainty and verification status, visible to decision support on commit | **Implemented** |
 | SRS-CLN-005 | Observations with code, value, unit, reference/interpretation, time, performer, device and status; trends keep the original unit | **Implemented** |
 | SRS-CLN-006 | Procedure record with indication, performer, site/laterality, outcome, complications and linked orders | **Implemented** |
-| SRS-CLN-007 | Care plans with problems, goals, interventions, owners, target dates and status | **Implemented** — the plan and its activities are modelled and stored; the task linkage lands with SRS-NUR-011's worklist in 4C |
+| SRS-CLN-007 | Care plans with problems, goals, interventions, owners, target dates and status | **Implemented** — the plan and its activities are modelled and stored, and Sprint 4C linked them to the nursing worklist through `TaskSource = "care_plan"` (SRS-NUR-011) |
 | SRS-CLN-008 | Document lifecycle draft → signed → amended/addendum/entered-in-error; signed content cannot be edited in place | **Implemented** |
 | SRS-CLN-009 | Signature with authenticated identity, timestamp and meaning; signature metadata and content hash retained | **Implemented** |
 | SRS-CLN-010 | Provenance for imported records: source organisation, source system and ingestion time, distinguishable from local authorship | **Implemented** |
@@ -795,7 +795,7 @@ Pinned by `TestAClerkCannotRewriteTheRoster`.
 | SRS-NUR-004 | Intake and output by category with a running shift/day balance; corrections use an amendment trail | **Implemented** |
 | SRS-NUR-005 | Fall, pressure-injury, pain and configured risk scores; version and inputs stored, due reassessment appears as work | **Implemented** |
 | SRS-NUR-006 | Lines, tubes, drains and catheters with insertion, site, care, output and removal; device-days from canonical dates | **Implemented** |
-| SRS-NUR-007 | Administration schedule from the medication service; only active verified orders create tasks | **Implemented** — the eMAR is written against the medication port and refuses everything while it is unwired; Sprint 5's SRS-MED supplies the adapter |
+| SRS-NUR-007 | Administration schedule from the medication service; only active verified orders create tasks | **Implemented** — wired in Sprint 5B: the eMAR reads the drug chart through `nursing/adapters/medication`, and an unverified prescription produces no doses |
 | SRS-NUR-008 | Positive patient identification before administration; a mismatch prevents completion unless policy allows an override | **Implemented** |
 | SRS-NUR-009 | Administered/not-administered/held/refused/delayed with dose, time, route, site and reason; scheduled versus actual retained | **Implemented** |
 | SRS-NUR-010 | Shift handover with outstanding issues, critical risks, devices and pending tasks; acknowledgement and shift recorded | **Implemented** |
@@ -1417,13 +1417,16 @@ mandatory reason and the report it feeds, not scarcity of the permission, and a
 nurse who cannot override when the trolley scanner fails at 03:00 will chart the
 dose somewhere the system cannot see.
 
-**SRS-NUR-007's medication seam is left unwired rather than stubbed.** The
-requirement's whole content is that only pharmacist-verified orders produce
-administration tasks, and a stub answering "verified" would be that safety
-control present in the code and absent in effect. The port is declared, the eMAR
-is written against it, and with nothing wired every administration is refused
-with a message naming the missing service. Sprint 5's SRS-MED supplies the
-adapter.
+**SRS-NUR-007's medication seam is left unwired rather than stubbed.** *Closed
+in Sprint 5B.* The requirement's whole content is that only pharmacist-verified
+orders produce administration tasks, and a stub answering "verified" would be
+that safety control present in the code and absent in effect. The port was
+declared and the eMAR written against it, and with nothing wired every
+administration was refused with a message naming the missing service. Sprint 5B
+supplies the adapter: `nursing/adapters/medication` projects the drug chart, an
+unverified prescription produces no doses at all, and the seam is exercised
+end to end by `TestTheEmarGivesTheDoseTheMedicationContextScheduled` rather
+than against a double.
 
 **SRS-NUR-018's duplicate guard is a database constraint, not an application
 check.** The requirement is about reconciliation after downtime, where the same
