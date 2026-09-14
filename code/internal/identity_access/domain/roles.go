@@ -81,6 +81,25 @@ const (
 	// else too.
 	RolePharmacist Role = "pharmacist"
 
+	// RoleBillingClerk raises charges, builds invoices and works the
+	// revenue-integrity list (SRS-BIL, Wave-1 actor "Billing User").
+	RoleBillingClerk Role = "billing_clerk"
+
+	// RoleCashier takes money and reconciles a drawer (SRS-BIL-008,
+	// SRS-BIL-015, Wave-1 actor "Cashier").
+	//
+	// A role of its own rather than a variant of the billing clerk, and the
+	// reason is the oldest control in finance: the person who decides what is
+	// owed should not be the person who collects it. A cashier takes payments
+	// and cannot raise a charge, apply a concession or issue a refund
+	// unapproved.
+	RoleCashier Role = "cashier"
+
+	// RoleFinanceAdmin maintains the charge master, the tariffs, the packages
+	// and the policy, and approves what exceeds a clerk's limit (SRS-BIL-001,
+	// SRS-BIL-002, SRS-BIL-007, Wave-1 actor "Finance Admin").
+	RoleFinanceAdmin Role = "finance_admin"
+
 	// RoleScheduler runs the diary: rosters, leave, theatre blocks, and the
 	// authority to book into a provisional block when the list is agreed
 	// (SRS-SCH-002). The Wave-1 backlog actor is "Scheduler".
@@ -313,6 +332,57 @@ var rolePermissions = map[Role][]string{
 		// and a pharmacist answering it would be answering on their behalf.
 	},
 
+	// A billing user works out what is owed (SRS-BIL-003, SRS-BIL-006,
+	// SRS-BIL-007, SRS-BIL-011, SRS-BIL-013).
+	RoleBillingClerk: {
+		"empi.patient.read",
+		"enc.encounter.read",
+		"bil.account.read",
+		"bil.charge.post",
+		"bil.charge.manual",
+		"bil.invoice.issue",
+		"bil.discount.apply",
+		"bil.account.close",
+		// Deliberately no bil.payment.receive and no bil.refund.issue: the
+		// person who decides what is owed should not be the person who collects
+		// it, which is the oldest control in finance and the one a small
+		// hospital is most tempted to collapse.
+		//
+		// And no bil.discount.approve: a limit a person can approve for
+		// themselves is not a limit.
+		//
+		// And no bil.catalogue.configure: a clerk who could edit the tariff
+		// could decide what they invoice.
+	},
+
+	// A cashier takes money and reconciles a drawer (SRS-BIL-008,
+	// SRS-BIL-015).
+	RoleCashier: {
+		"empi.patient.read",
+		"bil.account.read",
+		"bil.payment.receive",
+		"bil.shift.manage",
+		// Deliberately no bil.charge.post: a cashier who could raise a charge
+		// could raise one against the money they are holding. And no
+		// bil.refund.issue: money leaving needs a second person, which is what
+		// makes a refund different from a payment.
+	},
+
+	// Finance decides what things cost and signs off what exceeds a limit
+	// (SRS-BIL-001, SRS-BIL-002, SRS-BIL-007, SRS-BIL-009, SRS-BIL-015).
+	RoleFinanceAdmin: {
+		"bil.account.read",
+		"bil.catalogue.configure",
+		"bil.discount.approve",
+		// Refunds sit here rather than with the cashier, so money leaving
+		// carries a second name (SRS-BIL-009).
+		"bil.refund.issue",
+		"bil.shift.approve",
+		// Deliberately no bil.charge.post, no bil.invoice.issue and no
+		// bil.payment.receive: the role that sets the prices does not also
+		// raise the bills or take the money.
+	},
+
 	// A nurse delivers care. Note what is absent: no cln.document.sign and no
 	// enc.diagnosis.record. Signing a clinical document and recording a
 	// diagnosis are the medical team's assertions, and a nurse writing a
@@ -452,6 +522,14 @@ var rolePurposes = map[Role][]authctx.PurposeOfUse{
 	RoleNurse:        {authctx.PurposeTreatment},
 	RolePharmacist:   {authctx.PurposeTreatment},
 	RoleNurseManager: {authctx.PurposeTreatment, authctx.PurposeOperations},
+	// Billing acts on the financial record. Payment because that is what they
+	// are doing, and operations because a revenue-integrity report is
+	// administration rather than a bill. Never treatment: a billing read of a
+	// chart is not care, and an audit trail that said it was would be wrong
+	// about the one thing it exists to record.
+	RoleBillingClerk: {authctx.PurposePayment, authctx.PurposeOperations},
+	RoleCashier:      {authctx.PurposePayment},
+	RoleFinanceAdmin: {authctx.PurposePayment, authctx.PurposeOperations},
 	RoleScheduler:    {authctx.PurposeTreatment, authctx.PurposeOperations},
 }
 

@@ -13,6 +13,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/ppusapati/health/code/gen/go/healthcare/billing/v1/billingv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/clinical/v1/clinicalv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/empi/v1/empiv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/encounter/v1/encounterv1connect"
@@ -23,6 +24,9 @@ import (
 	"github.com/ppusapati/health/code/gen/go/healthcare/organization/v1/organizationv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/platform_api/v1/platformapiv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/scheduling/v1/schedulingv1connect"
+	billingpostgres "github.com/ppusapati/health/code/internal/billing/adapters/postgres"
+	billingapp "github.com/ppusapati/health/code/internal/billing/application"
+	billingtransport "github.com/ppusapati/health/code/internal/billing/transport"
 	clinicalpostgres "github.com/ppusapati/health/code/internal/clinical/adapters/postgres"
 	clinicalapp "github.com/ppusapati/health/code/internal/clinical/application"
 	clinicaltransport "github.com/ppusapati/health/code/internal/clinical/transport"
@@ -163,6 +167,7 @@ type Server struct {
 	Nursing      *nursingapp.Service
 	Orders       *ordersapp.Service
 	Medication   *medicationapp.Service
+	Billing      *billingapp.Service
 	Store        *store.Store
 	RateLimiter  *platformtransport.RateLimiter
 
@@ -473,9 +478,35 @@ func New(deps Deps) *Server {
 		nursingtransport.NewHandler(nursingService, time.Now), interceptors))
 	mux.Handle(ordersv1connect.NewOrderServiceHandler(
 		orderstransport.NewHandler(ordersService), interceptors))
+	billingRepo := billingpostgres.New(txManager)
+	billingService := billingapp.NewService(billingapp.Deps{
+		UnitOfWork: txManager,
+		Master:     billingpostgres.NewMaster(billingRepo),
+		Accounts:   billingpostgres.NewAccounts(billingRepo),
+		Charges:    billingpostgres.NewCharges(billingRepo),
+		Invoices:   billingpostgres.NewInvoices(billingRepo),
+		Ledger:     billingpostgres.NewLedger(billingRepo),
+		Shifts:     billingpostgres.NewShifts(billingRepo),
+		Policies:   billingpostgres.NewPolicies(billingRepo),
+		// Invoice and receipt numbers come from the platform's sequence
+		// (SRS-PLT-014) rather than a counter of this context's own: gapless is
+		// what a finance department's first question about a numbering scheme
+		// asks for, and a gap in an invoice series is a question an auditor
+		// asks.
+		Numbers: billingpostgres.NewNumbers(repo),
+		Encounters: billingpostgres.NewEncounters(
+			encounterpostgres.EncounterRepo{Repository: encounterRepo}),
+		Events: platformStore,
+		Audits: store.AuditAppenderFunc(platformStore.AppendAudit),
+		IDs:    uuidGenerator{},
+		Clock:  systemClock{},
+	})
+
 	mux.Handle(medicationv1connect.NewMedicationServiceHandler(
 		medicationtransport.NewHandler(medicationService, medicationTerminology),
 		interceptors))
+	mux.Handle(billingv1connect.NewBillingServiceHandler(
+		billingtransport.NewHandler(billingService), interceptors))
 	mux.Handle(platformapiv1connect.NewHealthServiceHandler(
 		platformapitransport.NewHandler(deps.Build, map[string]platformapitransport.Pinger{
 			"postgres": poolPinger{pool: deps.Pool},
@@ -497,6 +528,7 @@ func New(deps Deps) *Server {
 		Nursing:         nursingService,
 		Orders:          ordersService,
 		Medication:      medicationService,
+		Billing:         billingService,
 		Store:           platformStore,
 		RateLimiter:     rateLimiter,
 		Publisher:       publisher,

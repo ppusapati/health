@@ -1463,7 +1463,7 @@ The convention, and the reason for the UTC boundary, are stated at
 | SRS-ORD-011 | `order.placed/accepted/in_progress/completed/cancelled`, versioned and idempotent | **Implemented** |
 | SRS-ORD-012 | Personal favourites and panels that cannot bypass institutional order-set governance or mandatory rules | **Implemented** |
 | SRS-MED-001 … 014 | Medication management | **Implemented** — see below |
-| SRS-BIL-001 … 016 | Billing, tariffs and patient revenue | Not started — Sprint 5C |
+| SRS-BIL-001 … 016 | Billing, tariffs and patient revenue | **Implemented** — see below |
 
 ### What the order framework enforces
 
@@ -1935,6 +1935,259 @@ with the moment somebody got round to typing it made `StatusAt` answer "draft"
 for every day the patient was actually taking it — and made a hold backdated to
 the ward round look like a change dated before the prescription itself. Pinned by
 `TestATranscribedPrescriptionIsLiveFromWhenTheTherapyStarted`.
+
+## Sprint 5C — billing, tariffs and patient revenue
+
+| Requirement | What it asks for | State |
+|---|---|---|
+| SRS-BIL-001 | Charge master with code, description, department, tax attributes, revenue mapping and effective dates; a historical invoice resolves the version active at charge time | **Implemented** |
+| SRS-BIL-002 | Tariff contracts by payer, customer, facility, room class and service with effective dates; deterministic resolution | **Implemented** |
+| SRS-BIL-003 | Charges from eligible clinical events or authorised manual entry, with provenance and no silent duplication | **Implemented** |
+| SRS-BIL-004 | Package pricing with inclusions, exclusions, quantity caps and carve-outs; a consumption ledger explaining billed and not-billed items | **Implemented** |
+| SRS-BIL-005 | Estimates from planned services and payer information, labelled non-final and versioned | **Implemented** |
+| SRS-BIL-006 | Interim and final invoices from the charge ledger; a final invoice stores an immutable line snapshot and its calculation | **Implemented** |
+| SRS-BIL-007 | Concessions within authorisation limits with a reason; an over-limit request routes for approval | **Implemented** |
+| SRS-BIL-008 | Payments with method and provider reference, allocated to invoice or account; atomic receipt number, idempotent payment | **Implemented** |
+| SRS-BIL-009 | Refunds and reversals referencing the original payment with authorisation; the original retained, the refund a separate entry | **Implemented** |
+| SRS-BIL-010 | No destructive edit of a finalised invoice or receipt; corrections via credit, debit or reversal | **Implemented** |
+| SRS-BIL-011 | Unbilled completed services and pending charge exceptions, on a worklist linking to the source record | **Implemented** |
+| SRS-BIL-012 | Patient deposits and advances, consumed or refunded, on an auditable ledger the balance derives from | **Implemented** |
+| SRS-BIL-013 | Encounter financial account closed only after the configured reconciliation checks, with blocking exceptions listed | **Implemented** |
+| SRS-BIL-014 | Split liability across patient, payer and corporate after adjudication, each balance with a responsible party and provenance | **Implemented** |
+| SRS-BIL-015 | Cashier shift open and close with cash reconciliation; a variance needs a reason and approval per threshold | **Implemented** (SHOULD) |
+| SRS-BIL-016 | `charge.posted`, `invoice.finalized`, `payment.received`, `refund.completed`, referencing financial objects without exposing payment secrets | **Implemented** |
+
+### What the billing context enforces
+
+- **Money is an integer count of minor units, never a float.** A float cannot
+  represent 0.10 exactly, so a hundred line items summed as floats do not equal
+  the invoice total — and an invoice that does not add up is one a patient is
+  right to dispute and an auditor is right to reject. The currency travels with
+  the amount for the reason the clinical contexts give about quantities, and
+  mixing two is an error rather than a silent conversion at a rate nobody
+  recorded. Tax rates are integers too, in hundredths of a percent, because a
+  rate held as a float produces a different total depending on which order the
+  lines were summed in.
+- **The balance is the sum of an append-only ledger, never a stored column.**
+  SRS-BIL-012 says so outright, and the reason is what happens to the
+  alternative: a balance kept in step by every writer drifts the first time one
+  of them fails between its two writes, with nothing to reconcile against
+  because the ledger was never the truth. There is deliberately no UPDATE and no
+  DELETE against the ledger anywhere in `db/queries`, and a fitness test fails
+  the build if one appears.
+- **A finalised invoice is never edited.** Not because editing is technically
+  hard, but because the patient is holding a copy of it, and a system that can
+  quietly change what a document said is a system whose documents prove nothing.
+  A correction is a credit or debit note that references the original, which is
+  what every finance department already does and what every auditor expects to
+  find. One level down, the same rule: the lines are a snapshot copied on at
+  issue rather than a join to the charges, so a charge voided next week does not
+  restate last week's invoice, and the totals are stored rather than summed on
+  read, so a rounding rule changed in a future release does not change what the
+  document says.
+- **Everything effective-dated resolves as of the moment of care.** SRS-BIL-001's
+  acceptance is explicit — "historical invoice resolves service version active at
+  charge time" — so a charge keyed three days late is still priced, taxed and
+  described by what was in force on the day. A charge against a date no version
+  covers is refused rather than priced from today's master: quietly pricing it is
+  how a charge nobody can defend becomes invisible. An exclusion constraint keeps
+  exactly one version of a code in force at a time, so the resolution is
+  deterministic rather than "whichever row the planner reached first".
+- **Tariff resolution is deterministic by construction.** Most specific wins;
+  a tie on specificity is broken by an explicit priority and a tie on both by the
+  contract identifier — arbitrary but *stable*, so the same question asked twice
+  gets the same answer even after the rows have been migrated. A resolution that
+  depended on row order would satisfy the requirement only until somebody
+  reindexed the table. A contract for one payer never prices another payer's
+  patient, which is the whole point of scoping it, and the contract that produced
+  a price is stored on the charge rather than recomputed — "which tariff was
+  applied" is the first question of every payer dispute, and recomputing would
+  answer with today's contracts.
+- **One clinical event is one charge.** SRS-BIL-003's "cannot be silently
+  duplicated" is held by a unique index on the source reference rather than by a
+  check, because a bus redelivery and a retried RPC can be in flight at the same
+  moment. Three layers, and the fault injection showed which of them is
+  load-bearing: removing the application's pre-check changes nothing, because the
+  adapter reads back the row the conflict left; removing both still fails the
+  test, because the index refuses the second row. The pre-check is a convenience
+  and the table is the control.
+- **A package explains itself.** SRS-BIL-004's criterion is a ledger that
+  explains "billed/not billed items", so every service inside a package's scope
+  produces an entry — covered or not — carrying the reason in a sentence
+  somebody at a discharge desk can read aloud. Four mechanisms, genuinely
+  different rather than four names for a list: an inclusion is covered up to its
+  cap, an exclusion is named so the patient is told before admission rather than
+  at discharge, a cap bills the *excess* rather than the whole line, and a
+  carve-out is billed at the contracted price because that is how implants and
+  high-cost drugs are actually negotiated. A billed excess does not count against
+  the cap, or the cap would consume itself.
+- **Concessions are bounded in both directions.** A discount limit states a rate
+  and an amount and both apply, because five per cent of a half-million-rupee
+  bill is not a small decision even though the rate is. Applying and approving
+  are separate permissions held by different roles: a limit a person can approve
+  for themselves is not a limit. Every discount names who gave it and why — a
+  concession with no reason is money given away that nobody can account for,
+  which is the single commonest revenue leak in a hospital.
+- **The person who decides what is owed does not collect it.** The oldest
+  control in finance, and the one a small hospital is most tempted to collapse.
+  A billing clerk raises charges and issues invoices and cannot take money; a
+  cashier takes money and cannot raise a charge or refund one; finance sets the
+  prices and approves what exceeds a limit and does neither of the other two. A
+  refund carries a second name by construction, and a cashier cannot approve
+  their own drawer variance.
+- **The drawer reconciles against the ledger, not against itself.** What a shift
+  should hold is computed from the cash movements recorded against it, so a
+  cashier cannot make the count agree by adjusting the expectation. Any variance
+  needs a reason, not only a large one: a drawer short by ten rupees every day is
+  a pattern, and one that is never explained is a pattern nobody sees. Beyond the
+  tenant's threshold it waits for a supervisor.
+- **The close lists everything in the way.** SRS-BIL-013's acceptance is that the
+  blocking exceptions are listed, and the practical reason is that a biller told
+  "the account cannot be closed" goes hunting for what is usually one held charge
+  out of four hundred. The checks run against live state — the uninvoiced
+  charges, the held charges, the draft documents, the ledger and the patient's own
+  share — so an account cannot pass because somebody set a flag earlier. Money the
+  hospital is *holding* blocks the close too: an account closed over an unresolved
+  deposit is a refund nobody will ever make.
+- **The events reference financial objects and expose no payment secrets.**
+  SRS-BIL-016's qualifier decides the payloads: the method and the gateway's own
+  reference, which is what a reconciliation needs, and never a card number, an
+  account number or an authorisation code. A gateway reference identifies a
+  transaction to whoever already holds the gateway's credentials; a card number
+  identifies it to anybody.
+
+### Evidence
+
+| Property | Test |
+|---|---|
+| A hundred small amounts sum exactly, and a fully paid account is exactly zero | `TestAHundredSmallAmountsSumExactly`, `TestAFullyPaidAccountIsExactlyZero` |
+| Mixing currencies is refused, and an amount needs a real currency code | `TestMixingCurrenciesIsRefused`, `TestAnAmountNeedsAThreeLetterCurrency`, `TestAnAccountNeedsAThreeLetterCurrency` |
+| Subtraction and multiplication stay exact, and a negative amount renders with its sign | `TestSubtractionAndMultiplicationStayExact`, `TestANegativeAmountRendersWithItsSign` |
+| A rate rounds half away from zero, renders as a percentage, and cannot exceed 100% | `TestARateRoundsHalfAwayFromZero`, `TestARateRendersAsAPercentage`, `TestARateAboveOneHundredPercentIsRefused` |
+| A charge resolves the service version active when it happened | `TestAChargeResolvesTheServiceVersionActiveWhenItHappened`, `TestAChargeUsesTheTaxRateInForceOnTheDayOfCare` |
+| A service that did not exist yet does not resolve, and a charge against one is refused | `TestAServiceThatDidNotExistYetDoesNotResolve`, `TestAChargeAgainstAServiceNotYetInForceIsRefused` |
+| A service needs a department and a revenue account | `TestAServiceNeedsADepartmentAndARevenueAccount` |
+| A charge is priced at the day of care, not the day it was keyed | `TestAChargeIsPricedAtTheDayOfCareNotTheDayItWasKeyed` |
+| The most specific tariff wins, and the price names the contract that produced it | `TestTheMostSpecificTariffWins`, `TestThePriceCarriesTheContractThatProducedIt`, `TestAnInsurersTariffPricesTheirPatientAndSaysSo` |
+| A payer's contract does not price somebody else's patient | `TestAPayersContractDoesNotPriceSomebodyElsesPatient` |
+| A tie is broken deterministically, whatever the row order | `TestATieIsBrokenDeterministically` |
+| An expired tariff does not price today's care, and a tariff price cannot be negative | `TestAnExpiredTariffDoesNotPriceTodaysCare`, `TestATariffPriceCannotBeNegative` |
+| A service no tariff prices is refused rather than charged at zero | `TestAServiceNoTariffPricesIsRefusedRatherThanChargedAtZero` |
+| A charge carries where it came from, and the key is the source pair | `TestAChargeCarriesWhereItCameFrom`, `TestTheIdempotencyKeyIsTheSourcePair` |
+| A redelivered clinical event produces one charge | `TestARedeliveredClinicalEventProducesOneCharge` |
+| An automatic charge needs a source reference; a manual one needs an author and a reason | `TestAnAutomaticChargeNeedsASourceReference`, `TestAManualChargeNeedsAnAuthorAndAReason` |
+| A charge needs a quantity greater than zero | `TestAChargeNeedsAQuantityGreaterThanZero` |
+| Tax is added to an exclusive price and extracted from an inclusive one | `TestTaxIsAddedToAnExclusivePrice`, `TestTaxIsExtractedFromAnInclusivePrice` |
+| A charge on an issued invoice is corrected rather than voided | `TestAChargeOnAnInvoiceIsCorrectedRatherThanVoided` |
+| Voiding needs a reason and an author, and a voided charge cannot be invoiced | `TestVoidingAChargeNeedsAReasonAndAnAuthor`, `TestAVoidedChargeCannotBeInvoiced` |
+| A held charge carries its reason, can be released, and cannot reach an invoice | `TestAHeldChargeCarriesItsReasonAndCanBeReleased`, `TestAHeldChargeCannotReachAnInvoice` |
+| An included service is absorbed and says so; within the cap nothing is billed | `TestAnIncludedServiceIsAbsorbedAndSaysSo`, `TestWithinTheCapNothingIsBilled` |
+| A quantity cap bills the excess and says why | `TestAQuantityCapBillsTheExcessAndSaysWhy`, `TestABilledExcessDoesNotCountAgainstTheCap` |
+| An exclusion is billed and named as excluded; a carve-out at the contracted price | `TestAnExcludedServiceIsBilledAndNamedAsExcluded`, `TestACarveOutIsBilledAtTheContractedPrice` |
+| A service outside the package is recorded as outside it | `TestAServiceOutsideThePackageIsRecordedAsOutsideIt` |
+| An unlimited inclusion absorbs every occurrence | `TestAnUnlimitedInclusionAbsorbsEveryOccurrence` |
+| A package cannot both include and exclude a service, nor cap one twice, nor cover nothing | `TestAPackageCannotBothIncludeAndExcludeAService`, `TestAPackageCannotCapOneServiceTwice`, `TestAPackageNeedsAtLeastOneInclusion` |
+| The consumption ledger reads in order and explains billed and not-billed alike | `TestTheConsumptionLedgerReadsInOrder`, `TestThePackageLedgerExplainsBilledAndNotBilledItems` |
+| A charge a package absorbed does not appear on the bill | `TestAChargeAPackageAbsorbedDoesNotAppearOnTheBill` |
+| An estimate creates no balance and is superseded rather than overwritten | `TestAnEstimateCreatesNoBalance`, `TestAnEstimateCreatesNoBalanceOverTheWire`, `TestAnEstimateIsSupersededRatherThanOverwritten` |
+| An issued invoice carries its own arithmetic and a number | `TestTheInvoiceCarriesItsOwnArithmetic`, `TestAnInvoiceCarriesItsOwnArithmeticAndANumber` |
+| An issued invoice does not change when its charges do | `TestAnIssuedInvoiceDoesNotChangeWhenItsChargesDo` |
+| An issued invoice takes no more lines or discounts, and an empty one cannot be issued | `TestAnIssuedInvoiceTakesNoMoreLinesOrDiscounts`, `TestAnEmptyInvoiceCannotBeIssued` |
+| Issuing an invoice marks its charges invoiced | `TestIssuingAnInvoiceMarksItsChargesInvoiced` |
+| A correction is a credit note that names the original, and needs a reason and a line | `TestACorrectionIsACreditNoteThatNamesTheOriginal`, `TestAFinalisedInvoiceIsCorrectedByACreditNote`, `TestACorrectionNeedsAReasonAndAtLeastOneLine` |
+| A draft is edited rather than corrected; a final invoice is not superseded | `TestADraftIsEditedRatherThanCorrected`, `TestAFinalInvoiceIsNotSuperseded` |
+| A discount needs a reason and an author, and cannot exceed the subtotal | `TestADiscountNeedsAReasonAndAnAuthor`, `TestADiscountCannotExceedTheSubtotal` |
+| A discount limit bounds both the rate and the amount | `TestADiscountLimitBoundsBothTheRateAndTheAmount`, `TestAFlatDiscountIsCheckedAgainstARateOnlyLimit` |
+| A concession beyond the limit needs an approval | `TestAConcessionBeyondTheLimitNeedsAnApproval` |
+| A liability share names its party and its basis, and the split must add up | `TestALiabilityShareNamesItsPartyAndItsBasis`, `TestASplitThatDoesNotAddUpIsRefused`, `TestASplitLiabilityNamesEveryPartyAndAddsUp` |
+| An invoice with no adjudication makes the patient liable explicitly | `TestAnInvoiceWithNoAdjudicationMakesThePatientLiableExplicitly` |
+| The balance is the sum of the ledger, and a payment reduces it exactly | `TestTheBalanceIsTheSumOfTheLedger`, `TestAPaymentReducesTheBalanceExactly` |
+| A retried payment takes the money once | `TestARetriedPaymentTakesTheMoneyOnce` |
+| A payment must reduce the balance, and a zero movement is not a movement | `TestAPaymentMustReduceTheBalance`, `TestAZeroMovementIsNotAMovement` |
+| A non-cash payment needs the provider's reference | `TestANonCashPaymentNeedsTheProvidersReference` |
+| A payment cannot be refunded twice, and a refund against nothing is refused | `TestAPaymentCannotBeRefundedTwice`, `TestARefundAgainstNoPaymentIsRefused` |
+| A refund needs an original and an authorisation, and the original stays | `TestARefundNeedsAnOriginalAndAnAuthorisation`, `TestARefundReferencesTheOriginalAndCannotExceedIt` |
+| A write-off needs an authorisation and a reason | `TestAWriteOffNeedsAnAuthorisationAndAReason` |
+| Deposits are reported apart from the balance | `TestDepositsAreReportedApartFromTheBalance`, `TestADepositIsReportedApartFromTheBalance` |
+| Closing lists every blocking exception, and a clean account closes | `TestClosingListsEveryBlockingException`, `TestACleanAccountCloses`, `TestClosingAnAccountListsEverythingInTheWay` |
+| An account with exceptions will not close | `TestAnAccountWithExceptionsWillNotClose` |
+| A deposit still held blocks the close | `TestADepositStillHeldBlocksTheClose` |
+| A payer balance does not keep a discharged patient's account open | `TestAPayerBalanceDoesNotBlockTheCloseWherePolicyAllows`, `TestAPayerBalanceDoesNotKeepTheAccountOpen` |
+| A closed account takes no more charges | `TestAClosedAccountTakesNoMoreCharges` |
+| The expected cash is computed from the ledger, and a drawer that agrees reconciles | `TestTheExpectedCashIsComputedFromTheLedger`, `TestADrawerThatAgreesReconciles` |
+| Any variance needs a reason, and one beyond the threshold goes to a supervisor | `TestAnyVarianceNeedsAReason`, `TestAVarianceBeyondTheThresholdGoesToASupervisor`, `TestAShiftReconcilesAgainstTheLedgerAndEscalatesAVariance` |
+| A cashier cannot approve their own variance, and a balanced shift needs no approval | `TestACashierCannotApproveTheirOwnVariance`, `TestAReconciledShiftNeedsNoApproval` |
+| A shift needs a counter and a cashier, and two cashiers cannot share one counter | `TestAShiftNeedsACounterAndACashier`, `TestTwoCashiersCannotShareOneCounter` |
+| A completed service with no charge is on the worklist, and links to the source record | `TestACompletedServiceWithNoChargeIsOnTheWorklist`, `TestTheRevenueWorklistLinksBackToTheSourceRecord` |
+| A voided charge leaves its service unbilled; an invoiced one is not on the worklist | `TestAVoidedChargeLeavesItsServiceUnbilled`, `TestAnInvoicedChargeIsNotOnTheWorklist` |
+| The worklist puts the oldest first | `TestTheWorklistPutsTheOldestFirst` |
+| The billing events carry no payment secrets | `TestTheBillingEventsCarryNoPaymentSecrets` |
+| The one who decides what is owed does not collect it | `TestTheOneWhoDecidesWhatIsOwedDoesNotCollectIt` |
+| An account cannot be reached from another tenant | `TestAnAccountCannotBeReachedFromAnotherTenant` |
+
+### Decisions taken against the backlog
+
+**Three finance roles, not one.** The backlog names "Finance Admin", "Billing
+User" and "Cashier" separately, and the permission sets turn out to differ in
+ways that matter: a billing clerk raises charges and issues invoices and cannot
+take money; a cashier takes money and cannot raise a charge or issue a refund;
+finance sets the prices and approves what exceeds a limit and does neither of
+the other two. Folding any two together collapses the oldest control in finance
+— the person who decides what is owed should not be the person who collects it —
+and it is the control a small hospital is most tempted to collapse because the
+same two people are on the desk.
+
+**Money is minor units in an int64, in the domain, the schema and on the wire.**
+Not a decimal type, not a string, and emphatically not a float. The schema uses
+`bigint` rather than `numeric` because the arithmetic is exact either way and
+integers cannot be accidentally coerced; the wire uses `int64` rather than a
+formatted string because a string invites a client to parse it into a float. The
+currency is a separate field everywhere it appears, and the check that it is a
+three-letter ISO code is on the *bytes* rather than the length — "₹" is three
+bytes of UTF-8 and slipped through a length check, which is exactly the mistake
+the check exists to catch.
+
+**FIT-08 now covers the financial ledgers.** The architecture fitness tests
+already forbade deleting from the audit trail and the outbox; this sprint adds
+the billing ledger, the package consumption ledger and an issued invoice's
+lines, checked against `db/queries` rather than against Go source because that is
+where such a statement would actually be written. SRS-BIL-012's "balance derives
+from ledger and reconciles" is only true while the ledger is the whole truth, and
+a rule that is only written down is a rule that decays.
+
+**The invoice and receipt sequences are provisioned at facility creation,
+alongside the order sequence.** Per tenant rather than per facility: a hospital
+group keeps one invoice series across its sites, so a number identifies a
+document without also having to say which site issued it. Gapless matters more
+here than anywhere else in the system — the platform's sequence returns its
+number when a transaction rolls back, and a gap in an invoice series is a
+question an auditor asks that "the transaction rolled back" does not answer.
+
+**A closed encounter still takes charges; a closed *account* does not.** A
+procedure coded three days after discharge is the commonest late charge there
+is, and refusing it at the encounter is how revenue is lost rather than how it is
+controlled. The control that belongs here is SRS-BIL-013's: once the account is
+closed, the hospital's books say the visit is settled, and a new charge would
+restate a period somebody has already reported on — so it is refused, and the
+refusal names the credit-or-debit-note workflow.
+
+**Idempotency is three layers deep and only one of them is load-bearing.** The
+fault injection is what established this: removing the application's pre-check
+changes nothing, because the adapter reads back the row the `ON CONFLICT DO
+NOTHING` left; removing both still fails, because the unique index refuses the
+second row. The pre-check saves a wasted resolution on the ordinary retry and the
+adapter turns the conflict into an answer rather than an error, but the table is
+the control. Documented here because the opposite conclusion — that the
+application check is what protects the money — is the one somebody would reach by
+reading the code top-down.
+
+**A carve-out reprices the charge; an exclusion does not.** Both are billed, and
+the difference is which price applies. A carve-out is contracted at a stated
+rate — "at the blood bank's issue price" — so the charge's unit price is replaced
+and the pricing result names the package rather than the tariff. An exclusion was
+simply never part of the bundle, so it keeps the tariff it would have had
+anyway. Getting these the same way round would either lose the negotiated rate or
+apply it to things nobody negotiated.
 
 ## Wave-0 capabilities Wave 1 consumes
 

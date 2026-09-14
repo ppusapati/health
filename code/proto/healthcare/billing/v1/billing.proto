@@ -1,0 +1,907 @@
+// Billing, tariffs and patient revenue: the charge master, tariff contracts,
+// packages, charges, invoices, the account ledger and cashier shifts.
+//
+// Owning context : billing  (Master Engineering Registry)
+// Owning service : BillingService
+// Trace          : SRS-BIL-001 … SRS-BIL-016
+//
+// Three shapes in this contract are deliberate and worth reading before using
+// it.
+//
+// Money is an int64 count of minor units with its currency beside it, never a
+// double and never a decimal string. A double cannot represent 0.10 exactly, so
+// a hundred lines summed as doubles do not equal the invoice total — and an
+// invoice that does not add up is one a patient is right to dispute. A tariff
+// of 1,250.50 is 125050.
+//
+// An invoice carries its own totals rather than leaving a client to sum the
+// lines. The lines are a snapshot taken at issue, and the totals are what the
+// document said: a client that recomputed would eventually round differently
+// and show a patient a figure the hospital never charged.
+//
+// CloseAccountResponse returns the blocking exceptions rather than a boolean.
+// SRS-BIL-013's acceptance is that they are listed, and a biller told "the
+// account cannot be closed" has to go looking for what is usually one held
+// charge out of four hundred.
+syntax = "proto3";
+
+package healthcare.billing.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ppusapati/health/code/gen/go/healthcare/billing/v1;billingv1";
+
+// An amount in minor units with its currency. Inseparable: a number alone has
+// eventually been rendered under the wrong label by every system that stored it
+// that way.
+message Money {
+  // Signed. Negative is meaningful: a credit note line and a refund are both
+  // negative movements.
+  int64 minor = 1;
+  // ISO 4217 alphabetic — "INR", "USD".
+  string currency = 2;
+}
+
+// One billable thing, versioned by its effective window (SRS-BIL-001).
+message ServiceItem {
+  // Stable across versions. Two entries with one code and different windows are
+  // two versions of one service.
+  string code = 1;
+  string description = 2;
+  // Radiology's income is not the ward's.
+  string department = 3;
+  string revenue_account = 4;
+  string tax_code = 5;
+  // Hundredths of a percent: 18% is 1800. Integer for the same reason money is.
+  int32 tax_rate_bp = 6;
+  // Whether the tariff price already contains the tax. Stated rather than
+  // assumed: both conventions coexist in one hospital.
+  bool tax_inclusive = 7;
+  google.protobuf.Timestamp effective_from = 8;
+  // Unset while the version is current.
+  google.protobuf.Timestamp effective_to = 9;
+}
+
+// What a tariff contract is negotiated against (SRS-BIL-002).
+//
+// All five axes are optional. One that names none is the standard list price;
+// one that names a payer and a room class is the rate that insurer pays for a
+// private room. The most specific match wins.
+message TariffScope {
+  string payer_id = 1;
+  // The corporate account, which is not the same as the payer: a company scheme
+  // and the insurer administering it negotiate separately.
+  string customer_id = 2;
+  string facility_id = 3;
+  // The same service costs differently in a general ward and a suite.
+  string room_class = 4;
+  string service_code = 5;
+}
+
+message TariffLine {
+  string tariff_line_id = 1;
+  string contract_id = 2;
+  string name = 3;
+  TariffScope scope = 4;
+  Money price = 5;
+  // Breaks a tie between contracts of equal specificity. Explicit rather than
+  // "most recently created", because a resolution that depends on insertion
+  // order changes when data is migrated.
+  int32 priority = 6;
+  google.protobuf.Timestamp effective_from = 7;
+  google.protobuf.Timestamp effective_to = 8;
+}
+
+// The price and which contract produced it (SRS-BIL-002).
+message PricingResult {
+  Money price = 1;
+  // "Which tariff was applied" is the first question of every payer dispute.
+  string contract_id = 2;
+  string contract = 3;
+  TariffScope scope = 4;
+}
+
+// A service a package covers (SRS-BIL-004).
+message PackageInclusion {
+  string service_code = 1;
+  // The cap. Zero means unlimited within the package, which is a real
+  // contract — "all nursing care".
+  int32 quantity = 2;
+}
+
+// A service billed separately at a contracted price (SRS-BIL-004).
+//
+// A price rather than a flag, because that is how implants and high-cost drugs
+// are contracted.
+message PackageCarveOut {
+  string service_code = 1;
+  Money price = 2;
+  string note = 3;
+}
+
+message Package {
+  string code = 1;
+  string name = 2;
+  Money price = 3;
+  repeated PackageInclusion inclusions = 4;
+  // Named so a patient is told before admission rather than at discharge.
+  // Explicit rather than implied by absence from the inclusions: "we did not
+  // think about this" and "this is not covered" are different answers.
+  repeated string exclusions = 5;
+  repeated PackageCarveOut carve_outs = 6;
+  string room_class = 7;
+  google.protobuf.Timestamp effective_from = 8;
+  google.protobuf.Timestamp effective_to = 9;
+}
+
+// Where a charge came from (SRS-BIL-003).
+enum ChargeOrigin {
+  CHARGE_ORIGIN_UNSPECIFIED = 0;
+  CHARGE_ORIGIN_CLINICAL_EVENT = 1;
+  // A biller keying one in. Allowed, and audited harder: a manual charge is the
+  // path round every automated control.
+  CHARGE_ORIGIN_MANUAL = 2;
+  CHARGE_ORIGIN_RECURRING = 3;
+}
+
+// What a charge came from (SRS-BIL-003).
+//
+// System and identifier together are the idempotency key: a redelivered event
+// produces no second charge.
+message SourceReference {
+  // The context that raised it — "orders", "nursing", "scheduling".
+  string system = 1;
+  string id = 2;
+  // The reference a biller follows back — an order number a ward reads down a
+  // phone. An opaque identifier is not a link anybody can follow.
+  string detail = 3;
+}
+
+enum ChargeStatus {
+  CHARGE_STATUS_UNSPECIFIED = 0;
+  CHARGE_STATUS_POSTED = 1;
+  CHARGE_STATUS_INVOICED = 2;
+  // Raised in error. The record stays: a charge that vanished would leave an
+  // invoice total nobody can rebuild.
+  CHARGE_STATUS_VOIDED = 3;
+  // Waiting on a coding query or an authorisation.
+  CHARGE_STATUS_HELD = 4;
+}
+
+// What a package did with a charge (SRS-BIL-004).
+enum CoverageOutcome {
+  COVERAGE_OUTCOME_UNSPECIFIED = 0;
+  COVERAGE_OUTCOME_INCLUDED = 1;
+  // The inclusion's quantity was already used, so this one is billed — the
+  // excess rather than the whole line, which is what a cap means.
+  COVERAGE_OUTCOME_OVER_CAP = 2;
+  COVERAGE_OUTCOME_EXCLUDED = 3;
+  COVERAGE_OUTCOME_CARVE_OUT = 4;
+  // The package says nothing about it, so the standard tariff applies.
+  // Recorded rather than left silent.
+  COVERAGE_OUTCOME_OUTSIDE_PACKAGE = 5;
+}
+
+message Charge {
+  string charge_id = 1;
+  string account_id = 2;
+  string patient_id = 3;
+  string encounter_id = 4;
+  string facility_id = 5;
+
+  string service_code = 6;
+  // Copied from the service version in force at charge time, so a master edited
+  // afterwards does not restate what was charged.
+  string description = 7;
+  string department = 8;
+  int32 quantity = 9;
+  Money unit_price = 10;
+  PricingResult pricing = 11;
+
+  string tax_code = 12;
+  int32 tax_rate_bp = 13;
+  bool tax_inclusive = 14;
+  Money net = 15;
+  Money tax = 16;
+  Money total = 17;
+
+  ChargeOrigin origin = 18;
+  SourceReference source = 19;
+  string entered_by = 20;
+  string reason = 21;
+
+  // When the service was delivered, which is what the master and the tariff are
+  // resolved against. Distinct from posted_at: a charge keyed three days later
+  // is still priced at the day of care.
+  google.protobuf.Timestamp occurred_at = 22;
+  google.protobuf.Timestamp posted_at = 23;
+
+  ChargeStatus status = 24;
+  string package_code = 25;
+  bool covered = 26;
+  string coverage_note = 27;
+  string invoice_id = 28;
+}
+
+// One entry in the package ledger (SRS-BIL-004).
+message Consumption {
+  string package_code = 1;
+  string charge_id = 2;
+  string service_code = 3;
+  int32 quantity = 4;
+  CoverageOutcome outcome = 5;
+  // The sentence at the discharge desk.
+  string explanation = 6;
+  Money price = 7;
+  google.protobuf.Timestamp recorded_at = 8;
+}
+
+enum DocumentKind {
+  DOCUMENT_KIND_UNSPECIFIED = 0;
+  // A quote. Never a demand for payment, and never posts to the ledger.
+  DOCUMENT_KIND_ESTIMATE = 1;
+  // A running bill on an open account, supersedable.
+  DOCUMENT_KIND_INTERIM = 2;
+  DOCUMENT_KIND_FINAL = 3;
+  // Reduces what is owed. The correction workflow for a finalised document.
+  DOCUMENT_KIND_CREDIT_NOTE = 4;
+  DOCUMENT_KIND_DEBIT_NOTE = 5;
+}
+
+enum InvoiceStatus {
+  INVOICE_STATUS_UNSPECIFIED = 0;
+  INVOICE_STATUS_DRAFT = 1;
+  // Final and out. Nothing about it changes again.
+  INVOICE_STATUS_ISSUED = 2;
+  INVOICE_STATUS_SUPERSEDED = 3;
+  INVOICE_STATUS_CANCELLED = 4;
+}
+
+// Who owes a share (SRS-BIL-014).
+enum LiabilityParty {
+  LIABILITY_PARTY_UNSPECIFIED = 0;
+  LIABILITY_PARTY_PATIENT = 1;
+  LIABILITY_PARTY_PAYER = 2;
+  LIABILITY_PARTY_CORPORATE = 3;
+  LIABILITY_PARTY_SCHEME = 4;
+}
+
+// One party's portion, with its provenance (SRS-BIL-014).
+message LiabilityShare {
+  LiabilityParty party = 1;
+  string party_id = 2;
+  Money amount = 3;
+  // How the share was arrived at — "policy covers 90% up to 500,000",
+  // "co-payment per scheme rules". A share with no stated basis is a number a
+  // patient cannot challenge and a payer cannot reconcile.
+  string basis = 4;
+  string adjudication_ref = 5;
+}
+
+// A concession (SRS-BIL-007).
+message Discount {
+  // Either a rate or an amount, never both: a discount expressed two ways is
+  // two numbers that disagree the first time the subtotal changes.
+  int32 rate_bp = 1;
+  Money amount = 2;
+  string reason = 3;
+  string applied_by = 4;
+  // Set where the concession exceeded the applier's limit.
+  string approved_by = 5;
+  google.protobuf.Timestamp applied_at = 6;
+  string approval_ref = 7;
+}
+
+// One line of a document (SRS-BIL-006).
+//
+// A snapshot, not a reference. Every value a reader needs is copied on at issue,
+// so the document says the same thing in five years.
+message InvoiceLine {
+  int32 sequence = 1;
+  // Points back for audit. The line does not depend on it.
+  string charge_id = 2;
+  string service_code = 3;
+  string description = 4;
+  string department = 5;
+  int32 quantity = 6;
+  Money unit_price = 7;
+  Money net = 8;
+  string tax_code = 9;
+  int32 tax_rate_bp = 10;
+  Money tax = 11;
+  Money discount = 12;
+  Money total = 13;
+  string package_code = 14;
+  string coverage_note = 15;
+}
+
+message Invoice {
+  string invoice_id = 1;
+  // What the patient quotes. From the platform's numbering sequence, so it is
+  // gapless and collision-free.
+  string number = 2;
+  DocumentKind kind = 3;
+  InvoiceStatus status = 4;
+
+  string account_id = 5;
+  string patient_id = 6;
+  string encounter_id = 7;
+  string facility_id = 8;
+
+  // An estimate re-quoted after the plan changes is a new version, and the
+  // patient was shown the old one.
+  int32 document_version = 9;
+  string superseded_by = 10;
+  // The document a credit or debit note corrects.
+  string corrects_invoice_id = 11;
+
+  repeated InvoiceLine lines = 12;
+  // Carried rather than left to the client to sum: a client that recomputed
+  // would eventually round differently and show a figure the hospital never
+  // charged.
+  Money subtotal = 13;
+  Money discount = 14;
+  Money tax = 15;
+  Money total = 16;
+
+  repeated Discount discounts = 17;
+  repeated LiabilityShare liability = 18;
+
+  string payer_id = 19;
+  string customer_id = 20;
+  string notes = 21;
+
+  string issued_by = 22;
+  google.protobuf.Timestamp issued_at = 23;
+  string created_by = 24;
+  google.protobuf.Timestamp created_at = 25;
+}
+
+// What a ledger entry records (SRS-BIL-012).
+enum EntryKind {
+  ENTRY_KIND_UNSPECIFIED = 0;
+  ENTRY_KIND_INVOICE = 1;
+  ENTRY_KIND_PAYMENT = 2;
+  // A separate entry rather than an edit to the payment: "we never took this"
+  // and "we took it and gave it back" are different statements.
+  ENTRY_KIND_REFUND = 3;
+  ENTRY_KIND_DEPOSIT = 4;
+  ENTRY_KIND_DEPOSIT_APPLIED = 5;
+  ENTRY_KIND_WRITE_OFF = 6;
+  ENTRY_KIND_ADJUSTMENT = 7;
+}
+
+enum PaymentMethod {
+  PAYMENT_METHOD_UNSPECIFIED = 0;
+  PAYMENT_METHOD_CASH = 1;
+  PAYMENT_METHOD_CARD = 2;
+  PAYMENT_METHOD_UPI = 3;
+  PAYMENT_METHOD_BANK_TRANSFER = 4;
+  PAYMENT_METHOD_CHEQUE = 5;
+  // A settlement from an insurer rather than from the patient.
+  PAYMENT_METHOD_PAYER_SETTLEMENT = 6;
+}
+
+// One movement on an account (SRS-BIL-012).
+//
+// Append-only. A correction is another entry.
+message LedgerEntry {
+  string entry_id = 1;
+  string account_id = 2;
+  string patient_id = 3;
+  string encounter_id = 4;
+  EntryKind kind = 5;
+  // Signed: positive increases what the patient owes.
+  Money amount = 6;
+
+  string invoice_id = 7;
+  string payment_id = 8;
+  string refund_of_payment_id = 9;
+
+  PaymentMethod method = 10;
+  // The gateway's or bank's own identifier — what a reconciliation is done
+  // against. Deliberately not a card number or any other secret.
+  string provider_ref = 11;
+  string receipt_number = 12;
+  string shift_id = 13;
+
+  string reason = 14;
+  string recorded_by = 15;
+  string approved_by = 16;
+  google.protobuf.Timestamp occurred_at = 17;
+}
+
+enum AccountStatus {
+  ACCOUNT_STATUS_UNSPECIFIED = 0;
+  ACCOUNT_STATUS_OPEN = 1;
+  ACCOUNT_STATUS_CLOSED = 2;
+}
+
+message Account {
+  string account_id = 1;
+  string patient_id = 2;
+  string encounter_id = 3;
+  string facility_id = 4;
+  string currency = 5;
+  string payer_id = 6;
+  string customer_id = 7;
+  string room_class = 8;
+  string package_code = 9;
+  AccountStatus status = 10;
+  string closed_by = 11;
+  google.protobuf.Timestamp closed_at = 12;
+}
+
+// A reason an account cannot close yet (SRS-BIL-013).
+message CloseException {
+  string check = 1;
+  string detail = 2;
+  Money amount = 3;
+  // The records to fix. A worklist that says "something is outstanding"
+  // without saying which is one nobody can work.
+  repeated string references = 4;
+}
+
+enum ShiftStatus {
+  SHIFT_STATUS_UNSPECIFIED = 0;
+  SHIFT_STATUS_OPEN = 1;
+  SHIFT_STATUS_RECONCILED = 2;
+  SHIFT_STATUS_PENDING_APPROVAL = 3;
+}
+
+// One cashier's session at one drawer (SRS-BIL-015).
+message Shift {
+  string shift_id = 1;
+  string facility_id = 2;
+  string counter_id = 3;
+  string cashier_id = 4;
+  Money opening_float = 5;
+  google.protobuf.Timestamp opened_at = 6;
+  // What the cashier physically counted.
+  Money counted_cash = 7;
+  // The float plus the cash movements recorded against the shift, computed from
+  // the ledger rather than typed — so a cashier cannot make the count agree by
+  // adjusting the expectation.
+  Money expected_cash = 8;
+  Money variance = 9;
+  ShiftStatus status = 10;
+  string variance_reason = 11;
+  string approved_by = 12;
+  google.protobuf.Timestamp closed_at = 13;
+}
+
+// Why something is on the revenue-integrity worklist (SRS-BIL-011).
+enum ExceptionKind {
+  EXCEPTION_KIND_UNSPECIFIED = 0;
+  // A completed service with no charge. The commonest revenue leak in any
+  // hospital, and almost never theft — a procedure nobody coded.
+  EXCEPTION_KIND_UNBILLED_SERVICE = 1;
+  EXCEPTION_KIND_UNINVOICED_CHARGE = 2;
+  EXCEPTION_KIND_HELD_CHARGE = 3;
+  EXCEPTION_KIND_NO_TARIFF = 4;
+  EXCEPTION_KIND_UNPRICED_PACKAGE = 5;
+}
+
+message RevenueException {
+  ExceptionKind kind = 1;
+  string account_id = 2;
+  string patient_id = 3;
+  string encounter_id = 4;
+  string charge_id = 5;
+  SourceReference source = 6;
+  string detail = 7;
+  Money amount = 8;
+  // How long it has been outstanding, in seconds. A charge held since yesterday
+  // is a query; one held since last month is a loss.
+  int64 age_seconds = 9;
+}
+
+// A completed clinical service the biller expects to see (SRS-BIL-011).
+message BillableEvent {
+  SourceReference source = 1;
+  string service_code = 2;
+  string patient_id = 3;
+  string encounter_id = 4;
+  string account_id = 5;
+  google.protobuf.Timestamp occurred_at = 6;
+}
+
+// What a role may give without approval (SRS-BIL-007).
+message DiscountLimit {
+  int32 max_rate_bp = 1;
+  // Both bounds apply: 5% of a half-million-rupee bill is not a small decision
+  // even though the rate is.
+  Money max_amount = 2;
+}
+
+message BillingPolicy {
+  map<string, DiscountLimit> discount_limits = 1;
+  repeated string close_checks = 2;
+  // An insurer's ninety-day settlement is not a reason to keep a discharged
+  // patient's account open.
+  bool allow_payer_balance = 3;
+  int64 variance_threshold_minor = 4;
+  string currency = 5;
+}
+
+message OpenAccountRequest {
+  string encounter_id = 1;
+  string patient_id = 2;
+  string currency = 3;
+  string payer_id = 4;
+  string customer_id = 5;
+  string room_class = 6;
+  string package_code = 7;
+}
+
+message OpenAccountResponse {
+  Account account = 1;
+}
+
+message GetAccountRequest {
+  string account_id = 1;
+  // Either identifier. An encounter is what a ward knows; an account is what
+  // billing knows.
+  string encounter_id = 2;
+}
+
+message GetAccountResponse {
+  Account account = 1;
+}
+
+message PostChargeRequest {
+  string account_id = 1;
+  string service_code = 2;
+  int32 quantity = 3;
+  ChargeOrigin origin = 4;
+  SourceReference source = 5;
+  string reason = 6;
+  google.protobuf.Timestamp occurred_at = 7;
+}
+
+message PostChargeResponse {
+  Charge charge = 1;
+  // A redelivered clinical event: the charge returned is the one that was
+  // already there, and nothing was written.
+  bool already_posted = 2;
+  Consumption consumption = 3;
+}
+
+message ChangeChargeRequest {
+  string charge_id = 1;
+  string reason = 2;
+}
+
+message ChangeChargeResponse {
+  Charge charge = 1;
+}
+
+// One request and response type per RPC, which is what lets any of the three
+// gain a field later without changing the other two: voiding a charge raised
+// against the wrong patient and holding one pending a coding query are
+// different acts, and the day one of them needs something the others do not is
+// the day a shared message becomes a breaking change.
+message VoidChargeRequest {
+  ChangeChargeRequest change = 1;
+}
+
+message VoidChargeResponse {
+  Charge charge = 1;
+}
+
+message HoldChargeRequest {
+  ChangeChargeRequest change = 1;
+}
+
+message HoldChargeResponse {
+  Charge charge = 1;
+}
+
+message ReleaseChargeRequest {
+  ChangeChargeRequest change = 1;
+}
+
+message ReleaseChargeResponse {
+  Charge charge = 1;
+}
+
+message ListChargesRequest {
+  string account_id = 1;
+  bool billable_only = 2;
+  int32 page_size = 3;
+}
+
+message ListChargesResponse {
+  repeated Charge charges = 1;
+}
+
+message PackageLedgerRequest {
+  string account_id = 1;
+}
+
+message PackageLedgerResponse {
+  repeated Consumption entries = 1;
+}
+
+message RaiseInvoiceRequest {
+  string account_id = 1;
+  DocumentKind kind = 2;
+  Discount discount = 3;
+  repeated LiabilityShare liability = 4;
+  string notes = 5;
+  // Finalise in the same call. A draft left behind whenever a client crashed
+  // between two calls is one somebody has to clean up, and it blocks the
+  // account close.
+  bool issue = 6;
+}
+
+message RaiseInvoiceResponse {
+  Invoice invoice = 1;
+}
+
+message CorrectInvoiceRequest {
+  string invoice_id = 1;
+  DocumentKind kind = 2;
+  repeated InvoiceLine lines = 3;
+  string reason = 4;
+}
+
+message CorrectInvoiceResponse {
+  Invoice note = 1;
+}
+
+message GetInvoiceRequest {
+  string invoice_id = 1;
+}
+
+message GetInvoiceResponse {
+  Invoice invoice = 1;
+}
+
+message ListInvoicesRequest {
+  string account_id = 1;
+  int32 page_size = 2;
+}
+
+message ListInvoicesResponse {
+  repeated Invoice invoices = 1;
+}
+
+message ReceivePaymentRequest {
+  string account_id = 1;
+  Money amount = 2;
+  PaymentMethod method = 3;
+  string provider_ref = 4;
+  string invoice_id = 5;
+  string shift_id = 6;
+  // Makes a retried submission one payment. Supplied by the caller, because
+  // only the caller knows that its second attempt is the same attempt.
+  string idempotency_key = 7;
+  // An advance taken before care rather than a payment against a bill.
+  bool deposit = 8;
+  string reason = 9;
+}
+
+message ReceivePaymentResponse {
+  LedgerEntry entry = 1;
+  // A retried submission: the entry returned is the one that was already there,
+  // and no money moved twice.
+  bool already_received = 2;
+  Money balance = 3;
+}
+
+message RefundRequest {
+  string account_id = 1;
+  // The entry being reversed. Mandatory: a refund that names no original is
+  // money leaving with nothing to check it against.
+  string payment_id = 2;
+  Money amount = 3;
+  string reason = 4;
+  string shift_id = 5;
+  string approved_by = 6;
+}
+
+message RefundResponse {
+  LedgerEntry entry = 1;
+}
+
+message StatementRequest {
+  string account_id = 1;
+}
+
+message StatementResponse {
+  Account account = 1;
+  repeated LedgerEntry entries = 2;
+  // Derived from the ledger rather than stored, so the patient-facing figure
+  // and the finance figure cannot disagree.
+  Money balance = 3;
+  // Reported apart from the balance: a patient with 50,000 on deposit and
+  // 30,000 billed has 20,000 they can ask for back, and a single net figure
+  // hides that.
+  Money deposits = 4;
+}
+
+message CloseAccountRequest {
+  string account_id = 1;
+}
+
+message CloseAccountResponse {
+  Account account = 1;
+  // Empty when the account closed. Otherwise everything in the way, listed.
+  repeated CloseException exceptions = 2;
+}
+
+message CloseReadinessRequest {
+  string account_id = 1;
+}
+
+message CloseReadinessResponse {
+  repeated CloseException exceptions = 1;
+}
+
+message RevenueIntegrityRequest {
+  string facility_id = 1;
+  // The completed services the biller expects to see. Supplied by the caller
+  // because "what was delivered" is the clinical contexts' fact rather than
+  // billing's.
+  repeated BillableEvent events = 2;
+  int32 page_size = 3;
+}
+
+message RevenueIntegrityResponse {
+  repeated RevenueException exceptions = 1;
+}
+
+message OpenShiftRequest {
+  string facility_id = 1;
+  string counter_id = 2;
+  Money opening_float = 3;
+}
+
+message OpenShiftResponse {
+  Shift shift = 1;
+}
+
+message CloseShiftRequest {
+  string shift_id = 1;
+  Money counted = 2;
+  string reason = 3;
+}
+
+message CloseShiftResponse {
+  Shift shift = 1;
+}
+
+message ApproveShiftRequest {
+  string shift_id = 1;
+}
+
+message ApproveShiftResponse {
+  Shift shift = 1;
+}
+
+message ListShiftsRequest {
+  string facility_id = 1;
+  int32 page_size = 2;
+}
+
+message ListShiftsResponse {
+  repeated Shift shifts = 1;
+}
+
+message PublishServiceRequest {
+  ServiceItem item = 1;
+}
+
+message PublishServiceResponse {}
+
+message ListServicesRequest {
+  int32 page_size = 1;
+}
+
+message ListServicesResponse {
+  repeated ServiceItem items = 1;
+}
+
+message PublishTariffRequest {
+  TariffLine line = 1;
+}
+
+message PublishTariffResponse {}
+
+message ListTariffsRequest {
+  int32 page_size = 1;
+}
+
+message ListTariffsResponse {
+  repeated TariffLine lines = 1;
+}
+
+message QuoteRequest {
+  string account_id = 1;
+  string service_code = 2;
+}
+
+message QuoteResponse {
+  PricingResult pricing = 1;
+}
+
+message PublishPackageRequest {
+  Package package = 1;
+}
+
+message PublishPackageResponse {}
+
+message ListPackagesRequest {
+  int32 page_size = 1;
+}
+
+message ListPackagesResponse {
+  repeated Package packages = 1;
+}
+
+message SetBillingPolicyRequest {
+  BillingPolicy policy = 1;
+}
+
+message SetBillingPolicyResponse {}
+
+message GetBillingPolicyRequest {}
+
+message GetBillingPolicyResponse {
+  BillingPolicy policy = 1;
+}
+
+// BillingService is the billing context's boundary (SRS-BIL).
+service BillingService {
+  // SRS-BIL-013.
+  rpc OpenAccount(OpenAccountRequest) returns (OpenAccountResponse);
+  rpc GetAccount(GetAccountRequest) returns (GetAccountResponse);
+
+  // SRS-BIL-003, SRS-BIL-004. Idempotent on the source reference.
+  rpc PostCharge(PostChargeRequest) returns (PostChargeResponse);
+  // Three calls rather than one with a status, because the preconditions
+  // differ: a charge on an issued invoice is corrected by a note rather than
+  // voided, and only a held charge is released.
+  rpc VoidCharge(VoidChargeRequest) returns (VoidChargeResponse);
+  rpc HoldCharge(HoldChargeRequest) returns (HoldChargeResponse);
+  rpc ReleaseCharge(ReleaseChargeRequest) returns (ReleaseChargeResponse);
+  rpc ListCharges(ListChargesRequest) returns (ListChargesResponse);
+  rpc PackageLedger(PackageLedgerRequest) returns (PackageLedgerResponse);
+
+  // SRS-BIL-005, SRS-BIL-006, SRS-BIL-007, SRS-BIL-014.
+  rpc RaiseInvoice(RaiseInvoiceRequest) returns (RaiseInvoiceResponse);
+  // SRS-BIL-010. A correction is a new document, never an edit.
+  rpc CorrectInvoice(CorrectInvoiceRequest) returns (CorrectInvoiceResponse);
+  rpc GetInvoice(GetInvoiceRequest) returns (GetInvoiceResponse);
+  rpc ListInvoices(ListInvoicesRequest) returns (ListInvoicesResponse);
+
+  // SRS-BIL-008, SRS-BIL-009, SRS-BIL-012.
+  rpc ReceivePayment(ReceivePaymentRequest) returns (ReceivePaymentResponse);
+  rpc Refund(RefundRequest) returns (RefundResponse);
+  rpc Statement(StatementRequest) returns (StatementResponse);
+
+  // SRS-BIL-013.
+  rpc CloseAccount(CloseAccountRequest) returns (CloseAccountResponse);
+  rpc CloseReadiness(CloseReadinessRequest) returns (CloseReadinessResponse);
+
+  // SRS-BIL-011.
+  rpc RevenueIntegrity(RevenueIntegrityRequest) returns (RevenueIntegrityResponse);
+
+  // SRS-BIL-015.
+  rpc OpenShift(OpenShiftRequest) returns (OpenShiftResponse);
+  rpc CloseShift(CloseShiftRequest) returns (CloseShiftResponse);
+  rpc ApproveShift(ApproveShiftRequest) returns (ApproveShiftResponse);
+  rpc ListShifts(ListShiftsRequest) returns (ListShiftsResponse);
+
+  // Configuration (SRS-BIL-001, SRS-BIL-002, SRS-BIL-004, SRS-BIL-007).
+  rpc PublishService(PublishServiceRequest) returns (PublishServiceResponse);
+  rpc ListServices(ListServicesRequest) returns (ListServicesResponse);
+  rpc PublishTariff(PublishTariffRequest) returns (PublishTariffResponse);
+  rpc ListTariffs(ListTariffsRequest) returns (ListTariffsResponse);
+  rpc Quote(QuoteRequest) returns (QuoteResponse);
+  rpc PublishPackage(PublishPackageRequest) returns (PublishPackageResponse);
+  rpc ListPackages(ListPackagesRequest) returns (ListPackagesResponse);
+  rpc SetBillingPolicy(SetBillingPolicyRequest) returns (SetBillingPolicyResponse);
+  rpc GetBillingPolicy(GetBillingPolicyRequest) returns (GetBillingPolicyResponse);
+}

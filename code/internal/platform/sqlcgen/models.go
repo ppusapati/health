@@ -9,6 +9,233 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type BillingAccount struct {
+	AccountID   uuid.UUID
+	TenantID    uuid.UUID
+	PatientID   uuid.UUID
+	EncounterID uuid.UUID
+	FacilityID  uuid.UUID
+	Currency    string
+	PayerID     string
+	CustomerID  string
+	RoomClass   string
+	PackageCode string
+	Status      string
+	ClosedBy    string
+	ClosedAt    pgtype.Timestamptz
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+	Version     int64
+}
+
+type BillingCashierShift struct {
+	ShiftID           uuid.UUID
+	TenantID          uuid.UUID
+	FacilityID        uuid.UUID
+	CounterID         string
+	CashierID         string
+	OpeningFloatMinor int64
+	Currency          string
+	OpenedAt          pgtype.Timestamptz
+	CountedMinor      *int64
+	ExpectedMinor     *int64
+	VarianceMinor     *int64
+	VarianceReason    string
+	Status            string
+	ApprovedBy        string
+	ApprovedAt        pgtype.Timestamptz
+	ClosedAt          pgtype.Timestamptz
+	Version           int64
+}
+
+type BillingCharge struct {
+	ChargeID         uuid.UUID
+	TenantID         uuid.UUID
+	AccountID        uuid.UUID
+	PatientID        uuid.UUID
+	EncounterID      uuid.UUID
+	FacilityID       uuid.UUID
+	ServiceCode      string
+	Description      string
+	Department       string
+	RevenueAccount   string
+	Quantity         int32
+	UnitPriceMinor   int64
+	Currency         string
+	TariffContractID string
+	TariffContract   string
+	TaxCode          string
+	TaxRateBp        int32
+	TaxInclusive     bool
+	Origin           string
+	SourceSystem     string
+	SourceID         string
+	SourceDetail     string
+	EnteredBy        string
+	Reason           string
+	OccurredAt       pgtype.Timestamptz
+	PostedAt         pgtype.Timestamptz
+	Status           string
+	PackageCode      string
+	Covered          bool
+	CoverageNote     string
+	InvoiceID        pgtype.UUID
+	Version          int64
+}
+
+type BillingInvoice struct {
+	InvoiceID         uuid.UUID
+	TenantID          uuid.UUID
+	Number            string
+	Kind              string
+	Status            string
+	AccountID         uuid.UUID
+	PatientID         uuid.UUID
+	EncounterID       uuid.UUID
+	FacilityID        uuid.UUID
+	DocumentVersion   int32
+	SupersededBy      pgtype.UUID
+	CorrectsInvoiceID pgtype.UUID
+	SubtotalMinor     int64
+	DiscountMinor     int64
+	TaxMinor          int64
+	TotalMinor        int64
+	Currency          string
+	Discounts         []byte
+	Liability         []byte
+	PayerID           string
+	CustomerID        string
+	Notes             string
+	IssuedBy          string
+	IssuedAt          pgtype.Timestamptz
+	CreatedBy         string
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	RowVersion        int64
+}
+
+type BillingInvoiceLine struct {
+	TenantID       uuid.UUID
+	InvoiceID      uuid.UUID
+	Sequence       int32
+	ChargeID       pgtype.UUID
+	ServiceCode    string
+	Description    string
+	Department     string
+	Quantity       int32
+	UnitPriceMinor int64
+	NetMinor       int64
+	TaxCode        string
+	TaxRateBp      int32
+	TaxMinor       int64
+	DiscountMinor  int64
+	TotalMinor     int64
+	Currency       string
+	PackageCode    string
+	CoverageNote   string
+}
+
+type BillingLedgerEntry struct {
+	EntryID           uuid.UUID
+	TenantID          uuid.UUID
+	AccountID         uuid.UUID
+	PatientID         uuid.UUID
+	EncounterID       uuid.UUID
+	FacilityID        uuid.UUID
+	Kind              string
+	AmountMinor       int64
+	Currency          string
+	InvoiceID         pgtype.UUID
+	PaymentID         pgtype.UUID
+	RefundOfPaymentID pgtype.UUID
+	Method            string
+	ProviderRef       string
+	ReceiptNumber     string
+	ShiftID           pgtype.UUID
+	IdempotencyKey    string
+	Reason            string
+	RecordedBy        string
+	ApprovedBy        string
+	OccurredAt        pgtype.Timestamptz
+	RecordedAt        pgtype.Timestamptz
+}
+
+type BillingPackage struct {
+	TenantID      uuid.UUID
+	Code          string
+	Name          string
+	PriceMinor    int64
+	Currency      string
+	RoomClass     string
+	Inclusions    []byte
+	Exclusions    []byte
+	CarveOuts     []byte
+	EffectiveFrom pgtype.Timestamptz
+	EffectiveTo   pgtype.Timestamptz
+	UpdatedBy     string
+	UpdatedAt     pgtype.Timestamptz
+}
+
+type BillingPackageConsumption struct {
+	ConsumptionID uuid.UUID
+	TenantID      uuid.UUID
+	AccountID     uuid.UUID
+	PackageCode   string
+	ChargeID      uuid.UUID
+	ServiceCode   string
+	Quantity      int32
+	Outcome       string
+	Explanation   string
+	PriceMinor    int64
+	Currency      string
+	RecordedAt    pgtype.Timestamptz
+}
+
+type BillingPolicy struct {
+	TenantID               uuid.UUID
+	DiscountLimits         []byte
+	CloseChecks            []string
+	AllowPayerBalance      bool
+	VarianceThresholdMinor int64
+	Currency               string
+	UpdatedBy              string
+	UpdatedAt              pgtype.Timestamptz
+}
+
+type BillingServiceItem struct {
+	TenantID       uuid.UUID
+	Code           string
+	Description    string
+	Department     string
+	RevenueAccount string
+	TaxCode        string
+	TaxRateBp      int32
+	TaxInclusive   bool
+	EffectiveFrom  pgtype.Timestamptz
+	EffectiveTo    pgtype.Timestamptz
+	UpdatedBy      string
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type BillingTariffLine struct {
+	TariffLineID  uuid.UUID
+	TenantID      uuid.UUID
+	ContractID    string
+	Name          string
+	PayerID       string
+	CustomerID    string
+	FacilityID    string
+	RoomClass     string
+	ServiceCode   string
+	PriceMinor    int64
+	Currency      string
+	Priority      int32
+	EffectiveFrom pgtype.Timestamptz
+	EffectiveTo   pgtype.Timestamptz
+	UpdatedBy     string
+	UpdatedAt     pgtype.Timestamptz
+}
+
 type ClinicalAllergy struct {
 	AllergyID        uuid.UUID
 	TenantID         uuid.UUID

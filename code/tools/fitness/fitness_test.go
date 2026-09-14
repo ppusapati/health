@@ -240,6 +240,7 @@ func TestFIT02_GeneratedQueriesImportedOnlyByAdapters(t *testing.T) {
 		"internal/nursing/adapters/postgres",
 		"internal/orders/adapters/postgres",
 		"internal/medication/adapters/postgres",
+		"internal/billing/adapters/postgres",
 		"internal/platform/store",
 		"internal/platform/workflow",
 		"internal/platform/rules",
@@ -379,7 +380,22 @@ func TestFIT06_NoWholeMessageLogging(t *testing.T) {
 // path. Wave 0 has no clinical aggregate yet, so this guards the boundary that
 // exists today: retired masters and the append-only platform tables.
 func TestFIT08_NoDeleteOnAppendOnlyTables(t *testing.T) {
-	appendOnly := []string{"audit_record", "outbox_event", "inbox_message"}
+	// Qualified names, because the financial ledgers live in their own schema
+	// and "delete from ledger_entry" unqualified would match nothing.
+	appendOnly := []string{
+		"platform_data.audit_record",
+		"platform_data.outbox_event",
+		"platform_data.inbox_message",
+		// SRS-BIL-012's "balance derives from ledger and reconciles" is only
+		// true while the ledger is the whole truth. A deleted entry is money
+		// that moved and left no trace, and the balance would still add up —
+		// to the wrong number, with nothing to reconcile against.
+		"billing.ledger_entry",
+		// SRS-BIL-004's consumption ledger explains what a package billed and
+		// did not. A deleted entry is a charge the patient was told about and
+		// can no longer be shown the reason for.
+		"billing.package_consumption",
+	}
 
 	for _, f := range loadGoFiles(t) {
 		if strings.HasSuffix(f.rel, "_test.go") {
@@ -392,10 +408,47 @@ func TestFIT08_NoDeleteOnAppendOnlyTables(t *testing.T) {
 		text := strings.ToLower(string(source))
 
 		for _, table := range appendOnly {
-			if strings.Contains(text, "delete from platform_data."+table) {
+			if strings.Contains(text, "delete from "+table) {
 				t.Errorf("FIT-08: %s deletes from append-only table %q", f.rel, table)
 			}
 		}
+	}
+}
+
+// FIT-08 for the money: the financial ledgers take no UPDATE and no DELETE, and
+// an issued invoice's lines and totals are never edited (SRS-BIL-010,
+// SRS-BIL-012).
+//
+// Checked against db/queries rather than against Go source, because that is
+// where such a statement would actually be written — sqlc generates the method
+// and the adapter calls it, so the query file is the door.
+func TestFIT08_FinancialLedgersAreAppendOnly(t *testing.T) {
+	root := repoRoot(t)
+	path := filepath.Join(root, "db", "queries", "billing.sql")
+	source, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	text := strings.ToLower(string(source))
+
+	for _, forbidden := range []string{
+		"update billing.ledger_entry",
+		"delete from billing.ledger_entry",
+		"update billing.package_consumption",
+		"delete from billing.package_consumption",
+		// An issued document's lines are a snapshot. Editing them would change
+		// what a document the patient is holding says it charged for.
+		"update billing.invoice_line",
+		"delete from billing.invoice_line",
+	} {
+		if strings.Contains(text, forbidden) {
+			t.Errorf("FIT-08/SRS-BIL-010: billing.sql contains %q", forbidden)
+		}
+	}
+
+	// The rule is vacuous if the file has been renamed out from under it.
+	if !strings.Contains(text, "insert into billing.ledger_entry") {
+		t.Fatal("billing.sql no longer appends to the ledger; this rule is not testing anything")
 	}
 }
 

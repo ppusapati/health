@@ -299,6 +299,17 @@ func (s *Service) provisionMRNSequence(ctx context.Context, scope authctx.Tenant
 		return err
 	}
 
+	// And the finance counters (SRS-BIL-006, SRS-BIL-008). Per tenant for the
+	// same reason as the order counter and one of its own: a hospital group
+	// keeps one invoice series across its sites, so a number identifies a
+	// document without also having to say which site issued it. Gapless matters
+	// more here than anywhere else in the system — a gap in an invoice series is
+	// a question an auditor asks, and "the transaction rolled back" is not an
+	// answer they accept.
+	if err := s.provisionFinanceSequences(ctx, scope, now); err != nil {
+		return err
+	}
+
 	// EnsureSequence is ON CONFLICT DO NOTHING, so re-commissioning a facility
 	// code that once existed cannot reset a live counter back to 1 and re-issue
 	// an MRN already printed on a wristband.
@@ -321,6 +332,53 @@ func (s *Service) provisionMRNSequence(ctx context.Context, scope authctx.Tenant
 // Wide enough that a busy group does not reach it, and fixed-width so the
 // numbers sort and line up on a requisition.
 const DefaultOrderPadWidth = 8
+
+// DefaultFinancePadWidth zero-pads an invoice or receipt number to eight
+// digits.
+//
+// Fixed-width so the numbers sort, and wide enough that a busy group does not
+// reach the end of the series inside a financial year.
+const DefaultFinancePadWidth = 8
+
+// provisionFinanceSequences gives a tenant its invoice and receipt counters
+// (SRS-BIL-006, SRS-BIL-008, SRS-PLT-014).
+//
+// Two sequences rather than one, because an invoice number and a receipt number
+// are read by different people for different reasons: a patient quotes the
+// invoice when they query a charge and the receipt when they prove they paid,
+// and interleaving them into one series makes both harder to search for.
+//
+// ON CONFLICT DO NOTHING, so commissioning a second facility cannot reset a
+// live counter back to 1 and re-issue an invoice number a patient is already
+// holding a copy of.
+func (s *Service) provisionFinanceSequences(ctx context.Context,
+	scope authctx.TenantScope, now time.Time) error {
+
+	if s.numbers == nil {
+		return nil
+	}
+	for _, sequence := range []struct {
+		scope  domain.NumberScope
+		prefix string
+	}{
+		{domain.ScopeInvoice, "INV-"},
+		{domain.ScopeReceipt, "RCP-"},
+	} {
+		if err := s.numbers.EnsureSequence(ctx, scope, domain.NumberSequence{
+			ID:        s.ids.NewID(),
+			TenantID:  scope.TenantID(),
+			Scope:     sequence.scope,
+			Prefix:    sequence.prefix,
+			PadWidth:  DefaultFinancePadWidth,
+			NextValue: 1,
+			CreatedAt: now,
+			UpdatedAt: now,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 // provisionOrderSequence gives a tenant its clinical-order counter
 // (SRS-ORD-001, SRS-PLT-014).
