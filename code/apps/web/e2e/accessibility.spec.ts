@@ -37,7 +37,13 @@ function describe(results: Awaited<ReturnType<typeof scan>>): string {
 
 const pages = [
 	{ name: 'workspace home', path: '/' },
-	{ name: 'facilities worklist', path: '/facilities' }
+	{ name: 'facilities worklist', path: '/facilities' },
+	// The reception workspace, signed out. Every one of these renders its
+	// permission state rather than its data, which is the state a scan is most
+	// likely to find unlabelled — it is the one nobody looks at while building
+	// the screen.
+	{ name: 'reception board', path: '/reception' },
+	{ name: 'patient search', path: '/reception/search' }
 ];
 
 for (const target of pages) {

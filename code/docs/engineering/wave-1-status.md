@@ -17,7 +17,7 @@ What this records is which requirements have working, tested implementations.
 | 4 | Encounter, clinical, nursing | SRS-ENC/CLN/NUR | **Complete** |
 | 5 | Orders, medication, billing | SRS-ORD/MED/BIL | **Complete** |
 | 6 | Platform blob storage | SRS-DAT-007 (and SRS-EMPI-010, CLN-014, NUR-012) | **Complete** |
-| 7 | Role workspaces (UX-W1-01 … 06) | Wave-1 UX exit criterion | **Not started** |
+| 7 | Role workspaces (UX-W1-01 … 06) | Wave-1 UX exit criterion | **1 of 6** — UX-W1-01 built |
 
 All 130 requirements are implemented server-side. The wave is not finished: see
 [What is not built](#what-is-not-built).
@@ -28,31 +28,21 @@ All 130 requirements in the coverage register are implemented server-side, and
 every one is listed with its evidence in the sprint sections below. The Wave-1
 exit criteria are wider than that register, and two of them are not met.
 
-**The six role workspaces (UX-W1-01 … UX-W1-06) do not exist.** The web
-workspace is still the Wave-0 shell: an `AppShell`, an `ErrorBanner`, a
-`StatusChip` and a facilities page. Reception/Registration, the Doctor OPD
-workspace, Nursing/triage, the Order Composer and Results Inbox, the
-Medication/Prescription workspace and the Billing/Payment workspace are all
-unbuilt, and with them the required states the spec names for each — default,
-loading, empty, error, permission, conflict, and offline or stale where it
-applies. The Flutter app is likewise the Wave-0 shell. Every RPC those screens
-need exists, is authorized and is tested through the ConnectRPC boundary; what
-is missing is the client.
+**Five of the six role workspaces do not exist.** UX-W1-01
+Reception/Registration is built (see [Sprint 7](#sprint-7--the-reception-workspace-ux-w1-01)).
+The Doctor OPD workspace, Nursing/triage, the Order Composer and Results Inbox,
+the Medication/Prescription workspace and the Billing/Payment workspace are not,
+and with them the required states the spec names for each — default, loading,
+empty, error, permission, conflict, and offline or stale where it applies. The
+Flutter app is still the Wave-0 shell. Every RPC those screens need exists, is
+authorized and is tested through the ConnectRPC boundary; what is missing is the
+client.
 
-**The web and mobile generated clients are stale.** `buf.gen.web.yaml` and
-`buf.gen.dart.yaml` read the whole `proto/` directory, but the committed output
-under `apps/web/src/lib/gen` and `apps/mobile/lib/src/gen` covers only the four
-Wave-0 packages. The eight Wave-1 services have Go clients and no TypeScript or
-Dart ones. This is a regeneration rather than a design problem — `npm run
-generate` in `apps/web` and the Dart equivalent produce them — but it is not
-done, and `make generate` does not cover the client workspaces, so nothing
-fails while they drift.
-
-Both are client-side work. Neither changes a contract, a schema, an
-authorization rule or a domain invariant, which is why the server-side sprints
-could be called complete without them; but a wave whose exit outcome is "first
-production-ready OPD/ambulatory vertical slice" is not finished while the slice
-has no front end.
+This is client-side work. It changes no contract, schema, authorization rule or
+domain invariant, which is why the server-side sprints could be called complete
+without it; but a wave whose exit outcome is "first production-ready
+OPD/ambulatory vertical slice" is not finished while most of the slice has no
+front end.
 
 ### Deliberately out of scope, and why
 
@@ -2398,6 +2388,125 @@ split out of `AttachImage` for this. Writing an unconsented photograph of a
 patient and deleting it again on refusal leaves the bytes on a disk, in a
 bucket's version history or in a replica — which is precisely what the consent
 was about.
+
+
+## Sprint 7 — the reception workspace (UX-W1-01)
+
+The first of the six role workspaces the Wave-1 UX specification names, and the
+one that establishes the shared patterns the other five reuse: the patient
+banner, a permission-driven shell, and the state vocabulary every screen has to
+speak.
+
+| Deliverable | Requirements | State |
+|---|---|---|
+| Patient banner, shared by every workspace | SRS-CLN-001 | **Complete** |
+| Reception board: today's clinic, queue and wait estimates | SRS-SCH-007 … 011 | **Complete** |
+| Check-in from the board | SRS-SCH-007 | **Complete** |
+| Search before create, with duplicate confidence and masking | SRS-EMPI-003, SRS-EMPI-004, SRS-EMPI-014 | **Complete** |
+| Registration behind the duplicate gate | SRS-EMPI-001, SRS-EMPI-002 | **Complete** |
+| Permission-driven navigation and workspace home | SRS-WEB-004 | **Complete** — the module existed and nothing rendered it |
+| The six required states on every screen | UX-W1-01 | **Complete** — default, loading, empty, error, permission, conflict, stale |
+
+### What the workspace enforces
+
+- **There is no route that skips the search.** Registration lives inside the
+  search page rather than behind `/reception/register`, because a route is a
+  URL and a URL can be typed. Search-before-create is a control only if there
+  is no path around it.
+- **A failed search does not satisfy the gate.** "Nothing searched" and "nothing
+  found" both leave the candidate list empty and mean opposite things, so they
+  are separate state.
+- **Every blocking candidate must be rejected individually**, and a new search
+  clears the acknowledgements — a stale one would otherwise unlock the gate for
+  a different set of candidates.
+- **The server's own refusal is handled as an outcome, not an error.**
+  `RegisterPatient` returning candidates instead of a patient means the index
+  changed between the search and the submit; it is shown for review.
+- **The board is measured from arrival, not from the appointment.** A patient
+  who arrived an hour early has not been waiting an hour.
+- **A stale board says so.** Positions move as patients are called through, so
+  a snapshot more than thirty seconds old carries a notice rather than being
+  read as current — and the board is re-derived against a ticking clock so the
+  notice appears without another round trip.
+- **Names are not on the board.** It lists a whole clinic on a screen in a
+  public waiting area, so rows carry the token and a short identifier; the name
+  is one click away behind an audited read.
+- **An estimate says whether it was measured or configured.** A configured
+  default presented as observed is a wait time a receptionist repeats to a
+  waiting room.
+- **A reprioritisation is visible with its reason** (SRS-SCH-011), and sorts
+  above queue position — a reprioritisation that does not move the row has not
+  done anything.
+
+### Evidence
+
+| Behaviour | Test |
+|---|---|
+| An imprecise birth date never renders as an exact age | `age > is never a bare number for an imprecise date` |
+| A neonate's age is in days and an infant's in months | `age > is days for a neonate and months for an infant` |
+| An unknown age says so rather than being invented | `age > says so rather than inventing one` |
+| A name renders without assuming a family name exists | `name > does not assume a family name exists` |
+| The most serious alert is first | `alerts > puts the one that matters most first` |
+| A merge alert names the surviving record | `alerts > names the surviving record rather than just saying a merge happened` |
+| A hidden field is shown as hidden, not as blank | `alerts > says a hidden field is hidden` |
+| Deceased and merged-away records are read-only | `read-only records > marks a deceased or merged-away patient` |
+| An unconfirmed identity is not read-only | `read-only records > does not mark an unconfirmed identity read-only` |
+| An unidentified patient is identifiable from its designation | `an unidentified patient > is identifiable at the bedside from its designation` |
+| The board includes people who have not arrived | `what the board shows > includes people who have not arrived yet` |
+| A queued patient is not listed twice | `what the board shows > does not list a queued patient twice` |
+| Waiting time is measured from arrival | `waiting time > is measured from arrival, not from the appointment` |
+| Present patients sort above expected ones | `ordering > puts people who are here above people who are not` |
+| Clinical priority outranks queue position | `ordering > sorts present patients by clinical priority before queue position` |
+| A stale snapshot is marked stale | `the snapshot > is called stale once the numbers can no longer be quoted` |
+| An estimate reports whether it was observed | `the snapshot > reports whether the estimate was observed or configured` |
+| The board's safety columns cannot be hidden | `the worklist definition > refuses to hide the columns the desk cannot work without` |
+| An empty search is refused | `validating a search > refuses an empty one` |
+| A one-letter name is refused | `validating a search > refuses a single letter of a name` |
+| Match strength is words, not a bare percentage | `presenting a candidate > labels the strength in words rather than as a bare percentage` |
+| A former-name match is explained | `presenting a candidate > carries a former name through` |
+| Registration is not offered before a search | `the search-before-create gate > does not offer registration before anything has been searched` |
+| A probable duplicate blocks registration | `the search-before-create gate > blocks registration while a probable duplicate is unreviewed` |
+| Every blocking candidate must be acknowledged | `the search-before-create gate > needs every blocking candidate acknowledged, not just one` |
+| A stale acknowledgement does not unlock the gate | `the search-before-create gate > ignores an acknowledgement for somebody who is not a candidate` |
+| Every wire enum is translated rather than defaulted | `an appointment off the wire > translates every status rather than defaulting` |
+| An unset priority is standard, never immediate | `an appointment off the wire > reads an unset priority as standard, never as immediate` |
+| A malformed queue row is dropped, not rendered blank | `a queue position off the wire > drops one with no appointment rather than rendering a blank row` |
+| A receptionist with no clinical permission is offered nothing | `the reception catalogue > offers nothing to a user with no clinical permissions` |
+| Registering a patient is never a one-click tile | `the reception catalogue > treats registering a patient as an action that finalizes something` |
+| Both screens meet WCAG 2.2 AA | `reception board has no WCAG 2.2 AA violations`, `patient search has no WCAG 2.2 AA violations` |
+| Both screens render signed out rather than throwing | `the reception workspace renders without a session` |
+
+### Decisions taken against the backlog
+
+**Registration is not its own route.** It would have been the obvious layout,
+and it would have made search-before-create optional: a route is a URL, and a
+URL can be typed, bookmarked or linked from a bookmark bar on a shared terminal.
+Putting the form on the search page behind an explicit gate means the only way
+to reach it is through a completed search. The server enforces the same rule
+independently — `RegisterPatient` refuses a probable duplicate unless the caller
+lists the candidates it has seen — so this is the half that makes the refusal
+comprehensible rather than surprising, not the control itself.
+
+**The board shows identifiers, not names.** A reception board is displayed on a
+screen a waiting room can see. A column of patient names on it is a disclosure
+to everybody in the room, every day, and no permission check prevents it because
+the receptionist is legitimately entitled to the data. So rows carry the queue
+token and a truncated identifier, and the name is one click away behind a read
+that is audited.
+
+**Match strength is a sentence, not a percentage.** The server applies the
+configured routing thresholds (SRS-EMPI-004) and returns an outcome. Rendering
+the raw confidence invites a receptionist to develop a private threshold — "I
+ignore anything under 80" — which is a second, undocumented policy operating
+beside the configured one. The percentage is still shown, quietly, beside the
+sentence that says what to do.
+
+**The permission-driven navigation module already existed and nothing rendered
+it.** `buildWorkspace` was written for SRS-WEB-004 in Wave 0, tested, and never
+wired to the shell, which had two hardcoded links. That is the failure mode a
+"complete" status doc hides: a requirement can be implemented, tested and
+entirely inert. It is wired now, and the workspace home is built from the same
+catalogue.
 
 ## Wave-0 capabilities Wave 1 consumes
 

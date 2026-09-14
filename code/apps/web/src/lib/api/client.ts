@@ -9,6 +9,8 @@ import { createClient, type Client, type Interceptor } from '@connectrpc/connect
 import { createConnectTransport } from '@connectrpc/connect-web';
 import { OrganizationService } from '$gen/healthcare/organization/v1/organization_pb.js';
 import { IdentityService } from '$gen/healthcare/identity_access/v1/identity_pb.js';
+import { PatientService } from '$gen/healthcare/empi/v1/patient_pb.js';
+import { AppointmentService } from '$gen/healthcare/scheduling/v1/appointment_pb.js';
 
 /** Header names shared with the Go transport layer. */
 export const Headers = {
@@ -61,6 +63,8 @@ export function newCorrelationId(): string {
 export interface ApiClients {
 	readonly organization: Client<typeof OrganizationService>;
 	readonly identity: Client<typeof IdentityService>;
+	readonly patients: Client<typeof PatientService>;
+	readonly appointments: Client<typeof AppointmentService>;
 }
 
 /** Builds the clients for one base URL and credential source. */
@@ -75,6 +79,8 @@ export function createApiClients(
 
 	return {
 		organization: createClient(OrganizationService, transport),
-		identity: createClient(IdentityService, transport)
+		identity: createClient(IdentityService, transport),
+		patients: createClient(PatientService, transport),
+		appointments: createClient(AppointmentService, transport)
 	};
 }

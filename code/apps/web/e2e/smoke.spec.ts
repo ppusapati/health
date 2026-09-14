@@ -27,6 +27,18 @@ test('client-side navigation works', async ({ page }) => {
 	await expect(page.locator('main')).toBeVisible();
 });
 
+test('the reception workspace renders without a session', async ({ page }) => {
+	// Signed out, both screens render their permission state. The failure this
+	// catches is a screen that reaches into a null session on first paint —
+	// which throws before anything renders, and looks to a user exactly like
+	// the application being down.
+	for (const path of ['/reception', '/reception/search']) {
+		await page.goto(path);
+		await expect(page.locator('h1')).toBeVisible();
+		await expect(page.locator('main')).not.toBeEmpty();
+	}
+});
+
 test('no uncaught script errors on load', async ({ page }) => {
 	// An engine-specific parse or runtime error usually leaves the page looking
 	// almost right, so asserting on the console is what turns it into a

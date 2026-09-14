@@ -160,3 +160,67 @@ export const waveZeroCatalogue: WorkspaceCatalogue = {
 		}
 	]
 };
+
+/**
+ * The Wave-1 catalogue: the reception desk (UX-W1-01).
+ *
+ * Separate from the Wave-0 entries rather than merged into them, so a
+ * deployment running only the platform contexts is not offered clinical
+ * navigation that would fail at the server. Merged at the composition point
+ * below.
+ */
+export const receptionCatalogue: WorkspaceCatalogue = {
+	navigation: [
+		{
+			id: 'reception-board',
+			label: 'Reception board',
+			href: '/reception',
+			requires: 'sch.schedule.read',
+			section: 'operations'
+		},
+		{
+			id: 'patient-search',
+			label: 'Find a patient',
+			href: '/reception/search',
+			requires: 'empi.patient.read',
+			section: 'clinical'
+		}
+	],
+	quickActions: [
+		{
+			id: 'find-patient',
+			label: 'Find a patient',
+			requires: 'empi.patient.read',
+			finalizes: false
+		},
+		{
+			id: 'register-patient',
+			label: 'Register a patient',
+			// Creating a patient record is not reversible by the person who did
+			// it, and a duplicate created here is read as a second person for as
+			// long as it takes somebody to notice. Never a one-click tile: the
+			// action routes into search-before-create (SRS-EMPI-003).
+			requires: 'empi.patient.create',
+			finalizes: true
+		}
+	],
+	worklists: [
+		{
+			id: 'todays-clinic',
+			label: "Today's clinic",
+			requires: 'sch.schedule.read',
+			href: '/reception'
+		}
+	]
+};
+
+/** Merges catalogues into the one the shell renders. */
+export function mergeCatalogues(
+	...catalogues: readonly WorkspaceCatalogue[]
+): WorkspaceCatalogue {
+	return {
+		navigation: catalogues.flatMap((c) => c.navigation),
+		quickActions: catalogues.flatMap((c) => c.quickActions),
+		worklists: catalogues.flatMap((c) => c.worklists)
+	};
+}

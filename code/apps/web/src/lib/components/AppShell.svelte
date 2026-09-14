@@ -9,6 +9,12 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { session } from '$lib/session.js';
+	import {
+		buildWorkspace,
+		mergeCatalogues,
+		receptionCatalogue,
+		waveZeroCatalogue
+	} from '$lib/workspace/navigation.js';
 
 	interface Props {
 		environment: string;
@@ -18,6 +24,17 @@
 	const { environment, children }: Props = $props();
 
 	const isProduction = $derived(environment === 'production');
+
+	const catalogue = mergeCatalogues(waveZeroCatalogue, receptionCatalogue);
+
+	/**
+	 * Navigation built from the signed-in user's permissions (SRS-WEB-004).
+	 *
+	 * Hiding is a courtesy, not a control: it stops a user being offered links
+	 * that will fail at the server, and the server refuses regardless of what
+	 * this renders. A menu that hides an action is a menu.
+	 */
+	const workspace = $derived(buildWorkspace(catalogue, $session?.context.permissions ?? []));
 </script>
 
 <div class="shell">
@@ -68,7 +85,19 @@
 	<div class="body">
 		<nav class="nav" aria-label="Primary">
 			<a href="/">Home</a>
-			<a href="/facilities">Facilities</a>
+			{#each workspace.navigation as item (item.id)}
+				<a href={item.href}>{item.label}</a>
+			{/each}
+			{#if $session && workspace.empty}
+				<!--
+				  Said out loud. An empty sidebar looks identical to a broken
+				  one, and the user's next move differs completely: one is a
+				  bug report, the other is a call to an administrator.
+				-->
+				<p class="nav-empty">
+					Your roles grant no workspace yet. Ask your administrator for access.
+				</p>
+			{/if}
 		</nav>
 		<main class="content" id="main-content" tabindex="-1">
 			{@render children()}
@@ -100,6 +129,12 @@
 		   because the tab order silently stalls on it. */
 		left: 0.5rem;
 		top: 0.5rem;
+	}
+	.nav-empty {
+		font-size: 0.8125rem;
+		color: #5b6779;
+		margin: 0.5rem 0 0;
+		line-height: 1.4;
 	}
 	.environment {
 		background: #6b4708;
