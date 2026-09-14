@@ -46,11 +46,16 @@ import (
 // patient given twice what they were given, and the guard has to hold at the
 // table because the two submissions can be in flight at the same moment.
 
-// stubOrders is the medication seam until Sprint 5 delivers SRS-MED.
+// stubOrders stands in for the medication context in this file.
 //
-// A test double rather than a production stub: the composition root leaves the
-// port nil, so a deployment without a medication service refuses every
-// administration instead of accepting one unverified.
+// A test double rather than a production stub. Sprint 5B wired the real adapter
+// at the composition root, and it is exercised end to end in medication_test.go
+// — TestTheEmarGivesTheDoseTheMedicationContextScheduled and its neighbours.
+// What this double buys here is control: the eMAR's own rules — the barcode
+// check, the late-entry window, downtime reconciliation — are about what
+// happens at the bedside given an order, and constructing the orders directly
+// is how those cases are reached without first driving a whole prescription
+// through the medication stack.
 type stubOrders struct {
 	orders map[string]nursingdomain.MedicationOrder
 }

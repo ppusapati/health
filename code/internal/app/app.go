@@ -17,6 +17,7 @@ import (
 	"github.com/ppusapati/health/code/gen/go/healthcare/empi/v1/empiv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/encounter/v1/encounterv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/identity_access/v1/identityaccessv1connect"
+	"github.com/ppusapati/health/code/gen/go/healthcare/medication/v1/medicationv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/nursing/v1/nursingv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/orders/v1/ordersv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/organization/v1/organizationv1connect"
@@ -33,6 +34,11 @@ import (
 	encounterapp "github.com/ppusapati/health/code/internal/encounter/application"
 	encountertransport "github.com/ppusapati/health/code/internal/encounter/transport"
 	identitytransport "github.com/ppusapati/health/code/internal/identity_access/transport"
+	medicationorders "github.com/ppusapati/health/code/internal/medication/adapters/orders"
+	medicationpostgres "github.com/ppusapati/health/code/internal/medication/adapters/postgres"
+	medicationapp "github.com/ppusapati/health/code/internal/medication/application"
+	medicationtransport "github.com/ppusapati/health/code/internal/medication/transport"
+	nursingmedication "github.com/ppusapati/health/code/internal/nursing/adapters/medication"
 	nursingpostgres "github.com/ppusapati/health/code/internal/nursing/adapters/postgres"
 	nursingapp "github.com/ppusapati/health/code/internal/nursing/application"
 	nursingports "github.com/ppusapati/health/code/internal/nursing/ports"
@@ -135,13 +141,14 @@ type Deps struct {
 	// than a broken URL.
 	MeetingProvider schedulingports.MeetingProvider
 
-	// MedicationOrders is the seam onto the medication context (SRS-NUR-007).
+	// MedicationOrders overrides the eMAR's seam onto the drug chart
+	// (SRS-NUR-007).
 	//
-	// Nil is the Wave-1 default until Sprint 5 delivers SRS-MED, and it refuses
-	// every administration rather than accepting one unverified: an eMAR that
-	// cannot check that a pharmacist verified the order must not pretend it
-	// has. The alternative — a stub that answers "verified" — would be a
-	// safety control that is present in the code and absent in effect.
+	// Nil is the normal deployment: the medication context supplies the
+	// adapter, so an eMAR checks pharmacist verification against the real
+	// prescription. Set it only to exercise the eMAR against a stand-in — never
+	// one that answers "verified", which would be a safety control present in
+	// the code and absent in effect.
 	MedicationOrders nursingports.MedicationOrders
 }
 
@@ -155,6 +162,7 @@ type Server struct {
 	Clinical     *clinicalapp.Service
 	Nursing      *nursingapp.Service
 	Orders       *ordersapp.Service
+	Medication   *medicationapp.Service
 	Store        *store.Store
 	RateLimiter  *platformtransport.RateLimiter
 
@@ -294,36 +302,6 @@ func New(deps Deps) *Server {
 		Clock:  systemClock{},
 	})
 
-	nursingRepo := nursingpostgres.New(txManager)
-	nursingService := nursingapp.NewService(nursingapp.Deps{
-		UnitOfWork:     txManager,
-		Assessments:    nursingpostgres.NewAssessments(nursingRepo),
-		Risks:          nursingpostgres.NewRisk(nursingRepo),
-		Flowsheet:      nursingpostgres.NewFlowsheet(nursingRepo),
-		Devices:        nursingpostgres.NewDevices(nursingRepo),
-		Administration: nursingpostgres.NewAdministrations(nursingRepo),
-		// Nil until Sprint 5 delivers SRS-MED. An eMAR that cannot check
-		// pharmacist verification refuses every administration rather than
-		// accepting one unverified (SRS-NUR-007).
-		Orders:    deps.MedicationOrders,
-		Tasks:     nursingpostgres.NewTasks(nursingRepo),
-		Plans:     nursingpostgres.NewCarePlans(nursingRepo),
-		Handovers: nursingpostgres.NewHandovers(nursingRepo),
-		Safety:    nursingpostgres.NewSafety(nursingRepo),
-		Ward:      nursingpostgres.NewWard(nursingRepo),
-		Downtime:  nursingpostgres.NewDowntime(nursingRepo),
-		Encounters: nursingpostgres.NewEncounters(
-			encounterpostgres.EncounterRepo{Repository: encounterRepo}),
-		// Whether a consent covers clinical photography is the clinical
-		// context's question to answer (SRS-NUR-012).
-		Consents: nursingpostgres.NewConsents(
-			clinicalpostgres.GovernanceRepo{Repository: clinicalRepo}, time.Now),
-		Events: platformStore,
-		Audits: store.AuditAppenderFunc(platformStore.AppendAudit),
-		IDs:    uuidGenerator{},
-		Clock:  systemClock{},
-	})
-
 	ordersRepo := orderspostgres.New(txManager)
 	ordersService := ordersapp.NewService(ordersapp.Deps{
 		UnitOfWork: txManager,
@@ -342,6 +320,82 @@ func New(deps Deps) *Server {
 		// released independently.
 		Dispatcher: orderspostgres.NewDispatcher(platformStore, uuidGenerator{},
 			systemClock{}),
+		Events: platformStore,
+		Audits: store.AuditAppenderFunc(platformStore.AppendAudit),
+		IDs:    uuidGenerator{},
+		Clock:  systemClock{},
+	})
+
+	medicationRepo := medicationpostgres.New(txManager)
+	medicationTerminology := medicationpostgres.NewTerminology(medicationRepo)
+	medicationService := medicationapp.NewService(medicationapp.Deps{
+		UnitOfWork:      txManager,
+		Prescriptions:   medicationRepo,
+		Reconciliations: medicationpostgres.NewReconciliations(medicationRepo),
+		Substitutions:   medicationpostgres.NewSubstitutions(medicationRepo),
+		Catalogue:       medicationpostgres.NewCatalogue(medicationRepo),
+		// The tenant's own terminology map (SRS-MED-002). A deployment that
+		// licenses a drug database replaces this one adapter and changes
+		// nothing else, which is why the screen was written against a port.
+		Terminology: medicationTerminology,
+		// What a patient is allergic to is the clinical record's fact
+		// (SRS-MED-002), and how old they are and what their renal function is
+		// are the EMPI's and the laboratory's (SRS-MED-004). Adapters rather
+		// than copies: a second answer here would drift from the first.
+		Allergies: medicationpostgres.NewAllergies(
+			clinicalpostgres.RecordRepo{Repository: clinicalRepo}),
+		Patients: medicationpostgres.NewPatientFactors(
+			empipostgres.PatientRepo{Repository: empiRepo},
+			clinicalpostgres.RecordRepo{Repository: clinicalRepo}),
+		Encounters: medicationpostgres.NewEncounters(
+			encounterpostgres.EncounterRepo{Repository: encounterRepo},
+			orgpostgres.FacilityRepo{Repository: repo}),
+		// A prescription is the clinical detail of a medication order, so
+		// placing one places an order: the number a ward reads down a phone,
+		// the routing to the pharmacy, the duplicate check and the order
+		// lifecycle are all the order framework's, and this context asks for
+		// them rather than keeping a second copy.
+		Orders: medicationorders.New(ordersService),
+		Events: platformStore,
+		Audits: store.AuditAppenderFunc(platformStore.AppendAudit),
+		IDs:    uuidGenerator{},
+		Clock:  systemClock{},
+	})
+
+	// The eMAR's seam onto the drug chart (SRS-NUR-007), which Sprint 4C left
+	// as a port with no adapter. Deps.MedicationOrders overrides it, which is
+	// how a test exercises the eMAR without the whole medication stack.
+	var medicationOrders nursingports.MedicationOrders = nursingmedication.New(medicationService, systemClock{})
+	if deps.MedicationOrders != nil {
+		medicationOrders = deps.MedicationOrders
+	}
+
+	nursingRepo := nursingpostgres.New(txManager)
+	nursingService := nursingapp.NewService(nursingapp.Deps{
+		UnitOfWork:     txManager,
+		Assessments:    nursingpostgres.NewAssessments(nursingRepo),
+		Risks:          nursingpostgres.NewRisk(nursingRepo),
+		Flowsheet:      nursingpostgres.NewFlowsheet(nursingRepo),
+		Devices:        nursingpostgres.NewDevices(nursingRepo),
+		Administration: nursingpostgres.NewAdministrations(nursingRepo),
+		// The drug chart, projected (SRS-NUR-007). A nurse sees what to give,
+		// when, and whether a pharmacist has checked it; the indication, the
+		// safety findings and the prescriber's reasoning stay in the
+		// medication context, which is what keeps a drug round from depending
+		// on that context's shape.
+		Orders:    medicationOrders,
+		Tasks:     nursingpostgres.NewTasks(nursingRepo),
+		Plans:     nursingpostgres.NewCarePlans(nursingRepo),
+		Handovers: nursingpostgres.NewHandovers(nursingRepo),
+		Safety:    nursingpostgres.NewSafety(nursingRepo),
+		Ward:      nursingpostgres.NewWard(nursingRepo),
+		Downtime:  nursingpostgres.NewDowntime(nursingRepo),
+		Encounters: nursingpostgres.NewEncounters(
+			encounterpostgres.EncounterRepo{Repository: encounterRepo}),
+		// Whether a consent covers clinical photography is the clinical
+		// context's question to answer (SRS-NUR-012).
+		Consents: nursingpostgres.NewConsents(
+			clinicalpostgres.GovernanceRepo{Repository: clinicalRepo}, time.Now),
 		Events: platformStore,
 		Audits: store.AuditAppenderFunc(platformStore.AppendAudit),
 		IDs:    uuidGenerator{},
@@ -419,6 +473,9 @@ func New(deps Deps) *Server {
 		nursingtransport.NewHandler(nursingService, time.Now), interceptors))
 	mux.Handle(ordersv1connect.NewOrderServiceHandler(
 		orderstransport.NewHandler(ordersService), interceptors))
+	mux.Handle(medicationv1connect.NewMedicationServiceHandler(
+		medicationtransport.NewHandler(medicationService, medicationTerminology),
+		interceptors))
 	mux.Handle(platformapiv1connect.NewHealthServiceHandler(
 		platformapitransport.NewHandler(deps.Build, map[string]platformapitransport.Pinger{
 			"postgres": poolPinger{pool: deps.Pool},
@@ -439,6 +496,7 @@ func New(deps Deps) *Server {
 		Clinical:        clinicalService,
 		Nursing:         nursingService,
 		Orders:          ordersService,
+		Medication:      medicationService,
 		Store:           platformStore,
 		RateLimiter:     rateLimiter,
 		Publisher:       publisher,

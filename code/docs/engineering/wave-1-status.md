@@ -1462,7 +1462,7 @@ The convention, and the reason for the UTC boundary, are stated at
 | SRS-ORD-010 | Audit of placement, modification and cancellation with reason, linked to the originating user and client | **Implemented** |
 | SRS-ORD-011 | `order.placed/accepted/in_progress/completed/cancelled`, versioned and idempotent | **Implemented** |
 | SRS-ORD-012 | Personal favourites and panels that cannot bypass institutional order-set governance or mandatory rules | **Implemented** |
-| SRS-MED-001 … 014 | Medication management | Not started — Sprint 5B |
+| SRS-MED-001 … 014 | Medication management | **Implemented** — see below |
 | SRS-BIL-001 … 016 | Billing, tariffs and patient revenue | Not started — Sprint 5C |
 
 ### What the order framework enforces
@@ -1678,6 +1678,263 @@ The obvious fix, always booking at least two days out, broke
 `TestALateCancellationIsChargeableOnlyWhereConfigured`, which needs an
 appointment *inside* a seven-day notice period. The helper now takes a minimum
 lead so both requirements are stated rather than balanced against each other.
+
+## Sprint 5B — medication management
+
+| Requirement | What it asks for | State |
+|---|---|---|
+| SRS-MED-001 | Structured prescribing: ingredient/product, dose, unit, route, frequency/timing, duration/stop condition, indication and instructions, machine- and human-readable | **Implemented** |
+| SRS-MED-002 | Allergy and intolerance evaluation against medication terminology mapping before confirmation, producing a severity-classified warning with rule and version | **Implemented** — the mapping is a tenant-configured table behind a port; a deployment that licenses a drug database replaces one adapter |
+| SRS-MED-003 | Configured drug-drug interaction and duplicate-therapy rules; the clinician sees the interacting medications and may override only where policy permits | **Implemented** |
+| SRS-MED-004 | Renal, hepatic and paediatric dose support as advisory CDS when configured and validated, showing inputs and rule version | **Implemented** |
+| SRS-MED-005 | Reconciliation at admission, transfer and discharge, every home medication carrying continue/stop/change/unknown | **Implemented** |
+| SRS-MED-006 | Pharmacist verification before dispensing or administration where policy requires, storing status and identity | **Implemented** |
+| SRS-MED-007 | eMAR administrations only from eligible orders; a discontinued order prevents administrations after its effective stop time | **Implemented** — this is also the Sprint 4C eMAR seam, now wired |
+| SRS-MED-008 | PRN with indication, minimum interval and maximum dose, enforced where structured | **Implemented** |
+| SRS-MED-009 | Tapering and complex schedules as explicit dose segments, each visible and versioned | **Implemented** |
+| SRS-MED-010 | Ambiguous free-text-only dose prevented for configured classes; submit blocked until the dose is structured | **Implemented** |
+| SRS-MED-011 | Substitution proposal and dispensed product recorded separately from the prescribed product, with authorisation and reason | **Implemented** |
+| SRS-MED-012 | Formulary status and restrictions by facility, department or payer; a non-formulary choice shows the policy action and approval path | **Implemented** |
+| SRS-MED-013 | Discontinue, hold and restart with effective time and reason; historical MAR unchanged, future schedule updated | **Implemented** |
+| SRS-MED-014 | `medication.prescribed/verified/held/discontinued/administered`, reconstructable without mutating the source ledger | **Implemented** — four emitted here; `medication.administered` stays with nursing, which witnesses the act |
+
+### What the medication context enforces
+
+- **A prescription is a medication order's clinical detail, not a second
+  order.** SRS-ORD-001 already names medication as one of the nine order types,
+  and the order framework owns the number a ward reads down a phone, the routing
+  to the pharmacy, the duplicate check, the audit trail and the order lifecycle.
+  Placing a prescription places an order and stores its identifier; what lives
+  in this context is everything a prescription has that a chest X-ray does not.
+  That also means prescribing needs the permission to place an order, which is
+  the point: a permission model in which it did not is one where CPOE governance
+  can be routed around through the medication screen.
+- **Two statuses, and they are not a duplication.** The *order* status answers
+  "where has this supply request got to"; the *therapy* status answers "is the
+  patient on this drug right now". A drug held for a procedure is a therapy that
+  has stopped and a supply request that has not; a course dispensed in full on
+  Monday is a supply request that is finished and a therapy that runs until
+  Friday. A single status would have to lie about one of the two, and the one it
+  lies about is the one the ward acts on.
+- **The terminology map is the allergy control.** SRS-MED-002 says the check
+  runs "against medication terminology mapping", and the case that decides the
+  design is a prescription for co-amoxiclav against a recorded allergy to
+  penicillin: the chart and the prescription name the drug at different levels
+  of the terminology, and matching on the prescribed code alone misses it. So the
+  map is a real table a pharmacy maintains, versioned, and every finding names
+  the edition that produced it. What the screen never does is guess — a
+  medication with no mapping screens on its own code and nothing else, because
+  falling back to the display term fires on every brand pair that shares a word
+  and trains prescribers to dismiss the warnings that matter.
+- **A contraindication is refused in three places.** The domain refuses it, the
+  policy validator refuses a ceiling that would permit it, and a table constraint
+  refuses the row. Three, because it is the one control a configuration screen
+  must never be able to unlock: a prescription for a drug the patient is
+  documented as having had anaphylaxis to is not a setting. Everything below that
+  line is the tenant's to decide, and the default ceiling is *severe* rather than
+  moderate — a policy that blocked every severe interaction would block
+  combinations given deliberately every day, and a control clinicians must route
+  around daily is a control they route around silently.
+- **Dose support advises and never blocks.** SRS-MED-004 says final prescribing
+  authority remains with the clinician, so no severity makes a dose-support
+  finding blocking: a renal rule that refused a prescription would be a rule that
+  overrules a nephrologist who knows why. Two quieter properties do the real
+  work. A rule whose inputs are missing does not fire at all — a renal rule that
+  read an absent creatinine clearance as zero would warn on every patient who has
+  not had bloods taken — and an unvalidated rule does not run, because
+  "configured and validated" is two acts and somebody has to be answerable for
+  the advice a hospital gives.
+- **Verification is a second person, and an unverified drug produces no work.**
+  SRS-MED-006's control is not the flag, it is that somebody else read the
+  prescription: the pharmacist may not be the prescriber, held in the domain and
+  again by a table constraint, and the permission sits with a pharmacist role
+  that cannot prescribe or discontinue. An unverified prescription produces *no
+  doses at all* rather than doses a nurse discovers they may not give — a round
+  that lists work nobody may do is a round people learn to read past.
+- **A stop takes effect when the clinician said, not when they typed.** A drug
+  stopped on the ward round at 09:00 and recorded at 11:00 stopped at 09:00, and
+  the dose at 10:00 should not have been given. So every therapy change carries an
+  effective time distinct from its recorded time, doses before it stay on the
+  record exactly as they were, and doses after it are not produced — which is
+  SRS-MED-013's "historical MAR remains unchanged; future schedule updates" and
+  SRS-MED-007's "prevents future administrations after effective stop time" as
+  one mechanism rather than two. The same reasoning makes a transcribed
+  prescription live from when the therapy started rather than from the keystroke:
+  a drug the patient came in on was not started by the person who typed it up.
+- **The ledger is the timeline.** SRS-MED-014 asks consumers to reconstruct the
+  medication timeline "without mutating source ledger", so therapy changes append
+  rather than overwrite and the status at any past moment is computed from them.
+  A status column that were overwritten would answer "is the patient on this now"
+  and would have destroyed the answer to "what were they on last Tuesday", which
+  is the question asked after an incident.
+- **A taper is explicit steps.** "Reduce by 5 mg weekly" is a sentence a nurse
+  has to compute from, and every party computing separately is how a steroid
+  taper ends up with two different doses on the same day. Segments are numbered
+  contiguously from one so a missing step is refused rather than skipped, they
+  may not overlap, and the eMAR is shown the step in force today rather than the
+  starting dose.
+- **A substitution is recorded beside the prescription, never over it.** The
+  prescription is evidence of what a named clinician decided; a swap written over
+  the top would leave the chart saying the prescriber chose a drug they never
+  saw. A therapeutic swap — a different molecule — needs somebody other than the
+  proposing pharmacist, because that is a prescribing decision; a generic or
+  stock swap is the pharmacist's own call. Nothing is dispensed on an
+  unauthorised substitution, in the domain and at the table.
+- **The formulary shows the way through rather than blocking.** SRS-MED-012 asks
+  for the policy action and approval path, which is a different thing from
+  refusing: a formulary that blocked would be one clinicians route around by
+  prescribing on paper. A non-formulary entry with no approval path is refused at
+  configuration time, because a dead end is the failure the criterion exists to
+  prevent. The narrowest matching scope wins, and a scope the patient is not in —
+  an insurer's list for a self-paying patient — does not apply at all.
+- **The events carry identifiers and no clinical reasoning.** The payloads name
+  the prescription, the order, the patient, the drug and the status, and say
+  nothing about the indication, the instructions or why a drug was stopped.
+  "Prescribed amitriptyline for neuropathic pain" says something about the patient
+  that "prescribed amitriptyline" does not, and an event stream is read by more
+  systems, by more people and under fewer controls than the record it describes
+  (SRS-API-009).
+
+### Evidence
+
+| Property | Test |
+|---|---|
+| A prescription is structured, reads as a sentence, and carries the order it was placed as | `TestAPrescriptionIsStructuredAndCarriesTheOrderItWasPlacedAs`, `TestAPrescriptionReadsAsASentenceComposedFromItsStructure` |
+| A prescription needs a patient, an encounter, a route and a dose | `TestAPrescriptionNeedsAPatientAnEncounterARouteAndADose` |
+| A dose needs a unit and a value | `TestADoseNeedsAUnitAndAValue` |
+| The prescriber and the typist are kept apart | `TestAPrescriptionKeepsThePrescriberAndTheTypistApart`, `TestATypistDefaultsToThePrescriber` |
+| The schedule lands on the ward's clock, not UTC | `TestTheScheduleLandsOnTheWardsClock` |
+| A course stops after its count of doses | `TestACourseStopsAfterItsCountOfDoses` |
+| A penicillin allergy catches a co-amoxiclav prescription | `TestAPenicillinAllergyCatchesACoAmoxiclavPrescription`, `TestAPenicillinAllergyStopsACoAmoxiclavPrescription` |
+| Without the terminology map the class-level allergy is not matched | `TestWithoutTheTerminologyMapTheClassLevelAllergyIsNotMatched` |
+| Every finding names the rule and its version, and one without a version is refused | `TestEverySafetyFindingNamesTheRuleAndItsVersion`, `TestAFindingWithoutARuleVersionIsRefused`, `TestTheAllergyWarningNamesTheRuleAndTheMapVersion` |
+| An unconfirmed allergy warns one step lower, and an intolerance is never a contraindication | `TestAnUnconfirmedAllergyWarnsOneStepLower`, `TestAnIntoleranceIsNeverAContraindication` |
+| A contraindication is never overridable, even against a policy that permits it | `TestAContraindicationIsNeverOverridable`, `TestAContraindicationStandsEvenAgainstAPolicyThatPermitsIt`, `TestAPolicyMayNotMakeContraindicationsOverridable`, `TestAContraindicatedAllergyCannotBeOverridden` |
+| The tenant's policy decides what may be overridden | `TestTheTenantsPolicyDecidesWhatMayBeOverridden` |
+| An override needs a clinician and a reason, and answers the finding it was given for | `TestAnOverrideNeedsAClinicianAndAReason`, `TestAnOverrideAnswersTheFindingItWasGivenFor` |
+| An unanswered warning stops the prescription, and the refusal names every finding at once | `TestAPrescriptionWithAnUnansweredWarningCannotGoLive`, `TestASafetyRefusalNamesEveryFindingAtOnce` |
+| An overridden warning lets the prescription proceed and stays on the record | `TestAnOverriddenWarningLetsThePrescriptionProceedAndStaysOnTheRecord`, `TestAnInteractionWarnsAndCanBeOverriddenWithAReasonOnTheRecord` |
+| An interaction warning names the other medication and says what to do | `TestAnInteractionWarningNamesTheOtherMedication` |
+| An interaction rule needs a version and advice | `TestAnInteractionRuleNeedsAVersionAndAdvice` |
+| Duplicate therapy matches on the moiety rather than the brand, and is not guessed without one | `TestDuplicateTherapyMatchesOnTheMoietyNotTheBrand`, `TestAMedicationWithNoMoietyIsNotGuessedAt` |
+| Dose support advises and never blocks, and shows what it was computed from | `TestDoseSupportAdvisesAndNeverBlocks`, `TestDoseSupportShowsWhatItWasComputedFrom` |
+| A dose rule without its inputs does not fire, and an unvalidated one does not run | `TestADoseRuleWithoutItsInputsDoesNotFire`, `TestAnUnvalidatedDoseRuleDoesNotRun` |
+| A reconciliation is not complete while anything is undecided, and the refusal names what | `TestAReconciliationIsNotCompleteWhileAnythingIsUndecided`, `TestAReconciliationIsNotCompleteWhileAMedicationIsUndecided`, `TestTheRefusalNamesTheMedicationsNobodyHasDecidedAbout` |
+| "Unknown" is a decision and completes; "pending" is not | `TestUnknownIsADecisionAndCompletesTheReconciliation`, `TestPendingIsNotADecision` |
+| Stopping or changing a home medication needs a rationale; continuing does not | `TestStoppingOrChangingAMedicationNeedsARationale`, `TestStoppingAHomeMedicationNeedsARationale`, `TestContinuingDoesNotNeedARationale` |
+| A continued medication points at the prescription carrying it on | `TestAContinuedMedicationPointsAtThePrescriptionCarryingItOn` |
+| A home medication must say where it came from | `TestAHomeMedicationMustSayWhereItCameFrom` |
+| Reconciliation happens at admission, transfer and discharge, and nowhere invented | `TestReconciliationHappensAtAdmissionTransferAndDischarge` |
+| A completed reconciliation takes no further decisions | `TestACompletedReconciliationTakesNoFurtherDecisions` |
+| A prescriber cannot verify their own prescription | `TestAPharmacistCannotVerifyTheirOwnPrescription`, `TestAPrescriberCannotVerifyTheirOwnPrescription` |
+| A draft cannot be verified, and repeating a verification does not move its timestamp | `TestADraftPrescriptionCannotBeVerified`, `TestRepeatingAVerificationDoesNotMoveItsTimestamp` |
+| Verification is required by default and can be narrowed to particular classes | `TestVerificationIsRequiredByDefault`, `TestVerificationCanBeRequiredForSomeClassesOnly` |
+| The verification queue shows what nobody has checked | `TestTheVerificationQueueShowsWhatNobodyHasChecked` |
+| An unverified prescription produces no doses | `TestAnUnverifiedPrescriptionIsNotAdministrableWherePolicyRequiresIt`, `TestAnUnverifiedPrescriptionProducesNoDoses` |
+| A hold stops future doses from its effective time and leaves the past alone | `TestHoldingStopsFutureDosesFromItsEffectiveTime`, `TestAHoldStopsFutureDosesFromWhenTheClinicianSaid`, `TestAHoldTakesEffectWhenTheClinicianSaidNotWhenItWasTyped` |
+| A discontinued prescription is not administrable after its stop time | `TestADiscontinuedPrescriptionIsNotAdministrableAfterItsStopTime` |
+| A held medication restarts and the ledger carries every change | `TestRestartingAHeldMedicationResumesTheSchedule`, `TestAHeldMedicationRestartsAndTheLedgerCarriesEveryChange`, `TestOnlyAHeldMedicationCanBeRestarted` |
+| A discontinued medication cannot be restarted | `TestADiscontinuedMedicationCannotBeRestarted`, `TestADiscontinuedMedicationCannotBeRestartedOverTheWire` |
+| Holding and discontinuing need a reason | `TestHoldingAndDiscontinuingNeedAReason`, `TestStoppingAMedicationNeedsAReason` |
+| The therapy status is answerable as of a moment | `TestTheTherapyStatusCanBeAnsweredAsOfAMoment` |
+| A change cannot be backdated behind the previous one, and a repeat is harmless | `TestAChangeCannotBeBackdatedBehindThePreviousOne`, `TestRepeatingATherapyChangeIsHarmless` |
+| A transcribed prescription is live from when the therapy started | `TestATranscribedPrescriptionIsLiveFromWhenTheTherapyStarted` |
+| A PRN dose too soon is refused and says when it is due | `TestAPRNDoseTooSoonIsRefusedAndSaysWhenItIsDue`, `TestAPRNDoseAfterTheIntervalIsAllowed` |
+| The PRN maximum is enforced, and doses that have aged out do not count | `TestAPRNMaximumInThePeriodIsEnforced`, `TestPRNDosesThatHaveAgedOutOfThePeriodDoNotCount` |
+| A total-amount ceiling is enforced, and is not guessed across units | `TestAPRNTotalAmountCeilingIsEnforced`, `TestATotalCeilingInADifferentUnitIsNotGuessedAt` |
+| An as-needed medication needs an indication, has no schedule, and its constraints are rendered | `TestAnAsNeededMedicationNeedsAnIndication`, `TestAnAsNeededMedicationProducesNoScheduledDoses`, `TestAnAsNeededMedicationCannotAlsoHaveASchedule`, `TestThePRNConstraintsAppearInTheHumanReadableForm` |
+| A taper gives each segment's own dose | `TestATaperGivesEachSegmentsOwnDose`, `TestATaperIsPrescribedAsExplicitSegments` |
+| Dose segments are numbered without gaps and may not overlap | `TestDoseSegmentsMustBeNumberedWithoutGaps`, `TestTaperSegmentsCannotOverlap` |
+| A free-text dose is refused for a class that must be structured | `TestAFreeTextDoseIsRefusedForAClassThatMustBeStructured` |
+| A substitution leaves the prescribed product alone | `TestASubstitutionLeavesThePrescribedProductAlone`, `TestATherapeuticSubstitutionNeedsASecondPersonAndLeavesThePrescriptionAlone` |
+| A substitution needs a reason and must dispense something different | `TestASubstitutionNeedsAReason`, `TestASubstitutionMustDispenseSomethingDifferent` |
+| A therapeutic swap needs a second person; a generic one is the pharmacist's own call | `TestATherapeuticSubstitutionNeedsSomebodyElseToAuthoriseIt`, `TestAGenericSubstitutionIsThePharmacistsOwnCall` |
+| Nothing is dispensed on an unauthorised substitution, and a rejected one cannot be authorised later | `TestAnUnauthorisedSubstitutionIsNotDispensed`, `TestARejectedSubstitutionCannotBeAuthorisedLater` |
+| A non-formulary medication shows its approval path rather than being refused | `TestANonFormularyMedicationShowsItsApprovalPathRatherThanRefusing`, `TestANonFormularyMedicationIsPrescribedWithItsApprovalPathAttached` |
+| A non-formulary entry must say how to get approval, and a restricted one what the restriction is | `TestANonFormularyEntryMustSayHowToGetApproval`, `TestARestrictedEntryMustSayWhatTheRestrictionIs` |
+| The narrowest formulary scope wins, and a payer's list does not bind a patient they are not paying for | `TestTheNarrowestFormularyScopeWins`, `TestAPayersListDoesNotBindAPatientTheyAreNotPayingFor` |
+| An unclassified medication is unknown rather than non-formulary, and a class-level entry catches its members | `TestAnUnclassifiedMedicationIsUnknownRatherThanNonFormulary`, `TestAFormularyEntryCanBeWrittenAgainstAClass` |
+| The eMAR gives the dose the medication context scheduled | `TestTheEmarGivesTheDoseTheMedicationContextScheduled` |
+| Discontinuing empties the future drug round | `TestDiscontinuingAPrescriptionEmptiesTheFutureDrugRound` |
+| The medication events carry no clinical reasoning | `TestTheMedicationEventsCarryNoClinicalReasoning` |
+| A nurse reads the drug chart and does not prescribe | `TestANurseReadsTheDrugChartAndDoesNotPrescribe` |
+| A pharmacist verifies and cannot change the prescription | `TestAPharmacistVerifiesAndCannotChangeThePrescription` |
+| A prescription cannot be reached from another tenant | `TestAPrescriptionCannotBeReachedFromAnotherTenant` |
+
+### Decisions taken against the backlog
+
+**Pharmacist is a role of its own, not a clinician with extra permissions.**
+SRS-MED-006's control is that a second person read the prescription, and the
+permission model has to hold that rather than leaning on an aggregate invariant
+to rescue it. `RolePharmacist` verifies and records substitutions and cannot
+prescribe, change or discontinue; the clinician role holds prescribing and
+explicitly not `med.prescription.verify`. The domain still refuses a
+self-verification, and so does a table constraint — but a permission model that
+needs to be rescued in two other places is one that will be wrong somewhere
+else too.
+
+**Overriding a safety warning is a permission separate from prescribing.**
+SRS-MED-003 says a clinician may override "only when policy permits", and policy
+is two controls, not one: the tenant's severity ceiling, and who may answer a
+warning at all. `med.safety.override` is a distinct grant, so a hospital that
+wants junior staff to escalate rather than click through an interaction alert at
+three in the morning can withhold it and keep the rest of prescribing.
+
+**The terminology map is a table this system owns, with a port over it.**
+SRS-MED-002 names the mapping without saying where it comes from, and the honest
+answer is that a hospital licenses one. The screen was written against a
+`Terminology` port and a tenant-configured table implements it, so a deployment
+with a real drug database replaces one adapter and changes nothing else. The
+decision that matters more is what happens with no mapping: the screen narrows
+to the prescribed code rather than falling back to the display term, because a
+fallback that fires on every brand pair sharing a word is worse than a miss it
+is honest about.
+
+**Dose-rule inputs are carried with an explicit "known" set rather than as bare
+numbers.** A zero-valued float cannot be told apart from a genuine zero, and a
+creatinine clearance of nought is a patient in anuric renal failure — a real
+reading, and the opposite of "nobody measured it". Rules consult the known set
+and decline where an input is absent, which is why an absent weight produces no
+paediatric advice rather than a dose of nothing.
+
+**The medication context places its order through the order context's
+application service, not its tables.** That makes prescribing require
+`ord.order.place` as well as `med.prescription.write`, which is correct: a
+prescription *is* an order, and a permission model in which it is not is one
+where CPOE governance — the duplicate rules, the audit trail, the order events —
+can be routed around by going through the medication screen instead.
+
+**The order's own duplicate warning is acknowledged on the prescription's
+behalf, with a fixed reason.** The medication context has already run a
+duplicate-*therapy* check that matches on what the drug does rather than on its
+code, which is the stronger of the two; asking the prescriber the same question
+twice under two different names teaches them to click through both. The order's
+rule still records what it found, so the governance report is unchanged, and the
+acknowledgement is a fixed sentence rather than the clinician's words — those
+words answered a different check, and attributing them here would misreport what
+they were shown.
+
+**`medication.administered` stays with the nursing context.** SRS-MED-014 lists
+it among the medication events, and it is already emitted by the eMAR, which is
+the context that witnesses the act. Emitting it from here as well would give
+consumers two versions of one moment from two contexts that can disagree. One
+producer per event; the requirement is satisfied by the event existing on the
+bus, not by which context puts it there.
+
+**`rpcerr.FailedPrecondition` gained field violations.** A prescription refused
+because three safety warnings stand unanswered is a FAILED_PRECONDITION whose
+whole value to the caller is the list. Without structured violations that list
+would be flattened into the message and the client would be back to parsing a
+sentence — the same reasoning that put field violations on SRS-ORD-002's
+refusals and on the encounter closure gate.
+
+**A prescription goes live from when the therapy started, not from the
+keystroke.** Found while writing the end-to-end hold test. A drug the patient
+came in on is transcribed with a start time in the past, and stamping the ledger
+with the moment somebody got round to typing it made `StatusAt` answer "draft"
+for every day the patient was actually taking it — and made a hold backdated to
+the ward round look like a change dated before the prescription itself. Pinned by
+`TestATranscribedPrescriptionIsLiveFromWhenTheTherapyStarted`.
 
 ## Wave-0 capabilities Wave 1 consumes
 

@@ -61,6 +61,21 @@ func (e *Error) WithCause(err error) *Error {
 	return &clone
 }
 
+// WithViolations attaches field violations to any error.
+//
+// Invalid takes them at construction because a malformed request is the usual
+// place for them, but they are not exclusive to it: a medication refused
+// because three safety warnings stand unanswered is a FAILED_PRECONDITION whose
+// whole value to the caller is the list. Without this, that list would be
+// flattened into the message and the client would be back to parsing a
+// sentence.
+func (e *Error) WithViolations(violations ...FieldViolation) *Error {
+	clone := *e
+	clone.Violations = append(append([]FieldViolation(nil), e.Violations...),
+		violations...)
+	return &clone
+}
+
 // As extracts a *Error from an error chain.
 func As(err error) (*Error, bool) {
 	var target *Error

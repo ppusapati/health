@@ -1,0 +1,787 @@
+// Medication management: structured prescribing, safety screening,
+// reconciliation, pharmacist verification, substitution and formulary.
+//
+// Owning context : medication  (Master Engineering Registry)
+// Owning service : MedicationService
+// Trace          : SRS-MED-001 … SRS-MED-014
+//
+// Three shapes in this contract are deliberate and worth reading before using
+// it.
+//
+// A Prescription carries an order_id and an order_number. A prescription is the
+// clinical detail of a medication order rather than a second kind of order: the
+// number a ward reads down a phone, the routing to the pharmacy and the order
+// lifecycle all belong to the order context, and the two identifiers are how a
+// client joins them.
+//
+// therapy_status is not the order's status. It answers "is the patient on this
+// drug right now", where the order's answers "where has the supply request got
+// to". A drug held for a procedure is a therapy that has stopped and a supply
+// request that has not; a course dispensed in full on Monday is a supply
+// request that is finished and a therapy that runs until Friday.
+//
+// PrescribeResponse does not return warnings in the success case. A prescription
+// blocked by unanswered safety findings comes back as a FAILED_PRECONDITION
+// whose field violations carry every finding, its rule and its rule version —
+// so a client shows all of them at once rather than one at a time, and a
+// prescriber who answers the first does not then discover a second.
+syntax = "proto3";
+
+package healthcare.medication.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ppusapati/health/code/gen/go/healthcare/medication/v1;medicationv1";
+
+// A coded concept from a terminology.
+message Coding {
+  string system = 1;
+  // Pins the release: codes have been reassigned between revisions.
+  string version = 2;
+  string code = 3;
+  // A bare code on a screen is a screen clinicians stop reading.
+  string display = 4;
+}
+
+// A measured value with its unit. Inseparable: "5" is a safe dose of one drug
+// and ten times a lethal dose of another.
+message Quantity {
+  double value = 1;
+  string unit = 2;
+}
+
+// Is the patient on this drug right now (SRS-MED-013)?
+enum TherapyStatus {
+  THERAPY_STATUS_UNSPECIFIED = 0;
+  // Composed and not yet prescribed. Nothing downstream can see it.
+  THERAPY_STATUS_DRAFT = 1;
+  THERAPY_STATUS_ACTIVE = 2;
+  // Suspended and expected to resume. Distinct from discontinued because a held
+  // drug is one somebody must remember to restart.
+  THERAPY_STATUS_HELD = 3;
+  THERAPY_STATUS_DISCONTINUED = 4;
+  THERAPY_STATUS_COMPLETED = 5;
+}
+
+// How a course ends (SRS-MED-001).
+enum StopConditionKind {
+  STOP_CONDITION_KIND_UNSPECIFIED = 0;
+  STOP_CONDITION_KIND_AT_TIME = 1;
+  // "Five days of antibiotics" is really ten doses, and expressing it as a date
+  // gets it wrong whenever a dose is missed.
+  STOP_CONDITION_KIND_AFTER_DOSES = 2;
+  // A clinical condition in words: "until afebrile for 48 hours".
+  STOP_CONDITION_KIND_ON_CONDITION = 3;
+  // A continuing medication with no planned end. Explicit rather than absent:
+  // "nobody said" and "this is meant to continue" are different facts, and only
+  // one of them is a prescribing error.
+  STOP_CONDITION_KIND_NONE = 4;
+}
+
+message StopCondition {
+  StopConditionKind kind = 1;
+  google.protobuf.Timestamp at = 2;
+  int32 doses = 3;
+  string text = 4;
+}
+
+// When a dose is given (SRS-MED-001, SRS-MED-009).
+message Timing {
+  // The prescriber's own phrase, for display. Never what a schedule is computed
+  // from: "four times daily" is read one way by a pharmacy system and another
+  // by a ward, and the two then disagree about when the patient is due.
+  string frequency_text = 1;
+  // How often, in seconds. Zero with no times_of_day means once.
+  int64 interval_seconds = 2;
+  // Minutes after midnight in the facility's zone. A four-times-daily drug is
+  // given on the ward round at 06:00, 12:00, 18:00 and 22:00, not every six
+  // hours from whenever it was prescribed.
+  repeated int32 times_of_day = 3;
+  // 0 = Sunday. Empty means every day. Methotrexate weekly is the case that
+  // makes this load-bearing: given daily it is lethal.
+  repeated int32 days_of_week = 4;
+  bool prn = 5;
+  // How long one dose takes to give, for an infusion.
+  int64 duration_seconds = 6;
+}
+
+// One stretch of the schedule at one dose (SRS-MED-009).
+//
+// A simple prescription is one segment; a taper is several. The requirement is
+// explicit that the segments are explicit: "reduce by 5mg weekly" is a sentence
+// a nurse has to compute from, and every party computing separately is how a
+// steroid taper ends up with two different doses on the same day.
+message DoseSegment {
+  // Contiguous from 1. A gap is a step somebody meant to write and did not.
+  int32 sequence = 1;
+  Quantity dose = 2;
+  // A dose that could not be structured — "apply sparingly", "titrate to
+  // effect". Allowed, except for classes the tenant has configured as requiring
+  // structure (SRS-MED-010).
+  string free_text_dose = 3;
+  Timing timing = 4;
+  google.protobuf.Timestamp starts_at = 5;
+  // Zero on the last segment, where the stop condition takes over.
+  google.protobuf.Timestamp ends_at = 6;
+  string note = 7;
+}
+
+// What bounds an as-needed medication (SRS-MED-008).
+//
+// Structured, because the acceptance criterion is "where structured": a PRN
+// written as "one or two as required" cannot be enforced by anything.
+message PrnConstraint {
+  // Why the nurse would give it. Mandatory on a PRN.
+  string indication = 1;
+  int64 min_interval_seconds = 2;
+  int32 max_doses = 3;
+  // A ceiling on the summed amount — four grams of paracetamol, whatever the
+  // number of tablets that took.
+  Quantity max_dose_total = 4;
+  // What the maxima are measured over. Defaults to 24 hours.
+  int64 period_seconds = 5;
+}
+
+// Which rule produced a finding (SRS-MED-002, SRS-MED-003, SRS-MED-004).
+enum FindingKind {
+  FINDING_KIND_UNSPECIFIED = 0;
+  FINDING_KIND_ALLERGY = 1;
+  FINDING_KIND_INTERACTION = 2;
+  FINDING_KIND_DUPLICATE_THERAPY = 3;
+  // Renal, hepatic or paediatric dose advice. Advisory by construction: final
+  // prescribing authority remains with the clinician.
+  FINDING_KIND_DOSE_SUPPORT = 4;
+}
+
+enum Severity {
+  SEVERITY_UNSPECIFIED = 0;
+  // Never overridable, whatever a tenant configures.
+  SEVERITY_CONTRAINDICATED = 1;
+  SEVERITY_SEVERE = 2;
+  SEVERITY_MODERATE = 3;
+  SEVERITY_MILD = 4;
+  SEVERITY_INFORMATIONAL = 5;
+}
+
+// One thing the rules noticed (SRS-MED-002, SRS-MED-003, SRS-MED-004).
+message SafetyFinding {
+  FindingKind kind = 1;
+  Severity severity = 2;
+  // Both required. A finding that cannot say which edition of which rule
+  // produced it is one nobody can reproduce, defend or retire.
+  string rule_id = 3;
+  string rule_version = 4;
+  string summary = 5;
+  // The medications or allergens the finding is about. A warning that says a
+  // conflict exists without naming it is one nobody can act on.
+  repeated Coding subjects = 6;
+  // What the rule was evaluated against, for SRS-MED-004's "inputs are shown":
+  // a dose recommendation computed from a creatinine clearance of 22 is a
+  // different claim from one computed from 62.
+  map<string, string> inputs = 7;
+  Override override = 8;
+}
+
+message Override {
+  string by = 1;
+  google.protobuf.Timestamp at = 2;
+  string reason = 3;
+}
+
+// Where a medication stands with a formulary (SRS-MED-012).
+enum FormularyStatus {
+  FORMULARY_STATUS_UNSPECIFIED = 0;
+  FORMULARY_STATUS_FORMULARY = 1;
+  FORMULARY_STATUS_RESTRICTED = 2;
+  // Never a refusal: the requirement asks for the approval path to be shown,
+  // which is a different thing from blocking.
+  FORMULARY_STATUS_NON_FORMULARY = 3;
+  // Nobody has classified it. Distinct from non-formulary: "we have decided not
+  // to stock this" and "nobody has looked" are different answers.
+  FORMULARY_STATUS_UNKNOWN = 4;
+}
+
+message FormularyDecision {
+  FormularyStatus status = 1;
+  string scope = 2;
+  string scope_id = 3;
+  string restriction = 4;
+  // Where the clinician goes to get this approved.
+  string approval_path = 5;
+}
+
+message Verification {
+  string by = 1;
+  google.protobuf.Timestamp at = 2;
+  string note = 3;
+}
+
+// One entry in the therapy ledger (SRS-MED-013, SRS-MED-014).
+message TherapyChange {
+  TherapyStatus from_status = 1;
+  TherapyStatus to_status = 2;
+  // When it took effect clinically, which is not when it was typed.
+  google.protobuf.Timestamp effective_at = 3;
+  google.protobuf.Timestamp recorded_at = 4;
+  string changed_by = 5;
+  string reason = 6;
+}
+
+// One medication a patient is on (SRS-MED-001).
+message Prescription {
+  string prescription_id = 1;
+  // The CPOE order this is the clinical detail of.
+  string order_id = 2;
+  string order_number = 3;
+
+  string patient_id = 4;
+  string encounter_id = 5;
+  string facility_id = 6;
+  // Who is answerable, and who typed it. A verbal order taken by a nurse is the
+  // doctor's prescription.
+  string prescriber_id = 7;
+  string entered_by_id = 8;
+
+  Coding ingredient = 9;
+  Coding product = 10;
+  string route = 11;
+
+  repeated DoseSegment segments = 12;
+  google.protobuf.Timestamp starts_at = 13;
+  StopCondition stop = 14;
+
+  string indication = 15;
+  Coding indication_code = 16;
+  string instructions = 17;
+  PrnConstraint prn = 18;
+
+  TherapyStatus therapy_status = 19;
+  repeated TherapyChange changes = 20;
+  // The moment after which no further dose may be given (SRS-MED-007).
+  google.protobuf.Timestamp effective_stop = 21;
+
+  repeated SafetyFinding findings = 22;
+  FormularyDecision formulary = 23;
+  Verification verification = 24;
+
+  // The prescription as a sentence, composed from the structure so the two
+  // cannot disagree (SRS-MED-001). A client that composed its own would
+  // eventually render the same prescription differently from another client.
+  string description = 25;
+
+  google.protobuf.Timestamp created_at = 26;
+  google.protobuf.Timestamp updated_at = 27;
+  int64 version = 28;
+}
+
+// The clinician's answer to one warning (SRS-MED-003).
+//
+// Keyed by rule and subject rather than by an opaque finding identifier: the
+// screen is re-run between the warning being shown and the answer coming back,
+// and an override applied by position would answer whichever warning landed in
+// that slot the second time.
+message OverrideAnswer {
+  string rule_id = 1;
+  Coding subject = 2;
+  string reason = 3;
+}
+
+message PrescribeRequest {
+  string patient_id = 1;
+  string encounter_id = 2;
+
+  Coding ingredient = 3;
+  Coding product = 4;
+  string route = 5;
+
+  repeated DoseSegment segments = 6;
+  google.protobuf.Timestamp starts_at = 7;
+  StopCondition stop = 8;
+
+  string indication = 9;
+  Coding indication_code = 10;
+  string instructions = 11;
+  PrnConstraint prn = 12;
+
+  // Names the person at the keyboard where that differs from the prescriber.
+  string entered_by_id = 13;
+
+  // Empty on a first attempt, which is how the screen's findings reach the
+  // prescriber.
+  repeated OverrideAnswer overrides = 14;
+}
+
+message PrescribeResponse {
+  Prescription prescription = 1;
+}
+
+message GetPrescriptionRequest {
+  string prescription_id = 1;
+}
+
+message GetPrescriptionResponse {
+  Prescription prescription = 1;
+}
+
+message ListPrescriptionsRequest {
+  string encounter_id = 1;
+  // Hides finished medication. Off by default: a chart shows what was
+  // prescribed, not only what is current.
+  bool live_only = 2;
+  int32 page_size = 3;
+}
+
+message ListPrescriptionsResponse {
+  repeated Prescription prescriptions = 1;
+}
+
+// Holding, restarting or discontinuing (SRS-MED-013).
+message ChangeTherapyRequest {
+  string prescription_id = 1;
+  // Mandatory. A drug that stopped for no recorded reason is one nobody can
+  // decide whether to restart, and the person who knows has gone off shift.
+  string reason = 2;
+  // When the change takes effect clinically. Zero means now. A drug stopped on
+  // the ward round at 09:00 and typed at 11:00 stopped at 09:00, and the dose
+  // at 10:00 should not have been given.
+  google.protobuf.Timestamp effective_at = 3;
+}
+
+message ChangeTherapyResponse {
+  Prescription prescription = 1;
+}
+
+// One request and response type per RPC, which is what lets any of the three
+// gain a field later without changing the other two: holding a drug for theatre
+// and discontinuing it after a reaction are different acts, and the day one of
+// them needs something the others do not is the day a shared message becomes a
+// breaking change.
+message HoldTherapyRequest {
+  ChangeTherapyRequest change = 1;
+}
+
+message HoldTherapyResponse {
+  Prescription prescription = 1;
+}
+
+message RestartTherapyRequest {
+  ChangeTherapyRequest change = 1;
+}
+
+message RestartTherapyResponse {
+  Prescription prescription = 1;
+}
+
+message DiscontinueTherapyRequest {
+  ChangeTherapyRequest change = 1;
+}
+
+message DiscontinueTherapyResponse {
+  Prescription prescription = 1;
+}
+
+message VerifyPrescriptionRequest {
+  string prescription_id = 1;
+  string note = 2;
+}
+
+message VerifyPrescriptionResponse {
+  Prescription prescription = 1;
+}
+
+message VerificationQueueRequest {
+  string facility_id = 1;
+  int32 page_size = 2;
+}
+
+message VerificationQueueResponse {
+  repeated Prescription prescriptions = 1;
+}
+
+// One scheduled dose (SRS-MED-007).
+message DueDose {
+  string prescription_id = 1;
+  string order_id = 2;
+  google.protobuf.Timestamp scheduled_at = 3;
+  DoseSegment segment = 4;
+}
+
+message DueDosesRequest {
+  string encounter_id = 1;
+  google.protobuf.Timestamp from = 2;
+  google.protobuf.Timestamp to = 3;
+}
+
+message DueDosesResponse {
+  repeated DueDose doses = 1;
+}
+
+// Where a home-medication list came from (SRS-MED-005).
+//
+// Recorded because it is how much the list can be trusted: a printout from the
+// GP system and a relative's recollection are both worth having and are not
+// worth the same.
+enum HomeMedicationSource {
+  HOME_MEDICATION_SOURCE_UNSPECIFIED = 0;
+  HOME_MEDICATION_SOURCE_PATIENT = 1;
+  HOME_MEDICATION_SOURCE_CARER = 2;
+  HOME_MEDICATION_SOURCE_GP_RECORD = 3;
+  HOME_MEDICATION_SOURCE_PHARMACY = 4;
+  HOME_MEDICATION_SOURCE_PREVIOUS_STAY = 5;
+  HOME_MEDICATION_SOURCE_MEDICATION_BAG = 6;
+}
+
+// What was decided about one medication (SRS-MED-005).
+enum Disposition {
+  DISPOSITION_UNSPECIFIED = 0;
+  // The absence of a decision. Never a valid completed state.
+  DISPOSITION_PENDING = 1;
+  DISPOSITION_CONTINUE = 2;
+  DISPOSITION_STOP = 3;
+  // Continue at a different dose, which is a third answer rather than a stop
+  // followed by a start: the patient has been on this drug throughout.
+  DISPOSITION_CHANGE = 4;
+  // An honest answer — the patient cannot remember the dose and the surgery is
+  // shut. Recorded so the gap is visible rather than resolved by a guess.
+  DISPOSITION_UNKNOWN = 5;
+}
+
+enum ReconciliationEvent {
+  RECONCILIATION_EVENT_UNSPECIFIED = 0;
+  RECONCILIATION_EVENT_ADMISSION = 1;
+  RECONCILIATION_EVENT_TRANSFER = 2;
+  RECONCILIATION_EVENT_DISCHARGE = 3;
+}
+
+message ReconciliationItem {
+  int32 sequence = 1;
+  Coding medication = 2;
+  // The dose as reported. Free text on purpose: this is what a patient said in
+  // a corridor, and structuring it would claim a precision nobody has.
+  string dose_text = 3;
+  string route = 4;
+  HomeMedicationSource source = 5;
+
+  Disposition disposition = 6;
+  // Mandatory for stop and change, because those are the two that surprise the
+  // next clinician to read the chart.
+  string rationale = 7;
+  string resulting_prescription_id = 8;
+  string decided_by = 9;
+  google.protobuf.Timestamp decided_at = 10;
+}
+
+message Reconciliation {
+  string reconciliation_id = 1;
+  string patient_id = 2;
+  string encounter_id = 3;
+  ReconciliationEvent event = 4;
+  repeated ReconciliationItem items = 5;
+  string started_by = 6;
+  google.protobuf.Timestamp started_at = 7;
+  // Set only once every item has a disposition.
+  string completed_by = 8;
+  google.protobuf.Timestamp completed_at = 9;
+  int64 version = 10;
+}
+
+message StartReconciliationRequest {
+  string patient_id = 1;
+  string encounter_id = 2;
+  ReconciliationEvent event = 3;
+  repeated ReconciliationItem home_medications = 4;
+}
+
+message StartReconciliationResponse {
+  Reconciliation reconciliation = 1;
+}
+
+message DecideReconciliationRequest {
+  string reconciliation_id = 1;
+  int32 sequence = 2;
+  Disposition disposition = 3;
+  string rationale = 4;
+  string resulting_prescription_id = 5;
+}
+
+message DecideReconciliationResponse {
+  Reconciliation reconciliation = 1;
+}
+
+message CompleteReconciliationRequest {
+  string reconciliation_id = 1;
+}
+
+message CompleteReconciliationResponse {
+  Reconciliation reconciliation = 1;
+}
+
+message ListReconciliationsRequest {
+  string encounter_id = 1;
+  int32 page_size = 2;
+}
+
+message ListReconciliationsResponse {
+  repeated Reconciliation reconciliations = 1;
+}
+
+// What sort of swap was made (SRS-MED-011).
+enum SubstitutionKind {
+  SUBSTITUTION_KIND_UNSPECIFIED = 0;
+  SUBSTITUTION_KIND_GENERIC = 1;
+  // A different molecule doing the same job, which is a clinical decision
+  // rather than a stock one — and needs somebody other than the pharmacist
+  // proposing it.
+  SUBSTITUTION_KIND_THERAPEUTIC = 2;
+  SUBSTITUTION_KIND_FORMULARY = 3;
+  SUBSTITUTION_KIND_STOCK = 4;
+}
+
+enum SubstitutionStatus {
+  SUBSTITUTION_STATUS_UNSPECIFIED = 0;
+  SUBSTITUTION_STATUS_PROPOSED = 1;
+  SUBSTITUTION_STATUS_ACCEPTED = 2;
+  SUBSTITUTION_STATUS_REJECTED = 3;
+  SUBSTITUTION_STATUS_DISPENSED = 4;
+}
+
+// A dispensed product that differs from the prescribed one (SRS-MED-011).
+//
+// A record of its own rather than an edit to the prescription: the prescription
+// is evidence of what a named clinician decided, and a substitution written over
+// the top would leave the chart saying the prescriber chose a drug they never
+// saw.
+message Substitution {
+  string substitution_id = 1;
+  string prescription_id = 2;
+  Coding prescribed = 3;
+  Coding dispensed = 4;
+  SubstitutionKind kind = 5;
+  SubstitutionStatus status = 6;
+  // Mandatory: "out of stock" and "cheaper" are different facts, and only one
+  // of them is a clinical governance question.
+  string reason = 7;
+  string proposed_by = 8;
+  google.protobuf.Timestamp proposed_at = 9;
+  string authorized_by = 10;
+  google.protobuf.Timestamp authorized_at = 11;
+  google.protobuf.Timestamp dispensed_at = 12;
+}
+
+message ProposeSubstitutionRequest {
+  string prescription_id = 1;
+  Coding dispensed = 2;
+  SubstitutionKind kind = 3;
+  string reason = 4;
+}
+
+message ProposeSubstitutionResponse {
+  Substitution substitution = 1;
+}
+
+message AdvanceSubstitutionRequest {
+  string substitution_id = 1;
+  // Set only on a rejection.
+  string reason = 2;
+}
+
+message AdvanceSubstitutionResponse {
+  Substitution substitution = 1;
+}
+
+message AuthorizeSubstitutionRequest {
+  AdvanceSubstitutionRequest advance = 1;
+}
+
+message AuthorizeSubstitutionResponse {
+  Substitution substitution = 1;
+}
+
+message RejectSubstitutionRequest {
+  AdvanceSubstitutionRequest advance = 1;
+}
+
+message RejectSubstitutionResponse {
+  Substitution substitution = 1;
+}
+
+message DispenseSubstitutionRequest {
+  AdvanceSubstitutionRequest advance = 1;
+}
+
+message DispenseSubstitutionResponse {
+  Substitution substitution = 1;
+}
+
+message ListSubstitutionsRequest {
+  string prescription_id = 1;
+}
+
+message ListSubstitutionsResponse {
+  repeated Substitution substitutions = 1;
+}
+
+// Configuration a tenant's pharmacy committee maintains.
+message FormularyEntry {
+  Coding medication = 1;
+  string scope = 2;
+  string scope_id = 3;
+  FormularyStatus status = 4;
+  string restriction = 5;
+  string approval_path = 6;
+}
+
+message SetFormularyEntryRequest {
+  FormularyEntry entry = 1;
+}
+
+message SetFormularyEntryResponse {}
+
+// One configured drug-drug interaction (SRS-MED-003).
+message InteractionRule {
+  string rule_id = 1;
+  // Publishing a new version leaves the old one readable: a finding recorded
+  // last March names a version, and a version edited in place is a finding
+  // nobody can explain.
+  string version = 2;
+  Coding left = 3;
+  Coding right = 4;
+  Severity severity = 5;
+  // A warning that names a problem and no action is one clinicians learn to
+  // dismiss.
+  string advice = 6;
+  string management = 7;
+  bool active = 8;
+}
+
+message SetInteractionRuleRequest {
+  InteractionRule rule = 1;
+}
+
+message SetInteractionRuleResponse {}
+
+message ListInteractionRulesRequest {}
+
+message ListInteractionRulesResponse {
+  repeated InteractionRule rules = 1;
+}
+
+// Which population a dose rule applies to (SRS-MED-004).
+enum DoseRuleScope {
+  DOSE_RULE_SCOPE_UNSPECIFIED = 0;
+  DOSE_RULE_SCOPE_RENAL = 1;
+  DOSE_RULE_SCOPE_HEPATIC = 2;
+  DOSE_RULE_SCOPE_PAEDIATRIC = 3;
+}
+
+message DoseRule {
+  string rule_id = 1;
+  string version = 2;
+  DoseRuleScope scope = 3;
+  Coding medication = 4;
+  double max_creatinine_clearance = 5;
+  double max_age_years = 6;
+  string advice = 7;
+  // SRS-MED-004 applies dose support "when configured and validated". An
+  // unvalidated rule is advice nobody has checked, so it does not run at all.
+  bool validated = 8;
+  bool active = 9;
+}
+
+message SetDoseRuleRequest {
+  DoseRule rule = 1;
+}
+
+message SetDoseRuleResponse {}
+
+// One medication's terminology (SRS-MED-002).
+//
+// The mapping that lets a penicillin allergy catch a co-amoxiclav prescription.
+// Matching on the prescribed code alone misses it, which is the failure mode
+// that kills people.
+message TerminologyMapping {
+  Coding medication = 1;
+  repeated Coding ingredients = 2;
+  repeated Coding classes = 3;
+  // What the medication does, for the duplicate-therapy check. Two brands of
+  // the same drug share this and share nothing else.
+  Coding therapeutic_moiety = 4;
+  // So a finding can name the edition of the map that produced it.
+  string map_version = 5;
+}
+
+message SetTerminologyMappingRequest {
+  TerminologyMapping mapping = 1;
+}
+
+message SetTerminologyMappingResponse {}
+
+// The tenant's medication policy.
+message MedicationPolicy {
+  // The most serious finding a clinician may override. Never contraindicated.
+  Severity max_overridable = 1;
+  bool verification_required = 2;
+  // Classes that always need a pharmacist, whatever verification_required says:
+  // a hospital that cannot staff overnight pharmacy still wants every cytotoxic
+  // checked.
+  repeated string verification_classes = 3;
+  // Classes where a free-text dose is refused (SRS-MED-010).
+  repeated string structured_dose_classes = 4;
+}
+
+message SetMedicationPolicyRequest {
+  MedicationPolicy policy = 1;
+}
+
+message SetMedicationPolicyResponse {}
+
+message GetMedicationPolicyRequest {}
+
+message GetMedicationPolicyResponse {
+  MedicationPolicy policy = 1;
+}
+
+// MedicationService is the medication context's boundary (SRS-MED).
+service MedicationService {
+  // SRS-MED-001 … SRS-MED-004, SRS-MED-010, SRS-MED-012. Screens, places the
+  // order and records the prescription in one act.
+  rpc Prescribe(PrescribeRequest) returns (PrescribeResponse);
+  rpc GetPrescription(GetPrescriptionRequest) returns (GetPrescriptionResponse);
+  rpc ListPrescriptions(ListPrescriptionsRequest) returns (ListPrescriptionsResponse);
+
+  // SRS-MED-013. Three calls rather than one with a status, because the
+  // preconditions differ: only a held therapy restarts, and a discontinued one
+  // never does.
+  rpc HoldTherapy(HoldTherapyRequest) returns (HoldTherapyResponse);
+  rpc RestartTherapy(RestartTherapyRequest) returns (RestartTherapyResponse);
+  rpc DiscontinueTherapy(DiscontinueTherapyRequest) returns (DiscontinueTherapyResponse);
+
+  // SRS-MED-006.
+  rpc VerifyPrescription(VerifyPrescriptionRequest) returns (VerifyPrescriptionResponse);
+  rpc VerificationQueue(VerificationQueueRequest) returns (VerificationQueueResponse);
+
+  // SRS-MED-007. Only eligible prescriptions produce doses.
+  rpc DueDoses(DueDosesRequest) returns (DueDosesResponse);
+
+  // SRS-MED-005.
+  rpc StartReconciliation(StartReconciliationRequest) returns (StartReconciliationResponse);
+  rpc DecideReconciliation(DecideReconciliationRequest) returns (DecideReconciliationResponse);
+  rpc CompleteReconciliation(CompleteReconciliationRequest) returns (CompleteReconciliationResponse);
+  rpc ListReconciliations(ListReconciliationsRequest) returns (ListReconciliationsResponse);
+
+  // SRS-MED-011.
+  rpc ProposeSubstitution(ProposeSubstitutionRequest) returns (ProposeSubstitutionResponse);
+  rpc AuthorizeSubstitution(AuthorizeSubstitutionRequest) returns (AuthorizeSubstitutionResponse);
+  rpc RejectSubstitution(RejectSubstitutionRequest) returns (RejectSubstitutionResponse);
+  rpc DispenseSubstitution(DispenseSubstitutionRequest) returns (DispenseSubstitutionResponse);
+  rpc ListSubstitutions(ListSubstitutionsRequest) returns (ListSubstitutionsResponse);
+
+  // Configuration (SRS-MED-002, SRS-MED-003, SRS-MED-004, SRS-MED-012).
+  rpc SetFormularyEntry(SetFormularyEntryRequest) returns (SetFormularyEntryResponse);
+  rpc SetInteractionRule(SetInteractionRuleRequest) returns (SetInteractionRuleResponse);
+  rpc ListInteractionRules(ListInteractionRulesRequest) returns (ListInteractionRulesResponse);
+  rpc SetDoseRule(SetDoseRuleRequest) returns (SetDoseRuleResponse);
+  rpc SetTerminologyMapping(SetTerminologyMappingRequest) returns (SetTerminologyMappingResponse);
+  rpc SetMedicationPolicy(SetMedicationPolicyRequest) returns (SetMedicationPolicyResponse);
+  rpc GetMedicationPolicy(GetMedicationPolicyRequest) returns (GetMedicationPolicyResponse);
+}

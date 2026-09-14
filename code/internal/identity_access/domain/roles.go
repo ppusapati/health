@@ -69,6 +69,18 @@ const (
 	// (SRS-NUR-016, SRS-NUR-017, Wave-1 actor "Nurse Manager").
 	RoleNurseManager Role = "nurse_manager"
 
+	// RolePharmacist verifies prescriptions and dispenses (SRS-MED-006,
+	// SRS-MED-011, Wave-1 actor "Pharmacist").
+	//
+	// A role of its own, and the reason is the one control it holds: a
+	// pharmacist verifying a prescription is a second person reading it. Folding
+	// verification into the clinician role would give the prescriber the
+	// permission to verify their own work, and while the domain refuses a
+	// self-verification anyway, a permission model that has to be rescued by an
+	// aggregate invariant is a permission model that will be wrong somewhere
+	// else too.
+	RolePharmacist Role = "pharmacist"
+
 	// RoleScheduler runs the diary: rosters, leave, theatre blocks, and the
 	// authority to book into a provisional block when the list is agreed
 	// (SRS-SCH-002). The Wave-1 backlog actor is "Scheduler".
@@ -102,6 +114,12 @@ var rolePermissions = map[Role][]string{
 		// bundled with reading the orders themselves: deciding what a set
 		// offers and looking at who was ordered what are different jobs.
 		"ord.order.configure",
+		// The formulary, the interaction and dose-support rules, the
+		// terminology map and the override ceiling (SRS-MED-003, SRS-MED-004,
+		// SRS-MED-010, SRS-MED-012). Not with the prescriber, deliberately: a
+		// clinician who could edit the rule that is warning them has not been
+		// warned.
+		"med.catalogue.configure",
 		// Assessment templates, risk scales, the administration policy and the
 		// acuity weights (SRS-NUR-001, SRS-NUR-005, SRS-NUR-008, SRS-NUR-016).
 		// Note what is absent again: no nur.record.read. Deciding what a ward
@@ -249,10 +267,50 @@ var rolePermissions = map[Role][]string{
 		// tenant that disagrees withholds it from the role.
 		"ord.blood_product.order",
 
+		// Prescribing, and changing what was prescribed (SRS-MED-001,
+		// SRS-MED-013). Reconciliation is here too: deciding what a patient
+		// continues on admission is a prescribing decision made about
+		// medications somebody else started.
+		"med.prescription.read",
+		"med.prescription.write",
+		"med.prescription.change",
+		"med.reconciliation.perform",
+		// Answering a safety warning (SRS-MED-003). Granted to clinicians and
+		// separable from prescribing on purpose: a hospital that wants junior
+		// staff to escalate rather than click through an interaction alert
+		// withholds this one and keeps the rest.
+		"med.safety.override",
+		// Deliberately no med.prescription.verify: that is the pharmacist's
+		// second reading, and a prescriber who held it could verify their own
+		// prescription.
+
 		// Nursing content is readable by the medical team — a ward round is
 		// read from the flowsheet — but a doctor does not chart observations,
 		// give medication or apply restraints, so only the read is here.
 		"nur.record.read",
+	},
+
+	// A pharmacist checks what was prescribed and decides what is dispensed
+	// (SRS-MED-006, SRS-MED-011, SRS-MED-012).
+	RolePharmacist: {
+		"empi.patient.read",
+		"enc.encounter.read",
+		// The pharmacy worklist is an order worklist.
+		"ord.order.read",
+		// Reading the whole drug chart, because verifying one prescription
+		// against the patient's other medications is the job.
+		"med.prescription.read",
+		"med.prescription.verify",
+		"med.substitution.record",
+		// Deliberately no med.prescription.write and no
+		// med.prescription.change: a pharmacist who disagrees with a
+		// prescription proposes a substitution or telephones the prescriber,
+		// and both leave a record naming who decided. A pharmacist who could
+		// edit the prescription would leave the chart saying the doctor chose
+		// something they never saw.
+		//
+		// And no med.safety.override: the warning is shown to the prescriber,
+		// and a pharmacist answering it would be answering on their behalf.
 	},
 
 	// A nurse delivers care. Note what is absent: no cln.document.sign and no
@@ -278,6 +336,10 @@ var rolePermissions = map[Role][]string{
 		// through the entered-by field, which keeps who is answerable separate
 		// from who typed it.
 		"ord.order.read",
+		// The drug chart, which is what a medication round is worked from
+		// (SRS-NUR-007). Read only: a nurse gives what was prescribed and does
+		// not prescribe, hold or discontinue it.
+		"med.prescription.read",
 
 		"nur.record.read",
 		"nur.record.write",
@@ -382,7 +444,15 @@ var rolePurposes = map[Role][]authctx.PurposeOfUse{
 	RoleHIMOfficer:        {authctx.PurposeTreatment, authctx.PurposeOperations},
 	// A clinician reads a chart to treat somebody. Nothing else.
 	RoleClinician: {authctx.PurposeTreatment},
-	RoleScheduler: {authctx.PurposeTreatment, authctx.PurposeOperations},
+	// The bedside roles, for the same reason: a nurse charting an observation
+	// and a pharmacist verifying a prescription are both delivering care, and
+	// their reads should be distinguishable in the audit trail from an
+	// administrator's. A nurse manager runs the ward as well as working on it,
+	// so operations is theirs too.
+	RoleNurse:        {authctx.PurposeTreatment},
+	RolePharmacist:   {authctx.PurposeTreatment},
+	RoleNurseManager: {authctx.PurposeTreatment, authctx.PurposeOperations},
+	RoleScheduler:    {authctx.PurposeTreatment, authctx.PurposeOperations},
 }
 
 // PurposesFor returns the purposes-of-use the given roles may assert,

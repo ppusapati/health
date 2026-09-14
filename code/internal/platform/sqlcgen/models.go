@@ -700,6 +700,231 @@ type IdentityAccessStepUpProof struct {
 	ObtainedAt pgtype.Timestamptz
 }
 
+type MedicationDoseRule struct {
+	TenantID               uuid.UUID
+	RuleID                 string
+	Version                string
+	Scope                  string
+	MedicationSystem       string
+	MedicationCode         string
+	MedicationDisplay      string
+	MaxCreatinineClearance pgtype.Numeric
+	MaxAgeYears            pgtype.Numeric
+	Advice                 string
+	Validated              bool
+	ValidatedBy            string
+	ValidatedAt            pgtype.Timestamptz
+	Active                 bool
+	UpdatedBy              string
+	UpdatedAt              pgtype.Timestamptz
+}
+
+type MedicationDoseSegment struct {
+	TenantID       uuid.UUID
+	PrescriptionID uuid.UUID
+	Sequence       int32
+	DoseValue      pgtype.Numeric
+	DoseUnit       string
+	FreeTextDose   string
+	FrequencyText  string
+	IntervalPeriod pgtype.Interval
+	TimesOfDay     []int32
+	DaysOfWeek     []int32
+	Prn            bool
+	DoseDuration   pgtype.Interval
+	StartsAt       pgtype.Timestamptz
+	EndsAt         pgtype.Timestamptz
+	Note           string
+	Version        int64
+}
+
+type MedicationFormularyEntry struct {
+	TenantID          uuid.UUID
+	MedicationSystem  string
+	MedicationCode    string
+	MedicationDisplay string
+	Scope             string
+	ScopeID           string
+	Status            string
+	Restriction       string
+	ApprovalPath      string
+	UpdatedBy         string
+	UpdatedAt         pgtype.Timestamptz
+}
+
+type MedicationInteractionRule struct {
+	TenantID     uuid.UUID
+	RuleID       string
+	Version      string
+	LeftSystem   string
+	LeftCode     string
+	LeftDisplay  string
+	RightSystem  string
+	RightCode    string
+	RightDisplay string
+	Severity     string
+	Advice       string
+	Management   string
+	Active       bool
+	UpdatedBy    string
+	UpdatedAt    pgtype.Timestamptz
+}
+
+type MedicationPolicy struct {
+	TenantID              uuid.UUID
+	MaxOverridable        string
+	VerificationRequired  bool
+	VerificationClasses   []string
+	StructuredDoseClasses []string
+	UpdatedBy             string
+	UpdatedAt             pgtype.Timestamptz
+}
+
+type MedicationPrescription struct {
+	PrescriptionID        uuid.UUID
+	TenantID              uuid.UUID
+	OrderID               uuid.UUID
+	OrderNumber           string
+	PatientID             uuid.UUID
+	EncounterID           uuid.UUID
+	FacilityID            uuid.UUID
+	PrescriberID          string
+	EnteredByID           string
+	IngredientSystem      string
+	IngredientCode        string
+	IngredientDisplay     string
+	IngredientVersion     string
+	ProductSystem         string
+	ProductCode           string
+	ProductDisplay        string
+	Route                 string
+	StartsAt              pgtype.Timestamptz
+	StopKind              string
+	StopAt                pgtype.Timestamptz
+	StopDoses             int32
+	StopText              string
+	Indication            string
+	IndicationSystem      string
+	IndicationCode        string
+	IndicationDisplay     string
+	Instructions          string
+	Prn                   bool
+	PrnIndication         string
+	PrnMinInterval        pgtype.Interval
+	PrnMaxDoses           int32
+	PrnMaxTotalValue      pgtype.Numeric
+	PrnMaxTotalUnit       string
+	PrnPeriod             pgtype.Interval
+	TherapyStatus         string
+	EffectiveStop         pgtype.Timestamptz
+	VerifiedBy            string
+	VerifiedAt            pgtype.Timestamptz
+	VerificationNote      string
+	FormularyStatus       string
+	FormularyScope        string
+	FormularyScopeID      string
+	FormularyRestriction  string
+	FormularyApprovalPath string
+	ScreenedAt            pgtype.Timestamptz
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	Version               int64
+}
+
+type MedicationReconciliation struct {
+	ReconciliationID uuid.UUID
+	TenantID         uuid.UUID
+	PatientID        uuid.UUID
+	EncounterID      uuid.UUID
+	Event            string
+	StartedBy        string
+	StartedAt        pgtype.Timestamptz
+	CompletedBy      string
+	CompletedAt      pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	Version          int64
+}
+
+type MedicationReconciliationItem struct {
+	TenantID                uuid.UUID
+	ReconciliationID        uuid.UUID
+	Sequence                int32
+	MedicationSystem        string
+	MedicationCode          string
+	MedicationDisplay       string
+	DoseText                string
+	Route                   string
+	Source                  string
+	Disposition             string
+	Rationale               string
+	ResultingPrescriptionID pgtype.UUID
+	DecidedBy               string
+	DecidedAt               pgtype.Timestamptz
+}
+
+type MedicationSafetyFinding struct {
+	FindingID      uuid.UUID
+	TenantID       uuid.UUID
+	PrescriptionID uuid.UUID
+	Kind           string
+	Severity       string
+	RuleID         string
+	RuleVersion    string
+	Summary        string
+	Subjects       []byte
+	Inputs         []byte
+	OverrideBy     string
+	OverrideAt     pgtype.Timestamptz
+	OverrideReason string
+}
+
+type MedicationSubstitution struct {
+	SubstitutionID    uuid.UUID
+	TenantID          uuid.UUID
+	PrescriptionID    uuid.UUID
+	PrescribedSystem  string
+	PrescribedCode    string
+	PrescribedDisplay string
+	DispensedSystem   string
+	DispensedCode     string
+	DispensedDisplay  string
+	Kind              string
+	Status            string
+	Reason            string
+	ProposedBy        string
+	ProposedAt        pgtype.Timestamptz
+	AuthorizedBy      string
+	AuthorizedAt      pgtype.Timestamptz
+	DispensedAt       pgtype.Timestamptz
+}
+
+type MedicationTerminologyMap struct {
+	TenantID          uuid.UUID
+	MedicationSystem  string
+	MedicationCode    string
+	MedicationDisplay string
+	Ingredients       []string
+	Classes           []string
+	MoietySystem      string
+	MoietyCode        string
+	MoietyDisplay     string
+	MapVersion        string
+	UpdatedBy         string
+	UpdatedAt         pgtype.Timestamptz
+}
+
+type MedicationTherapyChange struct {
+	ChangeID       uuid.UUID
+	TenantID       uuid.UUID
+	PrescriptionID uuid.UUID
+	FromStatus     string
+	ToStatus       string
+	EffectiveAt    pgtype.Timestamptz
+	RecordedAt     pgtype.Timestamptz
+	ChangedBy      string
+	Reason         string
+}
+
 type NursingAcuityWeight struct {
 	TenantID    uuid.UUID
 	UnitID      string
