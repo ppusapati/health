@@ -277,7 +277,7 @@
 							  see it. The name is on the chart, one click away and
 							  behind an audited read.
 							-->
-							<a href={`/reception/search?patient=${row.patientId}`}>
+							<a href={`/chart/${row.patientId}`}>
 								<code>{row.patientId.slice(0, 8)}</code>
 							</a>
 						</td>

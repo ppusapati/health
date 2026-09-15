@@ -32,7 +32,7 @@ test('the reception workspace renders without a session', async ({ page }) => {
 	// catches is a screen that reaches into a null session on first paint —
 	// which throws before anything renders, and looks to a user exactly like
 	// the application being down.
-	for (const path of ['/reception', '/reception/search']) {
+	for (const path of ['/reception', '/reception/search', '/chart/pat-1']) {
 		await page.goto(path);
 		await expect(page.locator('h1')).toBeVisible();
 		await expect(page.locator('main')).not.toBeEmpty();

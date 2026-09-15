@@ -43,7 +43,8 @@ const pages = [
 	// likely to find unlabelled — it is the one nobody looks at while building
 	// the screen.
 	{ name: 'reception board', path: '/reception' },
-	{ name: 'patient search', path: '/reception/search' }
+	{ name: 'patient search', path: '/reception/search' },
+	{ name: 'patient chart', path: '/chart/pat-1' }
 ];
 
 for (const target of pages) {
