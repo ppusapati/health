@@ -138,7 +138,7 @@ which no requirement-level status table can show.
 | Go | 1,666 test functions across 48 packages (1,963 cases with subtests) | `make test` |
 | Web (unit) | 85 tests across 8 files | `cd apps/web && npm test` |
 | Web (browser) | accessibility and cross-browser smoke, 3 browser profiles | `make web-a11y`, `make web-browsers` |
-| Flutter | 169 tests | `make mobile-test` |
+| Flutter | 296 tests | `make mobile-test` |
 
 Repository tests run against a real PostgreSQL rather than a mock: constraints,
 SQLSTATE codes and transaction semantics are what a mock gets wrong, and

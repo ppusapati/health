@@ -171,4 +171,69 @@ void main() {
 
     expect(workspace.empty, isTrue);
   });
+
+  group('the ward catalogue', () {
+    test('a ward nurse is offered the round and the worklist', () {
+      final workspace = buildWorkspace(wardCatalogue, [
+        'nursing.task.read',
+        'nursing.administration.read',
+        'nursing.observation.write',
+        'nursing.administration.write',
+      ]);
+
+      expect(workspace.navigation.map((i) => i.id), ['ward', 'medication-round']);
+      expect(workspace.worklists.map((w) => w.id),
+          ['doses-due', 'observations-due']);
+      expect(workspace.empty, isFalse);
+    });
+
+    test('giving a medication is marked as finalizing', () {
+      // It puts a drug into a patient, and on a phone a tile is hit by accident
+      // far more often than a mouse click.
+      final workspace =
+          buildWorkspace(wardCatalogue, ['nursing.administration.write']);
+
+      final action = workspace.quickActions.single;
+      expect(action.id, 'administer');
+      expect(action.finalizes, isTrue);
+    });
+
+    test('recording observations is not finalizing', () {
+      final workspace =
+          buildWorkspace(wardCatalogue, ['nursing.observation.write']);
+      expect(workspace.quickActions.single.finalizes, isFalse);
+    });
+
+    test('a nurse who may read but not give sees the round and no give action', () {
+      final workspace =
+          buildWorkspace(wardCatalogue, ['nursing.administration.read']);
+
+      expect(workspace.navigation.map((i) => i.id), ['medication-round']);
+      expect(workspace.quickActions, isEmpty);
+    });
+
+    test('everything on a ward device is clinical', () {
+      // The argument for a short list: a tablet carried on a round is for work
+      // done standing up. Reception and billing stay on the web.
+      expect(
+        wardCatalogue.navigation
+            .every((i) => i.section == WorkspaceSection.clinical),
+        isTrue,
+      );
+    });
+
+    test('an administrator is offered nothing clinical, and a nurse nothing administrative', () {
+      final administrator = buildWorkspace(
+        mergeCatalogues(const [waveZeroCatalogue, wardCatalogue]),
+        ['organization.facility.read'],
+      );
+      final nurse = buildWorkspace(
+        mergeCatalogues(const [waveZeroCatalogue, wardCatalogue]),
+        ['nursing.task.read'],
+      );
+
+      expect(administrator.navigation.map((i) => i.id), ['facilities']);
+      expect(nurse.navigation.map((i) => i.id), ['ward']);
+    });
+  });
 }

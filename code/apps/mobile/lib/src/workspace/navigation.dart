@@ -185,6 +185,62 @@ const WorkspaceCatalogue waveZeroCatalogue = WorkspaceCatalogue(
   ],
 );
 
+/// The Wave-1 catalogue for a ward device.
+///
+/// Two entries, not six. The web shell has six workspaces because a desk has
+/// room for six; a tablet carried on a round is for the work done standing up,
+/// and offering a nurse a billing screen on it is offering them a way to get
+/// lost. Reception, the chart, orders and billing stay on the web, and this
+/// list is the argument for why the mobile shell is not simply behind.
+const WorkspaceCatalogue wardCatalogue = WorkspaceCatalogue(
+  navigation: [
+    NavItem(
+      id: 'ward',
+      label: 'Ward worklist',
+      route: '/ward',
+      requires: 'nursing.task.read',
+      section: WorkspaceSection.clinical,
+    ),
+    NavItem(
+      id: 'medication-round',
+      label: 'Medication round',
+      route: '/medications/round',
+      requires: 'nursing.administration.read',
+      section: WorkspaceSection.clinical,
+    ),
+  ],
+  quickActions: [
+    QuickAction(
+      id: 'chart-observation',
+      label: 'Record observations',
+      requires: 'nursing.observation.write',
+      finalizes: false,
+    ),
+    QuickAction(
+      id: 'administer',
+      label: 'Give a medication',
+      // Finalizing: this one puts a drug into a patient, and on a phone a tile
+      // is hit by accident far more often than a mouse click.
+      requires: 'nursing.administration.write',
+      finalizes: true,
+    ),
+  ],
+  worklists: [
+    Worklist(
+      id: 'doses-due',
+      label: 'Doses due now',
+      requires: 'nursing.administration.read',
+      route: '/medications/round',
+    ),
+    Worklist(
+      id: 'observations-due',
+      label: 'Observations due',
+      requires: 'nursing.task.read',
+      route: '/ward',
+    ),
+  ],
+);
+
 /// Merges catalogues into the one the shell renders.
 WorkspaceCatalogue mergeCatalogues(List<WorkspaceCatalogue> catalogues) =>
     WorkspaceCatalogue(

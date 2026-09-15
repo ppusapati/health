@@ -186,9 +186,16 @@ class _HealthAppState extends State<HealthApp> {
         onSignOut: widget.session.isSignedIn ? _signOut : null,
         // Built from the permissions the server reported for this session, so
         // a role change takes effect on the next sign-in without a release.
+        //
+        // Both catalogues, because a ward nurse and an administrator use the
+        // same build; the permission filter is what makes them different
+        // screens, not a different binary.
         workspace: session == null
             ? null
-            : buildWorkspace(waveZeroCatalogue, session.permissions),
+            : buildWorkspace(
+                mergeCatalogues(const [waveZeroCatalogue, wardCatalogue]),
+                session.permissions,
+              ),
         child: widget.session.isSignedIn ? _facilityList() : _signInForm(),
       ),
     );

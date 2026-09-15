@@ -27,16 +27,31 @@ the mobile client and the two gates that need a cluster.
 
 All 130 requirements in the coverage register are implemented server-side, and
 every one is listed with its evidence in the sprint sections below, and all six
-role workspaces the UX specification names are built. Two things remain.
+role workspaces the UX specification names are built on the web. Two things
+remain.
 
-**The Flutter application has no clinical screens.** It now carries the whole
-Wave-0 foundation — Connect transport, session handling, an offline operation
-queue, a generated client for every Wave-1 service, and the SRS-WEB family the
-web shell has (screen states, the unsaved-work guard, saved views, pagination,
-time-zone display, the role-specific workspace) — but nothing above it. The
-Wave-1 UX specification names six *screen groups* rather than six web pages, and
-a ward tablet running the eMAR is a real reading of UX-W1-03 and UX-W1-05. The
-web workspaces cover them; the mobile ones do not exist.
+**The Flutter application covers the ward, not the desk.** It carries the
+Wave-0 foundation and now two of the six Wave-1 screen groups:
+
+| Screen group | Where |
+|---|---|
+| UX-W1-03 ward worklist and observation charting | `lib/src/ward/`, `lib/src/screens/ward_worklist_screen.dart`, `observation_form.dart` |
+| UX-W1-05 medication round (eMAR) | `lib/src/meds/`, `lib/src/screens/medication_round_screen.dart` |
+
+Two, not six, and that is a decision rather than a shortfall. A tablet carried
+on a round is for the work done standing up; reception, the chart, orders and
+billing are desk work, and putting a billing screen on a ward device offers a
+nurse a way to get lost. `wardCatalogue` in `lib/src/workspace/navigation.dart`
+is where the argument is written down.
+
+What the mobile shell does that the web one cannot: an administration recorded
+out of network coverage is queued with the idempotency key minted at the bedside
+and the bedside `given_at`, and the tile says *"saved on this device, not yet
+sent"* rather than *"given"* — because a nurse shown the second for the first
+has a colleague who gives the dose again. See `lib/src/meds/submission.dart`.
+
+**The other four screen groups are web-only**, and stay that way unless somebody
+shows a ward using them on a tablet.
 
 **P0-12's cluster deployment cannot be closed in this environment.** A
 Kubernetes pod sandbox needs `CAP_SYS_RESOURCE` to set its `oom_score_adj`, and
