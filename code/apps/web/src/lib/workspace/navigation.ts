@@ -205,6 +205,13 @@ export const receptionCatalogue: WorkspaceCatalogue = {
 			href: '/medications',
 			requires: 'med.prescription.read',
 			section: 'clinical'
+		},
+		{
+			id: 'billing',
+			label: 'Billing',
+			href: '/billing',
+			requires: 'billing.account.read',
+			section: 'operations'
 		}
 	],
 	quickActions: [
@@ -249,6 +256,12 @@ export const receptionCatalogue: WorkspaceCatalogue = {
 			label: 'Prescriptions awaiting verification',
 			requires: 'med.prescription.verify',
 			href: '/medications'
+		},
+		{
+			id: 'unbilled',
+			label: 'Accounts and unbilled charges',
+			requires: 'billing.account.read',
+			href: '/billing'
 		}
 	]
 };
