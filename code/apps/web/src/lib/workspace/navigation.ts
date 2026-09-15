@@ -184,6 +184,13 @@ export const receptionCatalogue: WorkspaceCatalogue = {
 			href: '/reception/search',
 			requires: 'empi.patient.read',
 			section: 'clinical'
+		},
+		{
+			id: 'ward-worklist',
+			label: 'Ward worklist',
+			href: '/ward',
+			requires: 'nursing.record.read',
+			section: 'clinical'
 		}
 	],
 	quickActions: [
@@ -210,6 +217,12 @@ export const receptionCatalogue: WorkspaceCatalogue = {
 			label: "Today's clinic",
 			requires: 'sch.schedule.read',
 			href: '/reception'
+		},
+		{
+			id: 'nursing-work',
+			label: 'Nursing work and reassessments',
+			requires: 'nursing.record.read',
+			href: '/ward'
 		}
 	]
 };

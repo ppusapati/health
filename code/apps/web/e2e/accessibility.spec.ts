@@ -44,7 +44,8 @@ const pages = [
 	// the screen.
 	{ name: 'reception board', path: '/reception' },
 	{ name: 'patient search', path: '/reception/search' },
-	{ name: 'patient chart', path: '/chart/pat-1' }
+	{ name: 'patient chart', path: '/chart/pat-1' },
+	{ name: 'ward worklist', path: '/ward' }
 ];
 
 for (const target of pages) {
