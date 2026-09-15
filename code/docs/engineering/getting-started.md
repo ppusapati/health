@@ -95,6 +95,7 @@ npm run dev
 | `make test` | Everything, including repository integration tests |
 | `make test-fitness` | Architecture fitness tests (Gate A10) |
 | `make drills` | Operational drills — rotation, backup restore, disaster recovery |
+| `make manifests-admission` | Apply every overlay to a real API server; needs `KUBECONFIG` |
 
 `make drills` is deliberately outside `make ci`: each one starts real PostgreSQL
 instances and real service processes and takes minutes. Run them before changing

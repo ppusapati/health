@@ -120,6 +120,13 @@ test-migrations: ## Schema change invariants (expand/contract, notes, partitioni
 test-security: ## Security registers: risk acceptances, threat model actions, pentest and drill gates
 	go test ./tools/security/ -count=1
 
+.PHONY: manifests-admission
+manifests-admission: ## Apply every overlay to a real API server and prove pod security enforces
+	@# Needs a cluster (KUBECONFIG). Not in `ci` for that reason. This is the
+	@# step kubeconform cannot do: it skips ExternalSecret, SecretStore and
+	@# ClusterPolicy entirely, and it cannot run admission.
+	./scripts/cluster/admission-check.sh
+
 .PHONY: drills
 drills: ## Run the operational drills (SRS-SEC-002, SRS-NFR-005, SRS-NFR-016)
 	@# Not part of `ci`: each one starts real PostgreSQL instances and real

@@ -16,18 +16,21 @@ narrative: what each drill found, and what it did not cover.
 ## What these drills are, and what they are not
 
 They run the real binary against a real PostgreSQL, following the real runbook,
-and they measure. They do **not** run on Kubernetes.
+and they measure. They do **not** run a workload on Kubernetes.
 
 That limitation is not a choice. A pod sandbox sets `oom_score_adj` to -998, and
 lowering `oom_score_adj` needs `CAP_SYS_RESOURCE`, which is dropped from both
 the effective and the bounding capability set of the environment these drills
 were executed in. Every Kubernetes distribution fails identically there — kind
 and k3s were both tried, and both got as far as a running control plane and then
-could not start a single pod sandbox. So what is written below is true of the
-application, the database, the procedure and the scripts, and says nothing about
-rollouts, the mesh, external-secrets, or a cluster. **P0-12 and Gate A8 remain
-open**, and the pre-production drills the runbooks describe are still required
-before a production launch.
+could not start a single pod sandbox.
+
+The control plane itself works, which is worth something and is used: see
+[Manifest admission](#manifest-admission-against-a-real-api-server) below. But
+what is written about the three drills is true of the application, the database,
+the procedure and the scripts, and says nothing about rollouts, the mesh, or
+external-secrets. **P0-12 and Gate A8 remain open**, and the pre-production
+drills the runbooks describe are still required before a production launch.
 
 A drill that is honest about its scope is worth more than one that is not, which
 is why every entry in the register names what it did not cover.
@@ -131,13 +134,66 @@ incident immediately, and in a real event the decision is usually the largest
 single component. The runbook is explicit about this and the drill does not
 pretend otherwise.
 
+## Manifest admission against a real API server
+
+Not one of the three drills, but the same idea and the same environment
+constraint, so it lives here: `scripts/cluster/admission-check.sh`
+(`make manifests-admission`).
+
+`make manifests-validate` renders each overlay and checks it against published
+JSON schemas — and **skips ExternalSecret, SecretStore and ClusterPolicy**,
+because no schema exists for them. That is four objects per overlay
+(`kubeconform` reports `Skipped: 4`), and until now nothing validated them.
+
+`tools/infra` separately asserts that the namespace carries
+`pod-security.kubernetes.io/enforce=restricted`, which is a statement about a
+label rather than about the workload: nothing checked that the Deployment
+actually satisfies `restricted`.
+
+The check applies every overlay to a real Kubernetes API server with the two
+CRD bundles installed, pinned by version. Result:
+
+| Overlay | Objects applied |
+|---|---|
+| dev | 15 |
+| preprod | 16 |
+| prod | 16 |
+
+All three applied clean, those four objects included, and the Deployment
+produced a Pod — which is the evidence that pod security admitted it, since pod
+creation by the ReplicaSet controller is where the plugin runs.
+
+A pass there means nothing unless the policy can refuse, so the check injects a
+privileged variant of the shipped Deployment — derived from the real manifest
+rather than hand-written, so it cannot drift into a fixture refused for some
+unrelated reason. In `healthcare-dev` it is refused:
+
+```
+violates PodSecurity "restricted:latest": privileged (container "core" must not
+set securityContext.privileged=true), allowPrivilegeEscalation != false, …
+runAsNonRoot != true, seccompProfile …
+```
+
+and in a namespace without the label the identical manifest is **admitted** and
+a Pod appears. So the refusal is attributable to the policy and not to anything
+else about the manifest.
+
+**This is not a deployment.** The image is digest-pinned to a placeholder only
+the release pipeline substitutes, so nothing pulls; there is no database, no
+mesh and no external-secrets controller. "Every overlay applies to a real API
+server and pod security is enforcing" is the whole claim.
+
+**Not yet in CI.** A GitHub runner can run k3s, so wiring this into the pipeline
+is the obvious next step; it has not been done because it cannot be verified
+from the environment these checks were executed in, and shipping an unverified
+CI job is how a pipeline goes red on somebody else's change.
+
 ## Running them
 
 ```bash
-go build -o /tmp/drill-core ./cmd/core
-DRILL_BIN=/tmp/drill-core ./scripts/drills/rotation-drill.sh
-DRILL_BIN=/tmp/drill-core ./scripts/drills/backup-drill.sh
-DRILL_BIN=/tmp/drill-core ./scripts/drills/dr-drill.sh
+make drills                     # all three, building the binary first
+
+KUBECONFIG=… make manifests-admission   # needs a cluster
 ```
 
 Each is self-contained: it builds its own PostgreSQL under `/tmp/health-drill`,

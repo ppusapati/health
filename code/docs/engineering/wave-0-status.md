@@ -37,7 +37,7 @@ this document records is which P0 items have working, tested implementations.
 | A5 | OIDC/MFA/session/workload identity in non-production | **Pass** | ADR-008 closed: per-tenant OIDC federation verified in-process, ACR-based step-up, revocation watermark, workload identity. `internal/identity_access/adapters/oidc` against a live test provider over TLS |
 | A6 | Trace crosses client/RPC/DB/event without raw PHI | **Pass** | `observability_test.go` |
 | A7 | Migration strategy supports rolling expand/contract | **Pass** | `tools/migrations` refuses a contracting change that does not name the migration that expanded, and a NOT NULL column with no default. Every migration carries Trace, Rollback and Reconciliation notes |
-| A8 | Kubernetes deploy, secret rotation, backup/restore smoke | **Partial** | Manifests render and schema-validate; invariants tested in `tools/infra` including encryption-at-rest key references, TLS_MODE per overlay and the backup job's separate credential; image builds. **The rotation, backup and DR drills have now been executed** against the real binary and a real PostgreSQL, and found seven defects — see [`drill-log.md`](drill-log.md) and `security/drill-register.yaml`. The Kubernetes half is still open: no cluster deploy has happened |
+| A8 | Kubernetes deploy, secret rotation, backup/restore smoke | **Partial** | Manifests render, schema-validate, and **apply to a real Kubernetes API server** — all three overlays, including the three CRD kinds `kubeconform` skips (four objects per overlay), with pod security shown to be enforcing by fault injection (`make manifests-admission`). Invariants tested in `tools/infra`; image builds. **The rotation, backup and DR drills have now been executed** against the real binary and a real PostgreSQL, and found seven defects — see [`drill-log.md`](drill-log.md) and `security/drill-register.yaml`. What is still open is running the workload: no pod has started |
 | A9 | Svelte and Flutter consume the same contracts | **Pass** | Both generated from `proto/`; `connect_client_test.dart` asserts the procedure path matches the proto package |
 | A10 | Fitness tests block forbidden imports and cross-schema writes | **Pass** | `tools/fitness` |
 | A11 | Broker and workflow/rules ADRs closed after PoC | **Pass** | All three closed with the evidence the register asks for: [ADR-005](../adr/0005-event-broker.md) (benchmark + working transport), [ADR-006](../adr/0006-durable-workflow-engine.md) (reference long-running workflow + version upgrade test + multi-replica test), [ADR-007](../adr/0007-rules-engine.md) (decision-table reference implementation + replay). Each names its reopening triggers; ADR-006 is closed for Waves 1–6 and reopens unconditionally at Wave 7, which owns SRS-BPM-* |
@@ -193,11 +193,21 @@ executed under concurrent load rather than read:
 All seven are fixed, and `tools/infra` and `tools/security` hold the ones that
 can regress.
 
+A fourth check, `make manifests-admission`, applies every overlay to a real
+Kubernetes API server. It is the step `make manifests-validate` cannot do:
+`kubeconform` has no schema for ExternalSecret, SecretStore or ClusterPolicy and
+skips all four such objects in every overlay, and it cannot run admission at
+all. All three overlays apply
+clean, and the shipped Deployment is admitted under `restricted` while a
+privileged variant of it is refused — the second half being what makes the first
+mean anything. It is not wired into CI yet; a GitHub runner could run it, and
+that is named as the next step rather than shipped unverified.
+
 ## What is still open
 
 | Item | Why it cannot close here |
 |---|---|
-| P0-12 / A8 — cluster deploy | Not a matter of more code. A Kubernetes pod sandbox sets `oom_score_adj` to -998, which needs `CAP_SYS_RESOURCE`; that capability is dropped from both the effective and the bounding set of the environment this repository is built in. kind and k3s were both tried and both reached a running control plane and then could not start a single pod sandbox. Manifests render, schema-validate and have their invariants tested, and the image builds — "it runs on a cluster" is a different claim and stays unmade. |
+| P0-12 / A8 — running the workload on a cluster | Not a matter of more code. A Kubernetes pod sandbox sets `oom_score_adj` to -998, which needs `CAP_SYS_RESOURCE`; that capability is dropped from both the effective and the bounding set of the environment this repository is built in. kind and k3s were both tried and both reached a running control plane and then could not start a single pod sandbox. The control plane half **is** now exercised — every overlay applies to a real API server and pod security is shown to be enforcing — so what remains unmade is specifically "the workload runs", not "the manifests are acceptable". |
 | SRS-SEC-013 | A penetration test is an external engagement, not an artefact, and must not be recorded as done because a gate wants it green. `make release-gate` refuses a production release until an engagement is registered, which is the control working. |
 | The cluster half of each drill | The drills cover the application, the database and the procedure. They do not cover rollouts, external-secrets, the mesh, or a cross-zone failover, and each register entry says so. The pre-production drills the runbooks describe are still required before a production launch. |
 
