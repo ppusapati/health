@@ -41,9 +41,12 @@ web workspaces cover them; the mobile ones do not exist.
 **P0-12's cluster deployment cannot be closed in this environment.** A
 Kubernetes pod sandbox needs `CAP_SYS_RESOURCE` to set its `oom_score_adj`, and
 that capability is dropped here, so no distribution can start a pod — kind and
-k3s were both tried. The manifests are rendered and schema-validated by
-`make manifests-validate` and their invariants are held by `tools/infra`, but
-nothing has been applied to a running cluster.
+k3s were both tried. The control plane itself works and is used:
+`make manifests-admission` applies every overlay to a real API server, covering
+the four objects per overlay that `kubeconform` skips for want of a schema, and
+shows pod security refusing a privileged variant of the shipped Deployment. So
+"the manifests are acceptable to Kubernetes" is demonstrated; **"the workload
+runs" is not**, and that is what stays open.
 
 The rotation, backup and disaster-recovery drills, which were also outstanding,
 **have now been executed** — against the real binary and a real PostgreSQL
