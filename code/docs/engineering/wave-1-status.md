@@ -17,32 +17,30 @@ What this records is which requirements have working, tested implementations.
 | 4 | Encounter, clinical, nursing | SRS-ENC/CLN/NUR | **Complete** |
 | 5 | Orders, medication, billing | SRS-ORD/MED/BIL | **Complete** |
 | 6 | Platform blob storage | SRS-DAT-007 (and SRS-EMPI-010, CLN-014, NUR-012) | **Complete** |
-| 7 | Role workspaces (UX-W1-01 … 06) | Wave-1 UX exit criterion | **1 of 6** — UX-W1-01 built |
+| 7 | Role workspaces (UX-W1-01 … 06) | Wave-1 UX exit criterion | **Complete** — all six |
 
-All 130 requirements are implemented server-side. The wave is not finished: see
-[What is not built](#what-is-not-built).
+All 130 requirements are implemented server-side and all six role workspaces are
+built. What remains is listed in [What is not built](#what-is-not-built) — it is
+the mobile client and the two gates that need a cluster.
 
 ## What is not built
 
 All 130 requirements in the coverage register are implemented server-side, and
-every one is listed with its evidence in the sprint sections below. The Wave-1
-exit criteria are wider than that register, and two of them are not met.
+every one is listed with its evidence in the sprint sections below, and all six
+role workspaces the UX specification names are built. Two things remain.
 
-**Five of the six role workspaces do not exist.** UX-W1-01
-Reception/Registration is built (see [Sprint 7](#sprint-7--the-reception-workspace-ux-w1-01)).
-The Doctor OPD workspace, Nursing/triage, the Order Composer and Results Inbox,
-the Medication/Prescription workspace and the Billing/Payment workspace are not,
-and with them the required states the spec names for each — default, loading,
-empty, error, permission, conflict, and offline or stale where it applies. The
-Flutter app is still the Wave-0 shell. Every RPC those screens need exists, is
-authorized and is tested through the ConnectRPC boundary; what is missing is the
-client.
+**The Flutter application is still the Wave-0 shell.** It has a Connect
+transport, session handling, an offline operation queue and a generated client
+for every Wave-1 service — and no clinical screens. The Wave-1 UX specification
+names six *screen groups* rather than six web pages, and a ward tablet running
+the eMAR is a real reading of UX-W1-03 and UX-W1-05. The web workspaces cover
+them; the mobile ones do not exist.
 
-This is client-side work. It changes no contract, schema, authorization rule or
-domain invariant, which is why the server-side sprints could be called complete
-without it; but a wave whose exit outcome is "first production-ready
-OPD/ambulatory vertical slice" is not finished while most of the slice has no
-front end.
+**Two gates cannot be closed in this environment.** P0-12's cluster deployment
+and the rotation and disaster-recovery drills need a Kubernetes cluster, which
+no session here has. The manifests are rendered and schema-validated by
+`make manifests-validate` and their invariants are held by `tools/infra`, but
+nothing has been applied to a running cluster.
 
 ### Deliberately out of scope, and why
 
@@ -2390,7 +2388,7 @@ bucket's version history or in a replica — which is precisely what the consent
 was about.
 
 
-## Sprint 7 — the reception workspace (UX-W1-01)
+## Sprint 7A — the reception workspace (UX-W1-01)
 
 The first of the six role workspaces the Wave-1 UX specification names, and the
 one that establishes the shared patterns the other five reuse: the patient
@@ -2507,6 +2505,142 @@ wired to the shell, which had two hardcoded links. That is the failure mode a
 "complete" status doc hides: a requirement can be implemented, tested and
 entirely inert. It is wired now, and the workspace home is built from the same
 catalogue.
+
+
+## Sprint 7B — the remaining five workspaces, and what the six share
+
+UX-W1-02 through UX-W1-06, built on the patterns Sprint 7A established: the
+patient banner, permission-driven navigation, and a state vocabulary all six
+speak — default, loading, empty, error, permission, conflict, and stale or
+offline where it applies. This section covers the five and the properties the
+whole set shares; Sprint 7A above has the reception workspace's own evidence.
+
+| Workspace | Screen | Requirements |
+|---|---|---|
+| UX-W1-01 | `/reception`, `/reception/search` | SRS-EMPI-001 … 004, SRS-EMPI-014, SRS-SCH-007 … 011 |
+| UX-W1-02 | `/chart/[patientId]` | SRS-CLN-001 … 004, SRS-CLN-008, SRS-CLN-009, SRS-CLN-011, SRS-CLN-016, SRS-CLN-017 |
+| UX-W1-03 | `/ward` | SRS-NUR-003, SRS-NUR-005, SRS-NUR-011 |
+| UX-W1-04 | `/orders` | SRS-ORD-002, SRS-ORD-007 … 009, SRS-CLN-012 |
+| UX-W1-05 | `/medications` | SRS-MED-001 … 003, SRS-MED-006, SRS-MED-010, SRS-MED-012 |
+| UX-W1-06 | `/billing` | SRS-BIL-006, SRS-BIL-008, SRS-BIL-010, SRS-BIL-012, SRS-BIL-013 |
+
+### The pattern the six share
+
+Each workspace is three layers: a **pure logic module** holding the presentation
+and gating rules, a **mapping module** translating protobuf to those rules'
+models, and a **thin route** that fetches, renders and acts. Almost every test
+is against the first two, because that is where the decisions are.
+
+The mapping layers all use exhaustive `Record<WireEnum, T>` maps with no
+`default:` clause. This is a compile-time check rather than a convention — it
+caught a real mistake during UX-W1-03, where the map named `RiskDomain` members
+the generated enum does not have and `tsc` refused the file. A `default:` that
+picks a plausible-looking value is how a newly added server enum arrives in the
+browser as something it is not, and in a clinical panel that is a reassurance
+nobody wrote.
+
+### What each workspace refuses
+
+The interesting design in all six is what they will not do.
+
+**Reception.** There is no route that reaches registration without a completed
+search: the form lives inside the search page, because a separate
+`/reception/register` is a URL and a URL can be typed. A failed search does not
+satisfy the gate, and a new search clears every acknowledgement — a stale one
+would unlock it for a different set of candidates. The board shows queue tokens
+and truncated identifiers rather than names, because it is displayed where a
+waiting room can see it.
+
+**The chart.** No edit control on a signed note — absent, not disabled, because
+a disabled control reads as "I need a permission" and the truth is "the record
+does not do that". A document whose content no longer hashes to its signature
+offers nothing at all, not even an amendment. "Unable to assess" sorts with the
+high-criticality allergies rather than the low ones. An empty allergy panel says
+"nothing recorded", not "no known allergies". A trend refuses to plot across
+units rather than converting.
+
+**The ward.** Overdue is the server's verdict, never recomputed against a
+terminal clock that may be fast — the escalation is server-side, and a
+disagreeing screen is the one lying. An observation timed more than fifteen
+minutes back requires a reason before it can be charted, and the field appears
+when the time is set back rather than on submit. Risk bands are never derived
+from a score here.
+
+**Orders.** A required indication blocks the button rather than warning beside
+it. A duplicate is shown with what exists and a box for why another is needed,
+never suppressed, and the reason is recorded against those specific orders. The
+results inbox is ward-wide, because scoping it to the open chart hides exactly
+the results nobody is looking at.
+
+**Medications.** A contraindication has no reason box at all. Every other
+finding gets its own, attached to its own rule — one shared box produces a
+single sentence covering an allergy and a dose warning, which is the record a
+pharmacist reads at verification. An unrecognised severity is treated as needing
+a reason rather than as safe. A non-formulary choice is never blocked; it shows
+the approval path.
+
+**Billing.** Money never becomes a float anywhere: formatting splits a bigint
+with integer division, parsing builds one without a float in between, and a
+hundred ten-paise lines sum to exactly ten rupees. A typed amount that cannot be
+read is refused rather than treated as zero. The balance is derived from the
+ledger and shown against the server's figure, with a warning not to take payment
+when the two disagree. An issued invoice has no edit control at any status.
+
+### Evidence
+
+323 tests across 24 files in `apps/web`, plus the browser gates. The logic and
+mapping modules carry almost all of them:
+
+| Module | Tests | What it holds |
+|---|---|---|
+| `patient/banner` | 12 | Age precision, alert ordering, read-only records, masked fields |
+| `reception/board` | 16 | Waiting time from arrival, priority ordering, staleness |
+| `reception/search` | 15 | The search-before-create gate |
+| `reception/mapping` | 11 | Enum translation, measured zeros, malformed rows |
+| `chart/notes` | 14 | The document lifecycle, amendment versus addendum, signature meanings |
+| `chart/safety` | 19 | Criticality, verification, problem status, trends |
+| `chart/mapping` | 11 | Intact flag, unable-to-assess, uninterpreted results |
+| `ward/worklist` | 19 | Overdue, late entries, escalation, risk bands |
+| `ward/mapping` | 8 | Not-done versus cancelled, late reasons |
+| `orders/composer` | 16 | Indication gating, duplicate override, inbox ordering |
+| `orders/mapping` | 8 | Round-tripping types and priorities |
+| `meds/prescribe` | 23 | Contraindication, per-rule overrides, structured dose, formulary |
+| `meds/mapping` | 11 | Ungraded severities, verification, description fallback |
+| `billing/money` | 18 | Integer arithmetic, parsing, currency mixing, decimal places |
+| `billing/account` | 21 | Derived balance, invoice immutability, payment validity |
+| `billing/mapping` | 12 | bigint preservation, absent amounts, close exceptions |
+
+Browser gates: every one of the nine screens is scanned for WCAG 2.2 AA
+violations by axe and renders signed-out without throwing, which is the failure
+that looks to a user exactly like the application being down.
+
+### Decisions taken against the backlog
+
+**Registration is not its own route.** Recorded in Sprint 7 rather than as a
+layout note because it is the structural reason search-before-create is a
+control rather than a convention.
+
+**Names are not on the reception board.** A reception board is displayed on a
+screen a waiting room can see, and a column of patient names is a disclosure to
+everybody in the room, every day. No permission check prevents it, because the
+receptionist is legitimately entitled to the data. Tokens and truncated
+identifiers instead, with the name one click away behind an audited read.
+
+**Two Wave-0 modules were built, tested, and never rendered.** `buildWorkspace`
+(SRS-WEB-004's permission-driven navigation) and `DraftRegistry` (SRS-WEB's
+unsaved-work guard, which is what SRS-CLN-017's patient-context lock needs) both
+existed with passing tests and nothing using them — the shell had two hardcoded
+links and no screen registered a draft. That is the failure mode a status
+document tracking requirements rather than behaviour cannot show: a requirement
+can be implemented, tested and entirely inert. Both are wired now.
+
+**The client validates, and says so; the server decides.** Every gate on these
+screens exists so a clinician is told before the click rather than after it. The
+server re-validates all of them and is the authority — `RegisterPatient` refuses
+a probable duplicate, `PlaceOrder` refuses a missing indication, `Prescribe`
+refuses a contraindication, `ReceivePayment` deduplicates on the idempotency
+key. Nothing here is the control; all of it is what makes the control
+comprehensible.
 
 ## Wave-0 capabilities Wave 1 consumes
 
