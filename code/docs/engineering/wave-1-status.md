@@ -50,6 +50,16 @@ and the bedside `given_at`, and the tile says *"saved on this device, not yet
 sent"* rather than *"given"* — because a nurse shown the second for the first
 has a colleague who gives the dose again. See `lib/src/meds/submission.dart`.
 
+The round trip is closed at both ends. `WardController` and `RoundController`
+call `NursingClient` and map the wire types into what the screens render;
+`lib/src/offline/replay.dart` turns a queued administration back into a request
+when the network returns, re-sending what was captured rather than
+reconstructing it — the bedside `given_at`, the bedside idempotency key, and
+`offline: true` so the server is told the dose was recorded on a device that
+could not reach it at the time. An operation whose type nothing claims is
+refused rather than dropped: a queue that silently discards what it cannot route
+loses a nurse's work and reports success.
+
 **The other four screen groups are web-only**, and stay that way unless somebody
 shows a ward using them on a tablet.
 
