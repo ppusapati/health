@@ -46,7 +46,8 @@ const pages = [
 	{ name: 'patient search', path: '/reception/search' },
 	{ name: 'patient chart', path: '/chart/pat-1' },
 	{ name: 'ward worklist', path: '/ward' },
-	{ name: 'orders and results', path: '/orders' }
+	{ name: 'orders and results', path: '/orders' },
+	{ name: 'medications', path: '/medications' }
 ];
 
 for (const target of pages) {

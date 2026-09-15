@@ -198,6 +198,13 @@ export const receptionCatalogue: WorkspaceCatalogue = {
 			href: '/orders',
 			requires: 'orders.order.read',
 			section: 'clinical'
+		},
+		{
+			id: 'medications',
+			label: 'Medications',
+			href: '/medications',
+			requires: 'med.prescription.read',
+			section: 'clinical'
 		}
 	],
 	quickActions: [
@@ -236,6 +243,12 @@ export const receptionCatalogue: WorkspaceCatalogue = {
 			label: 'Critical results awaiting action',
 			requires: 'clinical.record.write',
 			href: '/orders'
+		},
+		{
+			id: 'verification-queue',
+			label: 'Prescriptions awaiting verification',
+			requires: 'med.prescription.verify',
+			href: '/medications'
 		}
 	]
 };
