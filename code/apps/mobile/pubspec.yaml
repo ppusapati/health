@@ -24,6 +24,7 @@ dependencies:
   # Durable local storage for the offline queue, so queued clinical work
   # survives a restart (SRS-NFR-013).
   path_provider: ^2.1.5
+  timezone: ^0.11.1
 
 dev_dependencies:
   flutter_test:

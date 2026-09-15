@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import '../config/environment.dart';
 import '../gen/healthcare/identity_access/v1/identity.pb.dart';
 import '../offline/operation_queue.dart';
+import '../workspace/navigation.dart';
 
 /// Scaffold with the environment banner, context bar and sync indicator.
 class AppShell extends StatelessWidget {
@@ -21,6 +22,7 @@ class AppShell extends StatelessWidget {
     this.session,
     this.queueCounts,
     this.onSignOut,
+    this.workspace,
   });
 
   final AppConfig config;
@@ -30,9 +32,20 @@ class AppShell extends StatelessWidget {
   final Map<QueuedStatus, int>? queueCounts;
   final VoidCallback? onSignOut;
 
+  /// What this user is offered, already filtered by the permissions the server
+  /// reported. Null when signed out.
+  ///
+  /// Filtered, not authorized: every route behind these entries is still
+  /// protected on the server. Hiding a link stops the user being offered an
+  /// action that will fail; it is not a control.
+  final Workspace? workspace;
+
   @override
   Widget build(BuildContext context) {
+    final workspace = this.workspace;
+
     return Scaffold(
+      drawer: workspace == null ? null : _WorkspaceDrawer(workspace: workspace),
       appBar: AppBar(
         title: Text(title),
         actions: [
@@ -167,4 +180,99 @@ class _SyncIndicator extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The workspace a user's permissions produce.
+class _WorkspaceDrawer extends StatelessWidget {
+  const _WorkspaceDrawer({required this.workspace});
+
+  final Workspace workspace;
+
+  @override
+  Widget build(BuildContext context) {
+    if (workspace.empty) {
+      return const Drawer(
+        child: SafeArea(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            // An unexplained empty drawer reads as a broken app. It is a
+            // legitimate state — a user whose role grants nothing this build
+            // offers — and saying so is the difference between a support call
+            // about a bug and one about access.
+            child: Text(
+              'Nothing is available to you here yet.\n\n'
+              'Your account does not hold any of the permissions these screens '
+              'need. An administrator can grant them.',
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Drawer(
+      child: SafeArea(
+        child: ListView(
+          children: [
+            for (final section in WorkspaceSection.values)
+              ..._section(context, section),
+            if (workspace.worklists.isNotEmpty) ...[
+              const Divider(),
+              _heading(context, 'Your worklists'),
+              for (final worklist in workspace.worklists)
+                ListTile(
+                  key: Key('worklist-${worklist.id}'),
+                  leading: const Icon(Icons.checklist),
+                  title: Text(worklist.label),
+                ),
+            ],
+            if (workspace.quickActions.isNotEmpty) ...[
+              const Divider(),
+              _heading(context, 'Quick actions'),
+              for (final action in workspace.quickActions)
+                ListTile(
+                  key: Key('quick-action-${action.id}'),
+                  leading: Icon(action.finalizes ? Icons.gavel : Icons.add),
+                  title: Text(action.label),
+                  // An action that finalizes something clinical or financial
+                  // says so before it is tapped, because on a phone a tile is
+                  // hit by accident far more often than a mouse click is.
+                  subtitle: action.finalizes
+                      ? const Text('Opens a confirmation step')
+                      : null,
+                ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _section(BuildContext context, WorkspaceSection section) {
+    final items = workspace.navigation.where((i) => i.section == section).toList();
+    if (items.isEmpty) return const [];
+
+    return [
+      _heading(context, switch (section) {
+        WorkspaceSection.clinical => 'Clinical',
+        WorkspaceSection.operations => 'Operations',
+        WorkspaceSection.administration => 'Administration',
+      }),
+      for (final item in items)
+        ListTile(
+          key: Key('nav-${item.id}'),
+          title: Text(item.label),
+        ),
+    ];
+  }
+
+  Widget _heading(BuildContext context, String text) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+        child: Text(
+          text,
+          style: Theme.of(context)
+              .textTheme
+              .labelLarge
+              ?.copyWith(color: const Color(0xFF33415C)),
+        ),
+      );
 }

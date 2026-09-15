@@ -29,12 +29,14 @@ All 130 requirements in the coverage register are implemented server-side, and
 every one is listed with its evidence in the sprint sections below, and all six
 role workspaces the UX specification names are built. Two things remain.
 
-**The Flutter application is still the Wave-0 shell.** It has a Connect
-transport, session handling, an offline operation queue and a generated client
-for every Wave-1 service — and no clinical screens. The Wave-1 UX specification
-names six *screen groups* rather than six web pages, and a ward tablet running
-the eMAR is a real reading of UX-W1-03 and UX-W1-05. The web workspaces cover
-them; the mobile ones do not exist.
+**The Flutter application has no clinical screens.** It now carries the whole
+Wave-0 foundation — Connect transport, session handling, an offline operation
+queue, a generated client for every Wave-1 service, and the SRS-WEB family the
+web shell has (screen states, the unsaved-work guard, saved views, pagination,
+time-zone display, the role-specific workspace) — but nothing above it. The
+Wave-1 UX specification names six *screen groups* rather than six web pages, and
+a ward tablet running the eMAR is a real reading of UX-W1-03 and UX-W1-05. The
+web workspaces cover them; the mobile ones do not exist.
 
 **Two gates cannot be closed in this environment.** P0-12's cluster deployment
 and the rotation and disaster-recovery drills need a Kubernetes cluster, which

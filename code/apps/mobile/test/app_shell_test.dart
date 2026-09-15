@@ -4,6 +4,7 @@ import 'package:health_mobile/src/config/environment.dart';
 import 'package:health_mobile/src/gen/healthcare/identity_access/v1/identity.pb.dart';
 import 'package:health_mobile/src/offline/operation_queue.dart';
 import 'package:health_mobile/src/ui/app_shell.dart';
+import 'package:health_mobile/src/workspace/navigation.dart';
 
 Widget wrap(Widget child) => MaterialApp(home: child);
 
@@ -112,6 +113,86 @@ void main() {
       )));
 
       expect(find.textContaining('2 need attention'), findsOneWidget);
+    });
+
+    // SRS-WEB-004. The workspace is built from permissions elsewhere and
+    // tested there; these assert that the shell actually renders it, which is
+    // the part a unit test of the builder cannot see.
+    group('workspace navigation', () {
+      Future<void> openDrawer(WidgetTester tester, Workspace? workspace) async {
+        await tester.pumpWidget(wrap(AppShell(
+          config: const AppConfig(
+            apiBaseUrl: 'http://x',
+            environment: Environment.production,
+          ),
+          title: 'Facilities',
+          workspace: workspace,
+          child: const SizedBox(),
+        )));
+        if (workspace != null) {
+          await tester.tap(find.byTooltip('Open navigation menu'));
+          await tester.pumpAndSettle();
+        }
+      }
+
+      testWidgets('offers the entries the permissions allow', (tester) async {
+        await openDrawer(
+          tester,
+          buildWorkspace(waveZeroCatalogue, [
+            'organization.facility.read',
+            'organization.facility.create',
+          ]),
+        );
+
+        expect(find.byKey(const Key('nav-facilities')), findsOneWidget);
+        expect(find.byKey(const Key('quick-action-new-facility')), findsOneWidget);
+
+        // Not held, so not offered. The endpoint behind it is still there and
+        // still refuses: hiding the link is a courtesy, not the control.
+        expect(find.byKey(const Key('nav-org-units')), findsNothing);
+        expect(find.byKey(const Key('worklist-pending-approvals')), findsNothing);
+      });
+
+      testWidgets('warns before an action that finalizes something', (tester) async {
+        await openDrawer(
+          tester,
+          buildWorkspace(waveZeroCatalogue, ['organization.master_data.approve']),
+        );
+
+        expect(find.byKey(const Key('quick-action-approve-change')), findsOneWidget);
+        expect(find.text('Opens a confirmation step'), findsOneWidget);
+      });
+
+      testWidgets('explains an empty workspace rather than showing a blank drawer',
+          (tester) async {
+        await openDrawer(tester, buildWorkspace(waveZeroCatalogue, const []));
+
+        expect(find.textContaining('An administrator can grant them'), findsOneWidget);
+      });
+
+      testWidgets('offers no menu at all when signed out', (tester) async {
+        await openDrawer(tester, null);
+
+        expect(find.byTooltip('Open navigation menu'), findsNothing);
+      });
+
+      testWidgets('the workspace menu meets the platform guidelines', (tester) async {
+        final handle = tester.ensureSemantics();
+        await openDrawer(
+          tester,
+          buildWorkspace(waveZeroCatalogue, [
+            'organization.facility.read',
+            'organization.unit.read',
+            'organization.master_data.approve',
+          ]),
+        );
+
+        await expectLater(tester, meetsGuideline(textContrastGuideline));
+        await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
+        await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+
+        handle.dispose();
+      });
     });
   });
 }

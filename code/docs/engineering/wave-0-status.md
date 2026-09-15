@@ -19,7 +19,7 @@ this document records is which P0 items have working, tested implementations.
 | P0-06 | Event backbone | Implemented | Outbox, inbox dedup, publisher, envelope, plus PostgreSQL-backed fan-out delivery with leases, backoff and dead-lettering, wired into the composition root (ADR-005 closed) |
 | P0-07 | Workflow / rules engines | Implemented | Durable engine with per-instance version migration, multi-replica safety and an operator surface; deterministic rules with four-eyes publication, effective dating and a replayable decision log. ADR-006 and ADR-007 closed |
 | P0-08 | SvelteKit shell | Implemented | AppShell, context banner, generated client, facility screen, error/permission states |
-| P0-09 | Flutter shell | Implemented | Generated Dart clients, Connect transport, session, offline queue, shell UI. Platform bindings wired at the composition point and verified: Android Keystore via EncryptedSharedPreferences (minSdk pinned to 23, which the option requires), iOS Keychain bound to the device and gated on first unlock, atomic file-backed queue that survives a kill |
+| P0-09 | Flutter shell | Implemented | Generated Dart clients, Connect transport, session, offline queue, shell UI. Platform bindings wired at the composition point and verified: Android Keystore via EncryptedSharedPreferences (minSdk pinned to 23, which the option requires), iOS Keychain bound to the device and gated on first unlock, atomic file-backed queue that survives a kill. The SRS-WEB foundation family is now present on this shell too, not only the web one — see the note under the family table |
 | P0-10 | Observability | Implemented | Tracing, correlation propagation, PHI-safe logging, and OTLP export to the collector the manifests already named. Parent-based ratio sampling, service/version/environment on the resource, flush on shutdown. Tested against a real in-process OTLP receiver |
 | P0-11 | DevSecOps | Implemented | Lint, vet, codegen drift, proto compatibility, plus a Security workflow: gitleaks, gosec, govulncheck, npm audit, syft SBOM, trivy image and IaC. Release workflow signs the image keyless (cosign/Sigstore), attests SLSA provenance and the image SBOM, and verifies its own output; manifests pin every image by digest and a Kyverno policy refuses an unsigned one at admission |
 | P0-12 | Deployment platform | **Partial** | Distroless image, kustomize base + 3 overlays, network policy, PDB, backup-with-restore-verification. No cluster deploy executed |
@@ -79,7 +79,7 @@ against the implementation tree:
 |---|---|---|
 | SRS-PLT | 20 | Implemented |
 | SRS-IAM | 15 | Implemented, including the production OIDC verifier (ADR-008 closed) |
-| SRS-WEB | 16 | Implemented |
+| SRS-WEB | 16 | Implemented on both shells |
 | SRS-API | 14 | Implemented |
 | SRS-DAT | 14 | Implemented |
 | SRS-SEC | 14 | Implemented |
@@ -101,6 +101,29 @@ matters and is not a formality:
 - **Nothing here has been deployed to a cluster.** Manifests are validated and
   their invariants tested, and that is a different claim from "it runs".
 
+**SRS-WEB-001…016 are assigned to P0-08 *and* P0-09.** They were implemented on
+the web shell first and, for a period, only there — the family table said
+"Implemented" and was measuring the web. It is a limitation of tracking by
+requirement identifier: a requirement assigned to two deliverables reads as met
+when either one meets it. The Flutter shell now carries the same family:
+
+| Concern | Module | Requirement |
+|---|---|---|
+| Time zone display and cross-site comparison | `lib/src/time/display.dart` | SRS-WEB-014 |
+| Unsaved-work guard, including backgrounding | `lib/src/drafts/guard.dart` | SRS-CLN-017 on the client |
+| Optimistic update policy | `lib/src/api/optimistic.dart` | SRS-WEB-012 |
+| Saved views and column preferences | `lib/src/prefs/views.dart` | SRS-WEB-013 |
+| Role-specific workspace | `lib/src/workspace/navigation.dart` | SRS-WEB-004 |
+| Pagination and incremental loading | `lib/src/api/pagination.dart` | SRS-WEB-010 |
+| Printable document identity and reconciliation | `lib/src/print/document.dart` | SRS-WEB-015/016 |
+| The seven screen states | `lib/src/ui/states.dart` | SRS-WEB-006 |
+
+Every one of these is reached by the running application rather than merely
+present: `test/app_states_test.dart` and the workspace group in
+`test/app_shell_test.dart` drive the shell itself. That check exists because
+two Wave-0 modules had previously been written, tested and left entirely inert,
+which no requirement-level status table can show.
+
 ## Test inventory
 
 | Stack | Count | Command |
@@ -108,7 +131,7 @@ matters and is not a formality:
 | Go | 701 tests across 39 packages | `make test` |
 | Web (unit) | 85 tests across 8 files | `cd apps/web && npm test` |
 | Web (browser) | accessibility and cross-browser smoke, 3 browser profiles | `make web-a11y`, `make web-browsers` |
-| Flutter | 54 tests | `make mobile-test` |
+| Flutter | 169 tests | `make mobile-test` |
 
 Repository tests run against a real PostgreSQL rather than a mock: constraints,
 SQLSTATE codes and transaction semantics are what a mock gets wrong, and
