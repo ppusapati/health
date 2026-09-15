@@ -88,6 +88,45 @@ spec:
     - secretKey: database
       remoteRef: { key: core/database, property: database }
 ---
+# The restore-verification job gets its own database credential, not the
+# application's.
+#
+# Found by running the drill (docs/engineering/drill-log.md, DRILL-2026-002):
+# backup-verify.sh creates a scratch database to restore into, so whatever
+# credential it uses needs CREATEDB. Pointing it at `core-database` would mean
+# granting CREATEDB to the role that serves patient traffic, so that a stolen
+# application credential could also create databases — a privilege it has no
+# use for in normal operation. A separate role keeps the privilege where the
+# job is and out of the request path.
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: core-backup-database
+  namespace: healthcare
+  annotations:
+    healthcare.io/requirement: SRS-NFR-016
+spec:
+  refreshInterval: 15m
+  secretStoreRef:
+    name: core-secrets
+    kind: SecretStore
+  target:
+    name: core-backup-database
+    creationPolicy: Owner
+    template:
+      type: Opaque
+      data:
+        url: "postgres://{{ .username }}:{{ .password }}@{{ .host }}:5432/{{ .database }}?sslmode=verify-full"
+  data:
+    - secretKey: username
+      remoteRef: { key: core/backup-database, property: username }
+    - secretKey: password
+      remoteRef: { key: core/backup-database, property: password }
+    - secretKey: host
+      remoteRef: { key: core/backup-database, property: host }
+    - secretKey: database
+      remoteRef: { key: core/backup-database, property: database }
+---
 # Persistent volumes are encrypted by the storage class, not by the claim, so
 # the class is where the key reference belongs. Named here so an overlay cannot
 # quietly bind a workload to an unencrypted default class.

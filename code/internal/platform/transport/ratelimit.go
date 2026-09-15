@@ -2,7 +2,9 @@ package transport
 
 import (
 	"context"
+	"fmt"
 	"math"
+	"net/netip"
 	"strings"
 	"sync"
 	"time"
@@ -25,6 +27,30 @@ type RateLimitConfig struct {
 	// unauthenticated caller has no business making sustained traffic.
 	UnauthenticatedRequestsPerSecond float64
 	UnauthenticatedBurst             float64
+
+	// PeerRequestsPerSecond bounds credential-bearing traffic from one address
+	// before the token is verified.
+	//
+	// It exists because the tight unauthenticated budget cannot be applied to
+	// every request: a service mesh terminates the connection in a sidecar, so
+	// the application sees one peer address for the whole hospital, and a 2/s
+	// bucket keyed on that address limits the deployment to two requests per
+	// second in total. The drill found exactly that (see
+	// docs/engineering/drill-log.md, DRILL-2026-001), and it would have been
+	// found in production otherwise, because nothing below sustained concurrent
+	// load through the real binary can see it.
+	//
+	// This is still only a flood backstop. The per-caller budget is the subject
+	// stage, which runs after authentication and keys on something the caller
+	// cannot choose.
+	PeerRequestsPerSecond float64
+	PeerBurst             float64
+
+	// TrustedProxies are the networks whose X-Forwarded-For header may be
+	// believed. Empty by default, which means the header is ignored: an
+	// attacker who can set it would otherwise choose their own rate-limit
+	// bucket, which is worse than having no per-address limit at all.
+	TrustedProxies []netip.Prefix
 }
 
 // DefaultRateLimit is the Wave-0 baseline. Real limits are a deployment and
@@ -36,7 +62,39 @@ func DefaultRateLimit() RateLimitConfig {
 		Burst:                            60,
 		UnauthenticatedRequestsPerSecond: 2,
 		UnauthenticatedBurst:             10,
+		// Two orders of magnitude above the unauthenticated budget, because
+		// behind a mesh this bucket may be shared by every user of the
+		// deployment. It is sized to stop a flood, not to shape traffic.
+		PeerRequestsPerSecond: 500,
+		PeerBurst:             1000,
 	}
+}
+
+// ParseTrustedProxies reads a comma-separated list of CIDR blocks.
+//
+// An entry that is not a CIDR is an error rather than a skipped line: an
+// operator who wrote "10.0.0.7" meaning one host should be told, not silently
+// given a configuration in which no proxy is trusted and every caller behind
+// the mesh shares a bucket.
+func ParseTrustedProxies(raw string) ([]netip.Prefix, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+
+	var prefixes []netip.Prefix
+	for _, entry := range strings.Split(raw, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		prefix, err := netip.ParsePrefix(entry)
+		if err != nil {
+			return nil, fmt.Errorf("transport: trusted proxy %q is not a CIDR block: %w", entry, err)
+		}
+		prefixes = append(prefixes, prefix)
+	}
+	return prefixes, nil
 }
 
 // tokenBucket is a single caller's allowance.
@@ -142,14 +200,24 @@ func (l *RateLimiter) Size() int {
 func NewPeerRateLimitInterceptor(limiter *RateLimiter) connect.UnaryInterceptorFunc {
 	return func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			peer := req.Peer().Addr
-			if host, _, found := strings.Cut(peer, ":"); found {
-				peer = host
+			peer := ClientAddress(req.Peer().Addr, req.Header().Get("X-Forwarded-For"),
+				limiter.config.TrustedProxies)
+
+			// Requests arriving with no credential at all get the tight budget:
+			// they are the flood this stage exists to refuse cheaply, and they
+			// are the ones that would otherwise pay for token verification.
+			//
+			// Requests carrying a credential get a much larger one. The header
+			// is not verified here -- that is the auth interceptor's job a step
+			// later -- so this is not a security decision, only a decision about
+			// which bucket to spend. A forged header buys the flood nothing
+			// except a token verification that fails.
+			rate, burst := limiter.config.UnauthenticatedRequestsPerSecond, limiter.config.UnauthenticatedBurst
+			if req.Header().Get(HeaderAuthorization) != "" {
+				rate, burst = limiter.config.PeerRequestsPerSecond, limiter.config.PeerBurst
 			}
 
-			if !limiter.Allow("peer:"+peer,
-				limiter.config.UnauthenticatedRequestsPerSecond,
-				limiter.config.UnauthenticatedBurst) {
+			if !limiter.Allow("peer:"+peer, rate, burst) {
 				return nil, ToConnect(
 					rpcerr.ResourceExhausted("RATE_LIMIT_EXCEEDED", "too many requests"),
 					CorrelationIDFromContext(ctx))
@@ -157,6 +225,47 @@ func NewPeerRateLimitInterceptor(limiter *RateLimiter) connect.UnaryInterceptorF
 			return next(ctx, req)
 		}
 	}
+}
+
+// ClientAddress resolves the address a rate-limit bucket should be keyed on.
+//
+// X-Forwarded-For is believed only when the immediate peer is inside a
+// configured trusted network, and then only its last entry -- the one the
+// trusted proxy itself appended. Earlier entries were supplied by whoever the
+// proxy was talking to and can say anything.
+func ClientAddress(peerAddr, forwardedFor string, trusted []netip.Prefix) string {
+	peer := peerAddr
+	if host, _, found := strings.Cut(peer, ":"); found {
+		peer = host
+	}
+	if forwardedFor == "" || len(trusted) == 0 {
+		return peer
+	}
+
+	parsed, err := netip.ParseAddr(peer)
+	if err != nil {
+		return peer
+	}
+	var isTrusted bool
+	for _, prefix := range trusted {
+		if prefix.Contains(parsed) {
+			isTrusted = true
+			break
+		}
+	}
+	if !isTrusted {
+		return peer
+	}
+
+	parts := strings.Split(forwardedFor, ",")
+	candidate := strings.TrimSpace(parts[len(parts)-1])
+	if candidate == "" {
+		return peer
+	}
+	if _, err := netip.ParseAddr(candidate); err != nil {
+		return peer
+	}
+	return candidate
 }
 
 // NewSubjectRateLimitInterceptor bounds traffic per authenticated caller.

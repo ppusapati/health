@@ -891,3 +891,58 @@ func TestAdmissionVerifiesImageSignatures(t *testing.T) {
 		t.Error("the policy never verifies build provenance; the signature alone does not say which commit produced the image")
 	}
 }
+
+// The restore-verification job must not use the application's database
+// credential (SRS-NFR-016, least privilege).
+//
+// backup-verify.sh creates a scratch database to restore into, so its
+// credential needs CREATEDB. Sharing the application's secret would mean
+// granting that privilege to the role that serves patient traffic, where it has
+// no use and is one more thing a stolen credential can do. The drill that found
+// this is recorded in docs/engineering/drill-log.md (DRILL-2026-002); this test
+// is what stops it coming back the next time somebody consolidates two secrets
+// that look alike.
+func TestBackupJobUsesItsOwnDatabaseCredential(t *testing.T) {
+	const applicationSecret = "core-database"
+
+	var sawJob bool
+	for _, doc := range loadManifests(t) {
+		if doc.kind() != "CronJob" {
+			continue
+		}
+		spec, _ := doc.data["spec"].(map[string]any)
+		jobTemplate, _ := spec["jobTemplate"].(map[string]any)
+		jobSpec, _ := jobTemplate["spec"].(map[string]any)
+		podTemplate, _ := jobSpec["template"].(map[string]any)
+		podSpec, _ := podTemplate["spec"].(map[string]any)
+		containers, _ := podSpec["containers"].([]any)
+
+		for _, rawContainer := range containers {
+			container, _ := rawContainer.(map[string]any)
+			env, _ := container["env"].([]any)
+			for _, rawEntry := range env {
+				entry, _ := rawEntry.(map[string]any)
+				if entry["name"] != "DATABASE_URL" {
+					continue
+				}
+				sawJob = true
+				valueFrom, _ := entry["valueFrom"].(map[string]any)
+				ref, _ := valueFrom["secretKeyRef"].(map[string]any)
+				name, _ := ref["name"].(string)
+				if name == applicationSecret {
+					t.Errorf("%s: %s reads its database credential from %q, "+
+						"the credential the application serves traffic with; "+
+						"this job needs CREATEDB and the application must not have it",
+						doc.path, doc.name(), applicationSecret)
+				}
+				if name == "" {
+					t.Errorf("%s: %s takes DATABASE_URL from something other than a secret", doc.path, doc.name())
+				}
+			}
+		}
+	}
+
+	if !sawJob {
+		t.Fatal("no CronJob with a DATABASE_URL found; this invariant would pass vacuously")
+	}
+}

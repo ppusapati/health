@@ -1,6 +1,7 @@
 package transport_test
 
 import (
+	"net/netip"
 	"sync"
 	"testing"
 	"time"
@@ -175,5 +176,151 @@ func TestConcurrentCallersDoNotCorruptTheBucket(t *testing.T) {
 	// Exactly the burst, no more: a data race would let extra requests through.
 	if allowed != 100 {
 		t.Fatalf("allowed %d of 200 concurrent requests, want exactly the burst of 100", allowed)
+	}
+}
+
+// A mesh terminates the connection in a sidecar, so every request reaches the
+// application from the same address. The peer stage must not turn that into a
+// two-request-per-second cap on the whole deployment.
+//
+// This is the defect the rotation drill surfaced (DRILL-2026-001): a load
+// generator at under five requests per second, from one address, was refused.
+func TestCredentialBearingTrafficFromOneAddressIsNotCappedAtTheUnauthenticatedRate(t *testing.T) {
+	c := &clock{now: time.Date(2026, 9, 15, 9, 0, 0, 0, time.UTC)}
+	config := transport.DefaultRateLimit()
+	limiter := transport.NewRateLimiter(config, c.Now)
+
+	// Well past the unauthenticated burst of 10, and past what any mesh-shared
+	// bucket at 2/s would allow.
+	const requests = 200
+	for i := 0; i < requests; i++ {
+		if !limiter.Allow("peer:127.0.0.1", config.PeerRequestsPerSecond, config.PeerBurst) {
+			t.Fatalf("request %d from the mesh address was refused; behind a sidecar "+
+				"this is every user of the deployment", i+1)
+		}
+	}
+}
+
+// The tight budget still exists, and still applies to traffic with no
+// credential — which is what it was for.
+func TestUncredentialedTrafficKeepsTheTightBudget(t *testing.T) {
+	c := &clock{now: time.Date(2026, 9, 15, 9, 0, 0, 0, time.UTC)}
+	config := transport.DefaultRateLimit()
+	limiter := transport.NewRateLimiter(config, c.Now)
+
+	var refusedAt int
+	for i := 1; i <= 40; i++ {
+		if !limiter.Allow("peer:203.0.113.9",
+			config.UnauthenticatedRequestsPerSecond, config.UnauthenticatedBurst) {
+			refusedAt = i
+			break
+		}
+	}
+	if refusedAt == 0 {
+		t.Fatal("an uncredentialed flood was never refused")
+	}
+	if refusedAt > int(config.UnauthenticatedBurst)+2 {
+		t.Errorf("uncredentialed traffic was allowed %d requests before refusal; "+
+			"the burst is %.0f", refusedAt, config.UnauthenticatedBurst)
+	}
+}
+
+func TestClientAddressIgnoresForwardedForByDefault(t *testing.T) {
+	// No trusted proxies configured, so the header is somebody's claim about
+	// themselves. Believing it would let a caller choose their own bucket.
+	got := transport.ClientAddress("10.0.0.7:41234", "203.0.113.5", nil)
+	if got != "10.0.0.7" {
+		t.Errorf("got %q, want the peer address 10.0.0.7", got)
+	}
+}
+
+func TestClientAddressBelievesATrustedProxy(t *testing.T) {
+	trusted := []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}
+
+	got := transport.ClientAddress("10.0.0.7:41234", "198.51.100.2, 203.0.113.5", trusted)
+	if got != "203.0.113.5" {
+		t.Errorf("got %q, want the entry the trusted proxy appended", got)
+	}
+}
+
+func TestClientAddressTakesOnlyTheProxysOwnEntry(t *testing.T) {
+	// Everything before the last entry was supplied by whoever the proxy was
+	// talking to, so a caller cannot pin themselves to a bucket of their
+	// choosing by prepending one.
+	trusted := []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}
+
+	got := transport.ClientAddress("10.0.0.7:41234", "not-an-address, 203.0.113.5", trusted)
+	if got != "203.0.113.5" {
+		t.Errorf("got %q, want 203.0.113.5", got)
+	}
+}
+
+func TestClientAddressRejectsAnUntrustedPeersHeader(t *testing.T) {
+	trusted := []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}
+
+	got := transport.ClientAddress("198.51.100.9:33221", "203.0.113.5", trusted)
+	if got != "198.51.100.9" {
+		t.Errorf("got %q, want the peer address; the header came from outside the trusted set", got)
+	}
+}
+
+func TestClientAddressFallsBackWhenTheHeaderIsJunk(t *testing.T) {
+	trusted := []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}
+
+	for _, junk := range []string{"", "   ", "nonsense", "1.2.3"} {
+		if got := transport.ClientAddress("10.0.0.7:41234", junk, trusted); got != "10.0.0.7" {
+			t.Errorf("X-Forwarded-For %q: got %q, want the peer address", junk, got)
+		}
+	}
+}
+
+func TestParseTrustedProxies(t *testing.T) {
+	got, err := transport.ParseTrustedProxies(" 10.0.0.0/8 , 192.168.1.0/24 ")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(got) != 2 || got[0].String() != "10.0.0.0/8" || got[1].String() != "192.168.1.0/24" {
+		t.Errorf("got %v", got)
+	}
+}
+
+func TestParseTrustedProxiesRefusesABareAddress(t *testing.T) {
+	// An operator who wrote a host address meaning "trust this one proxy"
+	// should be told. Skipping the line would leave them with a configuration
+	// in which nothing is trusted and every caller behind the mesh shares a
+	// bucket — which is the failure this setting exists to prevent.
+	if _, err := transport.ParseTrustedProxies("10.0.0.7"); err == nil {
+		t.Error("a bare address was accepted as a trusted proxy")
+	}
+}
+
+func TestParseTrustedProxiesTreatsEmptyAsNone(t *testing.T) {
+	for _, empty := range []string{"", "   ", ","} {
+		got, err := transport.ParseTrustedProxies(empty)
+		if err != nil {
+			t.Errorf("%q: %v", empty, err)
+		}
+		if len(got) != 0 {
+			t.Errorf("%q: got %v, want none", empty, got)
+		}
+	}
+}
+
+// A partial configuration must not produce a peer budget of zero, which would
+// refuse every request. The wiring fills the field; this pins the shape the
+// wiring depends on.
+func TestDefaultPeerBudgetIsFarAboveTheUncredentialedOne(t *testing.T) {
+	config := transport.DefaultRateLimit()
+
+	if config.PeerRequestsPerSecond <= config.UnauthenticatedRequestsPerSecond {
+		t.Errorf("peer budget %.0f/s is not above the uncredentialed %.0f/s",
+			config.PeerRequestsPerSecond, config.UnauthenticatedRequestsPerSecond)
+	}
+	// Above the per-caller budget too: behind a mesh this bucket is shared by
+	// every caller, so it cannot be the thing that shapes one caller's traffic.
+	if config.PeerRequestsPerSecond <= config.RequestsPerSecond {
+		t.Errorf("peer budget %.0f/s is not above the per-caller %.0f/s; "+
+			"behind a mesh it would become the effective per-caller limit",
+			config.PeerRequestsPerSecond, config.RequestsPerSecond)
 	}
 }

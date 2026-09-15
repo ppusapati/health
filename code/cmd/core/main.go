@@ -123,10 +123,23 @@ func run() error {
 			"this deployment will refuse to store binary content")
 	}
 
+	// Which networks' X-Forwarded-For may be believed when deciding whose rate
+	// limit a request spends. Absent by default, and absent means the header is
+	// ignored — a caller who can set it would otherwise choose their own bucket.
+	// Behind a mesh or an ingress this should name that hop, or every caller
+	// shares one bucket (see docs/engineering/drill-log.md, DRILL-2026-001).
+	trustedProxies, err := platformtransport.ParseTrustedProxies(os.Getenv("RATE_LIMIT_TRUSTED_PROXIES"))
+	if err != nil {
+		return err
+	}
+	rateLimit := platformtransport.DefaultRateLimit()
+	rateLimit.TrustedProxies = trustedProxies
+
 	server := app.New(app.Deps{
-		Pool:     pool,
-		Verifier: verifier,
-		Blobs:    blobs,
+		Pool:      pool,
+		Verifier:  verifier,
+		Blobs:     blobs,
+		RateLimit: rateLimit,
 		Build: platformapitransport.BuildInfo{
 			Version: version, Commit: commit, BuiltAt: builtAt,
 		},

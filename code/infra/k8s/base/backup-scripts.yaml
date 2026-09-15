@@ -8,38 +8,77 @@ data:
     #!/bin/sh
     # Dump, restore into a scratch database, and prove the restore matches.
     # Exiting non-zero fails the Job, which is what raises the alert.
+    #
+    # Three properties this script has to get right, each of which it got wrong
+    # until the drill was actually executed (docs/engineering/drill-log.md,
+    # DRILL-2026-002):
+    #
+    #   * it verifies EVERY schema. A hand-listed subset means a restore that
+    #     lost every patient record still passes, because the tables that were
+    #     checked happened to be empty;
+    #   * it counts rows exactly. n_live_tup is an estimate maintained by the
+    #     statistics collector, so it can differ from the truth in both
+    #     directions -- a false alarm, or a silent pass over a short restore;
+    #   * it counts inside the dump's own snapshot. Counting the live source
+    #     after the dump compares the database as it is now with the database as
+    #     it was when the dump began, so any write during the dump fails the
+    #     job. A hospital writes at one in the morning, so that is most nights,
+    #     and a job that cries wolf nightly is one whose alert stops being read.
     set -eu
 
     STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
     DUMP="/work/core-${STAMP}.dump"
+    DUMP_OK="/work/dump-${STAMP}.ok"
+    export DUMP DUMP_OK DATABASE_URL
+
+    # Every schema the migrations created, discovered rather than listed.
+    COUNT_QUERY="
+      SELECT coalesce(string_agg(fmt, ',' ORDER BY fmt), '') FROM (
+        SELECT n.nspname || '.' || c.relname || '=' || (
+                 xpath('/row/c/text()',
+                       query_to_xml(format('SELECT count(*) AS c FROM %I.%I',
+                                           n.nspname, c.relname),
+                                    false, true, ''))
+               )[1]::text AS fmt
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE c.relkind = 'r'
+          AND n.nspname NOT LIKE 'pg\_%'
+          AND n.nspname <> 'information_schema'
+      ) s"
 
     echo "dumping to ${DUMP}"
-    pg_dump --format=custom --no-owner --no-acl --file="${DUMP}" "${DATABASE_URL}"
+    # One repeatable-read transaction exports a snapshot, pg_dump reads that
+    # exact snapshot, and the counts come from inside the same transaction. The
+    # source figure is therefore the database as the dump saw it.
+    SOURCE_COUNTS="$(psql -v ON_ERROR_STOP=1 -qtA "${DATABASE_URL}" <<SQL
+    BEGIN ISOLATION LEVEL REPEATABLE READ;
+    SELECT pg_export_snapshot() AS snapshot_id \gset
+    \setenv SNAPSHOT_ID :snapshot_id
+    \! pg_dump --format=custom --no-owner --no-acl --snapshot="\$SNAPSHOT_ID" --file="\$DUMP" "\$DATABASE_URL" && touch "\$DUMP_OK"
+    ${COUNT_QUERY};
+    COMMIT;
+    SQL
+    )"
 
-    # Row counts from the source, to compare against the restored copy.
-    SOURCE_COUNTS="$(psql "${DATABASE_URL}" -tAc "
-      SELECT string_agg(fmt, ',' ORDER BY fmt) FROM (
-        SELECT schemaname || '.' || relname || '=' || n_live_tup AS fmt
-        FROM pg_stat_user_tables
-        WHERE schemaname IN ('organization','identity_access','platform_data')
-      ) s")"
+    # psql does not fail the script when a shell escape fails, so the dump
+    # reports its own success rather than being assumed.
+    if [ ! -f "${DUMP_OK}" ]; then
+      echo "DUMP FAILED"
+      exit 1
+    fi
+    rm -f "${DUMP_OK}"
 
     VERIFY_DB="restore_verify_${STAMP}"
     ADMIN_URL="$(echo "${DATABASE_URL}" | sed 's#/[^/?]*\(?\|$\)#/postgres\1#')"
 
     echo "restoring into ${VERIFY_DB}"
-    psql "${ADMIN_URL}" -c "CREATE DATABASE \"${VERIFY_DB}\""
+    psql -v ON_ERROR_STOP=1 "${ADMIN_URL}" -c "CREATE DATABASE \"${VERIFY_DB}\""
 
     VERIFY_URL="$(echo "${DATABASE_URL}" | sed "s#/[^/?]*\(?\|$\)#/${VERIFY_DB}\1#")"
     pg_restore --no-owner --no-acl --dbname="${VERIFY_URL}" "${DUMP}"
 
-    psql "${VERIFY_URL}" -c "ANALYZE"
-    RESTORED_COUNTS="$(psql "${VERIFY_URL}" -tAc "
-      SELECT string_agg(fmt, ',' ORDER BY fmt) FROM (
-        SELECT schemaname || '.' || relname || '=' || n_live_tup AS fmt
-        FROM pg_stat_user_tables
-        WHERE schemaname IN ('organization','identity_access','platform_data')
-      ) s")"
+    RESTORED_COUNTS="$(psql -qtA "${VERIFY_URL}" -c "${COUNT_QUERY}")"
 
     psql "${ADMIN_URL}" -c "DROP DATABASE IF EXISTS \"${VERIFY_DB}\" WITH (FORCE)"
 

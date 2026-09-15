@@ -94,6 +94,13 @@ npm run dev
 | `make test-unit` | Domain and pure-logic tests; no database |
 | `make test` | Everything, including repository integration tests |
 | `make test-fitness` | Architecture fitness tests (Gate A10) |
+| `make drills` | Operational drills — rotation, backup restore, disaster recovery |
+
+`make drills` is deliberately outside `make ci`: each one starts real PostgreSQL
+instances and real service processes and takes minutes. Run them before changing
+a runbook, the backup script or the rate limiter, and quarterly per the
+runbooks. They are what found the seven defects recorded in
+[`drill-log.md`](drill-log.md), none of which a unit test could see.
 
 Repository tests need `TEST_DATABASE_URL`. Without it they **skip** rather than
 fail, so `go test ./...` stays usable on a machine with no PostgreSQL — but CI

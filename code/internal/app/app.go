@@ -201,6 +201,13 @@ func New(deps Deps) *Server {
 	if deps.RateLimit.RequestsPerSecond == 0 {
 		deps.RateLimit = platformtransport.DefaultRateLimit()
 	}
+	// A caller that set only the subject budget would otherwise get a peer
+	// budget of zero, which refuses every request. Filled per field rather than
+	// wholesale so a partial configuration stays partial.
+	if deps.RateLimit.PeerRequestsPerSecond == 0 {
+		deps.RateLimit.PeerRequestsPerSecond = platformtransport.DefaultRateLimit().PeerRequestsPerSecond
+		deps.RateLimit.PeerBurst = platformtransport.DefaultRateLimit().PeerBurst
+	}
 	if len(deps.SecurityHeaders.ConnectSources) == 0 {
 		deps.SecurityHeaders = platformtransport.DefaultSecurityHeaders()
 	}

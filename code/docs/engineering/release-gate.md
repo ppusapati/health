@@ -66,13 +66,21 @@ be automated because they are judgements, not conditions.
    (SRS-NFR-016).
 
 5. Confirm the rotation drill is within its quarter
-   (`docs/engineering/runbooks/key-rotation.md`).
+   (`docs/engineering/runbooks/key-rotation.md`). `make release-gate` now
+   refuses when the most recent entry in `security/drill-register.yaml` is more
+   than 120 days old, so this step is checking the *scope* of the last drill,
+   not its existence: a harness run proves the procedure and the database, and
+   the pre-production drill is what proves external-secrets, the mesh and a
+   rollout.
 
 6. **Confirm the disaster-recovery drill is current** and that any missed
    target has a remediation reference
    (`docs/engineering/runbooks/disaster-recovery.md`, SRS-NFR-005). The gate
    checks the drill happened, not that it passed — a team that must pass to
-   release will stop running the drill in conditions where it might not.
+   release will stop running the drill in conditions where it might not. Read
+   the entry's `scope` field before accepting the numbers: an RPO measured
+   between two processes on one machine is a floor, not a prediction for a
+   cross-zone failover.
 
 7. **Run the manual accessibility pass** on the workflows changed this release
    (SRS-WEB-009, SRS-NFR-007). Automated scanning finds roughly a third of WCAG

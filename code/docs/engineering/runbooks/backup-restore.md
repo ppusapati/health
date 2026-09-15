@@ -66,3 +66,23 @@ Wave-0 engineering baselines, not contractual SLAs (Wave-0 spec §10):
 A daily logical backup alone does **not** meet Tier 0 or Tier 1 RPO. Continuous
 archiving and point-in-time recovery are required before any Tier 0/1 workload
 goes live, and are outstanding work — see `wave-0-status.md`.
+
+## The drill
+
+`scripts/drills/backup-drill.sh` runs `backup-verify.sh` — read out of
+`infra/k8s/base/backup-scripts.yaml`, not copied — against a PostgreSQL carrying
+the repository's full schema, in three cases: a quiet database, a database being
+written to throughout the dump, and a restore that lost rows.
+
+Run it after any change to the script, the schema, or the PostgreSQL version.
+The first time it was run it found four defects, two of which made the control
+worthless in opposite directions: it verified three schemas out of twenty, so a
+restore that lost every patient record would have passed; and it compared row
+counts taken outside the dump's snapshot, so it would have failed on any night
+the hospital was writing. Both are fixed, and both are the reason the drill
+exists rather than the runbook alone. The detail is in
+[`drill-log.md`](../drill-log.md).
+
+**What the drill does not cover:** the CronJob's scheduling, the object store
+the verified dump is copied to, and KMS envelope encryption of the dump. Those
+need a cluster.

@@ -18,6 +18,26 @@ schedule deletion. A key is referenced by every ciphertext ever written under
 it, including backups taken months ago and the one you will need during the
 incident that made you rotate in the first place.
 
+## The arrangement that makes a credential rotation possible at all
+
+**The role that owns the schema is not the role the application logs in as.**
+`core_owner` owns every object and cannot log in; `core`, `core_v2` and the
+backup job's role are login roles that are members of it.
+
+This is not tidiness. Two steps below are impossible without it, and both were
+found by running the drill rather than by reading it (see
+`docs/engineering/drill-log.md`, DRILL-2026-001):
+
+* **Step 7 cannot drop a role that owns objects.** PostgreSQL refuses, and the
+  alternative — reassigning ownership mid-rotation — takes exclusive locks
+  across the whole schema during a procedure whose entire promise is that
+  callers do not notice.
+* **The new role must be a member of `core_owner`, not of the outgoing role.**
+  Granting `IN ROLE core` is the obvious reading of "same privileges" and it is
+  fatal: the new role's only path to the data then runs through the role step 7
+  drops, so the rotation appears to succeed and every request afterwards fails
+  with a permission error. The drill produced exactly that outage.
+
 ## Drill: database credential rotation (run quarterly)
 
 Run in pre-production. The drill is what SRS-SEC-002's "tested" means; a
@@ -39,7 +59,8 @@ procedure nobody has executed is a document, not a control.
    valid at once; this is what makes the rotation non-disruptive.
 
    ```sql
-   CREATE ROLE core_v2 LOGIN PASSWORD '<generated>' IN ROLE core;
+   -- IN ROLE core_owner, never IN ROLE core. See the arrangement above.
+   CREATE ROLE core_v2 LOGIN PASSWORD '<generated>' IN ROLE core_owner;
    ```
 
 4. Update the value in the secret store. Do not touch the cluster.
@@ -73,10 +94,18 @@ procedure nobody has executed is a document, not a control.
    DROP ROLE core;
    ```
 
-8. Record the observed error rate and the total elapsed time in the drill log.
-   **Pass criterion: zero failed requests.** A drill with a visible error blip
-   has found a real defect in the rotation path — report it rather than
-   recording a pass with a caveat.
+8. Record the observed error rate and the total elapsed time in the drill log
+   (`security/drill-register.yaml`, narrated in
+   `docs/engineering/drill-log.md`). **Pass criterion: zero failed requests.**
+   A drill with a visible error blip has found a real defect in the rotation
+   path — report it rather than recording a pass with a caveat.
+
+   `scripts/drills/rotation-drill.sh` runs this procedure end to end against a
+   disposable PostgreSQL and two service instances, and prints the failure
+   count. It is not a substitute for the pre-production drill — it does not
+   exercise external-secrets, the mesh, or a rollout — but it is what keeps the
+   procedure from rotting between quarters, and it is what found the two
+   defects above.
 
 ### If step 7 shows the old role still connected
 

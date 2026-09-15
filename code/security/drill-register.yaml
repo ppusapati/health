@@ -1,0 +1,140 @@
+# Operational drill register (SRS-SEC-002, SRS-NFR-005, SRS-NFR-016).
+#
+# Three Wave-0 requirements say "tested" rather than "documented". This file is
+# what `tools/security` reads to decide whether that is true, and what a release
+# gate refuses against when the most recent drill is older than a quarter.
+#
+# Two rules about what goes in here:
+#
+#   * a missed target is recorded, with the number that was actually achieved
+#     and a remediation reference. A register of nothing but passes is a
+#     register of drills that were only run when they would pass;
+#   * every entry names its scope -- what the drill did NOT cover. The gap
+#     between "the drill passed" and "production will recover" is the first
+#     thing an auditor asks about, and leaving it implied is how a drill against
+#     a laptop comes to be read as a drill against the platform.
+#
+# The narrative, including what each drill found, is in
+# docs/engineering/drill-log.md.
+
+drills:
+  - id: DRILL-2026-001
+    kind: credential-rotation
+    requirement: SRS-SEC-002
+    executed_on: "2026-09-15"
+    environment: drill-harness
+    procedure: docs/engineering/runbooks/key-rotation.md
+    harness: scripts/drills/rotation-drill.sh
+    scope: >-
+      Two service instances and a PostgreSQL primary as ordinary processes on
+      one machine. Exercises the procedure end to end -- both credentials valid
+      at once, instances replaced one at a time under load, the old role
+      confirmed disconnected before it is dropped -- and measures failed
+      requests from a caller's side. Does NOT exercise external-secrets, Vault,
+      the 15-minute refresh window, the service mesh, or a Kubernetes rollout;
+      those need a cluster, and no session that has run this drill has had one.
+      The pre-production drill the runbook describes is still required before a
+      production launch.
+    measured:
+      requests: "433"
+      failed_requests: "0"
+      rate_limited: "0"
+      elapsed: "29s"
+    outcome: met
+    findings:
+      - >-
+        The application's login role owned the schema, so the runbook's final
+        step (DROP ROLE core) could not run at all. Fixed by separating a
+        NOLOGIN owner from the login roles.
+      - >-
+        The runbook created the new role IN ROLE core, so dropping the old role
+        removed the new one's only path to the data. The drill produced a total
+        outage. Fixed to IN ROLE core_owner.
+      - >-
+        The peer-address rate limiter applied a 2/s budget to every request. A
+        service mesh terminates the connection in a sidecar, so behind one that
+        bucket is shared by the whole deployment -- the drill's own load, under
+        5 requests per second from one address, was throttled. Fixed by keying
+        credential-bearing traffic to a flood-scale budget and adding
+        trusted-proxy resolution of the client address.
+    remediation: ""
+
+  - id: DRILL-2026-002
+    kind: backup-restore
+    requirement: SRS-NFR-016
+    executed_on: "2026-09-15"
+    environment: drill-harness
+    procedure: docs/engineering/runbooks/backup-restore.md
+    harness: scripts/drills/backup-drill.sh
+    scope: >-
+      Runs the CronJob's own backup-verify.sh, read out of
+      infra/k8s/base/backup-scripts.yaml rather than copied, against a
+      PostgreSQL carrying the repository's full schema. Covers a quiet database,
+      a database being written to throughout the dump, and a restore that lost
+      rows. Does NOT cover the CronJob's scheduling, the object store the
+      verified dump is copied to, or KMS envelope encryption of the dump.
+    measured:
+      quiet_case: "verified and published"
+      busy_case: "verified and published, 5001 audit records consistent across dump and restore"
+      short_restore_case: "detected, 5017 vs 4917"
+    outcome: met
+    findings:
+      - >-
+        The job read its database credential from the application's secret, but
+        it creates a scratch database and so needs CREATEDB. Running it as
+        configured would have meant granting CREATEDB to the role that serves
+        patient traffic. Fixed with a separate core-backup-database credential,
+        held by tools/infra.
+      - >-
+        Verification compared three hardcoded schemas out of the twenty the
+        migrations create. A restore that lost every patient record would have
+        passed, because the schemas it checked happened to be empty. Fixed to
+        discover every schema.
+      - >-
+        Verification compared n_live_tup, a statistics-collector estimate, not
+        actual row counts -- so it could both false-alarm and pass a short
+        restore. Fixed to exact counts.
+      - >-
+        Row counts were taken after the dump, outside its snapshot, so any write
+        during the dump failed the job. A hospital writes at one in the morning,
+        so the nightly job would have failed most nights and its alert would
+        have stopped being read. Fixed by exporting the dump's snapshot and
+        counting inside it.
+    remediation: ""
+
+  - id: DRILL-2026-003
+    kind: disaster-recovery
+    requirement: SRS-NFR-005
+    executed_on: "2026-09-15"
+    environment: drill-harness
+    procedure: docs/engineering/runbooks/disaster-recovery.md
+    harness: scripts/drills/dr-drill.sh
+    scope: >-
+      A PostgreSQL primary with WAL archiving and an asynchronous streaming
+      replica, both as ordinary processes, with the service writing through the
+      full stack. The primary is killed with SIGKILL rather than shut down, the
+      replica is promoted, the service is restarted against it, and RPO and RTO
+      are measured from the last write the user was told had been saved and from
+      the moment the incident was declared. Does NOT cover a cross-zone
+      failover, DNS or service-address cutover, a cluster, or the human decision
+      time that dominates a real RTO -- the drill declares immediately, so the
+      figure below is a floor, not a prediction. The RPO figure is optimistic
+      for the same reason: primary and replica share a loopback interface, so
+      the replica is never more than a fraction of a millisecond behind. Across
+      availability zones it would be behind by the round trip, and the number to
+      trust is the one a cross-zone drill produces.
+    measured:
+      rpo: "0s (341 writes confirmed, 341 survived)"
+      rto: "0s -- 483ms from the declaration to the first clinical request served"
+      declaration_delay: "18ms"
+      writes_confirmed: "341"
+      writes_survived: "341"
+      integrity: "342 facilities, 343 audit records, 0 facilities without an outbox event"
+    outcome: met
+    findings:
+      - >-
+        No defect found. The outbox check is the one worth keeping: every
+        facility that survived the failure still had its outbox event, so the
+        recovery did not leave a state change without the event that tells
+        downstream systems about it.
+    remediation: ""

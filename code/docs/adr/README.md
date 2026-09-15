@@ -25,6 +25,7 @@ Wave-1 implementation decisions the programme register does not cover:
 | ADR | Decision | Requirements |
 |---|---|---|
 | ADR-W1-009 | Object storage is one configured routing table, with a bounded database exception | SRS-DAT-007, SRS-SEC-002 |
+| ADR-W0-010 | Operational drills are scripts, not transcripts | SRS-SEC-002, SRS-NFR-005, SRS-NFR-016 |
 
 Each was built behind a **seam** rather than a vendor choice, and every closure
 confirmed the seam held: ADR-008 changed the composition root and the

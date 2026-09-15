@@ -117,8 +117,18 @@ test-migrations: ## Schema change invariants (expand/contract, notes, partitioni
 	go test ./tools/migrations/ -count=1
 
 .PHONY: test-security
-test-security: ## Security registers: risk acceptances, threat model actions, pentest gate
+test-security: ## Security registers: risk acceptances, threat model actions, pentest and drill gates
 	go test ./tools/security/ -count=1
+
+.PHONY: drills
+drills: ## Run the operational drills (SRS-SEC-002, SRS-NFR-005, SRS-NFR-016)
+	@# Not part of `ci`: each one starts real PostgreSQL instances and real
+	@# service processes and takes minutes. Run them before changing a runbook,
+	@# the backup script or the rate limiter, and quarterly per the runbooks.
+	go build -o /tmp/drill-core ./cmd/core
+	DRILL_BIN=/tmp/drill-core ./scripts/drills/rotation-drill.sh
+	DRILL_BIN=/tmp/drill-core ./scripts/drills/backup-drill.sh
+	DRILL_BIN=/tmp/drill-core ./scripts/drills/dr-drill.sh
 
 .PHONY: release-gate
 release-gate: ## Production release gate: penetration test and severity-1 defects

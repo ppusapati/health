@@ -1,0 +1,157 @@
+# Operational drill log
+
+Three Wave-0 requirements are satisfied by an activity rather than an artefact:
+
+| Requirement | Activity | Runbook | Harness |
+| --- | --- | --- | --- |
+| SRS-SEC-002 | Database credential rotation | [key-rotation.md](runbooks/key-rotation.md) | `scripts/drills/rotation-drill.sh` |
+| SRS-NFR-005 | Disaster recovery, RPO ≤ 5 min / RTO ≤ 60 min | [disaster-recovery.md](runbooks/disaster-recovery.md) | `scripts/drills/dr-drill.sh` |
+| SRS-NFR-016 | Backup with restore verification | [backup-restore.md](runbooks/backup-restore.md) | `scripts/drills/backup-drill.sh` |
+
+The machine-readable results are in `security/drill-register.yaml`, which
+`tools/security` reads; a production release is refused when the most recent
+drill for any of the three is more than 120 days old. This file is the
+narrative: what each drill found, and what it did not cover.
+
+## What these drills are, and what they are not
+
+They run the real binary against a real PostgreSQL, following the real runbook,
+and they measure. They do **not** run on Kubernetes.
+
+That limitation is not a choice. A pod sandbox sets `oom_score_adj` to -998, and
+lowering `oom_score_adj` needs `CAP_SYS_RESOURCE`, which is dropped from both
+the effective and the bounding capability set of the environment these drills
+were executed in. Every Kubernetes distribution fails identically there — kind
+and k3s were both tried, and both got as far as a running control plane and then
+could not start a single pod sandbox. So what is written below is true of the
+application, the database, the procedure and the scripts, and says nothing about
+rollouts, the mesh, external-secrets, or a cluster. **P0-12 and Gate A8 remain
+open**, and the pre-production drills the runbooks describe are still required
+before a production launch.
+
+A drill that is honest about its scope is worth more than one that is not, which
+is why every entry in the register names what it did not cover.
+
+## Why run them at all, then
+
+Because they found seven defects, and all seven are the kind that only a
+sustained, concurrent, adversarial execution of the procedure can produce. None
+of them would have been caught by reading the runbook, and several had been read
+several times.
+
+### DRILL-2026-001 — credential rotation (SRS-SEC-002)
+
+**Result: met.** 433 requests at roughly 15 per second through a full rotation.
+Zero failed.
+
+Three defects, each of which would have caused an outage during a real rotation:
+
+1. **The runbook's last step could not run.** `DROP ROLE core` fails when the
+   role owns objects, and the application's login role owned the entire schema.
+   The alternative — reassigning ownership mid-rotation — takes exclusive locks
+   across every table during a procedure whose whole promise is that callers do
+   not notice. Fixed by separating a `NOLOGIN` owner from the login roles, which
+   is now what the runbook describes and what the harness sets up.
+
+2. **The new credential was created with the wrong membership.** The runbook
+   said `CREATE ROLE core_v2 ... IN ROLE core`, which reads as "give it the same
+   privileges" and is fatal: the new role's only path to the data then runs
+   through the role that step 7 drops. The drill produced exactly that — the
+   rotation reported success and every subsequent request failed. `IN ROLE
+   core_owner` is correct and the runbook now says so, with the reason.
+
+3. **The peer-address rate limiter capped the deployment at two requests per
+   second.** The drill's own load — under five requests per second, from one
+   address — was throttled. The limiter applied the tight unauthenticated budget
+   to every request, keyed on the peer address; behind a service mesh the peer
+   address is the sidecar, so that budget is shared by the whole hospital. Fixed
+   in `internal/platform/transport/ratelimit.go`: credential-bearing traffic
+   gets a flood-scale peer budget, uncredentialed traffic keeps the tight one,
+   and `ClientAddress` recovers the real client from `X-Forwarded-For` when, and
+   only when, the immediate peer is inside a configured trusted network.
+
+The third is the one worth dwelling on. The code comment already said the peer
+address is "a weak key behind a proxy" — the fact was known and its consequence
+was not followed through. Nothing short of concurrent load through the real
+binary makes that consequence visible.
+
+### DRILL-2026-002 — backup restore verification (SRS-NFR-016)
+
+**Result: met.** Verified and published with the database quiet, verified and
+published with writes continuing throughout the dump, and a restore missing 100
+rows out of 5017 was detected.
+
+Four defects, two of them severe:
+
+1. **The job could not run under least privilege.** It creates a scratch
+   database to restore into, so it needs `CREATEDB`; it was configured to use
+   the application's credential. Making it work as configured would have meant
+   granting `CREATEDB` to the role that serves patient traffic. Fixed with a
+   separate `core-backup-database` secret, and `tools/infra` now refuses a
+   CronJob that reads `core-database`.
+
+2. **Verification covered three schemas out of twenty.** The dump covers the
+   whole database; the comparison listed `organization`, `identity_access` and
+   `platform_data` by hand. Every clinical schema added since — `empi`,
+   `clinical`, `nursing`, `orders`, `medication`, `billing`, `scheduling`,
+   `encounter` — was unverified. **A restore that lost every patient record
+   would have passed this check**, because the schemas it did compare happened to
+   be empty. Fixed to discover every schema rather than list any.
+
+3. **It compared estimates, not rows.** `n_live_tup` is maintained by the
+   statistics collector and is approximate in both directions, so the control
+   could raise a false alarm or wave through a short restore. Fixed to exact
+   `count(*)`.
+
+4. **It would have failed every night.** Row counts were taken after the dump,
+   outside its snapshot, so any write between the two made source and restored
+   disagree — and the job exits non-zero without publishing. A hospital writes at
+   one in the morning. The job would have failed most nights, published no
+   backup on those nights, and its alert would have stopped being read within a
+   fortnight. Fixed by exporting the dump's own snapshot with
+   `pg_export_snapshot()`, passing it to `pg_dump --snapshot`, and counting
+   inside the same transaction.
+
+Defects 2 and 4 interact in the worst possible way: a control that fails
+constantly for the wrong reason, and passes silently for the right one.
+
+### DRILL-2026-003 — disaster recovery (SRS-NFR-005)
+
+See `security/drill-register.yaml` for the measured RPO and RTO.
+
+The drill kills the primary with `SIGKILL` rather than shutting it down, because
+a graceful stop flushes WAL that a real failure would not, and measures the RPO
+against **the last write the user was told had been saved** rather than against
+the last WAL position — those are not the same number, and only the first one is
+what a clinician experiences. RTO runs from the declaration, not from the
+outage.
+
+The measured RTO is a floor rather than a prediction: the drill declares the
+incident immediately, and in a real event the decision is usually the largest
+single component. The runbook is explicit about this and the drill does not
+pretend otherwise.
+
+## Running them
+
+```bash
+go build -o /tmp/drill-core ./cmd/core
+DRILL_BIN=/tmp/drill-core ./scripts/drills/rotation-drill.sh
+DRILL_BIN=/tmp/drill-core ./scripts/drills/backup-drill.sh
+DRILL_BIN=/tmp/drill-core ./scripts/drills/dr-drill.sh
+```
+
+Each is self-contained: it builds its own PostgreSQL under `/tmp/health-drill`,
+applies the repository's migrations, runs, prints its numbers and tears down.
+They are not part of `make ci` — they take minutes and start real servers — but
+they are cheap enough to run before any change to a runbook, a backup script or
+the rate limiter, and that is the point of them being scripts rather than
+transcripts.
+
+## If a drill fails
+
+Record the number that was actually achieved, raise the remediation item, and
+run the next drill on schedule. Do not extend the window and retry until it
+passes: a register of nothing but passes is a register of drills that were only
+ever run when they would pass, and `tools/security` enforces that a missed
+target carries a remediation reference precisely so that recording the failure
+is cheaper than hiding it.

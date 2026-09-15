@@ -15,6 +15,14 @@ data:
   # inheriting a base default, and DATABASE_URL is a secret sourced from the
   # managed store (see encryption.yaml).
   #
+  # Also deliberately absent: RATE_LIMIT_TRUSTED_PROXIES. Which hop may be
+  # believed when it sets X-Forwarded-For is a per-environment fact — the mesh
+  # sidecar's network here, an ingress controller's there — and a base default
+  # would be a network somebody else's cluster uses. Unset means the header is
+  # ignored, which is the safe failure: rate-limit buckets become coarser, and
+  # nobody gets to choose their own. See docs/engineering/drill-log.md,
+  # DRILL-2026-001, for what goes wrong when this is left coarse behind a mesh.
+  #
   # Also deliberately absent: every BLOB_* variable. Where patient photographs,
   # scanned records and wound images are written is a per-environment decision
   # with legal consequences — which bucket, which region, which managed key —

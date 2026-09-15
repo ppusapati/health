@@ -38,11 +38,18 @@ Wave-1 UX specification names six *screen groups* rather than six web pages, and
 a ward tablet running the eMAR is a real reading of UX-W1-03 and UX-W1-05. The
 web workspaces cover them; the mobile ones do not exist.
 
-**Two gates cannot be closed in this environment.** P0-12's cluster deployment
-and the rotation and disaster-recovery drills need a Kubernetes cluster, which
-no session here has. The manifests are rendered and schema-validated by
+**P0-12's cluster deployment cannot be closed in this environment.** A
+Kubernetes pod sandbox needs `CAP_SYS_RESOURCE` to set its `oom_score_adj`, and
+that capability is dropped here, so no distribution can start a pod — kind and
+k3s were both tried. The manifests are rendered and schema-validated by
 `make manifests-validate` and their invariants are held by `tools/infra`, but
 nothing has been applied to a running cluster.
+
+The rotation, backup and disaster-recovery drills, which were also outstanding,
+**have now been executed** — against the real binary and a real PostgreSQL
+rather than a cluster. They found seven defects, three of them capable of
+causing an outage. See [`drill-log.md`](drill-log.md); the cluster half of each
+drill stays open for the same reason as P0-12.
 
 ### Deliberately out of scope, and why
 
