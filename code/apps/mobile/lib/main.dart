@@ -9,6 +9,8 @@ import 'package:flutter/material.dart';
 
 import 'src/api/api_error.dart';
 import 'src/api/connect_client.dart';
+import 'src/api/idempotency.dart';
+import 'src/api/nursing_client.dart';
 import 'src/api/organization_client.dart';
 import 'src/auth/keystore_secure_store.dart';
 import 'src/auth/session.dart';
@@ -18,8 +20,13 @@ import 'src/gen/healthcare/organization/v1/organization.pb.dart';
 import 'src/offline/file_queue_storage.dart';
 import 'src/offline/operation_queue.dart';
 import 'src/ui/app_shell.dart';
+import 'src/meds/round_controller.dart';
+import 'src/screens/medication_round_screen.dart';
+import 'src/screens/ward_worklist_screen.dart';
 import 'src/ui/states.dart';
+import 'src/ward/ward_controller.dart';
 import 'src/workspace/navigation.dart';
+import 'src/workspace/router.dart';
 
 void main() {
   final config = AppConfig.fromEnvironment();
@@ -67,6 +74,21 @@ class _HealthAppState extends State<HealthApp> {
   );
   late final OrganizationClient _organization = OrganizationClient(_connect);
   late final IdentityClient _identity = IdentityClient(_connect);
+  late final NursingClient _nursing = NursingClient(_connect);
+
+  late final WardController _ward =
+      WardController(_nursing, DateTime.now, newIdempotencyKey);
+  late final RoundController _round = RoundController(
+      _nursing, widget.queue, DateTime.now, newIdempotencyKey);
+
+  /// Where the shell currently is. Not a Navigator stack: a ward tablet has no
+  /// browser history and no deep links, and the destinations are a short list
+  /// chosen from a drawer.
+  Destination _destination = Destination.facilities;
+
+  /// The route the drawer asked for that nothing answers to, if any. Reported
+  /// rather than silently redirected — see `workspace/router.dart`.
+  String? _unknownRoute;
 
   final _tokenController = TextEditingController();
 
@@ -157,7 +179,12 @@ class _HealthAppState extends State<HealthApp> {
     // recoverable afterwards by signing back in.
     final decision = widget.drafts.evaluateNavigation(const SignOut());
     if (decision.prompt || decision.blocked) {
-      final confirmed = await _confirmDiscard(decision);
+      final confirmed = await _confirmDiscard(
+        decision,
+        title: 'Sign out and discard unsaved work?',
+        stay: 'Stay signed in',
+        proceed: 'Discard and sign out',
+      );
       if (!confirmed) return;
     }
 
@@ -167,8 +194,86 @@ class _HealthAppState extends State<HealthApp> {
       _facilities = const [];
       _error = null;
       _loaded = false;
+      // Back to the landing screen. Leaving the shell on a ward screen would
+      // show the next person to pick the tablet up the shape of the last one's
+      // work before they have signed in.
+      _destination = Destination.facilities;
+      _unknownRoute = null;
     });
   }
+
+  /// Handles a drawer tap.
+  ///
+  /// The guard runs before the screen changes, not after. A route change with
+  /// a half-entered observation behind it is the most ordinary way to lose
+  /// clinical work, and the answer here is acted on rather than logged.
+  Future<void> _navigate(String route) async {
+    final decision = decideNavigation(route: route, drafts: widget.drafts);
+
+    if (decision.guard.blocked) {
+      await _explainRefusal(decision.guard);
+      return;
+    }
+    if (decision.guard.prompt) {
+      final confirmed = await _confirmDiscard(
+        decision.guard,
+        title: 'Leave and discard unsaved work?',
+        // The words name the action being taken. A dialog that offers to sign
+        // the nurse out when they tapped a different screen is a dialog they
+        // will answer wrongly, or stop reading.
+        stay: 'Stay here',
+        proceed: 'Discard and leave',
+      );
+      if (!confirmed) return;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _unknownRoute = decision.unknownRoute ? route : null;
+      if (decision.destination != null) _destination = decision.destination!;
+    });
+  }
+
+  /// The screen the current destination names.
+  Widget _screen() {
+    if (!widget.session.isSignedIn) return _signInForm();
+
+    final unknown = _unknownRoute;
+    if (unknown != null) {
+      return Padding(
+        padding: const EdgeInsets.all(16),
+        child: ScreenState(
+          kind: ScreenStateKind.failure,
+          title: 'That screen is not in this build.',
+          // The route, because the person who can fix it is the one who wrote
+          // the catalogue entry, and they need to know which one.
+          detail: 'Nothing answers to $unknown.',
+        ),
+      );
+    }
+
+    return switch (_destination) {
+      Destination.facilities => _facilityList(),
+      Destination.ward => WardWorklistScreen(
+          view: _ward.view,
+          loading: _ward.loading,
+          failure: _ward.failure,
+          onRetry: () {},
+        ),
+      Destination.medicationRound => MedicationRoundScreen(
+          view: _round.view,
+          loading: _round.loading,
+          failure: _round.failure,
+          onRetry: () {},
+        ),
+    };
+  }
+
+  String _title() => switch (_destination) {
+        Destination.facilities => 'Facilities',
+        Destination.ward => 'Ward worklist',
+        Destination.medicationRound => 'Medication round',
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -180,7 +285,7 @@ class _HealthAppState extends State<HealthApp> {
       theme: ThemeData(useMaterial3: true, colorSchemeSeed: const Color(0xFF1C5FD6)),
       home: AppShell(
         config: widget.config,
-        title: 'Facilities',
+        title: _title(),
         session: widget.session.context,
         queueCounts: _queueCounts,
         onSignOut: widget.session.isSignedIn ? _signOut : null,
@@ -196,7 +301,8 @@ class _HealthAppState extends State<HealthApp> {
                 mergeCatalogues(const [waveZeroCatalogue, wardCatalogue]),
                 session.permissions,
               ),
-        child: widget.session.isSignedIn ? _facilityList() : _signInForm(),
+        onNavigate: _navigate,
+        child: _screen(),
       ),
     );
   }
@@ -313,12 +419,42 @@ class _HealthAppState extends State<HealthApp> {
     );
   }
 
+  /// Says why a navigation was refused outright.
+  ///
+  /// Refused rather than prompted, so there is one button: the answer is not a
+  /// choice. Saving an observation against the wrong chart is the hazard, and
+  /// no wording of "are you sure" makes it safe.
+  Future<void> _explainRefusal(GuardDecision decision) async {
+    final navigator = _navigator.currentContext;
+    if (navigator == null) return;
+
+    await showDialog<void>(
+      context: navigator,
+      builder: (context) => AlertDialog(
+        key: const Key('navigation-blocked'),
+        title: const Text('Finish this first'),
+        content: Text(describe(decision)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Stay here'),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Asks before discarding unsaved work.
   ///
   /// The drafts are named. "You have unsaved changes" is not enough to decide
   /// with: the user has to know whether the thing they are about to lose is a
   /// search box or a progress note.
-  Future<bool> _confirmDiscard(GuardDecision decision) async {
+  Future<bool> _confirmDiscard(
+    GuardDecision decision, {
+    required String title,
+    required String stay,
+    required String proceed,
+  }) async {
     final navigator = _navigator.currentContext;
     if (navigator == null) return false;
 
@@ -326,18 +462,18 @@ class _HealthAppState extends State<HealthApp> {
       context: navigator,
       builder: (context) => AlertDialog(
         key: const Key('discard-drafts'),
-        title: const Text('Sign out and discard unsaved work?'),
+        title: Text(title),
         content: Text(describe(decision)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Stay signed in'),
+            child: Text(stay),
           ),
           // Destructive, so it is not the default action and does not read like
           // one.
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Discard and sign out'),
+            child: Text(proceed),
           ),
         ],
       ),

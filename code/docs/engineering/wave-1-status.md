@@ -60,6 +60,15 @@ could not reach it at the time. An operation whose type nothing claims is
 refused rather than dropped: a queue that silently discards what it cannot route
 loses a nurse's work and reports success.
 
+The drawer reaches both screens. `lib/src/workspace/router.dart` is deliberately
+small — a ward tablet has no deep links and no browser history, so what a
+routing package would buy is not what is needed. What *is* needed is the part a
+router usually leaves to the application: **leaving a screen can be refused.** A
+route change runs through the draft guard, so navigating away from a
+half-entered observation prompts, and a route naming no screen is reported with
+the route in it rather than silently redirected home — the person who can fix a
+bad catalogue entry is the one who wrote it.
+
 **The other four screen groups are web-only**, and stay that way unless somebody
 shows a ward using them on a tablet.
 

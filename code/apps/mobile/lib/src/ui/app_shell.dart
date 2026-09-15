@@ -23,6 +23,7 @@ class AppShell extends StatelessWidget {
     this.queueCounts,
     this.onSignOut,
     this.workspace,
+    this.onNavigate,
   });
 
   final AppConfig config;
@@ -40,12 +41,20 @@ class AppShell extends StatelessWidget {
   /// action that will fail; it is not a control.
   final Workspace? workspace;
 
+  /// Where a drawer entry goes. The shell hands back a route rather than a
+  /// screen: what a route means, and whether leaving the current screen is
+  /// allowed, are decisions for `workspace/router.dart` and the draft guard,
+  /// not for a list tile.
+  final void Function(String route)? onNavigate;
+
   @override
   Widget build(BuildContext context) {
     final workspace = this.workspace;
 
     return Scaffold(
-      drawer: workspace == null ? null : _WorkspaceDrawer(workspace: workspace),
+      drawer: workspace == null
+          ? null
+          : _WorkspaceDrawer(workspace: workspace, onNavigate: onNavigate),
       appBar: AppBar(
         title: Text(title),
         actions: [
@@ -184,9 +193,22 @@ class _SyncIndicator extends StatelessWidget {
 
 /// The workspace a user's permissions produce.
 class _WorkspaceDrawer extends StatelessWidget {
-  const _WorkspaceDrawer({required this.workspace});
+  const _WorkspaceDrawer({required this.workspace, this.onNavigate});
 
   final Workspace workspace;
+  final void Function(String route)? onNavigate;
+
+  /// Closes the drawer, then asks to navigate.
+  ///
+  /// In that order: the navigation may be refused, and a drawer left open over
+  /// the dialog explaining why is a dialog nobody can read.
+  void Function()? _go(BuildContext context, String route) {
+    if (onNavigate == null) return null;
+    return () {
+      Navigator.of(context).maybePop();
+      onNavigate!(route);
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -223,6 +245,7 @@ class _WorkspaceDrawer extends StatelessWidget {
                   key: Key('worklist-${worklist.id}'),
                   leading: const Icon(Icons.checklist),
                   title: Text(worklist.label),
+                  onTap: _go(context, worklist.route),
                 ),
             ],
             if (workspace.quickActions.isNotEmpty) ...[
@@ -261,6 +284,7 @@ class _WorkspaceDrawer extends StatelessWidget {
         ListTile(
           key: Key('nav-${item.id}'),
           title: Text(item.label),
+          onTap: _go(context, item.route),
         ),
     ];
   }
