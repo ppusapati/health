@@ -1,7 +1,9 @@
 package app_test
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -10,6 +12,7 @@ import (
 	"github.com/ppusapati/health/code/internal/organization/domain"
 	"github.com/ppusapati/health/code/internal/organization/ports"
 	"github.com/ppusapati/health/code/internal/platform/authctx"
+	"github.com/ppusapati/health/code/internal/platform/blobstore"
 	"github.com/ppusapati/health/code/internal/platform/pgtx"
 )
 
@@ -314,4 +317,184 @@ func TestTenantAdminCannotProvisionTenants(t *testing.T) {
 	if got := connectCode(err); got != connect.CodePermissionDenied {
 		t.Fatalf("code = %v, want permission_denied", got)
 	}
+}
+
+// The object store is inside the isolation boundary, not beside it.
+//
+// Gate A2 carried the qualifier "object store is not yet in the stack" from
+// Wave 0, when it was true. Sprint 6 put one there (SRS-DAT-007), and an
+// object store is precisely where a tenant boundary gets quietly lost: the
+// bytes live outside PostgreSQL, so none of the row-level scoping the rest of
+// A2 proves applies to them. A scanned consent form, a wound photograph and a
+// signature are all PHI that the database never sees.
+//
+// These exercise the vault the application was actually built with, reached
+// through h.blobs, rather than a second vault configured the same way.
+func TestCrossTenantBlobReadIsNotFound(t *testing.T) {
+	h := newHarness(t)
+	fx := setupTwoTenants(t, h)
+	ctx := context.Background()
+
+	scopeA := blobScope(fx.tenantA)
+	scopeB := blobScope(fx.tenantB)
+
+	consent := []byte("tenant A signed consent form")
+	object, err := h.blobs.Put(ctx, scopeA, blobstore.ClassClinicalAttachment,
+		"application/pdf", consent)
+	if err != nil {
+		t.Fatalf("tenant A Put: %v", err)
+	}
+
+	// Tenant B holding tenant A's exact reference — the leaked-row case, which
+	// is the only way B ever learns a reference at all.
+	if _, err := h.blobs.Get(ctx, scopeB, object.Reference); err == nil {
+		t.Fatal("object store served another tenant's content")
+	} else if !errors.Is(err, blobstore.ErrNotFound) {
+		// Not found rather than forbidden: a reference that answers
+		// "forbidden" has confirmed it exists, which is the fact the probe
+		// wanted. Same reasoning as NOT_FOUND over the RPC boundary above.
+		t.Fatalf("cross-tenant read: want ErrNotFound, got %v", err)
+	}
+
+	got, err := h.blobs.Get(ctx, scopeA, object.Reference)
+	if err != nil {
+		t.Fatalf("owning tenant denied its own object: %v", err)
+	}
+	if !bytes.Equal(got, consent) {
+		t.Fatal("owning tenant got back content it did not store")
+	}
+}
+
+// A cross-tenant delete is worse than a cross-tenant read: the read leaks,
+// the delete destroys. Tested separately because Get and Delete are separate
+// entry points and a tenant check on one is not a tenant check on the other.
+func TestCrossTenantBlobDeleteDoesNothing(t *testing.T) {
+	h := newHarness(t)
+	fx := setupTwoTenants(t, h)
+	ctx := context.Background()
+
+	scopeA := blobScope(fx.tenantA)
+	scopeB := blobScope(fx.tenantB)
+
+	image := []byte("tenant A wound photograph")
+	object, err := h.blobs.Put(ctx, scopeA, blobstore.ClassWoundImage, "image/jpeg", image)
+	if err != nil {
+		t.Fatalf("tenant A Put: %v", err)
+	}
+
+	// Delete is idempotent by design, so "no error" would be the answer for an
+	// object that was already gone. What matters is the effect, asserted
+	// below: A's object is still there.
+	if err := h.blobs.Delete(ctx, scopeB, object.Reference); err == nil {
+		t.Fatal("object store accepted a delete of another tenant's content")
+	} else if !errors.Is(err, blobstore.ErrNotFound) {
+		t.Fatalf("cross-tenant delete: want ErrNotFound, got %v", err)
+	}
+
+	got, err := h.blobs.Get(ctx, scopeA, object.Reference)
+	if err != nil {
+		t.Fatalf("tenant A's object did not survive tenant B's delete: %v", err)
+	}
+	if !bytes.Equal(got, image) {
+		t.Fatal("tenant A's content changed under tenant B's delete")
+	}
+}
+
+// Two tenants storing byte-identical content must not end up sharing one
+// object.
+//
+// This is the failure mode that content-addressed storage invites: key on the
+// digest, notice that the same bytes are already stored, and "deduplicate".
+// Then one tenant withdrawing consent deletes the other tenant's document, and
+// a tenant can confirm another tenant holds a particular file by storing it
+// and watching the write get skipped. The tenant is the first path segment
+// here precisely so that identical content is two objects.
+func TestIdenticalContentInTwoTenantsIsTwoObjects(t *testing.T) {
+	h := newHarness(t)
+	fx := setupTwoTenants(t, h)
+	ctx := context.Background()
+
+	scopeA := blobScope(fx.tenantA)
+	scopeB := blobScope(fx.tenantB)
+
+	// A blank consent form both hospitals print from the same template: the
+	// realistic way two tenants come to hold identical bytes.
+	form := []byte("MINISTRY OF HEALTH :: CONSENT FORM 2B :: (blank)")
+
+	objectA, err := h.blobs.Put(ctx, scopeA, blobstore.ClassClinicalAttachment,
+		"application/pdf", form)
+	if err != nil {
+		t.Fatalf("tenant A Put: %v", err)
+	}
+	objectB, err := h.blobs.Put(ctx, scopeB, blobstore.ClassClinicalAttachment,
+		"application/pdf", form)
+	if err != nil {
+		t.Fatalf("tenant B Put: %v", err)
+	}
+
+	if objectA.Digest != objectB.Digest {
+		t.Fatal("identical content hashed differently; the digests should match")
+	}
+
+	// The references differ, but that alone proves nothing: every Put mints a
+	// fresh object id, so two uploads of the same bytes into the SAME tenant
+	// differ too. What has to be true is where the bytes landed — each under
+	// its own tenant's prefix, which is what lets a bucket policy grant access
+	// per tenant as defence in depth behind this check.
+	refA, err := blobstore.ParseReference(objectA.Reference)
+	if err != nil {
+		t.Fatalf("parse tenant A reference: %v", err)
+	}
+	refB, err := blobstore.ParseReference(objectB.Reference)
+	if err != nil {
+		t.Fatalf("parse tenant B reference: %v", err)
+	}
+	if refA.TenantID != fx.tenantA {
+		t.Fatalf("tenant A's object is stored under %q, not %q", refA.TenantID, fx.tenantA)
+	}
+	if refB.TenantID != fx.tenantB {
+		t.Fatalf("tenant B's object is stored under %q, not %q", refB.TenantID, fx.tenantB)
+	}
+
+	// The destructive half: A withdraws consent, B still has its copy.
+	if err := h.blobs.Delete(ctx, scopeA, objectA.Reference); err != nil {
+		t.Fatalf("tenant A Delete: %v", err)
+	}
+	got, err := h.blobs.Get(ctx, scopeB, objectB.Reference)
+	if err != nil {
+		t.Fatalf("tenant B's copy was destroyed by tenant A's delete: %v", err)
+	}
+	if !bytes.Equal(got, form) {
+		t.Fatal("tenant B's copy changed when tenant A deleted theirs")
+	}
+}
+
+// An empty TenantScope must fail closed at the object store the same way it
+// does at the repository, rather than writing to a tenant-less prefix that
+// every tenant can then read.
+func TestZeroTenantScopeIsRefusedByTheObjectStore(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+
+	var zero authctx.TenantScope
+
+	if _, err := h.blobs.Put(ctx, zero, blobstore.ClassSignature, "image/png",
+		[]byte("a signature")); err == nil {
+		t.Fatal("zero scope was accepted by Put")
+	}
+	if _, err := h.blobs.Get(ctx, zero, "filesystem/t/signature/o/d"); err == nil {
+		t.Fatal("zero scope was accepted by Get")
+	}
+	if err := h.blobs.Delete(ctx, zero, "filesystem/t/signature/o/d"); err == nil {
+		t.Fatal("zero scope was accepted by Delete")
+	}
+}
+
+// blobScope builds the tenant scope the object store is called with. The
+// subject is an attacker's by name: every caller here is reaching for content
+// stored by somebody else.
+func blobScope(tenantID string) authctx.TenantScope {
+	return authctx.NewSession(authctx.Session{
+		SubjectID: "attacker", TenantID: tenantID,
+	}).TenantScope()
 }

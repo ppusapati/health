@@ -92,15 +92,30 @@ bad catalogue entry is the one who wrote it.
 **The other four screen groups are web-only**, and stay that way unless somebody
 shows a ward using them on a tablet.
 
-**P0-12's cluster deployment cannot be closed in this environment.** A
-Kubernetes pod sandbox needs `CAP_SYS_RESOURCE` to set its `oom_score_adj`, and
-that capability is dropped here, so no distribution can start a pod — kind and
-k3s were both tried. The control plane itself works and is used:
-`make manifests-admission` applies every overlay to a real API server, covering
-the four objects per overlay that `kubeconform` skips for want of a schema, and
-shows pod security refusing a privileged variant of the shipped Deployment. So
-"the manifests are acceptable to Kubernetes" is demonstrated; **"the workload
-runs" is not**, and that is what stays open.
+**P0-12's cluster deployment cannot be closed in this environment**, though
+what stays open is now narrower than the whole of it. A Kubernetes pod sandbox
+needs `CAP_SYS_RESOURCE` to set its `oom_score_adj`, and that capability is
+dropped here, so no distribution can start a pod — kind and k3s were both
+tried. Plain containers do run, which is what makes that a specific diagnosis
+rather than a broken environment, and it lets both halves either side of
+kubelet be exercised.
+
+The control plane half: `make manifests-admission` applies every overlay to a
+real API server, covering the four objects per overlay that `kubeconform` skips
+for want of a schema, and shows pod security refusing a privileged variant of
+the shipped Deployment.
+
+The workload half: the image runs under the container-level security context
+the Deployment declares — non-root 65532, read-only root filesystem, every
+capability dropped, no privilege escalation — answers both manifest probes,
+carries the Milestone-1 slice and the Milestone-2 cross-tenant denial end to
+end, and drains on `SIGTERM` in 72 ms against a 30 s grace period. Running it
+found a defect that no unit test would: the outbox publisher reported the same
+drain failure four times a second for as long as an outage lasted and never
+reported recovering. See [`drill-log.md`](drill-log.md).
+
+**What stays open is kubelet in the middle** — the rollout, the probe
+scheduler, the disruption budget, the network policy and the mesh.
 
 The rotation, backup and disaster-recovery drills, which were also outstanding,
 **have now been executed** — against the real binary and a real PostgreSQL

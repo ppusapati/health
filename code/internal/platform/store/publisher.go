@@ -118,6 +118,17 @@ func (p *Publisher) PublishBatch(ctx context.Context, now time.Time) (int, error
 // aggregate committing and its event reaching a consumer.
 const DefaultPublishInterval = 250 * time.Millisecond
 
+// DrainFailureReportInterval throttles repeated reports of the same drain
+// failure.
+//
+// The drain retries every DefaultPublishInterval, so an unreachable database
+// produces four identical lines per second per replica for as long as the
+// outage lasts — tens of thousands of them over a half-hour incident, which is
+// precisely the incident whose logs somebody needs to read. The failure still
+// has to be visible immediately, so the first one is logged at once and only
+// the repetitions are throttled.
+const DrainFailureReportInterval = 30 * time.Second
+
 // Run drains the outbox until the context is cancelled.
 //
 // Drains to empty before waiting again, for the same reason the consumer
@@ -136,6 +147,16 @@ func (p *Publisher) Run(ctx context.Context, interval time.Duration) error {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
+	// Failure state, reset the moment a cycle succeeds. Local rather than on
+	// the Publisher because it describes this loop's run, not the publisher:
+	// two Runs would otherwise report each other's outage.
+	var (
+		failingSince time.Time
+		failures     int
+		reportedErr  string
+		reportedAt   time.Time
+	)
+
 	for {
 		for {
 			published, err := p.PublishBatch(ctx, time.Now().UTC())
@@ -143,8 +164,34 @@ func (p *Publisher) Run(ctx context.Context, interval time.Duration) error {
 				if ctx.Err() != nil {
 					return ctx.Err()
 				}
-				slog.ErrorContext(ctx, "outbox drain failed", slog.String("error", err.Error()))
+				now := time.Now()
+				failures++
+				if failingSince.IsZero() {
+					failingSince = now
+				}
+				// A changed message is a changed fault and is always reported:
+				// "connection refused" becoming "relation does not exist" is
+				// the sentence that tells an operator what actually happened.
+				if message := err.Error(); message != reportedErr ||
+					now.Sub(reportedAt) >= DrainFailureReportInterval {
+					slog.ErrorContext(ctx, "outbox drain failed",
+						slog.String("error", message),
+						slog.Int("consecutive_failures", failures),
+						slog.Duration("failing_for", now.Sub(failingSince)))
+					reportedErr = message
+					reportedAt = now
+				}
 				break
+			}
+			if failures > 0 {
+				// Recovery is a separate line because its absence is the
+				// question an operator is actually asking. A stream that just
+				// stops reporting failures looks the same as a publisher that
+				// died.
+				slog.InfoContext(ctx, "outbox drain recovered",
+					slog.Int("consecutive_failures", failures),
+					slog.Duration("failing_for", time.Since(failingSince)))
+				failingSince, failures, reportedErr, reportedAt = time.Time{}, 0, "", time.Time{}
 			}
 			// A short batch means the backlog is clear. Looping again would
 			// be a wasted query per cycle.

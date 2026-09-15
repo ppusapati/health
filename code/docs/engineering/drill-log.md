@@ -188,6 +188,88 @@ is the obvious next step; it has not been done because it cannot be verified
 from the environment these checks were executed in, and shipping an unverified
 CI job is how a pipeline goes red on somebody else's change.
 
+## The workload under its own security context
+
+Also not a drill, and for the same reason as the section above: what could not
+be done here was running the workload *under kubelet*, so this establishes as
+much of "the workload runs" as the environment allows and says plainly where
+it stops.
+
+A pod sandbox cannot start here — `CAP_SYS_RESOURCE` is dropped, and the
+sandbox needs it to set `oom_score_adj` — but plain containers run fine, which
+is what makes this possible at all and also confirms the original diagnosis was
+specific rather than "containers do not work".
+
+The runtime image was run with the container-level controls the Deployment
+declares, set one for one:
+
+| Deployment | Runtime |
+|---|---|
+| `runAsUser: 65532`, `runAsNonRoot` | `--user 65532:65532` |
+| `readOnlyRootFilesystem: true` | `--read-only` |
+| `capabilities.drop: ["ALL"]` | `--cap-drop ALL` |
+| `allowPrivilegeEscalation: false` | `--security-opt no-new-privileges` |
+| `tmp` emptyDir | `--tmpfs /tmp` |
+| `core-config` + the database secret | the same variables, `AUTH_MODE=dev`, `TLS_MODE=mesh` |
+
+Under those constraints, against a PostgreSQL carrying the migrations exactly
+as `db/migrations` ships them:
+
+- the service starts, and says so: `core service listening addr=:8080 tls_mode=mesh`
+- both probes the manifest declares answer 200 on their real paths, and
+  readiness reports its dependency — `{"ready":true,"dependencies":{"postgres":true}}`
+- the Milestone-1 slice runs end to end through the container: `CreateTenant`
+  then `CreateFacility`, leaving 2 audit records and 2 outbox events
+- the Milestone-2 denial holds through the container: a second tenant asking
+  for the first tenant's facility gets `not_found`, not `permission_denied`
+- an incomplete request is refused by the domain with field violations and a
+  correlation id, so the error contract survives the wire
+- there is no shell to exec into: `/bin/sh` and `/bin/bash` are both absent
+- `SIGTERM` drains in **72 ms** against a `terminationGracePeriodSeconds: 30`,
+  exiting 0
+
+**What this is not.** No kubelet, so nothing here exercises the probe scheduler,
+the readiness gate's effect on endpoints, the rollout, the PodDisruptionBudget,
+the NetworkPolicy or the mesh. Those are properties of the orchestrator, and
+they remain untested. What it removes from doubt is the other half: the image
+runs, under the security context the manifests ask for, and serves the system's
+own gate criteria.
+
+### What it found
+
+Running it surfaced a defect that no unit test would, because it only appears
+when the process stays up across a failure:
+
+**The outbox publisher reported the same failure forever, and its recovery
+never at all.** With the database reachable but the schema absent, the drain
+retried every 250 ms and logged one identical `ERROR` line per attempt — four a
+second, per replica, for as long as the outage lasted. Over a half-hour
+incident that is tens of thousands of identical lines burying the diagnostics
+somebody needs during exactly that incident, and when the fault cleared the
+stream simply stopped complaining, which looks the same as a publisher that
+died.
+
+The retry is not what was wrong and did not change: the outbox is durable, so
+waiting loses nothing, and a publisher that exits on a transient database error
+takes the events with it. What changed is the reporting. The first failure is
+logged immediately, repetitions are throttled to one line per
+`DrainFailureReportInterval` (30 s), a changed error message is always reported
+because a changed message is a changed fault, and recovery gets its own line
+carrying how long the outage lasted and how many attempts it covered.
+
+Measured in the container before and after, over 12 seconds of continuous
+failure: **48 lines before, 1 after**, with the recovery line accounting for the
+148 attempts the regression test observes it swallowing.
+
+Evidence: `TestRepeatedDrainFailureIsReportedOnceThenThrottled`, which asserts
+one failure line and one recovery line across many failing ticks — and asserts
+the recovery line reports at least ten swallowed attempts, so it cannot pass by
+the drain having been attempted only once.
+
+Not a severity-1 defect and deliberately not in `security/defect-register.yaml`:
+nothing is lost, corrupted or exposed. That register is narrow on purpose, and
+filling it with severe-but-recoverable faults is how it stops being read.
+
 ## Running them
 
 ```bash

@@ -1,9 +1,15 @@
 package store_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
+	"regexp"
+	"strconv"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -280,4 +286,110 @@ func TestInvalidEnvelopeRejectedBeforeInsert(t *testing.T) {
 	if err == nil {
 		t.Fatal("event without correlation ID was accepted")
 	}
+}
+
+// A drain that keeps failing must report the fault immediately and then stop
+// repeating itself.
+//
+// Found by running the container against a database with no schema: the drain
+// retries every 250ms and logged one identical ERROR line per attempt, with
+// nothing to say when it recovered. Four lines a second per replica buries the
+// diagnostics in exactly the incident whose logs somebody needs, and a stream
+// that merely stops complaining looks the same as a publisher that died.
+//
+// The retry itself is correct and is not what changed — the outbox is durable,
+// so waiting loses nothing, and a publisher that exits on a transient database
+// error takes the events with it.
+func TestRepeatedDrainFailureIsReportedOnceThenThrottled(t *testing.T) {
+	pool := pgtest.New(t)
+	ctx := context.Background()
+
+	// The outage this reproduces is the one that was actually observed: the
+	// table the drain reads is not there.
+	if _, err := pool.Exec(ctx,
+		`ALTER TABLE platform_data.outbox_event RENAME TO outbox_event_hidden`); err != nil {
+		t.Fatalf("hide the outbox table: %v", err)
+	}
+
+	var buf lockedBuffer
+	restore := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	t.Cleanup(func() { slog.SetDefault(restore) })
+
+	s := store.New(pgtx.NewManager(pool))
+	publisher := store.NewPublisher(s, &recordingBroker{}, 10)
+
+	// Many ticks, all inside DrainFailureReportInterval, so every report after
+	// the first is a repetition the throttle should swallow.
+	runCtx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = publisher.Run(runCtx, time.Millisecond)
+	}()
+	time.Sleep(150 * time.Millisecond)
+
+	if got := strings.Count(buf.String(), `"msg":"outbox drain failed"`); got != 1 {
+		t.Fatalf("drain failures reported %d times over ~150 ticks, want exactly 1", got)
+	}
+	// The one report has to carry what an operator needs: how long, how many.
+	if !strings.Contains(buf.String(), `"consecutive_failures":1`) {
+		t.Fatal("the failure report does not say how many attempts have failed")
+	}
+
+	// Recovery must be announced, not merely implied by the complaints ending.
+	if _, err := pool.Exec(ctx,
+		`ALTER TABLE platform_data.outbox_event_hidden RENAME TO outbox_event`); err != nil {
+		t.Fatalf("restore the outbox table: %v", err)
+	}
+	time.Sleep(150 * time.Millisecond)
+	cancel()
+	<-done
+
+	out := buf.String()
+	if !strings.Contains(out, `"msg":"outbox drain recovered"`) {
+		t.Fatal("the drain recovered and said nothing")
+	}
+	if got := strings.Count(out, `"msg":"outbox drain recovered"`); got != 1 {
+		t.Fatalf("recovery reported %d times, want 1 — it is an edge, not a state", got)
+	}
+	if got := strings.Count(out, `"msg":"outbox drain failed"`); got != 1 {
+		t.Fatalf("drain failures reported %d times in total, want 1", got)
+	}
+
+	// Without this the test would also pass if the drain had simply been
+	// attempted once: the point is that many attempts failed and one line was
+	// written, so the recovery line has to show the attempts that were
+	// swallowed.
+	swallowed := regexp.MustCompile(`"msg":"outbox drain recovered","consecutive_failures":(\d+)`).
+		FindStringSubmatch(out)
+	if swallowed == nil {
+		t.Fatal("the recovery line does not report how many attempts failed")
+	}
+	attempts, err := strconv.Atoi(swallowed[1])
+	if err != nil {
+		t.Fatalf("unreadable failure count %q: %v", swallowed[1], err)
+	}
+	if attempts < 10 {
+		t.Fatalf("only %d attempts failed; too few to show the repetitions were throttled", attempts)
+	}
+}
+
+// lockedBuffer is a bytes.Buffer safe for the publisher goroutine to write
+// while the test reads it.
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }

@@ -32,6 +32,9 @@ import (
 type harness struct {
 	pool   *pgxpool.Pool
 	server *httptest.Server
+	// blobs is the very vault app.New was handed, not a second one built the
+	// same way. An isolation test against a lookalike proves the lookalike.
+	blobs  *blobstore.Vault
 	org    organizationv1connect.OrganizationServiceClient
 	ident  identityaccessv1connect.IdentityServiceClient
 	health platformapiv1connect.HealthServiceClient
@@ -57,10 +60,11 @@ func newHarnessWithRateLimit(t *testing.T, limit platformtransport.RateLimitConf
 		t.Fatalf("devauth.New: %v", err)
 	}
 
+	blobs := testBlobs(t)
 	built := app.New(app.Deps{
 		Pool:      pool,
 		Verifier:  verifier,
-		Blobs:     testBlobs(t),
+		Blobs:     blobs,
 		Build:     platformapitransport.BuildInfo{Version: "test", Commit: "test", BuiltAt: "test"},
 		RateLimit: limit,
 	})
@@ -72,6 +76,7 @@ func newHarnessWithRateLimit(t *testing.T, limit platformtransport.RateLimitConf
 	return &harness{
 		pool:   pool,
 		server: server,
+		blobs:  blobs,
 		org:    organizationv1connect.NewOrganizationServiceClient(client, server.URL),
 		ident:  identityaccessv1connect.NewIdentityServiceClient(client, server.URL),
 		health: platformapiv1connect.NewHealthServiceClient(client, server.URL),
