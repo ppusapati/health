@@ -31,18 +31,20 @@ role workspaces the UX specification names are built on the web. Two things
 remain.
 
 **The Flutter application covers the ward, not the desk.** It carries the
-Wave-0 foundation and now two of the six Wave-1 screen groups:
+Wave-0 foundation and now the two Wave-1 screen groups a ward device needs,
+plus the screen that gets a nurse to a patient:
 
 | Screen group | Where |
 |---|---|
 | UX-W1-03 ward worklist and observation charting | `lib/src/ward/`, `lib/src/screens/ward_worklist_screen.dart`, `observation_form.dart` |
 | UX-W1-05 medication round (eMAR) | `lib/src/meds/`, `lib/src/screens/medication_round_screen.dart` |
+| Patient selection, which both of the above need | `lib/src/patient/caseload.dart`, `lib/src/screens/patient_picker_screen.dart` |
 
-Two, not six, and that is a decision rather than a shortfall. A tablet carried
-on a round is for the work done standing up; reception, the chart, orders and
-billing are desk work, and putting a billing screen on a ward device offers a
-nurse a way to get lost. `wardCatalogue` in `lib/src/workspace/navigation.dart`
-is where the argument is written down.
+Two of the six numbered groups, not all six, and that is a decision rather than
+a shortfall. A tablet carried on a round is for the work done standing up;
+reception, the chart, orders and billing are desk work, and putting a billing
+screen on a ward device offers a nurse a way to get lost. `wardCatalogue` in
+`lib/src/workspace/navigation.dart` is where the argument is written down.
 
 What the mobile shell does that the web one cannot: an administration recorded
 out of network coverage is queued with the idempotency key minted at the bedside
@@ -60,11 +62,29 @@ could not reach it at the time. An operation whose type nothing claims is
 refused rather than dropped: a queue that silently discards what it cannot route
 loses a nurse's work and reports success.
 
-The drawer reaches both screens. `lib/src/workspace/router.dart` is deliberately
-small — a ward tablet has no deep links and no browser history, so what a
-routing package would buy is not what is needed. What *is* needed is the part a
-router usually leaves to the application: **leaving a screen can be refused.** A
-route change runs through the draft guard, so navigating away from a
+**A patient is reached from the nurse's own caseload, in bed order.** That is
+the shape of the work: a round is a walk down a corridor, so the list is ordered
+by unit and then by bed, with bed numbers compared as numbers — a ward that
+sorts bed 10 between bed 1 and bed 2 sends a nurse back down the corridor.
+Scanning a wristband is the way off that list, and searching by name is the
+fallback for a band that will not read.
+
+The property worth stating loudly is what falls out of having three ways in: **a
+patient reached by scanning has had their identity verified, and a patient
+picked off a list has not.** `PatientSelection.identityVerified` is true only
+for `SelectionMethod.scan`, so the eMAR's barcode gate reads a fact rather than
+re-deriving one. A scan that matches nothing says *"check the band"*; a scan
+that matches more than one patient says *"do not proceed from this band — tell
+the ward clerk"* and offers no way to pick between them, because the one thing
+that must not happen is a nurse resolving a duplicate at the bedside. The lookup
+asks for two results precisely so a duplicate is visible as a duplicate rather
+than arriving as a confident single answer.
+
+The drawer reaches all three screens. `lib/src/workspace/router.dart` is
+deliberately small — a ward tablet has no deep links and no browser history, so
+what a routing package would buy is not what is needed. What *is* needed is the
+part a router usually leaves to the application: **leaving a screen can be
+refused.** A route change runs through the draft guard, so navigating away from a
 half-entered observation prompts, and a route naming no screen is reported with
 the route in it rather than silently redirected home — the person who can fix a
 bad catalogue entry is the one who wrote it.

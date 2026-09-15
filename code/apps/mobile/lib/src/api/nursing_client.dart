@@ -47,6 +47,27 @@ class NursingClient {
     );
   }
 
+  /// The patients assigned to one nurse, as of now.
+  ///
+  /// This is the caseload a round is worked from. `asOf` is left to the server
+  /// rather than sent from the device: a tablet with a wrong clock would
+  /// otherwise ask for the caseload of a shift that has not started.
+  Future<ListAssignmentsResponse> listAssignments({
+    required String nurseId,
+    String unitId = '',
+    int pageSize = 50,
+  }) {
+    return _connect.unary(
+      procedure: '$_service/ListAssignments',
+      request: ListAssignmentsRequest(
+        nurseId: nurseId,
+        unitId: unitId,
+        pageSize: pageSize,
+      ),
+      parse: ListAssignmentsResponse.fromBuffer,
+    );
+  }
+
   /// Marks a task done, with what was done.
   ///
   /// `evidence` is not decoration: a task closed with no record of what

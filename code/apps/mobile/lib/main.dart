@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'src/api/api_error.dart';
 import 'src/api/connect_client.dart';
 import 'src/api/idempotency.dart';
+import 'src/api/empi_client.dart';
 import 'src/api/nursing_client.dart';
 import 'src/api/organization_client.dart';
 import 'src/auth/keystore_secure_store.dart';
@@ -21,6 +22,9 @@ import 'src/offline/file_queue_storage.dart';
 import 'src/offline/operation_queue.dart';
 import 'src/ui/app_shell.dart';
 import 'src/meds/round_controller.dart';
+import 'src/patient/caseload.dart';
+import 'src/patient/caseload_controller.dart';
+import 'src/screens/patient_picker_screen.dart';
 import 'src/screens/medication_round_screen.dart';
 import 'src/screens/ward_worklist_screen.dart';
 import 'src/ui/states.dart';
@@ -75,6 +79,8 @@ class _HealthAppState extends State<HealthApp> {
   late final OrganizationClient _organization = OrganizationClient(_connect);
   late final IdentityClient _identity = IdentityClient(_connect);
   late final NursingClient _nursing = NursingClient(_connect);
+  late final EmpiClient _empi = EmpiClient(_connect);
+  late final CaseloadController _caseload = CaseloadController(_nursing, _empi);
 
   late final WardController _ward =
       WardController(_nursing, DateTime.now, newIdempotencyKey);
@@ -89,6 +95,12 @@ class _HealthAppState extends State<HealthApp> {
   /// The route the drawer asked for that nothing answers to, if any. Reported
   /// rather than silently redirected — see `workspace/router.dart`.
   String? _unknownRoute;
+
+  /// Who the clinical screens are about, and how they came to be chosen.
+  ///
+  /// Null until a patient is picked, which is why both screens open in their
+  /// "choose a patient" state rather than showing an empty list.
+  PatientSelection? _patient;
 
   final _tokenController = TextEditingController();
 
@@ -199,6 +211,8 @@ class _HealthAppState extends State<HealthApp> {
       // work before they have signed in.
       _destination = Destination.facilities;
       _unknownRoute = null;
+      // The next person to pick the tablet up must not inherit a patient.
+      _patient = null;
     });
   }
 
@@ -232,6 +246,82 @@ class _HealthAppState extends State<HealthApp> {
       _unknownRoute = decision.unknownRoute ? route : null;
       if (decision.destination != null) _destination = decision.destination!;
     });
+
+    // The picker is the one screen that fetches on arrival. The clinical
+    // screens are about a patient, and loading them before one is chosen would
+    // be asking the server about nobody.
+    if (decision.destination == Destination.patients) await _loadCaseload();
+  }
+
+  /// Opens a patient.
+  ///
+  /// Switching patients is the navigation the draft guard refuses rather than
+  /// prompts: a half-entered observation saved against the wrong chart is the
+  /// hazard, and there is no wording of "are you sure" that makes it safe.
+  Future<void> _openPatient(PatientSelection selection) async {
+    if (_patient != null && _patient!.patientId != selection.patientId) {
+      final decision =
+          widget.drafts.evaluateNavigation(PatientSwitch(selection.patientId));
+      if (decision.blocked) {
+        await _explainRefusal(decision);
+        return;
+      }
+      if (decision.prompt) {
+        final confirmed = await _confirmDiscard(
+          decision,
+          title: 'Open a different patient and discard unsaved work?',
+          stay: 'Stay with this patient',
+          proceed: 'Discard and open',
+        );
+        if (!confirmed) return;
+      }
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _patient = selection;
+      _destination = Destination.ward;
+    });
+    await _loadPatient();
+  }
+
+  /// Loads both clinical screens for the chosen patient.
+  Future<void> _loadPatient() async {
+    final patient = _patient;
+    final session = widget.session.context;
+    if (patient == null || session == null) return;
+
+    final now = DateTime.now();
+    await _ward.load(encounterId: patient.encounterId);
+    await _round.load(
+      encounterId: patient.encounterId,
+      patientId: patient.patientId,
+      facilityId: session.activeFacilityId,
+      // The round in front of the nurse: an hour either side of now, which is
+      // long enough to catch a dose running late and short enough not to show
+      // tomorrow's.
+      from: now.subtract(const Duration(hours: 1)),
+      to: now.add(const Duration(hours: 1)),
+    );
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _loadCaseload() async {
+    final session = widget.session.context;
+    if (session == null) return;
+    await _caseload.load(nurseId: session.subjectId);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _scan(String barcode) async {
+    final selection = await _caseload.scan(barcode);
+    if (!mounted) return;
+    if (selection == null) {
+      // The problem is on the picker's own view; nothing else to do.
+      setState(() {});
+      return;
+    }
+    await _openPatient(selection);
   }
 
   /// The screen the current destination names.
@@ -254,23 +344,36 @@ class _HealthAppState extends State<HealthApp> {
 
     return switch (_destination) {
       Destination.facilities => _facilityList(),
+      Destination.patients => PatientPickerScreen(
+          view: _caseload.view,
+          loading: _caseload.loading,
+          failure: _caseload.failure,
+          onRetry: _loadCaseload,
+          onSelect: _openPatient,
+          onScan: _scan,
+          onSearch: (name) async {
+            await _caseload.search(name);
+            if (mounted) setState(() {});
+          },
+        ),
       Destination.ward => WardWorklistScreen(
           view: _ward.view,
           loading: _ward.loading,
           failure: _ward.failure,
-          onRetry: () {},
+          onRetry: _loadPatient,
         ),
       Destination.medicationRound => MedicationRoundScreen(
           view: _round.view,
           loading: _round.loading,
           failure: _round.failure,
-          onRetry: () {},
+          onRetry: _loadPatient,
         ),
     };
   }
 
   String _title() => switch (_destination) {
         Destination.facilities => 'Facilities',
+        Destination.patients => 'My patients',
         Destination.ward => 'Ward worklist',
         Destination.medicationRound => 'Medication round',
       };

@@ -181,7 +181,8 @@ void main() {
         'nursing.administration.write',
       ]);
 
-      expect(workspace.navigation.map((i) => i.id), ['ward', 'medication-round']);
+      expect(workspace.navigation.map((i) => i.id),
+          ['patients', 'ward', 'medication-round']);
       expect(workspace.worklists.map((w) => w.id),
           ['doses-due', 'observations-due']);
       expect(workspace.empty, isFalse);
@@ -208,6 +209,8 @@ void main() {
       final workspace =
           buildWorkspace(wardCatalogue, ['nursing.administration.read']);
 
+      // No 'patients': that entry needs nursing.task.read, which this nurse
+      // does not hold.
       expect(workspace.navigation.map((i) => i.id), ['medication-round']);
       expect(workspace.quickActions, isEmpty);
     });
@@ -233,7 +236,9 @@ void main() {
       );
 
       expect(administrator.navigation.map((i) => i.id), ['facilities']);
-      expect(nurse.navigation.map((i) => i.id), ['ward']);
+      // The picker rides on the same permission as the worklist: a nurse who
+      // may see the work may see whose work it is.
+      expect(nurse.navigation.map((i) => i.id), ['patients', 'ward']);
     });
   });
 }

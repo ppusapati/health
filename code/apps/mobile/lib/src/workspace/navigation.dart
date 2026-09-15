@@ -195,6 +195,15 @@ const WorkspaceCatalogue waveZeroCatalogue = WorkspaceCatalogue(
 const WorkspaceCatalogue wardCatalogue = WorkspaceCatalogue(
   navigation: [
     NavItem(
+      id: 'patients',
+      label: 'My patients',
+      route: '/patients',
+      // The same permission the worklist needs: a nurse who may see the work
+      // may see whose work it is.
+      requires: 'nursing.task.read',
+      section: WorkspaceSection.clinical,
+    ),
+    NavItem(
       id: 'ward',
       label: 'Ward worklist',
       route: '/ward',

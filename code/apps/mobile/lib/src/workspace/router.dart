@@ -23,6 +23,9 @@ enum Destination {
   /// The signed-in landing screen: facilities, from Wave 0.
   facilities,
 
+  /// Choosing a patient: the nurse's caseload, a wristband scan, a search.
+  patients,
+
   /// The ward worklist (UX-W1-03).
   ward,
 
@@ -37,6 +40,7 @@ enum Destination {
 /// this file.
 const Map<String, Destination> routes = {
   '/facilities': Destination.facilities,
+  '/patients': Destination.patients,
   '/ward': Destination.ward,
   '/medications/round': Destination.medicationRound,
 };
