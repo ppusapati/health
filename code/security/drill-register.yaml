@@ -138,3 +138,66 @@ drills:
         recovery did not leave a state change without the event that tells
         downstream systems about it.
     remediation: ""
+
+  - id: DRILL-2026-004
+    kind: rolling-update
+    requirement: SRS-NFR-002
+    executed_on: "2026-09-16"
+    environment: kind cluster, dev overlay, single node
+    procedure: docs/engineering/runbooks/core.md
+    harness: scripts/drills/rollout-drill.sh
+    scope: >-
+      A rolling replacement of the running version while an in-cluster client
+      asks for a real RPC every 100ms through the Service. The Deployment
+      claims maxUnavailable 0 and carries a PodDisruptionBudget; both are
+      assertions about what happens during a rollout, and a manifest test can
+      only read the numbers. Does NOT cover a multi-node cluster, a cross-zone
+      rollout, or production concurrency -- one node means the replacement
+      lands on the same kubelet, which is the easy case, so the figure below is
+      a floor.
+    measured:
+      runs: "3 consecutive"
+      requests: "589, 589, 589"
+      served: "589, 589, 589"
+      dropped: "0, 0, 0"
+      sensitivity: >-
+        Scaling to zero mid-run produced 63 transport errors in 186 requests,
+        so the drill detects an outage rather than reporting green regardless.
+    outcome: met
+    findings:
+      - >-
+        Two defects in the drill itself, both of which would have reported a
+        healthy rollout as a failure, and both worth recording because they are
+        the kind of mistake that makes a drill worse than no drill.
+
+        The first version measured through `kubectl port-forward svc/...` and
+        reported 453 dropped requests of 536. That is not a cluster behaviour:
+        port-forward binds to one Pod and dies with it, so it measures kubectl
+        during a rollout. The client now runs inside the cluster, where the
+        Service's virtual IP does the load balancing.
+
+        The second version polled /readyz, which answers 503 by design while a
+        Pod drains -- so it counted the drain working as the drain failing. It
+        now asks for a real RPC.
+      - >-
+        A genuine defect, found once the measurement was sound: one request in
+        589 failed at the transport layer, intermittently. Endpoint removal is
+        asynchronous -- kubelet signals the Pod and the API server tells every
+        kube-proxy separately -- so for a short window traffic still arrives at
+        a Pod on its way out. The service shut down in 72ms, which made the
+        window as wide as it can be: the cleaner the shutdown, the worse this
+        gets.
+      - >-
+        The probe was rate-limited before it was authenticated: 450 of 589
+        requests came back 429 at 10 requests a second against an
+        unauthenticated budget of 2/s with a burst of 10. The same trap
+        DRILL-2026-001 fell into. The drill now authenticates and counts 429
+        apart from the failures, and calls the run invalid when the limiter
+        dominates it.
+    remediation: >-
+      Fixed. Readiness answers false the moment the shutdown signal lands, and
+      the process keeps serving for five seconds before it stops accepting, so
+      the endpoint is gone from every kube-proxy by the time the listener
+      closes. Five seconds sits inside the manifests' 30s grace period, which
+      has to hold the drain plus the shutdown. Three consecutive runs since,
+      none dropped.

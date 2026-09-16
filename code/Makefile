@@ -229,6 +229,10 @@ mobile-test: ## Run Flutter unit and widget tests
 cluster-deploy: ## Deploy the manifests to a real cluster and prove the workload runs
 	./scripts/cluster/deploy-check.sh
 
+.PHONY: drill-rollout
+drill-rollout: ## DRILL-2026-004: roll the deployment under load and count what was dropped
+	./scripts/drills/rollout-drill.sh
+
 .PHONY: parity
 parity: ## Web/mobile behavioural parity for the rules both clients implement
 	cd apps/web && npx vitest run src/lib/parity.runner.test.ts

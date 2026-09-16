@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -42,6 +43,24 @@ var (
 const (
 	readHeaderTimeout = 10 * time.Second
 	shutdownTimeout   = 20 * time.Second
+
+	// drainDelay is how long the process keeps serving after being told to
+	// stop, while reporting itself unready.
+	//
+	// Removing a Pod's endpoint is asynchronous: kubelet sends SIGTERM and the
+	// API server tells every kube-proxy separately, so for a short window
+	// traffic still arrives at a Pod on its way out. Stopping the instant the
+	// signal lands turns that window into refused connections — and the
+	// cleaner the shutdown, the wider the window, which is why a service that
+	// drains in 72ms is worse at this than a slow one.
+	//
+	// Five seconds is comfortably longer than propagation takes on any cluster
+	// worth running, and well inside the manifests' 30s grace period, which
+	// has to hold this plus the actual drain.
+	//
+	// Found by DRILL-2026-004: one request in 589 failed at the transport
+	// layer across a rolling update, intermittently.
+	drainDelay = 5 * time.Second
 )
 
 func main() {
@@ -135,11 +154,18 @@ func run() error {
 	rateLimit := platformtransport.DefaultRateLimit()
 	rateLimit.TrustedProxies = trustedProxies
 
+	// Flipped the moment the shutdown signal lands, and read by readiness.
+	// A plain atomic rather than the context, because readiness has to be able
+	// to answer "draining" while every in-flight request still carries a live
+	// context.
+	var draining atomic.Bool
+
 	server := app.New(app.Deps{
 		Pool:      pool,
 		Verifier:  verifier,
 		Blobs:     blobs,
 		RateLimit: rateLimit,
+		Draining:  drainingFlag{flag: &draining},
 		Build: platformapitransport.BuildInfo{
 			Version: version, Commit: commit, BuiltAt: builtAt,
 		},
@@ -187,6 +213,16 @@ func run() error {
 		slog.Info("shutdown signal received")
 	}
 
+	// Readiness answers false from here. Nothing else changes yet: the process
+	// keeps serving for drainDelay so the endpoint removal can propagate.
+	draining.Store(true)
+
+	// Readiness has already flipped to false: the health handler watches the
+	// same signal. Wait for that to reach every kube-proxy before refusing
+	// anything, so the endpoint is gone by the time the listener closes.
+	slog.Info("draining", "for", drainDelay.String())
+	time.Sleep(drainDelay)
+
 	// Stop consuming before draining HTTP, so a handler that publishes during
 	// shutdown still has an outbox to publish into — the row is durable either
 	// way, and the next process to start drains it.
@@ -196,6 +232,11 @@ func run() error {
 	defer cancel()
 	return httpServer.Shutdown(shutdownCtx)
 }
+
+// drainingFlag adapts an atomic to what the health handler reads.
+type drainingFlag struct{ flag *atomic.Bool }
+
+func (d drainingFlag) Draining() bool { return d.flag.Load() }
 
 // serve starts the listener under the declared transport mode.
 //

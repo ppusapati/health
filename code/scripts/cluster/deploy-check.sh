@@ -138,7 +138,14 @@ kubectl -n "$NAMESPACE" rollout restart deployment/postgres >/dev/null
 kubectl -n "$NAMESPACE" rollout status deployment/postgres --timeout=300s
 
 log "Schema"
-POD="$(kubectl -n "$NAMESPACE" get pod -l app=postgres -o jsonpath='{.items[0].metadata.name}')"
+# Running pods only, and the ready one at that: a rollout leaves the previous
+# pod Terminating and still matching the label, and exec into it fails with
+# "container not found" a beat after it is chosen.
+kubectl -n "$NAMESPACE" wait --for=condition=Ready pod -l app=postgres --timeout=180s >/dev/null
+POD="$(kubectl -n "$NAMESPACE" get pod -l app=postgres \
+  --field-selector=status.phase=Running \
+  -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.deletionTimestamp}{"\n"}{end}' \
+  | awk -F'\t' '$2 == "" {print $1; exit}')"
 # The migrations are not idempotent and are not meant to be — they are applied
 # once, in order, by a migration runner. Re-running this script against a live
 # database would otherwise fail on the first CREATE TABLE.

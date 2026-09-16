@@ -90,6 +90,12 @@ type Deps struct {
 	Verifier platformtransport.TokenVerifier
 	Build    platformapitransport.BuildInfo
 
+	// Draining makes readiness answer false from the moment shutdown begins,
+	// while the process is still serving. Nil means the process never reports
+	// itself draining, which is right for a test and wrong for a Pod — see the
+	// interface's own comment for the race it exists to close.
+	Draining platformapitransport.Draining
+
 	// RateLimit bounds per-caller request rate (SRS-SEC-005). The zero value
 	// disables limiting, which is why the composition root supplies a default
 	// rather than leaving it unset.
@@ -546,6 +552,9 @@ func New(deps Deps) *Server {
 		map[string]platformapitransport.Pinger{
 			"postgres": poolPinger{pool: deps.Pool},
 		})
+	if deps.Draining != nil {
+		health.WatchDraining(deps.Draining)
+	}
 	mux.Handle(platformapiv1connect.NewHealthServiceHandler(health, interceptors))
 	// The same checks over plain HTTP GET, because a Kubernetes httpGet probe
 	// cannot POST and a Connect procedure is a POST. Registered outside the
