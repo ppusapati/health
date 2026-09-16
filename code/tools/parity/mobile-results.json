@@ -1,0 +1,1249 @@
+{
+  "decimalsFor": [
+    2,
+    2,
+    0,
+    3,
+    3,
+    0,
+    0,
+    3,
+    2,
+    0,
+    2,
+    2
+  ],
+  "formatMoney": [
+    {
+      "withCurrency": "INR 0.00",
+      "bare": "0.00"
+    },
+    {
+      "withCurrency": "INR 0.01",
+      "bare": "0.01"
+    },
+    {
+      "withCurrency": "INR 0.05",
+      "bare": "0.05"
+    },
+    {
+      "withCurrency": "INR 0.50",
+      "bare": "0.50"
+    },
+    {
+      "withCurrency": "INR 0.99",
+      "bare": "0.99"
+    },
+    {
+      "withCurrency": "INR 1.00",
+      "bare": "1.00"
+    },
+    {
+      "withCurrency": "INR 9.99",
+      "bare": "9.99"
+    },
+    {
+      "withCurrency": "INR 10.00",
+      "bare": "10.00"
+    },
+    {
+      "withCurrency": "INR 12,345.67",
+      "bare": "12,345.67"
+    },
+    {
+      "withCurrency": "INR -12,345.67",
+      "bare": "-12,345.67"
+    },
+    {
+      "withCurrency": "INR -0.01",
+      "bare": "-0.01"
+    },
+    {
+      "withCurrency": "INR 1,234,567,890,123.45",
+      "bare": "1,234,567,890,123.45"
+    },
+    {
+      "withCurrency": "JPY 1,200",
+      "bare": "1,200"
+    },
+    {
+      "withCurrency": "JPY 0",
+      "bare": "0"
+    },
+    {
+      "withCurrency": "KWD 1.234",
+      "bare": "1.234"
+    },
+    {
+      "withCurrency": "KWD 0.001",
+      "bare": "0.001"
+    },
+    {
+      "withCurrency": "USD 1.00",
+      "bare": "1.00"
+    }
+  ],
+  "parseMoney": [
+    {
+      "minor": 0,
+      "currency": "INR"
+    },
+    {
+      "minor": 100,
+      "currency": "INR"
+    },
+    {
+      "minor": 150,
+      "currency": "INR"
+    },
+    {
+      "minor": 150,
+      "currency": "INR"
+    },
+    {
+      "minor": 100,
+      "currency": "INR"
+    },
+    {
+      "minor": 50,
+      "currency": "INR"
+    },
+    {
+      "minor": -50,
+      "currency": "INR"
+    },
+    null,
+    null,
+    null,
+    null,
+    null,
+    {
+      "minor": 123450,
+      "currency": "INR"
+    },
+    {
+      "minor": 123450,
+      "currency": "INR"
+    },
+    {
+      "minor": -500,
+      "currency": "INR"
+    },
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    {
+      "minor": 1,
+      "currency": "JPY"
+    },
+    {
+      "minor": 1234,
+      "currency": "KWD"
+    },
+    null,
+    {
+      "minor": -1234,
+      "currency": "INR"
+    },
+    {
+      "minor": 0,
+      "currency": "INR"
+    },
+    {
+      "minor": 1234,
+      "currency": "INR"
+    },
+    {
+      "minor": 100,
+      "currency": "INR"
+    }
+  ],
+  "describeBalance": [
+    "Settled",
+    "Owes INR 50.00",
+    "In credit INR 50.00",
+    "Owes INR 0.01",
+    "In credit INR 0.01"
+  ],
+  "formatRate": [
+    "0%",
+    "5%",
+    "18%",
+    "12.5%",
+    "12.34%",
+    "12.05%",
+    "100%",
+    "0.01%",
+    "0.99%",
+    "1%",
+    "-12.5%"
+  ],
+  "validateSearch": [
+    {
+      "runnable": false,
+      "reason": "NO_CRITERIA",
+      "message": "Enter a name, phone number, date of birth or identifier to search."
+    },
+    {
+      "runnable": false,
+      "reason": "NO_CRITERIA",
+      "message": "Enter a name, phone number, date of birth or identifier to search."
+    },
+    {
+      "runnable": false,
+      "reason": "TOO_BROAD",
+      "message": "Use at least two letters of the name, or add a date of birth, phone number or identifier."
+    },
+    {
+      "runnable": true,
+      "reason": null,
+      "message": ""
+    },
+    {
+      "runnable": true,
+      "reason": null,
+      "message": ""
+    },
+    {
+      "runnable": true,
+      "reason": null,
+      "message": ""
+    },
+    {
+      "runnable": true,
+      "reason": null,
+      "message": ""
+    },
+    {
+      "runnable": true,
+      "reason": null,
+      "message": ""
+    },
+    {
+      "runnable": true,
+      "reason": null,
+      "message": ""
+    },
+    {
+      "runnable": true,
+      "reason": null,
+      "message": ""
+    },
+    {
+      "runnable": false,
+      "reason": "TOO_BROAD",
+      "message": "Use at least two letters of the name, or add a date of birth, phone number or identifier."
+    }
+  ],
+  "presentMatch": [
+    {
+      "confidencePercent": 0,
+      "outcomeLabel": "A different person",
+      "blocksRegistration": false
+    },
+    {
+      "confidencePercent": 50,
+      "outcomeLabel": "Possibly the same person — check before registering",
+      "blocksRegistration": true
+    },
+    {
+      "confidencePercent": 92,
+      "outcomeLabel": "Almost certainly the same person",
+      "blocksRegistration": true
+    },
+    {
+      "confidencePercent": 93,
+      "outcomeLabel": "Almost certainly the same person",
+      "blocksRegistration": true
+    },
+    {
+      "confidencePercent": 100,
+      "outcomeLabel": "Almost certainly the same person",
+      "blocksRegistration": true
+    },
+    {
+      "confidencePercent": 100,
+      "outcomeLabel": "Almost certainly the same person",
+      "blocksRegistration": true
+    },
+    {
+      "confidencePercent": 0,
+      "outcomeLabel": "A different person",
+      "blocksRegistration": false
+    },
+    {
+      "confidencePercent": 1,
+      "outcomeLabel": "Same identifier, different details — needs review",
+      "blocksRegistration": true
+    },
+    {
+      "confidencePercent": 50,
+      "outcomeLabel": "Match strength not assessed",
+      "blocksRegistration": false
+    }
+  ],
+  "registrationGate": [
+    {
+      "state": "search-first",
+      "message": "Search for the patient before registering a new record.",
+      "outstanding": []
+    },
+    {
+      "state": "clear",
+      "message": "No existing record matches. You can register a new patient.",
+      "outstanding": []
+    },
+    {
+      "state": "review-candidates",
+      "message": "One existing record may be this patient. Open it, or confirm it is somebody else.",
+      "outstanding": [
+        "p1"
+      ]
+    },
+    {
+      "state": "acknowledged",
+      "message": "You have confirmed the existing records are different people. Registering will create a new record.",
+      "outstanding": []
+    },
+    {
+      "state": "clear",
+      "message": "No existing record matches. You can register a new patient.",
+      "outstanding": []
+    },
+    {
+      "state": "review-candidates",
+      "message": "One existing record may be this patient. Open it, or confirm it is somebody else.",
+      "outstanding": [
+        "p2"
+      ]
+    },
+    {
+      "state": "acknowledged",
+      "message": "You have confirmed the existing records are different people. Registering will create a new record.",
+      "outstanding": []
+    },
+    {
+      "state": "review-candidates",
+      "message": "One existing record may be this patient. Open it, or confirm it is somebody else.",
+      "outstanding": [
+        "p1"
+      ]
+    },
+    {
+      "state": "review-candidates",
+      "message": "2 existing records may be this patient. Open them, or confirm each is somebody else.",
+      "outstanding": [
+        "p2",
+        "p3"
+      ]
+    },
+    {
+      "state": "clear",
+      "message": "No existing record matches. You can register a new patient.",
+      "outstanding": []
+    },
+    {
+      "state": "search-first",
+      "message": "Search for the patient before registering a new record.",
+      "outstanding": []
+    }
+  ],
+  "readyToSign": [
+    {
+      "ready": true,
+      "problems": []
+    },
+    {
+      "ready": false,
+      "problems": [
+        "Give the note a title."
+      ]
+    },
+    {
+      "ready": false,
+      "problems": [
+        "Give the note a title."
+      ]
+    },
+    {
+      "ready": false,
+      "problems": [
+        "The note has no content."
+      ]
+    },
+    {
+      "ready": false,
+      "problems": [
+        "The note has no content."
+      ]
+    },
+    {
+      "ready": true,
+      "problems": []
+    },
+    {
+      "ready": false,
+      "problems": [
+        "The note is not linked to a template version."
+      ]
+    },
+    {
+      "ready": false,
+      "problems": [
+        "This note is not attached to a patient."
+      ]
+    },
+    {
+      "ready": false,
+      "problems": [
+        "This note is not attached to an encounter."
+      ]
+    },
+    {
+      "ready": false,
+      "problems": [
+        "This note is not attached to a patient.",
+        "This note is not attached to an encounter.",
+        "Give the note a title.",
+        "The note has no content.",
+        "The note is not linked to a template version."
+      ]
+    }
+  ],
+  "actionsFor": [
+    {
+      "status": "draft",
+      "intact": true,
+      "mayWrite": true,
+      "edit": true,
+      "sign": true,
+      "amend": false,
+      "addendum": false,
+      "retract": true,
+      "blocked": false
+    },
+    {
+      "status": "draft",
+      "intact": true,
+      "mayWrite": false,
+      "edit": false,
+      "sign": false,
+      "amend": false,
+      "addendum": false,
+      "retract": false,
+      "blocked": true
+    },
+    {
+      "status": "draft",
+      "intact": false,
+      "mayWrite": true,
+      "edit": false,
+      "sign": false,
+      "amend": false,
+      "addendum": false,
+      "retract": false,
+      "blocked": true
+    },
+    {
+      "status": "draft",
+      "intact": false,
+      "mayWrite": false,
+      "edit": false,
+      "sign": false,
+      "amend": false,
+      "addendum": false,
+      "retract": false,
+      "blocked": true
+    },
+    {
+      "status": "signed",
+      "intact": true,
+      "mayWrite": true,
+      "edit": false,
+      "sign": false,
+      "amend": true,
+      "addendum": true,
+      "retract": true,
+      "blocked": false
+    },
+    {
+      "status": "signed",
+      "intact": true,
+      "mayWrite": false,
+      "edit": false,
+      "sign": false,
+      "amend": false,
+      "addendum": false,
+      "retract": false,
+      "blocked": true
+    },
+    {
+      "status": "signed",
+      "intact": false,
+      "mayWrite": true,
+      "edit": false,
+      "sign": false,
+      "amend": false,
+      "addendum": false,
+      "retract": false,
+      "blocked": true
+    },
+    {
+      "status": "signed",
+      "intact": false,
+      "mayWrite": false,
+      "edit": false,
+      "sign": false,
+      "amend": false,
+      "addendum": false,
+      "retract": false,
+      "blocked": true
+    },
+    {
+      "status": "amended",
+      "intact": true,
+      "mayWrite": true,
+      "edit": false,
+      "sign": false,
+      "amend": true,
+      "addendum": true,
+      "retract": true,
+      "blocked": false
+    },
+    {
+      "status": "amended",
+      "intact": true,
+      "mayWrite": false,
+      "edit": false,
+      "sign": false,
+      "amend": false,
+      "addendum": false,
+      "retract": false,
+      "blocked": true
+    },
+    {
+      "status": "amended",
+      "intact": false,
+      "mayWrite": true,
+      "edit": false,
+      "sign": false,
+      "amend": false,
+      "addendum": false,
+      "retract": false,
+      "blocked": true
+    },
+    {
+      "status": "amended",
+      "intact": false,
+      "mayWrite": false,
+      "edit": false,
+      "sign": false,
+      "amend": false,
+      "addendum": false,
+      "retract": false,
+      "blocked": true
+    },
+    {
+      "status": "addendum",
+      "intact": true,
+      "mayWrite": true,
+      "edit": false,
+      "sign": false,
+      "amend": true,
+      "addendum": true,
+      "retract": true,
+      "blocked": false
+    },
+    {
+      "status": "addendum",
+      "intact": true,
+      "mayWrite": false,
+      "edit": false,
+      "sign": false,
+      "amend": false,
+      "addendum": false,
+      "retract": false,
+      "blocked": true
+    },
+    {
+      "status": "addendum",
+      "intact": false,
+      "mayWrite": true,
+      "edit": false,
+      "sign": false,
+      "amend": false,
+      "addendum": false,
+      "retract": false,
+      "blocked": true
+    },
+    {
+      "status": "addendum",
+      "intact": false,
+      "mayWrite": false,
+      "edit": false,
+      "sign": false,
+      "amend": false,
+      "addendum": false,
+      "retract": false,
+      "blocked": true
+    },
+    {
+      "status": "entered_in_error",
+      "intact": true,
+      "mayWrite": true,
+      "edit": false,
+      "sign": false,
+      "amend": false,
+      "addendum": false,
+      "retract": false,
+      "blocked": true
+    },
+    {
+      "status": "entered_in_error",
+      "intact": true,
+      "mayWrite": false,
+      "edit": false,
+      "sign": false,
+      "amend": false,
+      "addendum": false,
+      "retract": false,
+      "blocked": true
+    },
+    {
+      "status": "entered_in_error",
+      "intact": false,
+      "mayWrite": true,
+      "edit": false,
+      "sign": false,
+      "amend": false,
+      "addendum": false,
+      "retract": false,
+      "blocked": true
+    },
+    {
+      "status": "entered_in_error",
+      "intact": false,
+      "mayWrite": false,
+      "edit": false,
+      "sign": false,
+      "amend": false,
+      "addendum": false,
+      "retract": false,
+      "blocked": true
+    },
+    {
+      "status": "unspecified",
+      "intact": true,
+      "mayWrite": true,
+      "edit": false,
+      "sign": false,
+      "amend": false,
+      "addendum": false,
+      "retract": false,
+      "blocked": true
+    },
+    {
+      "status": "unspecified",
+      "intact": true,
+      "mayWrite": false,
+      "edit": false,
+      "sign": false,
+      "amend": false,
+      "addendum": false,
+      "retract": false,
+      "blocked": true
+    },
+    {
+      "status": "unspecified",
+      "intact": false,
+      "mayWrite": true,
+      "edit": false,
+      "sign": false,
+      "amend": false,
+      "addendum": false,
+      "retract": false,
+      "blocked": true
+    },
+    {
+      "status": "unspecified",
+      "intact": false,
+      "mayWrite": false,
+      "edit": false,
+      "sign": false,
+      "amend": false,
+      "addendum": false,
+      "retract": false,
+      "blocked": true
+    }
+  ],
+  "finalises": [
+    true,
+    true,
+    true,
+    false,
+    false,
+    false
+  ],
+  "orderAllergies": [
+    [
+      "C",
+      "B",
+      "A"
+    ],
+    [
+      "Z",
+      "A"
+    ],
+    [
+      "A",
+      "Z"
+    ],
+    [
+      "A",
+      "B"
+    ],
+    [
+      "B",
+      "A"
+    ],
+    []
+  ],
+  "presentAllergy": [
+    {
+      "criticality": "low",
+      "verification": "unconfirmed",
+      "prominent": false,
+      "historical": false,
+      "criticalityLabel": "Low risk"
+    },
+    {
+      "criticality": "low",
+      "verification": "confirmed",
+      "prominent": false,
+      "historical": false,
+      "criticalityLabel": "Low risk"
+    },
+    {
+      "criticality": "low",
+      "verification": "refuted",
+      "prominent": false,
+      "historical": true,
+      "criticalityLabel": "Low risk"
+    },
+    {
+      "criticality": "low",
+      "verification": "entered_in_error",
+      "prominent": false,
+      "historical": true,
+      "criticalityLabel": "Low risk"
+    },
+    {
+      "criticality": "low",
+      "verification": "unspecified",
+      "prominent": false,
+      "historical": false,
+      "criticalityLabel": "Low risk"
+    },
+    {
+      "criticality": "high",
+      "verification": "unconfirmed",
+      "prominent": true,
+      "historical": false,
+      "criticalityLabel": "High risk"
+    },
+    {
+      "criticality": "high",
+      "verification": "confirmed",
+      "prominent": true,
+      "historical": false,
+      "criticalityLabel": "High risk"
+    },
+    {
+      "criticality": "high",
+      "verification": "refuted",
+      "prominent": false,
+      "historical": true,
+      "criticalityLabel": "High risk"
+    },
+    {
+      "criticality": "high",
+      "verification": "entered_in_error",
+      "prominent": false,
+      "historical": true,
+      "criticalityLabel": "High risk"
+    },
+    {
+      "criticality": "high",
+      "verification": "unspecified",
+      "prominent": true,
+      "historical": false,
+      "criticalityLabel": "High risk"
+    },
+    {
+      "criticality": "unable_to_assess",
+      "verification": "unconfirmed",
+      "prominent": true,
+      "historical": false,
+      "criticalityLabel": "Not assessed — risk unknown"
+    },
+    {
+      "criticality": "unable_to_assess",
+      "verification": "confirmed",
+      "prominent": true,
+      "historical": false,
+      "criticalityLabel": "Not assessed — risk unknown"
+    },
+    {
+      "criticality": "unable_to_assess",
+      "verification": "refuted",
+      "prominent": false,
+      "historical": true,
+      "criticalityLabel": "Not assessed — risk unknown"
+    },
+    {
+      "criticality": "unable_to_assess",
+      "verification": "entered_in_error",
+      "prominent": false,
+      "historical": true,
+      "criticalityLabel": "Not assessed — risk unknown"
+    },
+    {
+      "criticality": "unable_to_assess",
+      "verification": "unspecified",
+      "prominent": true,
+      "historical": false,
+      "criticalityLabel": "Not assessed — risk unknown"
+    },
+    {
+      "criticality": "unspecified",
+      "verification": "unconfirmed",
+      "prominent": false,
+      "historical": false,
+      "criticalityLabel": "Not classified"
+    },
+    {
+      "criticality": "unspecified",
+      "verification": "confirmed",
+      "prominent": false,
+      "historical": false,
+      "criticalityLabel": "Not classified"
+    },
+    {
+      "criticality": "unspecified",
+      "verification": "refuted",
+      "prominent": false,
+      "historical": true,
+      "criticalityLabel": "Not classified"
+    },
+    {
+      "criticality": "unspecified",
+      "verification": "entered_in_error",
+      "prominent": false,
+      "historical": true,
+      "criticalityLabel": "Not classified"
+    },
+    {
+      "criticality": "unspecified",
+      "verification": "unspecified",
+      "prominent": false,
+      "historical": false,
+      "criticalityLabel": "Not classified"
+    }
+  ],
+  "buildTrend": [
+    {
+      "mixedUnits": false,
+      "points": 2,
+      "unit": "mmol/L"
+    },
+    {
+      "mixedUnits": true,
+      "points": 0,
+      "unit": "mmol/L"
+    },
+    {
+      "mixedUnits": false,
+      "points": 1,
+      "unit": "mmol/L"
+    },
+    {
+      "mixedUnits": false,
+      "points": 0,
+      "unit": ""
+    },
+    {
+      "mixedUnits": false,
+      "points": 1,
+      "unit": "10^9/L"
+    },
+    {
+      "mixedUnits": false,
+      "points": 0,
+      "unit": ""
+    },
+    {
+      "mixedUnits": false,
+      "points": 2,
+      "unit": ""
+    }
+  ],
+  "validateOrder": [
+    {
+      "ready": true,
+      "order": [],
+      "fields": []
+    },
+    {
+      "ready": false,
+      "order": [
+        "This kind of order needs a clinical indication before it can be placed."
+      ],
+      "fields": [
+        "indication"
+      ]
+    },
+    {
+      "ready": true,
+      "order": [],
+      "fields": []
+    },
+    {
+      "ready": false,
+      "order": [
+        "This kind of order needs a clinical indication before it can be placed."
+      ],
+      "fields": [
+        "indication"
+      ]
+    },
+    {
+      "ready": false,
+      "order": [
+        "Give a start time.",
+        "Give how often, as a frequency rather than as free text."
+      ],
+      "fields": [
+        "frequency",
+        "startAt"
+      ]
+    },
+    {
+      "ready": true,
+      "order": [],
+      "fields": []
+    },
+    {
+      "ready": false,
+      "order": [
+        "Give how often, as a frequency rather than as free text."
+      ],
+      "fields": [
+        "frequency"
+      ]
+    },
+    {
+      "ready": false,
+      "order": [
+        "Choose what kind of order this is."
+      ],
+      "fields": [
+        "type"
+      ]
+    },
+    {
+      "ready": false,
+      "order": [
+        "This order is not attached to a patient."
+      ],
+      "fields": [
+        "patient"
+      ]
+    },
+    {
+      "ready": false,
+      "order": [
+        "This order is not attached to an encounter."
+      ],
+      "fields": [
+        "encounter"
+      ]
+    },
+    {
+      "ready": false,
+      "order": [
+        "Choose what is being ordered."
+      ],
+      "fields": [
+        "code"
+      ]
+    },
+    {
+      "ready": false,
+      "order": [
+        "Choose what kind of order this is.",
+        "This order is not attached to a patient.",
+        "This order is not attached to an encounter.",
+        "Choose what is being ordered.",
+        "This kind of order needs a clinical indication before it can be placed.",
+        "Give a start time.",
+        "Give how often, as a frequency rather than as free text."
+      ],
+      "fields": [
+        "code",
+        "encounter",
+        "frequency",
+        "indication",
+        "patient",
+        "startAt",
+        "type"
+      ]
+    }
+  ],
+  "duplicateGate": [
+    {
+      "state": "clear",
+      "message": "",
+      "windowHours": 0
+    },
+    {
+      "state": "needs-override",
+      "message": "An order for this was placed in the last 4 hours. Say why another is needed.",
+      "windowHours": 4
+    },
+    {
+      "state": "needs-override",
+      "message": "An order for this was placed in the last 4 hours. Say why another is needed.",
+      "windowHours": 4
+    },
+    {
+      "state": "needs-override",
+      "message": "An order for this was placed in the last 4 hours. Say why another is needed.",
+      "windowHours": 4
+    },
+    {
+      "state": "overridden",
+      "message": "",
+      "windowHours": 0
+    },
+    {
+      "state": "needs-override",
+      "message": "An order for this was placed in the last 4 hours. Say why another is needed.",
+      "windowHours": 4
+    },
+    {
+      "state": "needs-override",
+      "message": "2 orders for this were placed in the last 4 hours. Say why another is needed.",
+      "windowHours": 4
+    },
+    {
+      "state": "overridden",
+      "message": "",
+      "windowHours": 0
+    },
+    {
+      "state": "refused",
+      "message": "An identical order is already live and policy does not allow a duplicate. Use the existing order, or cancel it first.",
+      "windowHours": 0
+    },
+    {
+      "state": "needs-override",
+      "message": "An order for this was placed in the last 1 hours. Say why another is needed.",
+      "windowHours": 1
+    },
+    {
+      "state": "needs-override",
+      "message": "An order for this was placed in the last 1 hours. Say why another is needed.",
+      "windowHours": 1
+    },
+    {
+      "state": "needs-override",
+      "message": "An order for this was placed in the last 2 hours. Say why another is needed.",
+      "windowHours": 2
+    },
+    {
+      "state": "needs-override",
+      "message": "An order for this was placed in the last 4 hours. Say why another is needed.",
+      "windowHours": 4
+    }
+  ],
+  "orderInbox": [
+    [
+      "escalated",
+      "old",
+      "fresh"
+    ],
+    [
+      "b",
+      "a"
+    ],
+    [
+      "a",
+      "b"
+    ],
+    []
+  ],
+  "acknowledgementProblem": [
+    "Say what was done about this result, not only that it was seen.",
+    "Say what was done about this result, not only that it was seen.",
+    "",
+    ""
+  ],
+  "validatePayment": [
+    {
+      "ready": true,
+      "problems": []
+    },
+    {
+      "ready": false,
+      "problems": [
+        "Enter an amount."
+      ]
+    },
+    {
+      "ready": false,
+      "problems": [
+        "A payment must be more than zero. Use a refund to return money."
+      ]
+    },
+    {
+      "ready": false,
+      "problems": [
+        "A payment must be more than zero. Use a refund to return money."
+      ]
+    },
+    {
+      "ready": false,
+      "problems": [
+        "Choose how the money was taken."
+      ]
+    },
+    {
+      "ready": false,
+      "problems": [
+        "This payment has no idempotency key."
+      ]
+    },
+    {
+      "ready": false,
+      "problems": [
+        "This payment has no idempotency key."
+      ]
+    },
+    {
+      "ready": false,
+      "problems": [
+        "No account is open."
+      ]
+    },
+    {
+      "ready": false,
+      "problems": [
+        "No account is open.",
+        "Enter an amount.",
+        "Choose how the money was taken.",
+        "This payment has no idempotency key."
+      ]
+    }
+  ],
+  "presentInvoice": [
+    {
+      "status": "draft",
+      "editable": true,
+      "correctable": false
+    },
+    {
+      "status": "issued",
+      "editable": false,
+      "correctable": true
+    },
+    {
+      "status": "superseded",
+      "editable": false,
+      "correctable": false
+    },
+    {
+      "status": "cancelled",
+      "editable": false,
+      "correctable": false
+    },
+    {
+      "status": "unspecified",
+      "editable": false,
+      "correctable": false
+    }
+  ],
+  "buildStatement": [
+    {
+      "derived": 6000,
+      "reconciles": true,
+      "order": [
+        "e1",
+        "e0"
+      ]
+    },
+    {
+      "derived": 10000,
+      "reconciles": false,
+      "order": [
+        "e0"
+      ]
+    },
+    {
+      "derived": 0,
+      "reconciles": true,
+      "order": []
+    },
+    {
+      "derived": 0,
+      "reconciles": false,
+      "order": []
+    },
+    {
+      "derived": 30,
+      "reconciles": true,
+      "order": [
+        "e2",
+        "e1",
+        "e0"
+      ]
+    },
+    {
+      "derived": 99,
+      "reconciles": true,
+      "order": [
+        "e2",
+        "e1",
+        "e0"
+      ]
+    }
+  ],
+  "closeReadiness": [
+    {
+      "ready": true,
+      "message": "Everything is settled. The account can be closed."
+    },
+    {
+      "ready": false,
+      "message": "One thing is outstanding before this account can be closed."
+    },
+    {
+      "ready": false,
+      "message": "2 things are outstanding before this account can be closed."
+    },
+    {
+      "ready": false,
+      "message": "5 things are outstanding before this account can be closed."
+    }
+  ],
+  "unbilledTotal": [
+    50000,
+    0,
+    0
+  ],
+  "sumMoney": [
+    1000
+  ]
+}

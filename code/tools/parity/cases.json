@@ -1,0 +1,222 @@
+{
+  "_comment": "Shared corpus for the web/mobile parity harness. Each group names a ported rule; each case is one input. The two runners emit the same shape, and a divergence is a bug in one of them.",
+
+  "decimalsFor": ["INR", "USD", "JPY", "KWD", "BHD", "KRW", "VND", "TND", "inr", "jpy", "XXX", ""],
+
+  "formatMoney": [
+    {"minor": 0, "currency": "INR"},
+    {"minor": 1, "currency": "INR"},
+    {"minor": 5, "currency": "INR"},
+    {"minor": 50, "currency": "INR"},
+    {"minor": 99, "currency": "INR"},
+    {"minor": 100, "currency": "INR"},
+    {"minor": 999, "currency": "INR"},
+    {"minor": 1000, "currency": "INR"},
+    {"minor": 1234567, "currency": "INR"},
+    {"minor": -1234567, "currency": "INR"},
+    {"minor": -1, "currency": "INR"},
+    {"minor": 123456789012345, "currency": "INR"},
+    {"minor": 1200, "currency": "JPY"},
+    {"minor": 0, "currency": "JPY"},
+    {"minor": 1234, "currency": "KWD"},
+    {"minor": 1, "currency": "KWD"},
+    {"minor": 100, "currency": "USD"}
+  ],
+
+  "parseMoney": [
+    {"input": "0", "currency": "INR"},
+    {"input": "1", "currency": "INR"},
+    {"input": "1.5", "currency": "INR"},
+    {"input": "1.50", "currency": "INR"},
+    {"input": "1.", "currency": "INR"},
+    {"input": ".5", "currency": "INR"},
+    {"input": "-.5", "currency": "INR"},
+    {"input": "-.", "currency": "INR"},
+    {"input": ".", "currency": "INR"},
+    {"input": "-", "currency": "INR"},
+    {"input": "", "currency": "INR"},
+    {"input": "   ", "currency": "INR"},
+    {"input": "1,234.50", "currency": "INR"},
+    {"input": " 1 234.50 ", "currency": "INR"},
+    {"input": "- 5", "currency": "INR"},
+    {"input": "abc", "currency": "INR"},
+    {"input": "1.2.3", "currency": "INR"},
+    {"input": "12x", "currency": "INR"},
+    {"input": ".-5", "currency": "INR"},
+    {"input": "10.005", "currency": "INR"},
+    {"input": "1.5", "currency": "JPY"},
+    {"input": "1", "currency": "JPY"},
+    {"input": "1.234", "currency": "KWD"},
+    {"input": "1.2345", "currency": "KWD"},
+    {"input": "-12.34", "currency": "INR"},
+    {"input": "0.00", "currency": "INR"},
+    {"input": "00012.34", "currency": "INR"},
+    {"input": "1.00", "currency": "inr"}
+  ],
+
+  "describeBalance": [
+    {"minor": 0, "currency": "INR"},
+    {"minor": 5000, "currency": "INR"},
+    {"minor": -5000, "currency": "INR"},
+    {"minor": 1, "currency": "INR"},
+    {"minor": -1, "currency": "INR"}
+  ],
+
+  "formatRate": [0, 500, 1800, 1250, 1234, 1205, 10000, 1, 99, 100, -1250],
+
+  "validateSearch": [
+    {"name": "", "phone": "", "identifierValue": "", "birthDate": ""},
+    {"name": "   ", "phone": "", "identifierValue": "", "birthDate": ""},
+    {"name": "S", "phone": "", "identifierValue": "", "birthDate": ""},
+    {"name": "Sh", "phone": "", "identifierValue": "", "birthDate": ""},
+    {"name": "S", "phone": "", "identifierValue": "", "birthDate": "1984-02-11"},
+    {"name": "S", "phone": "9876543210", "identifierValue": "", "birthDate": ""},
+    {"name": "S", "phone": "", "identifierValue": "MRN-42", "birthDate": ""},
+    {"name": "", "phone": "", "identifierValue": "MRN-42", "birthDate": ""},
+    {"name": "", "phone": "9876543210", "identifierValue": "", "birthDate": ""},
+    {"name": "", "phone": "", "identifierValue": "", "birthDate": "1984-02-11"},
+    {"name": " S ", "phone": "", "identifierValue": "", "birthDate": ""}
+  ],
+
+  "presentMatch": [
+    {"confidence": 0, "outcome": "distinct"},
+    {"confidence": 0.5, "outcome": "review"},
+    {"confidence": 0.923, "outcome": "probable"},
+    {"confidence": 0.925, "outcome": "probable"},
+    {"confidence": 1, "outcome": "probable"},
+    {"confidence": 1.4, "outcome": "probable"},
+    {"confidence": -0.2, "outcome": "distinct"},
+    {"confidence": 0.005, "outcome": "conflict"},
+    {"confidence": 0.5, "outcome": "unspecified"}
+  ],
+
+  "registrationGate": [
+    {"searched": false, "matches": [], "acknowledged": []},
+    {"searched": true, "matches": [], "acknowledged": []},
+    {"searched": true, "matches": [["p1", "probable"]], "acknowledged": []},
+    {"searched": true, "matches": [["p1", "probable"]], "acknowledged": ["p1"]},
+    {"searched": true, "matches": [["p1", "distinct"]], "acknowledged": []},
+    {"searched": true, "matches": [["p1", "probable"], ["p2", "review"]], "acknowledged": ["p1"]},
+    {"searched": true, "matches": [["p1", "probable"], ["p2", "review"]], "acknowledged": ["p1", "p2"]},
+    {"searched": true, "matches": [["p1", "probable"]], "acknowledged": ["other"]},
+    {"searched": true, "matches": [["p1", "probable"], ["p2", "review"], ["p3", "conflict"]], "acknowledged": ["p1"]},
+    {"searched": true, "matches": [["p1", "unspecified"]], "acknowledged": []},
+    {"searched": false, "matches": [["p1", "probable"]], "acknowledged": ["p1"]}
+  ],
+
+  "readyToSign": [
+    {"title": "Ward round", "sections": [["Plan", "Continue."]], "templateVersion": "v3", "patientId": "p1", "encounterId": "e1"},
+    {"title": "", "sections": [["Plan", "Continue."]], "templateVersion": "v3", "patientId": "p1", "encounterId": "e1"},
+    {"title": "  ", "sections": [["Plan", "Continue."]], "templateVersion": "v3", "patientId": "p1", "encounterId": "e1"},
+    {"title": "Ward round", "sections": [], "templateVersion": "v3", "patientId": "p1", "encounterId": "e1"},
+    {"title": "Ward round", "sections": [["Plan", "   "]], "templateVersion": "v3", "patientId": "p1", "encounterId": "e1"},
+    {"title": "Ward round", "sections": [["Plan", ""], ["Exam", "Chest clear"]], "templateVersion": "v3", "patientId": "p1", "encounterId": "e1"},
+    {"title": "Ward round", "sections": [["Plan", "Continue."]], "templateVersion": "", "patientId": "p1", "encounterId": "e1"},
+    {"title": "Ward round", "sections": [["Plan", "Continue."]], "templateVersion": "v3", "patientId": "", "encounterId": "e1"},
+    {"title": "Ward round", "sections": [["Plan", "Continue."]], "templateVersion": "v3", "patientId": "p1", "encounterId": ""},
+    {"title": "", "sections": [], "templateVersion": "", "patientId": "", "encounterId": ""}
+  ],
+
+  "actionsFor": {
+    "statuses": ["draft", "signed", "amended", "addendum", "entered_in_error", "unspecified"],
+    "intact": [true, false],
+    "mayWrite": [true, false]
+  },
+
+  "finalises": ["author", "verifier", "cosigner", "witness", "transcriber", "unspecified"],
+
+  "orderAllergies": [
+    [["low", "confirmed", "A"], ["unable_to_assess", "confirmed", "B"], ["high", "confirmed", "C"]],
+    [["high", "refuted", "A"], ["low", "confirmed", "Z"]],
+    [["high", "confirmed", "Z"], ["high", "confirmed", "A"]],
+    [["unspecified", "confirmed", "A"], ["low", "confirmed", "B"]],
+    [["high", "entered_in_error", "A"], ["unable_to_assess", "unconfirmed", "B"]],
+    []
+  ],
+
+  "presentAllergy": {
+    "criticalities": ["low", "high", "unable_to_assess", "unspecified"],
+    "verifications": ["unconfirmed", "confirmed", "refuted", "entered_in_error", "unspecified"]
+  },
+
+  "buildTrend": [
+    [["o1", 7.4, "mmol/L"], ["o2", 8.1, "mmol/L"]],
+    [["o1", 7.4, "mmol/L"], ["o2", 133, "mg/dL"]],
+    [["o1", 7.4, "mmol/L"], ["o2", null, "mmol/L"]],
+    [["o1", null, "mmol/L"]],
+    [["o1", 0, "10^9/L"]],
+    [],
+    [["o1", 7.4, ""], ["o2", 8.1, ""]]
+  ],
+
+  "validateOrder": [
+    {"type": "laboratory", "patientId": "p1", "encounterId": "e1", "code": "GLU", "indication": "", "startAt": "", "frequencySeconds": 0, "policy": null},
+    {"type": "imaging", "patientId": "p1", "encounterId": "e1", "code": "CT", "indication": "", "startAt": "", "frequencySeconds": 0, "policy": {"indicationRequired": true, "structuredTimingRequired": false}},
+    {"type": "imaging", "patientId": "p1", "encounterId": "e1", "code": "CT", "indication": "query PE", "startAt": "", "frequencySeconds": 0, "policy": {"indicationRequired": true, "structuredTimingRequired": false}},
+    {"type": "imaging", "patientId": "p1", "encounterId": "e1", "code": "CT", "indication": "   ", "startAt": "", "frequencySeconds": 0, "policy": {"indicationRequired": true, "structuredTimingRequired": false}},
+    {"type": "medication", "patientId": "p1", "encounterId": "e1", "code": "AMX", "indication": "", "startAt": "", "frequencySeconds": 0, "policy": {"indicationRequired": false, "structuredTimingRequired": true}},
+    {"type": "medication", "patientId": "p1", "encounterId": "e1", "code": "AMX", "indication": "", "startAt": "2026-09-16T08:00", "frequencySeconds": 28800, "policy": {"indicationRequired": false, "structuredTimingRequired": true}},
+    {"type": "medication", "patientId": "p1", "encounterId": "e1", "code": "AMX", "indication": "", "startAt": "2026-09-16T08:00", "frequencySeconds": 0, "policy": {"indicationRequired": false, "structuredTimingRequired": true}},
+    {"type": "unspecified", "patientId": "p1", "encounterId": "e1", "code": "X", "indication": "", "startAt": "", "frequencySeconds": 0, "policy": null},
+    {"type": "laboratory", "patientId": "", "encounterId": "e1", "code": "GLU", "indication": "", "startAt": "", "frequencySeconds": 0, "policy": null},
+    {"type": "laboratory", "patientId": "p1", "encounterId": "", "code": "GLU", "indication": "", "startAt": "", "frequencySeconds": 0, "policy": null},
+    {"type": "laboratory", "patientId": "p1", "encounterId": "e1", "code": "", "indication": "", "startAt": "", "frequencySeconds": 0, "policy": null},
+    {"type": "unspecified", "patientId": "", "encounterId": "", "code": "", "indication": "", "startAt": "", "frequencySeconds": 0, "policy": {"indicationRequired": true, "structuredTimingRequired": true}}
+  ],
+
+  "duplicateGate": [
+    {"candidates": [], "overridable": true, "windowSeconds": 14400, "acknowledged": [], "reason": ""},
+    {"candidates": ["o1"], "overridable": true, "windowSeconds": 14400, "acknowledged": [], "reason": ""},
+    {"candidates": ["o1"], "overridable": true, "windowSeconds": 14400, "acknowledged": ["o1"], "reason": ""},
+    {"candidates": ["o1"], "overridable": true, "windowSeconds": 14400, "acknowledged": [], "reason": "needed"},
+    {"candidates": ["o1"], "overridable": true, "windowSeconds": 14400, "acknowledged": ["o1"], "reason": "needed"},
+    {"candidates": ["o1"], "overridable": true, "windowSeconds": 14400, "acknowledged": ["o1"], "reason": "   "},
+    {"candidates": ["o1", "o2"], "overridable": true, "windowSeconds": 14400, "acknowledged": ["o1"], "reason": "needed"},
+    {"candidates": ["o1", "o2"], "overridable": true, "windowSeconds": 14400, "acknowledged": ["o1", "o2"], "reason": "needed"},
+    {"candidates": ["o1"], "overridable": false, "windowSeconds": 14400, "acknowledged": ["o1"], "reason": "needed"},
+    {"candidates": ["o1"], "overridable": true, "windowSeconds": 60, "acknowledged": [], "reason": ""},
+    {"candidates": ["o1"], "overridable": true, "windowSeconds": 0, "acknowledged": [], "reason": ""},
+    {"candidates": ["o1"], "overridable": true, "windowSeconds": 5400, "acknowledged": [], "reason": ""},
+    {"candidates": ["o1"], "overridable": true, "windowSeconds": 14400, "acknowledged": ["other"], "reason": "needed"}
+  ],
+
+  "orderInbox": [
+    [["fresh", 0, "2026-09-16T11:00:00Z"], ["escalated", 2, "2026-09-16T07:00:00Z"], ["old", 0, "2026-09-16T06:00:00Z"]],
+    [["a", 1, "2026-09-16T09:00:00Z"], ["b", 1, "2026-09-16T08:00:00Z"]],
+    [["a", 3, "2026-09-16T09:00:00Z"], ["b", 2, "2026-09-16T08:00:00Z"]],
+    []
+  ],
+
+  "acknowledgementProblem": ["", "   ", "Seen", "Insulin stopped, recheck sent"],
+
+  "validatePayment": [
+    {"amount": {"minor": 1000, "currency": "INR"}, "method": "cash", "idempotencyKey": "k", "accountId": "a"},
+    {"amount": null, "method": "cash", "idempotencyKey": "k", "accountId": "a"},
+    {"amount": {"minor": 0, "currency": "INR"}, "method": "cash", "idempotencyKey": "k", "accountId": "a"},
+    {"amount": {"minor": -100, "currency": "INR"}, "method": "cash", "idempotencyKey": "k", "accountId": "a"},
+    {"amount": {"minor": 1000, "currency": "INR"}, "method": "unspecified", "idempotencyKey": "k", "accountId": "a"},
+    {"amount": {"minor": 1000, "currency": "INR"}, "method": "cash", "idempotencyKey": "", "accountId": "a"},
+    {"amount": {"minor": 1000, "currency": "INR"}, "method": "cash", "idempotencyKey": "  ", "accountId": "a"},
+    {"amount": {"minor": 1000, "currency": "INR"}, "method": "cash", "idempotencyKey": "k", "accountId": ""},
+    {"amount": null, "method": "unspecified", "idempotencyKey": "", "accountId": ""}
+  ],
+
+  "presentInvoice": ["draft", "issued", "superseded", "cancelled", "unspecified"],
+
+  "buildStatement": [
+    {"entries": [10000, -4000], "reported": 6000},
+    {"entries": [10000], "reported": 6000},
+    {"entries": [], "reported": 0},
+    {"entries": [], "reported": 100},
+    {"entries": [10, 10, 10], "reported": 30},
+    {"entries": [33, 33, 33], "reported": 99}
+  ],
+
+  "closeReadiness": [0, 1, 2, 5],
+
+  "unbilledTotal": [
+    [["posted", 50000], ["invoiced", 30000], ["held", 50000]],
+    [["voided", 10000]],
+    []
+  ]
+}

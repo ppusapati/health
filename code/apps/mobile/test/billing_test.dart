@@ -404,20 +404,33 @@ void main() {
           total: inr(50000),
         );
 
-    test('posted and held charges are unbilled; invoiced and voided are not', () {
+    test('only a posted charge is going on the next invoice', () {
+      // A held charge is waiting on a coding query or an authorisation, and is
+      // held precisely so it does not reach an invoice yet. Counting it as
+      // unbilled inflates a total somebody bills from.
+      //
+      // This assertion previously said held counted too, which was wrong and
+      // was written from the same misreading as the code it tested. The
+      // web/mobile parity harness is what caught it.
       expect(charge(ChargeStatus.posted).unbilled, isTrue);
-      expect(charge(ChargeStatus.held).unbilled, isTrue);
+      expect(charge(ChargeStatus.held).unbilled, isFalse);
       expect(charge(ChargeStatus.invoiced).unbilled, isFalse);
       expect(charge(ChargeStatus.voided).unbilled, isFalse);
     });
 
-    test('the unbilled total counts only the unbilled', () {
+    test('a held charge is still visible as held', () {
+      // Not counted, but not hidden either: it is work somebody has to chase.
+      expect(charge(ChargeStatus.held).held, isTrue);
+      expect(charge(ChargeStatus.posted).held, isFalse);
+    });
+
+    test('the unbilled total leaves out the held as well as the invoiced', () {
       final total = unbilledTotal([
         charge(ChargeStatus.posted),
         charge(ChargeStatus.invoiced),
         charge(ChargeStatus.held),
       ], 'INR');
-      expect(total, inr(100000));
+      expect(total, inr(50000));
     });
 
     test('an unreadable status is not counted as unbilled', () {

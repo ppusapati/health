@@ -216,6 +216,25 @@ void main() {
       expect(find.byKey(const Key('charge-c1')), findsOneWidget);
       expect(find.byKey(const Key('charge-c2')), findsNothing);
     });
+
+    testWidgets('a held charge is shown but not counted', (tester) async {
+      // Counting it inflates a figure somebody quotes; hiding it loses work
+      // waiting on a coding query.
+      await pump(tester, BillingScreen(view: BillingView(
+        statement: statement(), currency: 'INR',
+        charges: [
+          presentCharge(chargeId: 'c1', display: 'Consultation',
+              status: ChargeStatus.posted, total: inr(50000)),
+          presentCharge(chargeId: 'c2', display: 'Theatre',
+              status: ChargeStatus.held, total: inr(90000)),
+        ],
+      )));
+      expect(tester.widget<Text>(find.byKey(const Key('unbilled-total'))).data,
+          'INR 500.00');
+      expect(find.byKey(const Key('charge-c2')), findsNothing);
+      expect(find.byKey(const Key('held-c2')), findsOneWidget);
+      expect(find.textContaining('not counted above'), findsOneWidget);
+    });
   });
 
   group('closing the account', () {

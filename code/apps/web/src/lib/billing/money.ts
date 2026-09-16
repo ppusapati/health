@@ -127,6 +127,16 @@ export function parseMoney(input: string, currency: string): Money | null {
 	const unsigned = negative ? cleaned.slice(1) : cleaned;
 	const [wholePart = '', fractionPart = ''] = unsigned.split('.');
 
+	if (wholePart === '' && fractionPart === '') {
+		// "-." reaches here: the regex above allows an empty whole part and an
+		// empty fraction, and the explicit checks catch "-" and "." but not the
+		// two together. Without this it parsed as zero — which is exactly the
+		// outcome this function's contract exists to refuse, since zero is what
+		// a lenient parser produces from a typing slip. Found by the web/mobile
+		// parity harness in tools/parity.
+		return null;
+	}
+
 	if (fractionPart.length > decimals) {
 		// More precision than the currency has. Refused rather than rounded:
 		// silently turning 10.005 into 10.01 on a receipt is a discrepancy

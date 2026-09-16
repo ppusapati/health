@@ -63,10 +63,16 @@ enum Interpretation {
 
 String describeCriticality(Criticality c) => switch (c) {
       Criticality.high => 'High risk',
-      // Never "low" and never blank. The sentence has to say that nobody
-      // graded it, because that is the actual state of knowledge.
-      Criticality.unableToAssess => 'Could not be assessed',
+      // Never "low" and never blank, and it has to say the risk is unknown
+      // rather than only that the assessment did not happen — the second half
+      // is the clinical point. Same words as the web shell: a clinician moving
+      // between a desk terminal and a tablet should not meet two vocabularies
+      // for the same fact.
+      Criticality.unableToAssess => 'Not assessed — risk unknown',
       Criticality.low => 'Low risk',
+      // "Not classified", not "not recorded": the allergy is recorded, its
+      // criticality is not, and an empty panel already says "nothing
+      // recorded" about something else entirely.
       Criticality.unspecified => 'Not classified',
       Criticality.unrecognised => 'Risk not recognised by this app',
     };

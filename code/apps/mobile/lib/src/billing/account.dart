@@ -294,8 +294,20 @@ class PresentedCharge {
   final ChargeStatus status;
   final Money total;
 
-  /// True when this charge is not yet on an invoice.
+  /// True when this charge will appear on the next invoice.
+  ///
+  /// Not "is not yet on an invoice", which is a wider set and the mistake this
+  /// field invites: a held charge is also not on an invoice, and it is held
+  /// precisely so that it does not reach one until a coding query or an
+  /// authorisation is resolved. Counting it inflates a figure somebody bills
+  /// from and quotes to a patient.
   final bool unbilled;
+
+  /// True when the charge is waiting on a coding query or an authorisation.
+  ///
+  /// Its own flag so the desk can show it — a held charge is actionable, and
+  /// dropping it off the screen entirely hides work somebody has to chase.
+  bool get held => status == ChargeStatus.held;
 
   final DateTime? occurredAt;
 
@@ -315,9 +327,10 @@ PresentedCharge presentCharge({
       display: display,
       status: status,
       total: total,
-      // Posted and held are both unbilled; voided is not a charge any more,
-      // and invoiced is already on a document.
-      unbilled: status == ChargeStatus.posted || status == ChargeStatus.held,
+      // Posted only. Invoiced is already on a document, voided is not a charge
+      // any more, and held is waiting on a query — see the field's own comment
+      // for why that last one is the trap.
+      unbilled: status == ChargeStatus.posted,
       occurredAt: occurredAt,
     );
 

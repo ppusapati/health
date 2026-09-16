@@ -69,7 +69,7 @@ void main() {
         allergies: [allergy(criticality: Criticality.unableToAssess)],
       )));
       expect(find.byIcon(Icons.warning_amber), findsOneWidget);
-      expect(find.textContaining('Could not be assessed'), findsOneWidget);
+      expect(find.textContaining('Not assessed — risk unknown'), findsOneWidget);
     });
 
     testWidgets('a ruled-out allergy is struck through, not removed',

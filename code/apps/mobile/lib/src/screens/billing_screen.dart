@@ -280,6 +280,19 @@ class _BillingScreenState extends State<BillingScreen> {
                   '${formatMoney(charge.total, grouping: view.grouping)} '
                   '(${charge.statusLabel})'),
             ),
+        // Held charges are listed below the total rather than inside it. They
+        // are not going on the next invoice, so counting them would inflate a
+        // figure somebody quotes — but they are work waiting on a coding query
+        // or an authorisation, and dropping them off the screen hides it.
+        for (final charge in view.charges)
+          if (charge.held)
+            Padding(
+              key: Key('held-${charge.chargeId}'),
+              padding: const EdgeInsets.only(top: 4),
+              child: Text('Held: ${charge.display} — '
+                  '${formatMoney(charge.total, grouping: view.grouping)} '
+                  '(not counted above)'),
+            ),
       ]);
 
   Widget _invoices(BillingView view) => _card('Invoices', [

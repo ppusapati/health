@@ -225,5 +225,11 @@ mobile-analyze: ## Analyze the Flutter workspace
 mobile-test: ## Run Flutter unit and widget tests
 	cd apps/mobile && flutter test
 
+.PHONY: parity
+parity: ## Web/mobile behavioural parity for the rules both clients implement
+	cd apps/web && npx vitest run src/lib/parity.runner.test.ts
+	cd apps/mobile && flutter test test/parity_runner_test.dart
+	python3 tools/parity/compare.py
+
 .PHONY: ci
-ci: lint test-fitness test-infra test-security test-migrations test-contract test ## Everything CI runs
+ci: lint test-fitness test-infra test-security test-migrations test-contract test parity ## Everything CI runs

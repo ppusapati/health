@@ -78,6 +78,17 @@ describe('parsing what a cashier typed', () => {
 		}
 	});
 
+	it('refuses a lone sign and point, which used to parse as zero', () => {
+		// "-" and "." are each refused explicitly, and the regex allows an empty
+		// whole part and an empty fraction — so together they slipped past all
+		// three checks and produced a zero payment, the exact outcome this
+		// function exists to refuse. Found by the parity harness in
+		// tools/parity, where the Dart implementation refused and this did not.
+		expect(parseMoney('-.', 'INR')).toBeNull();
+		expect(parseMoney('.', 'INR')).toBeNull();
+		expect(parseMoney('-', 'INR')).toBeNull();
+	});
+
 	it('refuses more precision than the currency has', () => {
 		// Silently turning 10.005 into 10.01 on a receipt is a discrepancy
 		// somebody has to reconcile later.

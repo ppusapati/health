@@ -236,9 +236,13 @@ void main() {
       expect(allergy(criticality: Criticality.low).prominent, isFalse);
     });
 
-    test('its label says nobody graded it, never "low" and never blank', () {
+    test('its label says the risk is unknown, never "low" and never blank', () {
+      // The second half is the clinical point: that nobody assessed it is a
+      // fact about the process, that the risk is unknown is a fact about the
+      // patient. Same words as the web shell, so a clinician moving between a
+      // desk terminal and a tablet meets one vocabulary.
       final label = describeCriticality(Criticality.unableToAssess);
-      expect(label, 'Could not be assessed');
+      expect(label, 'Not assessed — risk unknown');
       expect(label.toLowerCase(), isNot(contains('low')));
     });
 

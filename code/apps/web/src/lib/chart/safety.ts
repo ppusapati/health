@@ -78,7 +78,11 @@ const criticalityLabels: Record<Criticality, string> = {
 	low: 'Low risk',
 	// The honest phrasing. "Unknown" reads as a shrug; this reads as a task.
 	unable_to_assess: 'Not assessed — risk unknown',
-	unspecified: 'Not recorded'
+	// "Not classified", not "not recorded": the allergy is recorded, its
+	// criticality is not, and an empty panel already says "nothing recorded"
+	// about something else entirely. Aligned with the Flutter shell so a
+	// clinician does not meet two vocabularies for the same fact.
+	unspecified: 'Not classified'
 };
 
 const verificationLabels: Record<Verification, string> = {
