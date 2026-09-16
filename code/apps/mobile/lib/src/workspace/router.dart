@@ -40,6 +40,9 @@ enum Destination {
 
   /// Orders and the critical-result inbox (UX-W1-04).
   orders,
+
+  /// The cashier's desk: balance, payments, invoices (UX-W1-06).
+  billing,
 }
 
 /// The route string each destination answers to.
@@ -55,6 +58,7 @@ const Map<String, Destination> routes = {
   '/reception': Destination.reception,
   '/chart': Destination.chart,
   '/orders': Destination.orders,
+  '/billing': Destination.billing,
 };
 
 /// The destination a route names, or null when nothing does.

@@ -19,48 +19,83 @@ What this records is which requirements have working, tested implementations.
 | 6 | Platform blob storage | SRS-DAT-007 (and SRS-EMPI-010, CLN-014, NUR-012) | **Complete** |
 | 7 | Role workspaces (UX-W1-01 … 06) | Wave-1 UX exit criterion | **Complete** — all six |
 
-All 130 requirements are implemented server-side and all six role workspaces are
-built. What remains is listed in [What is not built](#what-is-not-built) — it is
-the mobile client and the two gates that need a cluster.
+All 130 requirements are implemented server-side, and all six role workspaces
+are built on **both** clients. What remains is listed in
+[What is not built](#what-is-not-built) — it is the gates that need a cluster.
 
 ## What is not built
 
 All 130 requirements in the coverage register are implemented server-side, and
 every one is listed with its evidence in the sprint sections below, and all six
-role workspaces the UX specification names are built on the web. Two things
-remain.
+role workspaces the UX specification names are built on the web and on mobile.
+One thing remains.
 
-**The Flutter application covers the ward, not the desk.** It carries the
-Wave-0 foundation and now the two Wave-1 screen groups a ward device needs,
-plus the screen that gets a nurse to a patient:
+**The Flutter application now covers all six workspaces.** It carried two of
+them for a while, on the argument that a tablet is for work done standing up.
+That argument was about the hardware and the hardware is not the axis: the same
+tablet is carried by a receptionist at a counter and handed to a clinician at a
+bedside. Every workspace is in the catalogue, each gated on the permission it
+needs, and a nurse still sees a short list — because the permissions now do the
+narrowing that omission used to do.
 
 | Screen group | Where |
 |---|---|
+| UX-W1-01 reception: queue board and search-before-create | `lib/src/reception/`, `lib/src/screens/reception_screen.dart` |
+| UX-W1-02 chart: allergies, problems, results, notes | `lib/src/chart/`, `lib/src/screens/chart_screen.dart` |
 | UX-W1-03 ward worklist and observation charting | `lib/src/ward/`, `lib/src/screens/ward_worklist_screen.dart`, `observation_form.dart` |
+| UX-W1-04 orders and the critical-result inbox | `lib/src/orders/`, `lib/src/screens/orders_screen.dart` |
 | UX-W1-05 medication round (eMAR) | `lib/src/meds/`, `lib/src/screens/medication_round_screen.dart` |
-| Patient selection, which both of the above need | `lib/src/patient/caseload.dart`, `lib/src/screens/patient_picker_screen.dart` |
+| UX-W1-06 billing: balance, payments, invoices | `lib/src/billing/`, `lib/src/screens/billing_screen.dart` |
+| Patient selection, which most of the above need | `lib/src/patient/caseload.dart`, `lib/src/screens/patient_picker_screen.dart` |
 
-Two of the six numbered groups, not all six, and that is a decision rather than
-a shortfall. A tablet carried on a round is for the work done standing up;
-reception, the chart, orders and billing are desk work, and putting a billing
-screen on a ward device offers a nurse a way to get lost. `wardCatalogue` in
-`lib/src/workspace/navigation.dart` is where the argument is written down.
+Each is the same three layers as the web: a pure logic module holding the
+presentation and gating rules, a mapping module translating protobuf into those
+rules' models, and a thin screen that renders and reports. Almost every test is
+against the first two, because that is where the decisions are.
 
-What the mobile shell does that the web one cannot: an administration recorded
-out of network coverage is queued with the idempotency key minted at the bedside
-and the bedside `given_at`, and the tile says *"saved on this device, not yet
-sent"* rather than *"given"* — because a nurse shown the second for the first
-has a colleague who gives the dose again. See `lib/src/meds/submission.dart`.
+**The refusals are ported, not paraphrased.** Registration is unreachable
+without a completed search; a signed note has no edit control at all; "unable to
+assess" sorts with the high-criticality allergies; an empty allergy panel says
+"nothing recorded" rather than "no known allergies"; a trend refuses to plot
+across units; a required indication blocks the order button rather than warning
+beside it; a duplicate order is shown in full with a per-order override; the
+results inbox is ward-wide; money never becomes a float anywhere, a typed amount
+that cannot be read is refused rather than zeroed, the balance is derived from
+the ledger and shown against the server's figure with a warning when they
+disagree, and no invoice offers an edit control at any status.
 
-The round trip is closed at both ends. `WardController` and `RoundController`
-call `NursingClient` and map the wire types into what the screens render;
-`lib/src/offline/replay.dart` turns a queued administration back into a request
-when the network returns, re-sending what was captured rather than
-reconstructing it — the bedside `given_at`, the bedside idempotency key, and
-`offline: true` so the server is told the dose was recorded on a device that
-could not reach it at the time. An operation whose type nothing claims is
-refused rather than dropped: a queue that silently discards what it cannot route
-loses a nurse's work and reports success.
+### The unknown-enum hazard, found while porting
+
+The web gets exhaustive enum handling from `tsc`: its maps are
+`Record<WireEnum, T>` and a missed member fails the build. The obvious Dart
+substitute is a `default:` arm that throws — and writing the test for it showed
+that arm **can never run**. Measured rather than assumed: `protobuf.dart`
+decodes an unrecognised enum tag as the **zero member** and files the real tag
+under `unknownFields`.
+
+So a future `MATCH_OUTCOME_MERGED` would not arrive as something unmapped. It
+would arrive as `MATCH_OUTCOME_UNSPECIFIED`, which reads as "match strength not
+assessed" — and that does not block registration. A newer server would have
+silently unlocked the create button on a patient already in the index.
+
+Every mapping module now checks `unknownFields`, where the evidence actually is,
+and each enum has an explicit `unrecognised` member whose behaviour is chosen
+for what the mistake would cost:
+
+| Unreadable value | Falls back to | Because |
+|---|---|---|
+| Match outcome | blocks registration | a verdict this build cannot read is not "a different person" |
+| Document status | offers no action | a lifecycle it cannot interpret must never grow an Edit button |
+| Signature meaning | does not finalise | finalising is what attributes a note clinically |
+| Allergy criticality | stays prominent | a risk it cannot read is not a low one |
+| Allergy verification | stays live | "refuted" would move it out of a prescriber's way |
+| Order type | cannot be placed | the type routes the order to a performing service |
+| Invoice status | never editable | the patient may be holding a copy |
+| Charge status | not unbilled | it would join a total somebody bills from |
+
+The tests construct those values the way they really arrive — by appending a
+varint field to an encoded message — because a value from a newer contract
+cannot be built through the generated API at all.
 
 **A patient is reached from the nurse's own caseload, in bed order.** That is
 the shape of the work: a round is a walk down a corridor, so the list is ordered
@@ -80,7 +115,7 @@ that must not happen is a nurse resolving a duplicate at the bedside. The lookup
 asks for two results precisely so a duplicate is visible as a duplicate rather
 than arriving as a confident single answer.
 
-The drawer reaches all three screens. `lib/src/workspace/router.dart` is
+The drawer reaches every screen. `lib/src/workspace/router.dart` is
 deliberately small — a ward tablet has no deep links and no browser history, so
 what a routing package would buy is not what is needed. What *is* needed is the
 part a router usually leaves to the application: **leaving a screen can be
@@ -88,9 +123,6 @@ refused.** A route change runs through the draft guard, so navigating away from 
 half-entered observation prompts, and a route naming no screen is reported with
 the route in it rather than silently redirected home — the person who can fix a
 bad catalogue entry is the one who wrote it.
-
-**The other four screen groups are web-only**, and stay that way unless somebody
-shows a ward using them on a tablet.
 
 **P0-12's cluster deployment cannot be closed in this environment**, though
 what stays open is now narrower than the whole of it. A Kubernetes pod sandbox

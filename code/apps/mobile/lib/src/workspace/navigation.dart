@@ -243,6 +243,13 @@ const WorkspaceCatalogue wardCatalogue = WorkspaceCatalogue(
       requires: 'nursing.administration.read',
       section: WorkspaceSection.clinical,
     ),
+    NavItem(
+      id: 'billing',
+      label: 'Billing',
+      route: '/billing',
+      requires: 'billing.account.read',
+      section: WorkspaceSection.operations,
+    ),
   ],
   quickActions: [
     QuickAction(

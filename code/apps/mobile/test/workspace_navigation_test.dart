@@ -215,14 +215,40 @@ void main() {
       expect(workspace.quickActions, isEmpty);
     });
 
-    test('everything on a ward device is clinical', () {
-      // The argument for a short list: a tablet carried on a round is for work
-      // done standing up. Reception and billing stay on the web.
+    test('permissions decide what a device shows, not the section', () {
+      // This replaced an assertion that every ward entry was clinical, which
+      // encoded an argument about hardware: a tablet is for work done standing
+      // up, so reception and billing stay on the web. That axis was wrong —
+      // the same tablet is carried by a receptionist at a counter and handed
+      // to a clinician at a bedside. Every workspace is in the catalogue now,
+      // and the permissions do the narrowing.
       expect(
-        wardCatalogue.navigation
-            .every((i) => i.section == WorkspaceSection.clinical),
-        isTrue,
+        wardCatalogue.navigation.map((i) => i.section).toSet(),
+        containsAll([WorkspaceSection.clinical, WorkspaceSection.operations]),
       );
+      // Each entry still names exactly one permission, which is what makes the
+      // narrowing possible at all.
+      for (final item in wardCatalogue.navigation) {
+        expect(item.requires, isNotEmpty, reason: '${item.id} gates on nothing');
+      }
+    });
+
+    test('a nurse sees a short list because of what they may do', () {
+      // The old catalogue was short by omission. This one is short for a
+      // nurse because a nurse does not hold the reception or billing
+      // permissions — and a receptionist on the same build sees theirs.
+      final nurse = buildWorkspace(wardCatalogue, [
+        'nursing.task.read',
+        'nursing.administration.read',
+        'clinical.note.read',
+      ]);
+      expect(nurse.navigation.map((i) => i.id),
+          isNot(contains('billing')));
+      expect(nurse.navigation.map((i) => i.id), isNot(contains('reception')));
+
+      final receptionist =
+          buildWorkspace(wardCatalogue, ['scheduling.queue.read']);
+      expect(receptionist.navigation.map((i) => i.id), ['reception']);
     });
 
     test('an administrator is offered nothing clinical, and a nurse nothing administrative', () {

@@ -26,11 +26,14 @@ import 'src/patient/caseload.dart';
 import 'src/patient/caseload_controller.dart';
 import 'src/api/scheduling_client.dart';
 import 'src/api/clinical_client.dart';
+import 'src/api/billing_client.dart';
 import 'src/api/orders_client.dart';
+import 'src/billing/billing_controller.dart';
 import 'src/chart/chart_controller.dart';
 import 'src/reception/reception_controller.dart';
 import 'src/screens/patient_picker_screen.dart';
 import 'src/orders/orders_controller.dart';
+import 'src/screens/billing_screen.dart';
 import 'src/screens/chart_screen.dart';
 import 'src/screens/orders_screen.dart';
 import 'src/screens/reception_screen.dart';
@@ -93,6 +96,9 @@ class _HealthAppState extends State<HealthApp> {
   late final ClinicalClient _clinical = ClinicalClient(_connect);
   late final ChartController _chart = ChartController(_clinical);
   late final OrdersClient _orders = OrdersClient(_connect);
+  late final BillingClient _billingClient = BillingClient(_connect);
+  late final BillingController _billing =
+      BillingController(_billingClient, newIdempotencyKey);
   late final OrdersController _ordering =
       OrdersController(_orders, _clinical, DateTime.now);
   late final CaseloadController _caseload = CaseloadController(_nursing, _empi);
@@ -271,6 +277,7 @@ class _HealthAppState extends State<HealthApp> {
     if (decision.destination == Destination.reception) await _loadBoard();
     if (decision.destination == Destination.chart) await _loadChart();
     if (decision.destination == Destination.orders) await _loadInbox();
+    if (decision.destination == Destination.billing) await _loadAccount();
   }
 
   /// Opens a patient.
@@ -331,6 +338,18 @@ class _HealthAppState extends State<HealthApp> {
     final session = widget.session.context;
     if (session == null) return;
     await _reception.loadBoard(facilityId: session.activeFacilityId);
+    if (mounted) setState(() {});
+  }
+
+  /// Loads the billing account for the open patient.
+  ///
+  /// The account id is the patient's own here. A deployment that bills a
+  /// guarantor separately would resolve it through the encounter instead, and
+  /// the controller takes it as an argument for exactly that reason.
+  Future<void> _loadAccount() async {
+    final patient = _patient;
+    if (patient == null) return;
+    await _billing.load(accountId: patient.patientId);
     if (mounted) setState(() {});
   }
 
@@ -423,6 +442,24 @@ class _HealthAppState extends State<HealthApp> {
           failure: _round.failure,
           onRetry: _loadPatient,
         ),
+      Destination.billing => BillingScreen(
+          view: _billing.view,
+          loading: _billing.loading,
+          failure: _billing.failure,
+          onRetry: _loadAccount,
+          onAmountChanged: (typed) {
+            _billing.setAmount(typed);
+            setState(() {});
+          },
+          onMethodChanged: (method) {
+            _billing.setMethod(method);
+            setState(() {});
+          },
+          onTakePayment: () async {
+            await _billing.takePayment();
+            if (mounted) setState(() {});
+          },
+        ),
       Destination.orders => OrdersScreen(
           view: _ordering.view,
           loading: _ordering.loading,
@@ -508,6 +545,7 @@ class _HealthAppState extends State<HealthApp> {
         Destination.reception => 'Reception',
         Destination.chart => 'Chart',
         Destination.orders => 'Orders',
+        Destination.billing => 'Billing',
       };
 
   @override
