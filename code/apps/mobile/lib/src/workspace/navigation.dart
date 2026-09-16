@@ -216,6 +216,13 @@ const WorkspaceCatalogue wardCatalogue = WorkspaceCatalogue(
       section: WorkspaceSection.clinical,
     ),
     NavItem(
+      id: 'chart',
+      label: 'Chart',
+      route: '/chart',
+      requires: 'clinical.note.read',
+      section: WorkspaceSection.clinical,
+    ),
+    NavItem(
       id: 'ward',
       label: 'Ward worklist',
       route: '/ward',
