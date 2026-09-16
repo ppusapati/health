@@ -1,0 +1,30 @@
+# The writable volume the dev overlay's filesystem blob backend needs.
+#
+# Only this overlay chooses a filesystem backend; preprod and prod set no BLOB_*
+# at all and a deployment with none refuses to store binary content and says so
+# at boot. So the volume belongs here rather than in the base, where it would be
+# an empty mount every real deployment carried for nothing.
+#
+# Found by deploying to a real cluster: the workload crash-looped on
+# `mkdir /var/lib/health: read-only file system`. The overlay was configuring a
+# path the Deployment's readOnlyRootFilesystem forbids writing to, and the two
+# had never been applied together.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: core
+spec:
+  template:
+    spec:
+      containers:
+        - name: core
+          volumeMounts:
+            - name: blobs
+              mountPath: /var/lib/health/blobs
+      volumes:
+        # Ephemeral on purpose, and only tolerable because this is dev: a
+        # filesystem backend on an emptyDir loses every patient photograph and
+        # scanned consent form when the pod moves. preprod and prod use the
+        # object store, which is what SRS-DAT-007 is about.
+        - name: blobs
+          emptyDir: {}

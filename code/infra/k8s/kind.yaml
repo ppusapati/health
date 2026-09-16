@@ -1,0 +1,12 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+# restrict_oom_score_adj is containerd's supported setting for environments
+# that cannot lower oom_score_adj — rootless and constrained sandboxes. It
+# clamps the value to what the process may set rather than failing the sandbox,
+# which is exactly the failure that stopped every previous attempt.
+containerdConfigPatches:
+  - |-
+    [plugins."io.containerd.grpc.v1.cri"]
+      restrict_oom_score_adj = true
+nodes:
+  - role: control-plane

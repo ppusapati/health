@@ -107,22 +107,16 @@ spec:
           # outage, turning a degradation into an outage.
           livenessProbe:
             httpGet:
-              path: /healthcare.platform_api.v1.HealthService/CheckLiveness
+              path: /healthz
               port: http
-              httpHeaders:
-                - name: Content-Type
-                  value: application/json
             initialDelaySeconds: 5
             periodSeconds: 10
             timeoutSeconds: 2
             failureThreshold: 3
           readinessProbe:
             httpGet:
-              path: /healthcare.platform_api.v1.HealthService/CheckReadiness
+              path: /readyz
               port: http
-              httpHeaders:
-                - name: Content-Type
-                  value: application/json
             initialDelaySeconds: 3
             periodSeconds: 5
             timeoutSeconds: 3
@@ -131,15 +125,37 @@ spec:
           # the liveness threshold for the steady state.
           startupProbe:
             httpGet:
-              path: /healthcare.platform_api.v1.HealthService/CheckLiveness
+              path: /healthz
               port: http
             periodSeconds: 3
             failureThreshold: 20
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            # The certificate authority the database's server certificate
+            # chains to (SRS-SEC-004). The binary refuses any sslmode below
+            # verify-ca, and verify-ca needs a CA the client trusts — which for
+            # every managed PostgreSQL worth using is a private one, not a root
+            # in the image's trust store. Without this mount the policy and the
+            # manifest contradict each other: the only databases reachable
+            # would be ones whose certificate chains to a public root, which a
+            # managed instance's does not.
+            #
+            # Found by deploying to a real cluster: the workload crash-looped
+            # refusing its own DSN, which is the control working and the
+            # manifest unable to satisfy it.
+            - name: database-ca
+              mountPath: /etc/ssl/database
+              readOnly: true
       # readOnlyRootFilesystem still needs somewhere writable for scratch.
       volumes:
         - name: tmp
           emptyDir: {}
+        # Optional so a deployment whose database presents a publicly trusted
+        # certificate needs no ConfigMap; the DSN simply omits sslrootcert. A
+        # required volume would make every such deployment carry an empty one.
+        - name: database-ca
+          configMap:
+            name: core-database-ca
+            optional: true
       terminationGracePeriodSeconds: 30

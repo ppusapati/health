@@ -4,6 +4,8 @@ package transport
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
 
 	"connectrpc.com/connect"
 	platformapiv1 "github.com/ppusapati/health/code/gen/go/healthcare/platform_api/v1"
@@ -72,4 +74,67 @@ func (h *Handler) GetBuildInfo(
 		Commit:  h.build.Commit,
 		BuiltAt: h.build.BuiltAt,
 	}), nil
+}
+
+// Probe paths a Kubernetes httpGet probe can actually reach.
+//
+// The Deployment's probes were declared against the Connect procedure paths,
+// and a Connect unary procedure is a POST. Kubernetes httpGet probes issue GET
+// and nothing can change that, so every probe answered 405 and the Pod never
+// became ready — the manifests could not roll out in any cluster.
+//
+// Found by deploying to a real kubelet. Neither schema validation, nor
+// admission, nor running the image by hand catches it: the first two never
+// execute a probe, and running it by hand means choosing the verb yourself,
+// which is exactly the mistake.
+const (
+	LivenessPath  = "/healthz"
+	ReadinessPath = "/readyz"
+)
+
+// RegisterProbes serves the liveness and readiness checks over plain HTTP GET.
+//
+// The bodies delegate to the same methods the RPC surface exposes, rather than
+// re-deriving readiness: two implementations of "is this instance ready" drift,
+// and the one the orchestrator believes is whichever it happens to call.
+func (h *Handler) RegisterProbes(mux *http.ServeMux) {
+	mux.HandleFunc(LivenessPath, func(w http.ResponseWriter, r *http.Request) {
+		// Liveness touches no dependency, by the same reasoning as the RPC: a
+		// database outage must not make the orchestrator restart every pod.
+		if _, err := h.CheckLiveness(r.Context(), connect.NewRequest(
+			&platformapiv1.CheckLivenessRequest{})); err != nil {
+			http.Error(w, "not alive", http.StatusServiceUnavailable)
+			return
+		}
+		writeProbe(w, http.StatusOK, map[string]any{"alive": true})
+	})
+
+	mux.HandleFunc(ReadinessPath, func(w http.ResponseWriter, r *http.Request) {
+		response, err := h.CheckReadiness(r.Context(), connect.NewRequest(
+			&platformapiv1.CheckReadinessRequest{}))
+		if err != nil {
+			http.Error(w, "not ready", http.StatusServiceUnavailable)
+			return
+		}
+		status := http.StatusOK
+		if !response.Msg.GetReady() {
+			// 503 rather than a 200 carrying ready:false. A probe reads the
+			// status code and nothing else, so a body that says "not ready"
+			// under a 200 is a pod the orchestrator keeps sending traffic to.
+			status = http.StatusServiceUnavailable
+		}
+		writeProbe(w, status, map[string]any{
+			"ready":        response.Msg.GetReady(),
+			"dependencies": response.Msg.GetDependencies(),
+		})
+	})
+}
+
+// writeProbe renders a probe body. The body is for a human reading `kubectl
+// describe` or curling the endpoint during an incident; the orchestrator only
+// ever reads the status code.
+func writeProbe(w http.ResponseWriter, status int, body map[string]any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(body)
 }

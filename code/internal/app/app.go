@@ -542,10 +542,16 @@ func New(deps Deps) *Server {
 		interceptors))
 	mux.Handle(billingv1connect.NewBillingServiceHandler(
 		billingtransport.NewHandler(billingService), interceptors))
-	mux.Handle(platformapiv1connect.NewHealthServiceHandler(
-		platformapitransport.NewHandler(deps.Build, map[string]platformapitransport.Pinger{
+	health := platformapitransport.NewHandler(deps.Build,
+		map[string]platformapitransport.Pinger{
 			"postgres": poolPinger{pool: deps.Pool},
-		}), interceptors))
+		})
+	mux.Handle(platformapiv1connect.NewHealthServiceHandler(health, interceptors))
+	// The same checks over plain HTTP GET, because a Kubernetes httpGet probe
+	// cannot POST and a Connect procedure is a POST. Registered outside the
+	// interceptor chain on purpose: a probe that needed a bearer token would
+	// make an unauthenticated kubelet mark every pod unready.
+	health.RegisterProbes(mux)
 
 	// Security headers wrap the mux rather than sitting in the interceptor
 	// chain, so they reach every response the browser sees — a 404, a

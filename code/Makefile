@@ -225,6 +225,10 @@ mobile-analyze: ## Analyze the Flutter workspace
 mobile-test: ## Run Flutter unit and widget tests
 	cd apps/mobile && flutter test
 
+.PHONY: cluster-deploy
+cluster-deploy: ## Deploy the manifests to a real cluster and prove the workload runs
+	./scripts/cluster/deploy-check.sh
+
 .PHONY: parity
 parity: ## Web/mobile behavioural parity for the rules both clients implement
 	cd apps/web && npx vitest run src/lib/parity.runner.test.ts

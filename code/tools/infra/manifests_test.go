@@ -31,6 +31,25 @@ type document struct {
 	data map[string]any
 }
 
+// devFixture reports whether a document is a local development fixture rather
+// than something the release pipeline ships.
+//
+// The distinction matters for exactly three invariants — digest pinning, the
+// release registry, and zero-downtime rollout — which a side-loaded image and a
+// single-replica scratch database cannot satisfy and should not pretend to.
+// Every security invariant still applies: a fixture exempted from the policy is
+// a hole the policy does not cover, and the namespace enforces "restricted"
+// against it either way.
+//
+// Marked on the object rather than matched by filename, so a new fixture has to
+// say so in its own text and a shipped workload cannot become exempt by being
+// moved.
+func (d document) devFixture() bool {
+	metadata, _ := d.data["metadata"].(map[string]any)
+	annotations, _ := metadata["annotations"].(map[string]any)
+	return annotations["health.dev/fixture"] == "true"
+}
+
 // loadManifests parses every YAML document under infra/k8s.
 func loadManifests(t *testing.T) []document {
 	t.Helper()
@@ -257,11 +276,16 @@ func TestLivenessDoesNotProbeDependencies(t *testing.T) {
 			httpGet, _ := liveness["httpGet"].(map[string]any)
 			path, _ := httpGet["path"].(string)
 
-			if strings.Contains(path, "CheckReadiness") {
+			// The probe paths are plain HTTP, not the Connect procedure
+			// paths they used to be: a Connect unary procedure is a POST and a
+			// Kubernetes httpGet probe issues GET, so the old declaration
+			// answered 405 and the Pod never became ready. See
+			// RegisterProbes in internal/platform_api/transport/health.go.
+			if path == "/readyz" || strings.Contains(path, "CheckReadiness") {
 				t.Errorf("%s/%s: liveness probes readiness (%s); a dependency outage would restart every pod",
 					doc.path, doc.name(), path)
 			}
-			if !strings.Contains(path, "CheckLiveness") {
+			if path != "/healthz" {
 				t.Errorf("%s/%s: liveness probe path %q is not the liveness endpoint", doc.path, doc.name(), path)
 			}
 		}
@@ -269,6 +293,50 @@ func TestLivenessDoesNotProbeDependencies(t *testing.T) {
 
 	if checked == 0 {
 		t.Fatal("no liveness probes found")
+	}
+}
+
+// A probe Kubernetes cannot issue is a probe that never passes.
+//
+// httpGet probes send GET and there is no way to make them send anything else.
+// Every probe here was originally declared against a ConnectRPC procedure path,
+// which only answers POST, so all three returned 405 and the Deployment could
+// not roll out in any cluster. Schema validation passed, admission passed, and
+// running the image by hand passed — because doing it by hand means choosing
+// the verb yourself, which is the whole mistake.
+func TestProbesUseGetReachablePaths(t *testing.T) {
+	checked := 0
+	for _, doc := range loadManifests(t) {
+		if doc.isPatch() {
+			continue
+		}
+		podSpec, ok := doc.podSpec()
+		if !ok {
+			continue
+		}
+		for _, container := range containersOf(podSpec) {
+			for _, kind := range []string{"livenessProbe", "readinessProbe", "startupProbe"} {
+				probe, ok := container[kind].(map[string]any)
+				if !ok {
+					continue
+				}
+				httpGet, ok := probe["httpGet"].(map[string]any)
+				if !ok {
+					// exec and tcpSocket probes are not subject to this.
+					continue
+				}
+				checked++
+				path, _ := httpGet["path"].(string)
+				if strings.Contains(path, ".v1.") || strings.Contains(path, "Service/") {
+					t.Errorf("%s/%s: %s httpGet path %q looks like an RPC procedure; "+
+						"a Connect procedure only answers POST and an httpGet probe sends GET",
+						doc.path, doc.name(), kind, path)
+				}
+			}
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no httpGet probes found")
 	}
 }
 
@@ -368,6 +436,9 @@ func TestRolloutAndDisruptionProtectAvailability(t *testing.T) {
 	var sawDeployment, sawPDB bool
 
 	for _, doc := range loadManifests(t) {
+		if doc.devFixture() {
+			continue
+		}
 		if doc.isPatch() {
 			continue
 		}
@@ -784,6 +855,9 @@ func TestImagesArePinnedByDigest(t *testing.T) {
 	var checked int
 
 	for _, doc := range loadManifests(t) {
+		if doc.devFixture() {
+			continue
+		}
 		for _, ref := range doc.imageRefs() {
 			checked++
 
@@ -815,6 +889,9 @@ func TestImagesComeFromTheReleaseRegistry(t *testing.T) {
 	allowedExternal := []string{"postgres@sha256:", "docker.io/library/postgres@sha256:"}
 
 	for _, doc := range loadManifests(t) {
+		if doc.devFixture() {
+			continue
+		}
 		for _, ref := range doc.imageRefs() {
 			if strings.HasPrefix(ref, "ghcr.io/ppusapati/health/") {
 				continue

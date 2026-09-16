@@ -18,6 +18,12 @@ patches:
       kind: ConfigMap
       name: core-config
     path: config-patch.yaml
+  # The writable volume this overlay's filesystem blob backend needs. See the
+  # patch for why it is not in the base.
+  - target:
+      kind: Deployment
+      name: core
+    path: blobs-patch.yaml
   # Nightly restore verification is a production control; running it in dev
   # only burns cluster time.
   - target:
