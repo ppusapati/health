@@ -1026,3 +1026,69 @@ func TestAnOrderCannotBeReachedFromAnotherTenant(t *testing.T) {
 		t.Fatalf("the refusal confirms the order exists elsewhere: %v", err)
 	}
 }
+
+// SRS-ORD-010: "audit of placement, modification and cancellation with reason,
+// linked to the originating user and client".
+//
+// Added by the Wave-1 traceability audit, which found this marked Implemented
+// with nothing asserting it. The audit call is three lines inside a
+// transaction, which is exactly the kind of thing a refactor moves out of the
+// transaction or drops — and an audit trail nobody checks is one that is
+// discovered to be missing at the point somebody needs it.
+func TestPlacingAndCancellingAnOrderIsAuditedToTheRequester(t *testing.T) {
+	h := newOrdHarness(t)
+	patient, encounter := h.chart(t, "Iyer", "9876543210")
+	ctx := context.Background()
+
+	// Placed directly rather than through the harness helper, whose fifth
+	// argument is the duplicate acknowledgement rather than the indication.
+	placed, err := h.orders.PlaceOrder(ctx,
+		withFacility(h.clinicianToken(), h.facility, &ordersv1.PlaceOrderRequest{
+			Type:      ordersv1.OrderType_ORDER_TYPE_LABORATORY,
+			PatientId: patient, EncounterId: encounter,
+			Code:       potassiumCode(),
+			Priority:   ordersv1.Priority_PRIORITY_ROUTINE,
+			Indication: "query pulmonary embolism",
+		}))
+	if err != nil {
+		t.Fatalf("PlaceOrder: %v", err)
+	}
+	order := placed.Msg.GetOrder()
+
+	var actor, reason string
+	if err := h.pool.QueryRow(ctx,
+		`SELECT actor_id, reason FROM platform_data.audit_record
+		  WHERE action = 'orders.order.place' AND resource_id = $1`,
+		order.GetOrderId()).Scan(&actor, &reason); err != nil {
+		t.Fatalf("placing an order was not audited: %v", err)
+	}
+	// Linked to the originating user, which is the half of the requirement a
+	// generic "something happened" record would miss.
+	if actor != "doctor-1" {
+		t.Fatalf("the placement is attributed to %q", actor)
+	}
+	// With reason: the indication is what makes the audit answer "why", and a
+	// row that records only "an order was placed" answers nothing worth asking.
+	if reason != "query pulmonary embolism" {
+		t.Fatalf("the audited reason is %q", reason)
+	}
+
+	if _, err := h.orders.CancelOrder(ctx,
+		withFacility(h.clinicianToken(), h.facility, &ordersv1.CancelOrderRequest{
+			OrderId: order.GetOrderId(),
+			Reason:  "patient declined the scan",
+		})); err != nil {
+		t.Fatalf("CancelOrder: %v", err)
+	}
+
+	var cancelReason string
+	if err := h.pool.QueryRow(ctx,
+		`SELECT reason FROM platform_data.audit_record
+		  WHERE action LIKE 'orders.order.cancel%' AND resource_id = $1`,
+		order.GetOrderId()).Scan(&cancelReason); err != nil {
+		t.Fatalf("cancelling an order was not audited: %v", err)
+	}
+	if cancelReason != "patient declined the scan" {
+		t.Fatalf("the audited cancellation reason is %q", cancelReason)
+	}
+}

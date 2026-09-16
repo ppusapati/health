@@ -46,6 +46,24 @@ Add its inputs to `cases.json`, emit its answers from both runners, and run
 `make parity`. The corpus speaks the web's vocabulary — snake_case enum names —
 and the Dart runner translates, so a case reads the same for both sides.
 
+## The traceability check
+
+`make traceability` is the other half of the same audit, and lives here because
+it answers the same kind of question. `wave-1-status.md` does not claim
+"implemented" — it claims "has a working, tested implementation", and the
+difference is the whole point of the document. The check asserts the weaker
+half mechanically: every requirement id the doc claims appears in at least one
+test file.
+
+It cannot check that the test asserts the right thing; nothing can, short of
+reading it. It does catch what the audit found twice — a requirement
+implemented, marked Implemented, and exercised by nothing at all:
+
+| Requirement | What was missing |
+|---|---|
+| SRS-ENC-010 | The referral a visit answers was held on the domain and the proto, and no test touched `ReferralID`. "Travels with the encounter" is the claim that fails silently, because a field dropped in a mapping layer looks like nothing until somebody tries to close the loop back to the referrer. Now round-tripped through storage and back. |
+| SRS-ORD-010 | Placement and cancellation were audited, and nothing asserted it. The audit call is three lines inside a transaction — the kind of thing a refactor moves out or drops — and an audit trail nobody checks is one discovered to be missing at the moment somebody needs it. Now asserted with the actor and the reason. |
+
 ## What it does not cover
 
 Rules only one client has. The web's prescribing module (`meds/prescribe.ts`)

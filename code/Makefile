@@ -231,5 +231,9 @@ parity: ## Web/mobile behavioural parity for the rules both clients implement
 	cd apps/mobile && flutter test test/parity_runner_test.dart
 	python3 tools/parity/compare.py
 
+.PHONY: traceability
+traceability: ## Every requirement the status doc claims is named by a test
+	python3 tools/parity/traceability.py
+
 .PHONY: ci
-ci: lint test-fitness test-infra test-security test-migrations test-contract test parity ## Everything CI runs
+ci: lint test-fitness test-infra test-security test-migrations test-contract test parity traceability ## Everything CI runs

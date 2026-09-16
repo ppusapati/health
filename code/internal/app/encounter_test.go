@@ -528,3 +528,60 @@ func TestCancellingNeedsAReason(t *testing.T) {
 		t.Fatal("an encounter was cancelled with no reason")
 	}
 }
+
+// SRS-ENC-010: "linked external referral/request source".
+//
+// Added by the Wave-1 traceability audit, which found this requirement
+// implemented and marked Implemented with no test naming it — and, worse, no
+// test touching ReferralID at all. "The reference is held and travels with the
+// encounter" is exactly the claim that fails silently: a field dropped in a
+// mapping layer looks like nothing at all until somebody tries to close the
+// loop back to the referrer.
+func TestAnEncounterKeepsTheReferralItAnswers(t *testing.T) {
+	h := newEncHarness(t)
+	patient := h.registerPatient(t, "Iyer", "9876543210")
+
+	const referral = "REF-2026-00841"
+
+	opened, err := h.encounters.OpenEncounter(context.Background(),
+		withFacility(h.clinicianToken(), h.facility, &encounterv1.OpenEncounterRequest{
+			PatientId: patient, FacilityId: h.facility,
+			Class:               encounterv1.EncounterClass_ENCOUNTER_CLASS_OUTPATIENT,
+			AttendingProviderId: "doctor-1", Reason: "chest pain",
+			ReferralId:       referral,
+			StartImmediately: true,
+		}))
+	if err != nil {
+		t.Fatalf("OpenEncounter: %v", err)
+	}
+	if got := opened.Msg.GetEncounter().GetReferralId(); got != referral {
+		t.Fatalf("the response dropped the referral: %q", got)
+	}
+
+	// The half that matters: it survives the round trip to storage and back,
+	// rather than being echoed from the request.
+	read, err := h.encounters.GetEncounter(context.Background(),
+		withFacility(h.clinicianToken(), h.facility, &encounterv1.GetEncounterRequest{
+			EncounterId: opened.Msg.GetEncounter().GetEncounterId(),
+		}))
+	if err != nil {
+		t.Fatalf("GetEncounter: %v", err)
+	}
+	if got := read.Msg.GetEncounter().GetReferralId(); got != referral {
+		t.Fatalf("the stored encounter has referral %q, want %q", got, referral)
+	}
+}
+
+// An encounter that answers no referral carries none, rather than an empty
+// string that later reads as a referral nobody can find.
+func TestAnEncounterWithNoReferralCarriesNone(t *testing.T) {
+	h := newEncHarness(t)
+	patient := h.registerPatient(t, "Iyer", "9876543210")
+
+	encounter := h.openEncounter(t, patient,
+		encounterv1.EncounterClass_ENCOUNTER_CLASS_OUTPATIENT)
+
+	if got := encounter.GetReferralId(); got != "" {
+		t.Fatalf("an unreferred encounter carries %q", got)
+	}
+}
