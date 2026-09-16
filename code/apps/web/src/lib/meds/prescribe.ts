@@ -85,7 +85,10 @@ const severityLabels: Record<Severity, string> = {
 	moderate: 'Moderate',
 	mild: 'Mild',
 	informational: 'For information',
-	unspecified: 'Not graded'
+	// Long form deliberately. This label sits beside a kind chip, and a bare
+	// 'Not graded' next to 'Allergy' reads as though the allergy is what was
+	// not graded. The formulary labels below take the same shape.
+	unspecified: 'Severity not graded'
 };
 
 const kindLabels: Record<FindingKind, string> = {
@@ -95,6 +98,21 @@ const kindLabels: Record<FindingKind, string> = {
 	dose_support: 'Dose advice',
 	unspecified: 'Safety finding'
 };
+
+/**
+ * A dose amount is a plain decimal, with an optional sign so that a negative
+ * one can be refused for the right reason.
+ *
+ * Shape first, `Number()` second. `Number('NaN')`, `Number('Infinity')` and
+ * `Number('0x10')` all produce a value and two of those three are greater than
+ * zero, so an infinite dose validated cleanly here until the parity corpus
+ * asked both clients the same question. Scientific notation is refused for the
+ * same reason: a prescriber reading back `1e3` does not see a gram.
+ */
+const decimalAmount = /^-?\d+(\.\d+)?$/;
+
+/** A naked decimal point, which is a dose written dangerously rather than a typo. */
+const nakedDecimal = /^-?\.\d+$/;
 
 /** Sort rank. Lower is more serious. */
 const severityRank: Record<Severity, number> = {
@@ -331,11 +349,18 @@ export function validatePrescription(
 			'The eMAR and the dose checks cannot read free text.';
 	}
 
-	if (hasStructured && Number.isNaN(Number(draft.dose.amount))) {
-		problems.dose = 'The dose amount is not a number.';
-	}
-	if (hasStructured && Number(draft.dose.amount) <= 0) {
-		problems.dose = 'The dose amount must be greater than zero.';
+	if (hasStructured) {
+		const amount = draft.dose.amount.trim();
+		if (nakedDecimal.test(amount)) {
+			// .5 read as 5 is a tenfold overdose, which is why every medication
+			// safety list says to write the leading zero. The composer can just
+			// ask for it rather than pass an ambiguous string on.
+			problems.dose = `Write the dose with a leading zero: ${amount.replace('.', '0.')}, not ${amount}.`;
+		} else if (!decimalAmount.test(amount)) {
+			problems.dose = 'The dose amount is not a number.';
+		} else if (Number(amount) <= 0) {
+			problems.dose = 'The dose amount must be greater than zero.';
+		}
 	}
 
 	const order = ['patient', 'encounter', 'ingredient', 'dose', 'route', 'indication']

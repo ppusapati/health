@@ -32,6 +32,9 @@ enum Destination {
   /// The medication round (UX-W1-05).
   medicationRound,
 
+  /// Prescribing and the pharmacist's verification queue (UX-W1-05).
+  prescribing,
+
   /// The reception desk: the queue board, and search before create (UX-W1-01).
   reception,
 
@@ -55,6 +58,7 @@ const Map<String, Destination> routes = {
   '/patients': Destination.patients,
   '/ward': Destination.ward,
   '/medications/round': Destination.medicationRound,
+  '/medications/prescribe': Destination.prescribing,
   '/reception': Destination.reception,
   '/chart': Destination.chart,
   '/orders': Destination.orders,

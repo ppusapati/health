@@ -360,9 +360,23 @@ func TestFIT06_NoWholeMessageLogging(t *testing.T) {
 		regexp.MustCompile(`log\.Print`),
 	}
 
+	// Drill harnesses are excluded, and the exclusion is narrow on purpose.
+	// scripts/drills/* is built and run by an operator during a drill and is
+	// never in the deployed image; its whole output is the measurement, printed
+	// to a terminal somebody is watching. Everything that ships -- cmd/,
+	// internal/, tools/ -- is still covered, and the assertion below is what
+	// stops this exclusion quietly widening to any of them.
+	var covered int
 	for _, f := range loadGoFiles(t) {
 		if strings.HasSuffix(f.rel, "_test.go") {
 			continue
+		}
+		if strings.HasPrefix(filepath.ToSlash(f.rel), "scripts/drills/") {
+			continue
+		}
+		if strings.HasPrefix(filepath.ToSlash(f.rel), "cmd/") ||
+			strings.HasPrefix(filepath.ToSlash(f.rel), "internal/") {
+			covered++
 		}
 
 		source, err := os.ReadFile(f.path)
@@ -375,6 +389,13 @@ func TestFIT06_NoWholeMessageLogging(t *testing.T) {
 				t.Errorf("FIT-06: %s contains unsafe logging construct %q", f.rel, loc)
 			}
 		}
+	}
+
+	// A skip rule that swallowed the deployed tree would leave this test green
+	// and meaningless.
+	if covered < 50 {
+		t.Errorf("FIT-06 scanned only %d files under cmd/ and internal/; the "+
+			"exclusion above has widened past the drill harnesses", covered)
 	}
 }
 

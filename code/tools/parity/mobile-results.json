@@ -1243,6 +1243,482 @@
     0,
     0
   ],
+  "safetyGate": [
+    {
+      "state": "clear",
+      "message": "",
+      "outstanding": []
+    },
+    {
+      "state": "contraindicated",
+      "message": "This is contraindicated for this patient. It cannot be prescribed here.",
+      "outstanding": []
+    },
+    {
+      "state": "contraindicated",
+      "message": "2 contraindications apply. This cannot be prescribed here.",
+      "outstanding": []
+    },
+    {
+      "state": "contraindicated",
+      "message": "This is contraindicated for this patient. It cannot be prescribed here.",
+      "outstanding": []
+    },
+    {
+      "state": "needs-reasons",
+      "message": "Give a reason for the safety warning before prescribing.",
+      "outstanding": [
+        "r1"
+      ]
+    },
+    {
+      "state": "overridden",
+      "message": "",
+      "outstanding": []
+    },
+    {
+      "state": "needs-reasons",
+      "message": "Give a reason for the safety warning before prescribing.",
+      "outstanding": [
+        "r1"
+      ]
+    },
+    {
+      "state": "needs-reasons",
+      "message": "Give a reason for the safety warning before prescribing.",
+      "outstanding": [
+        "r1"
+      ]
+    },
+    {
+      "state": "clear",
+      "message": "",
+      "outstanding": []
+    },
+    {
+      "state": "clear",
+      "message": "",
+      "outstanding": []
+    },
+    {
+      "state": "needs-reasons",
+      "message": "Give a reason for the safety warning before prescribing.",
+      "outstanding": [
+        "r2"
+      ]
+    },
+    {
+      "state": "overridden",
+      "message": "",
+      "outstanding": []
+    },
+    {
+      "state": "needs-reasons",
+      "message": "Give a reason for the safety warning before prescribing.",
+      "outstanding": [
+        "r2"
+      ]
+    },
+    {
+      "state": "overridden",
+      "message": "",
+      "outstanding": []
+    }
+  ],
+  "orderFindings": [
+    [
+      "stop",
+      "sev",
+      "mild"
+    ],
+    [
+      "stop",
+      "a",
+      "z"
+    ],
+    [
+      "i",
+      "u"
+    ],
+    []
+  ],
+  "presentFinding": [
+    {
+      "severity": "contraindicated",
+      "overridable": false,
+      "severityLabel": "Contraindicated"
+    },
+    {
+      "severity": "severe",
+      "overridable": true,
+      "severityLabel": "Severe"
+    },
+    {
+      "severity": "moderate",
+      "overridable": true,
+      "severityLabel": "Moderate"
+    },
+    {
+      "severity": "mild",
+      "overridable": true,
+      "severityLabel": "Mild"
+    },
+    {
+      "severity": "informational",
+      "overridable": true,
+      "severityLabel": "For information"
+    },
+    {
+      "severity": "unspecified",
+      "overridable": true,
+      "severityLabel": "Severity not graded"
+    }
+  ],
+  "describeFindingKind": [
+    "Allergy",
+    "Interaction",
+    "Duplicate therapy",
+    "Dose advice",
+    "Safety finding"
+  ],
+  "structuredDoseRequiredFor": [
+    true,
+    true,
+    false,
+    false,
+    false,
+    false,
+    true
+  ],
+  "validatePrescription": [
+    {
+      "ready": true,
+      "order": [],
+      "fields": [],
+      "mayPrescribe": true
+    },
+    {
+      "ready": true,
+      "order": [],
+      "fields": [],
+      "mayPrescribe": true
+    },
+    {
+      "ready": false,
+      "order": [
+        "This medicine needs a numeric dose and unit rather than free text. The eMAR and the dose checks cannot read free text."
+      ],
+      "fields": [
+        "dose"
+      ],
+      "mayPrescribe": false
+    },
+    {
+      "ready": false,
+      "order": [
+        "Give a dose."
+      ],
+      "fields": [
+        "dose"
+      ],
+      "mayPrescribe": false
+    },
+    {
+      "ready": false,
+      "order": [
+        "The dose amount is not a number."
+      ],
+      "fields": [
+        "dose"
+      ],
+      "mayPrescribe": false
+    },
+    {
+      "ready": false,
+      "order": [
+        "The dose amount must be greater than zero."
+      ],
+      "fields": [
+        "dose"
+      ],
+      "mayPrescribe": false
+    },
+    {
+      "ready": false,
+      "order": [
+        "The dose amount must be greater than zero."
+      ],
+      "fields": [
+        "dose"
+      ],
+      "mayPrescribe": false
+    },
+    {
+      "ready": false,
+      "order": [
+        "Give a dose."
+      ],
+      "fields": [
+        "dose"
+      ],
+      "mayPrescribe": false
+    },
+    {
+      "ready": false,
+      "order": [
+        "This prescription is not attached to a patient."
+      ],
+      "fields": [
+        "patient"
+      ],
+      "mayPrescribe": false
+    },
+    {
+      "ready": false,
+      "order": [
+        "This prescription is not attached to an encounter."
+      ],
+      "fields": [
+        "encounter"
+      ],
+      "mayPrescribe": false
+    },
+    {
+      "ready": false,
+      "order": [
+        "Choose what is being prescribed."
+      ],
+      "fields": [
+        "ingredient"
+      ],
+      "mayPrescribe": false
+    },
+    {
+      "ready": false,
+      "order": [
+        "Give the route."
+      ],
+      "fields": [
+        "route"
+      ],
+      "mayPrescribe": false
+    },
+    {
+      "ready": false,
+      "order": [
+        "Give the indication."
+      ],
+      "fields": [
+        "indication"
+      ],
+      "mayPrescribe": false
+    },
+    {
+      "ready": false,
+      "order": [
+        "This prescription is not attached to a patient.",
+        "This prescription is not attached to an encounter.",
+        "Choose what is being prescribed.",
+        "Give a dose.",
+        "Give the route.",
+        "Give the indication."
+      ],
+      "fields": [
+        "dose",
+        "encounter",
+        "indication",
+        "ingredient",
+        "patient",
+        "route"
+      ],
+      "mayPrescribe": false
+    },
+    {
+      "ready": false,
+      "order": [
+        "The dose amount is not a number."
+      ],
+      "fields": [
+        "dose"
+      ],
+      "mayPrescribe": false
+    },
+    {
+      "ready": false,
+      "order": [
+        "The dose amount is not a number."
+      ],
+      "fields": [
+        "dose"
+      ],
+      "mayPrescribe": false
+    },
+    {
+      "ready": false,
+      "order": [
+        "The dose amount is not a number."
+      ],
+      "fields": [
+        "dose"
+      ],
+      "mayPrescribe": false
+    },
+    {
+      "ready": false,
+      "order": [
+        "The dose amount is not a number."
+      ],
+      "fields": [
+        "dose"
+      ],
+      "mayPrescribe": false
+    },
+    {
+      "ready": false,
+      "order": [
+        "The dose amount is not a number."
+      ],
+      "fields": [
+        "dose"
+      ],
+      "mayPrescribe": false
+    },
+    {
+      "ready": false,
+      "order": [
+        "Write the dose with a leading zero: 0.5, not .5."
+      ],
+      "fields": [
+        "dose"
+      ],
+      "mayPrescribe": false
+    },
+    {
+      "ready": false,
+      "order": [
+        "Write the dose with a leading zero: -0.5, not -.5."
+      ],
+      "fields": [
+        "dose"
+      ],
+      "mayPrescribe": false
+    },
+    {
+      "ready": true,
+      "order": [],
+      "fields": [],
+      "mayPrescribe": true
+    },
+    {
+      "ready": true,
+      "order": [],
+      "fields": [],
+      "mayPrescribe": true
+    },
+    {
+      "ready": true,
+      "order": [],
+      "fields": [],
+      "mayPrescribe": true
+    },
+    {
+      "ready": true,
+      "order": [],
+      "fields": [],
+      "mayPrescribe": true
+    },
+    {
+      "ready": false,
+      "order": [
+        "The dose amount is not a number."
+      ],
+      "fields": [
+        "dose"
+      ],
+      "mayPrescribe": false
+    },
+    {
+      "ready": false,
+      "order": [
+        "The dose amount is not a number."
+      ],
+      "fields": [
+        "dose"
+      ],
+      "mayPrescribe": false
+    },
+    {
+      "ready": false,
+      "order": [
+        "The dose amount is not a number."
+      ],
+      "fields": [
+        "dose"
+      ],
+      "mayPrescribe": false
+    }
+  ],
+  "formularyNotice": [
+    {
+      "label": "On formulary",
+      "action": "",
+      "prominent": false
+    },
+    {
+      "label": "Restricted",
+      "action": "ICU only",
+      "prominent": true
+    },
+    {
+      "label": "Restricted",
+      "action": "Ask the on-call consultant",
+      "prominent": true
+    },
+    {
+      "label": "Not on formulary",
+      "action": "Consultant microbiologist approval",
+      "prominent": true
+    },
+    {
+      "label": "Not on formulary",
+      "action": "",
+      "prominent": true
+    },
+    {
+      "label": "Formulary status unknown",
+      "action": "",
+      "prominent": false
+    },
+    {
+      "label": "Formulary status not checked",
+      "action": "",
+      "prominent": false
+    }
+  ],
+  "worstSeverity": [
+    "unspecified",
+    "mild",
+    "severe",
+    "informational",
+    "contraindicated",
+    "unspecified"
+  ],
+  "orderQueue": [
+    [],
+    [
+      "b",
+      "c",
+      "a"
+    ],
+    [
+      "old",
+      "new"
+    ],
+    [
+      "i",
+      "u"
+    ]
+  ],
   "sumMoney": [
     1000
   ]

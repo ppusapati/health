@@ -34,6 +34,12 @@ import {
 	validateOrder, duplicateGate, orderInbox, acknowledgementProblem,
 	type OrderType, type OrderPriority, type OrderStatus
 } from './orders/composer.js';
+import {
+	presentFinding, orderFindings, safetyGate, structuredDoseRequiredFor,
+	validatePrescription, mayPrescribe, describeFormulary, describeFindingKind,
+	worstSeverity, orderQueue,
+	type Severity, type FormularyStatus, type FindingKind
+} from './meds/prescribe.js';
 
 const root = resolve(__dirname, '../../../../tools/parity');
 const cases = JSON.parse(readFileSync(resolve(root, 'cases.json'), 'utf8'));
@@ -305,6 +311,95 @@ describe('parity runner', () => {
 						'INR'
 					).minor
 				)
+		);
+
+		const asFinding = (id: string, severity: Severity, existing = '') =>
+			presentFinding({
+				ruleId: id, ruleVersion: 'v1', kind: 'interaction', severity,
+				summary: `Finding ${id}`, subjects: [],
+				existingOverrideReason: existing
+			});
+
+		results.safetyGate = cases.safetyGate.map(
+			(c: { findings: [string, Severity, string][]; answers: [string, string][] }) => {
+				const gate = safetyGate(
+					c.findings.map(([id, severity, existing]) => asFinding(id, severity, existing)),
+					c.answers.map(([ruleId, reason]) => ({ ruleId, reason }))
+				);
+				return {
+					state: gate.state,
+					message: 'message' in gate ? gate.message : '',
+					outstanding: 'outstanding' in gate
+						? gate.outstanding.map((f) => f.ruleId)
+						: []
+				};
+			}
+		);
+
+		results.orderFindings = cases.orderFindings.map(
+			(group: [string, Severity][]) =>
+				orderFindings(group.map(([id, severity]) => asFinding(id, severity)))
+					.map((f) => f.ruleId)
+		);
+
+		results.presentFinding = cases.presentFinding.map((severity: Severity) => {
+			const f = asFinding('r1', severity);
+			return { severity, overridable: f.overridable, severityLabel: f.severityLabel };
+		});
+
+		results.describeFindingKind = cases.describeFindingKind.map((kind: FindingKind) =>
+			describeFindingKind(kind)
+		);
+
+		results.structuredDoseRequiredFor = cases.structuredDoseRequiredFor.map(
+			(c: { classes: string[]; drugClass: string }) =>
+				structuredDoseRequiredFor(c.classes, c.drugClass)
+		);
+
+		results.validatePrescription = cases.validatePrescription.map((c: never) => {
+			const cc = c as {
+				patientId: string; encounterId: string; ingredientCode: string;
+				route: string; indication: string; amount: string; unit: string;
+				freeText: string; structuredDoseRequired: boolean;
+			};
+			const validity = validatePrescription({
+				patientId: cc.patientId, encounterId: cc.encounterId,
+				ingredientCode: cc.ingredientCode, ingredientDisplay: '',
+				drugClass: '', route: cc.route,
+				dose: {
+					amount: cc.amount, unit: cc.unit, freeText: cc.freeText,
+					frequencySeconds: 0
+				},
+				indication: cc.indication, startsAt: ''
+			}, { structuredDoseRequired: cc.structuredDoseRequired });
+			return {
+				ready: validity.ready,
+				order: validity.order,
+				fields: Object.keys(validity.problems).sort(),
+				mayPrescribe: mayPrescribe(validity, { state: 'clear' })
+			};
+		});
+
+		results.formularyNotice = cases.formularyNotice.map(
+			(c: { status: FormularyStatus; restriction: string; approvalPath: string }) => {
+				const notice = describeFormulary(c);
+				return { label: notice.label, action: notice.action, prominent: notice.prominent };
+			}
+		);
+
+		results.worstSeverity = cases.worstSeverity.map((group: Severity[]) =>
+			worstSeverity(group.map((severity, i) => asFinding(`r${i}`, severity)))
+		);
+
+		results.orderQueue = cases.orderQueue.map((group: [string, Severity, string][]) =>
+			orderQueue(
+				group.map(([prescriptionId, severity, createdAt]) => ({
+					prescriptionId, patientId: 'p1', description: prescriptionId,
+					prescriberId: 'd1', createdAt: new Date(createdAt),
+					therapyStatus: 'draft' as const, worstSeverity: severity,
+					findings: [], overridden: false, verified: false
+				}))
+			).map((e) => e.prescriptionId)
 		);
 
 		results.sumMoney = [Number(sumMoney(

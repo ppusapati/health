@@ -218,5 +218,104 @@
     [["posted", 50000], ["invoiced", 30000], ["held", 50000]],
     [["voided", 10000]],
     []
+  ],
+
+  "_prescribing": "UX-W1-05. apps/web/src/lib/meds/prescribe.ts and apps/mobile/lib/src/meds/prescribe.dart.",
+
+  "presentFinding": ["contraindicated", "severe", "moderate", "mild", "informational", "unspecified"],
+
+  "describeFindingKind": ["allergy", "interaction", "duplicate_therapy", "dose_support", "unspecified"],
+
+  "orderFindings": [
+    [["mild", "mild"], ["stop", "contraindicated"], ["sev", "severe"]],
+    [["z", "moderate"], ["a", "moderate"], ["stop", "contraindicated"]],
+    [["i", "informational"], ["u", "unspecified"]],
+    []
+  ],
+
+  "safetyGate": [
+    {"findings": [], "answers": []},
+    {"findings": [["r1", "contraindicated", ""]], "answers": [["r1", "I am sure"]]},
+    {"findings": [["r1", "contraindicated", ""], ["r2", "contraindicated", ""]], "answers": []},
+    {"findings": [["r1", "severe", ""], ["r2", "contraindicated", ""]], "answers": [["r1", "considered"]]},
+    {"findings": [["r1", "severe", ""]], "answers": []},
+    {"findings": [["r1", "severe", ""]], "answers": [["r1", "mild rash only"]]},
+    {"findings": [["r1", "severe", ""]], "answers": [["r1", "   "]]},
+    {"findings": [["r1", "severe", ""]], "answers": [["other", "considered"]]},
+    {"findings": [["r1", "severe", "agreed at the MDT"]], "answers": []},
+    {"findings": [["r1", "informational", ""]], "answers": []},
+    {"findings": [["r1", "severe", ""], ["r2", "moderate", ""]], "answers": [["r1", "a"]]},
+    {"findings": [["r1", "severe", ""], ["r2", "moderate", ""]], "answers": [["r1", "a"], ["r2", "b"]]},
+    {"findings": [["r1", "informational", ""], ["r2", "mild", ""]], "answers": []},
+    {"findings": [["r1", "mild", ""]], "answers": [["r1", "considered"], ["r1", ""]]}
+  ],
+
+  "structuredDoseRequiredFor": [
+    {"classes": ["anticoagulant"], "drugClass": "Anticoagulant"},
+    {"classes": ["anticoagulant"], "drugClass": "  anticoagulant "},
+    {"classes": ["anticoagulant"], "drugClass": "analgesic"},
+    {"classes": ["anticoagulant"], "drugClass": ""},
+    {"classes": ["anticoagulant"], "drugClass": "   "},
+    {"classes": [], "drugClass": "anticoagulant"},
+    {"classes": ["Anticoagulant", "Insulin"], "drugClass": "insulin"}
+  ],
+
+  "validatePrescription": [
+    {"patientId": "p1", "encounterId": "e1", "ingredientCode": "AMX", "route": "oral", "indication": "infection", "amount": "500", "unit": "mg", "freeText": "", "structuredDoseRequired": false},
+    {"patientId": "p1", "encounterId": "e1", "ingredientCode": "AMX", "route": "oral", "indication": "infection", "amount": "", "unit": "", "freeText": "two puffs", "structuredDoseRequired": false},
+    {"patientId": "p1", "encounterId": "e1", "ingredientCode": "AMX", "route": "oral", "indication": "infection", "amount": "", "unit": "", "freeText": "as directed", "structuredDoseRequired": true},
+    {"patientId": "p1", "encounterId": "e1", "ingredientCode": "AMX", "route": "oral", "indication": "infection", "amount": "", "unit": "", "freeText": "", "structuredDoseRequired": false},
+    {"patientId": "p1", "encounterId": "e1", "ingredientCode": "AMX", "route": "oral", "indication": "infection", "amount": "five", "unit": "mg", "freeText": "", "structuredDoseRequired": false},
+    {"patientId": "p1", "encounterId": "e1", "ingredientCode": "AMX", "route": "oral", "indication": "infection", "amount": "0", "unit": "mg", "freeText": "", "structuredDoseRequired": false},
+    {"patientId": "p1", "encounterId": "e1", "ingredientCode": "AMX", "route": "oral", "indication": "infection", "amount": "-5", "unit": "mg", "freeText": "", "structuredDoseRequired": false},
+    {"patientId": "p1", "encounterId": "e1", "ingredientCode": "AMX", "route": "oral", "indication": "infection", "amount": "500", "unit": "", "freeText": "", "structuredDoseRequired": false},
+    {"patientId": "", "encounterId": "e1", "ingredientCode": "AMX", "route": "oral", "indication": "infection", "amount": "500", "unit": "mg", "freeText": "", "structuredDoseRequired": false},
+    {"patientId": "p1", "encounterId": "", "ingredientCode": "AMX", "route": "oral", "indication": "infection", "amount": "500", "unit": "mg", "freeText": "", "structuredDoseRequired": false},
+    {"patientId": "p1", "encounterId": "e1", "ingredientCode": "", "route": "oral", "indication": "infection", "amount": "500", "unit": "mg", "freeText": "", "structuredDoseRequired": false},
+    {"patientId": "p1", "encounterId": "e1", "ingredientCode": "AMX", "route": "", "indication": "infection", "amount": "500", "unit": "mg", "freeText": "", "structuredDoseRequired": false},
+    {"patientId": "p1", "encounterId": "e1", "ingredientCode": "AMX", "route": "oral", "indication": "", "amount": "500", "unit": "mg", "freeText": "", "structuredDoseRequired": false},
+    {"patientId": "", "encounterId": "", "ingredientCode": "", "route": "", "indication": "", "amount": "", "unit": "", "freeText": "", "structuredDoseRequired": false},
+
+    {"_note": "Amounts that a Number() or a double.tryParse will happily turn into something.",
+     "patientId": "p1", "encounterId": "e1", "ingredientCode": "AMX", "route": "oral", "indication": "infection", "amount": "NaN", "unit": "mg", "freeText": "", "structuredDoseRequired": false},
+    {"patientId": "p1", "encounterId": "e1", "ingredientCode": "AMX", "route": "oral", "indication": "infection", "amount": "Infinity", "unit": "mg", "freeText": "", "structuredDoseRequired": false},
+    {"patientId": "p1", "encounterId": "e1", "ingredientCode": "AMX", "route": "oral", "indication": "infection", "amount": "-Infinity", "unit": "mg", "freeText": "", "structuredDoseRequired": false},
+    {"patientId": "p1", "encounterId": "e1", "ingredientCode": "AMX", "route": "oral", "indication": "infection", "amount": "0x10", "unit": "mg", "freeText": "", "structuredDoseRequired": false},
+    {"patientId": "p1", "encounterId": "e1", "ingredientCode": "AMX", "route": "oral", "indication": "infection", "amount": "1e3", "unit": "mg", "freeText": "", "structuredDoseRequired": false},
+    {"patientId": "p1", "encounterId": "e1", "ingredientCode": "AMX", "route": "oral", "indication": "infection", "amount": ".5", "unit": "mg", "freeText": "", "structuredDoseRequired": false},
+    {"patientId": "p1", "encounterId": "e1", "ingredientCode": "AMX", "route": "oral", "indication": "infection", "amount": "-.5", "unit": "mg", "freeText": "", "structuredDoseRequired": false},
+    {"patientId": "p1", "encounterId": "e1", "ingredientCode": "AMX", "route": "oral", "indication": "infection", "amount": "5.0", "unit": "mg", "freeText": "", "structuredDoseRequired": false},
+    {"patientId": "p1", "encounterId": "e1", "ingredientCode": "AMX", "route": "oral", "indication": "infection", "amount": " 500 ", "unit": "mg", "freeText": "", "structuredDoseRequired": false},
+    {"patientId": "p1", "encounterId": "e1", "ingredientCode": "AMX", "route": "oral", "indication": "infection", "amount": "0.5", "unit": "mg", "freeText": "", "structuredDoseRequired": false},
+    {"patientId": "p1", "encounterId": "e1", "ingredientCode": "AMX", "route": "oral", "indication": "infection", "amount": "00.5", "unit": "mg", "freeText": "", "structuredDoseRequired": false},
+    {"patientId": "p1", "encounterId": "e1", "ingredientCode": "AMX", "route": "oral", "indication": "infection", "amount": "5.", "unit": "mg", "freeText": "", "structuredDoseRequired": false},
+    {"patientId": "p1", "encounterId": "e1", "ingredientCode": "AMX", "route": "oral", "indication": "infection", "amount": "+5", "unit": "mg", "freeText": "", "structuredDoseRequired": false},
+    {"patientId": "p1", "encounterId": "e1", "ingredientCode": "AMX", "route": "oral", "indication": "infection", "amount": "1,5", "unit": "mg", "freeText": "", "structuredDoseRequired": false}
+  ],
+
+  "formularyNotice": [
+    {"status": "formulary", "restriction": "", "approvalPath": ""},
+    {"status": "restricted", "restriction": "ICU only", "approvalPath": ""},
+    {"status": "restricted", "restriction": "ICU only", "approvalPath": "Ask the on-call consultant"},
+    {"status": "non_formulary", "restriction": "", "approvalPath": "Consultant microbiologist approval"},
+    {"status": "non_formulary", "restriction": "", "approvalPath": ""},
+    {"status": "unknown", "restriction": "", "approvalPath": ""},
+    {"status": "unspecified", "restriction": "", "approvalPath": ""}
+  ],
+
+  "worstSeverity": [
+    [],
+    ["mild"],
+    ["mild", "severe"],
+    ["informational", "unspecified"],
+    ["severe", "contraindicated", "moderate"],
+    ["unspecified"]
+  ],
+
+  "orderQueue": [
+    [],
+    [["a", "mild", "2026-09-16T09:00:00Z"], ["b", "contraindicated", "2026-09-16T10:00:00Z"], ["c", "severe", "2026-09-16T08:00:00Z"]],
+    [["old", "moderate", "2026-09-16T06:00:00Z"], ["new", "moderate", "2026-09-16T11:00:00Z"]],
+    [["u", "unspecified", "2026-09-16T06:00:00Z"], ["i", "informational", "2026-09-16T11:00:00Z"]]
   ]
 }

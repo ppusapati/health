@@ -11,6 +11,7 @@ import 'src/api/api_error.dart';
 import 'src/api/connect_client.dart';
 import 'src/api/idempotency.dart';
 import 'src/api/empi_client.dart';
+import 'src/api/medication_client.dart';
 import 'src/api/nursing_client.dart';
 import 'src/api/organization_client.dart';
 import 'src/auth/keystore_secure_store.dart';
@@ -21,6 +22,7 @@ import 'src/gen/healthcare/organization/v1/organization.pb.dart';
 import 'src/offline/file_queue_storage.dart';
 import 'src/offline/operation_queue.dart';
 import 'src/ui/app_shell.dart';
+import 'src/meds/prescribe_controller.dart';
 import 'src/meds/round_controller.dart';
 import 'src/patient/caseload.dart';
 import 'src/patient/caseload_controller.dart';
@@ -38,6 +40,7 @@ import 'src/screens/chart_screen.dart';
 import 'src/screens/orders_screen.dart';
 import 'src/screens/reception_screen.dart';
 import 'src/screens/medication_round_screen.dart';
+import 'src/screens/prescribe_screen.dart';
 import 'src/screens/ward_worklist_screen.dart';
 import 'src/ui/states.dart';
 import 'src/ward/ward_controller.dart';
@@ -96,6 +99,7 @@ class _HealthAppState extends State<HealthApp> {
   late final ClinicalClient _clinical = ClinicalClient(_connect);
   late final ChartController _chart = ChartController(_clinical);
   late final OrdersClient _orders = OrdersClient(_connect);
+  late final MedicationClient _medication = MedicationClient(_connect);
   late final BillingClient _billingClient = BillingClient(_connect);
   late final BillingController _billing =
       BillingController(_billingClient, newIdempotencyKey);
@@ -109,6 +113,7 @@ class _HealthAppState extends State<HealthApp> {
       WardController(_nursing, DateTime.now, newIdempotencyKey);
   late final RoundController _round = RoundController(
       _nursing, widget.queue, DateTime.now, newIdempotencyKey);
+  late final PrescribeController _prescribing = PrescribeController(_medication);
 
   /// Where the shell currently is. Not a Navigator stack: a ward tablet has no
   /// browser history and no deep links, and the destinations are a short list
@@ -278,6 +283,7 @@ class _HealthAppState extends State<HealthApp> {
     if (decision.destination == Destination.chart) await _loadChart();
     if (decision.destination == Destination.orders) await _loadInbox();
     if (decision.destination == Destination.billing) await _loadAccount();
+    if (decision.destination == Destination.prescribing) await _loadMedication();
   }
 
   /// Opens a patient.
@@ -362,6 +368,28 @@ class _HealthAppState extends State<HealthApp> {
     if (mounted) setState(() {});
   }
 
+  /// Loads the medication screen for the open patient.
+  ///
+  /// Both halves, because both are permission-gated and the person holding the
+  /// tablet may be either. The queue is ward-wide and takes no patient: what a
+  /// pharmacist has to verify is not scoped to whoever happens to be open.
+  Future<void> _loadMedication() async {
+    final patient = _patient;
+    final permissions = widget.session.context?.permissions ?? const <String>[];
+    _prescribing.startDraft(
+      patientId: patient?.patientId ?? '',
+      encounterId: patient?.encounterId ?? '',
+      mayVerify: permissions.contains('med.prescription.verify'),
+    );
+    if (patient != null) {
+      await _prescribing.loadTherapies(encounterId: patient.encounterId);
+    }
+    if (permissions.contains('med.prescription.verify')) {
+      await _prescribing.loadQueue();
+    }
+    if (mounted) setState(() {});
+  }
+
   /// Loads the chart for the open patient.
   ///
   /// mayWrite comes from the session's permissions rather than from a role
@@ -441,6 +469,52 @@ class _HealthAppState extends State<HealthApp> {
           loading: _round.loading,
           failure: _round.failure,
           onRetry: _loadPatient,
+        ),
+      Destination.prescribing => PrescribeScreen(
+          view: _prescribing.view,
+          loading: _prescribing.loading,
+          failure: _prescribing.failure,
+          onRetry: _loadMedication,
+          onIngredientChanged: (text) {
+            _prescribing.setIngredient(text);
+            setState(() {});
+          },
+          onDrugClassChanged: (text) {
+            _prescribing.setDrugClass(text);
+            setState(() {});
+          },
+          onRouteChanged: (text) {
+            _prescribing.setRoute(text);
+            setState(() {});
+          },
+          onAmountChanged: (text) {
+            _prescribing.setDoseAmount(text);
+            setState(() {});
+          },
+          onUnitChanged: (text) {
+            _prescribing.setDoseUnit(text);
+            setState(() {});
+          },
+          onFreeTextDoseChanged: (text) {
+            _prescribing.setFreeTextDose(text);
+            setState(() {});
+          },
+          onIndicationChanged: (text) {
+            _prescribing.setIndication(text);
+            setState(() {});
+          },
+          onReasonChanged: (ruleId, reason) {
+            _prescribing.setReason(ruleId, reason);
+            setState(() {});
+          },
+          onPrescribe: () async {
+            await _prescribing.prescribe();
+            if (mounted) setState(() {});
+          },
+          onVerify: (entry) async {
+            await _prescribing.verify(entry.prescriptionId);
+            if (mounted) setState(() {});
+          },
         ),
       Destination.billing => BillingScreen(
           view: _billing.view,
@@ -542,6 +616,7 @@ class _HealthAppState extends State<HealthApp> {
         Destination.patients => 'My patients',
         Destination.ward => 'Ward worklist',
         Destination.medicationRound => 'Medication round',
+        Destination.prescribing => 'Medication',
         Destination.reception => 'Reception',
         Destination.chart => 'Chart',
         Destination.orders => 'Orders',

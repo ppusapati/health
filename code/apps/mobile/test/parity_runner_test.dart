@@ -14,6 +14,7 @@ import 'package:health_mobile/src/billing/account.dart';
 import 'package:health_mobile/src/billing/money.dart';
 import 'package:health_mobile/src/chart/notes.dart';
 import 'package:health_mobile/src/chart/safety.dart';
+import 'package:health_mobile/src/meds/prescribe.dart';
 import 'package:health_mobile/src/orders/composer.dart';
 import 'package:health_mobile/src/reception/search.dart';
 
@@ -416,6 +417,150 @@ void main() {
           }
           return unbilledTotal(charges, 'INR').minor;
         }(),
+    ];
+
+    PresentedFinding asFinding(String id, String severity, [String existing = '']) =>
+        presentFinding(
+          ruleId: id,
+          ruleVersion: 'v1',
+          kind: FindingKind.interaction,
+          severity: _enumBy(Severity.values, severity),
+          summary: 'Finding $id',
+          existingOverrideReason: existing,
+        );
+
+    results['safetyGate'] = [
+      for (final c in cases['safetyGate'])
+        () {
+          final m = c as Map<String, dynamic>;
+          final gate = safetyGate(
+            [
+              for (final f in m['findings'])
+                asFinding(f[0] as String, f[1] as String, f[2] as String),
+            ],
+            [
+              for (final a in m['answers'])
+                OverrideAnswer(ruleId: a[0] as String, reason: a[1] as String),
+            ],
+          );
+          return {
+            'state': _snake(gate.state.name).replaceAll('_', '-'),
+            'message': gate.message,
+            'outstanding': [for (final f in gate.outstanding) f.ruleId],
+          };
+        }(),
+    ];
+
+    results['orderFindings'] = [
+      for (final group in cases['orderFindings'])
+        [
+          for (final f in orderFindings([
+            for (final row in group) asFinding(row[0] as String, row[1] as String),
+          ]))
+            f.ruleId,
+        ],
+    ];
+
+    results['presentFinding'] = [
+      for (final severity in cases['presentFinding'])
+        () {
+          final f = asFinding('r1', severity as String);
+          return {
+            'severity': severity,
+            'overridable': f.overridable,
+            'severityLabel': f.severityLabel,
+          };
+        }(),
+    ];
+
+    results['describeFindingKind'] = [
+      for (final kind in cases['describeFindingKind'])
+        describeFindingKind(_enumBy(FindingKind.values, kind as String)),
+    ];
+
+    results['structuredDoseRequiredFor'] = [
+      for (final c in cases['structuredDoseRequiredFor'])
+        structuredDoseRequiredFor(
+          [for (final k in (c as Map<String, dynamic>)['classes']) k as String],
+          c['drugClass'] as String,
+        ),
+    ];
+
+    results['validatePrescription'] = [
+      for (final c in cases['validatePrescription'])
+        () {
+          final m = c as Map<String, dynamic>;
+          final validity = validatePrescription(
+            PrescriptionDraft(
+              patientId: m['patientId'] as String,
+              encounterId: m['encounterId'] as String,
+              ingredientCode: m['ingredientCode'] as String,
+              route: m['route'] as String,
+              indication: m['indication'] as String,
+              dose: DoseDraft(
+                amount: m['amount'] as String,
+                unit: m['unit'] as String,
+                freeText: m['freeText'] as String,
+              ),
+            ),
+            structuredDoseRequired: m['structuredDoseRequired'] as bool,
+          );
+          return {
+            'ready': validity.ready,
+            'order': validity.order,
+            'fields': validity.problems.keys.toList()..sort(),
+            'mayPrescribe': mayPrescribe(
+                validity, const SafetyGate(state: SafetyState.clear)),
+          };
+        }(),
+    ];
+
+    results['formularyNotice'] = [
+      for (final c in cases['formularyNotice'])
+        () {
+          final m = c as Map<String, dynamic>;
+          final notice = formularyNotice(
+            status: _enumBy(FormularyStatus.values, m['status'] as String),
+            restriction: m['restriction'] as String,
+            approvalPath: m['approvalPath'] as String,
+          );
+          return {
+            'label': notice.label,
+            'action': notice.action,
+            'prominent': notice.prominent,
+          };
+        }(),
+    ];
+
+    results['worstSeverity'] = [
+      for (final group in cases['worstSeverity'])
+        () {
+          var n = 0;
+          final findings = <PresentedFinding>[];
+          for (final severity in group) {
+            findings.add(asFinding('r$n', severity as String));
+            n++;
+          }
+          return _snake(worstSeverity(findings).name);
+        }(),
+    ];
+
+    results['orderQueue'] = [
+      for (final group in cases['orderQueue'])
+        [
+          for (final e in orderQueue([
+            for (final row in group)
+              QueueEntry(
+                prescriptionId: row[0] as String,
+                patientId: 'p1',
+                description: row[0] as String,
+                prescriberId: 'd1',
+                createdAt: DateTime.parse(row[2] as String),
+                worstSeverity: _enumBy(Severity.values, row[1] as String),
+              ),
+          ]))
+            e.prescriptionId,
+        ],
     ];
 
     results['sumMoney'] = [

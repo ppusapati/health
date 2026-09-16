@@ -183,6 +183,7 @@ void main() {
 
       expect(workspace.navigation.map((i) => i.id),
           ['patients', 'ward', 'medication-round']);
+      // No 'prescribing': a ward nurse holds no med.prescription.read.
       expect(workspace.worklists.map((w) => w.id),
           ['doses-due', 'observations-due']);
       expect(workspace.empty, isFalse);
@@ -213,6 +214,41 @@ void main() {
       // does not hold.
       expect(workspace.navigation.map((i) => i.id), ['medication-round']);
       expect(workspace.quickActions, isEmpty);
+    });
+
+    test('a prescriber is offered the medication screen', () {
+      final workspace = buildWorkspace(wardCatalogue, [
+        'med.prescription.read',
+        'med.prescription.write',
+      ]);
+
+      expect(workspace.navigation.map((i) => i.id), ['prescribing']);
+      // Finalizing: a prescription is an instruction to give a drug, and the
+      // person who carries it out is not the one who tapped this.
+      expect(workspace.quickActions.single.id, 'prescribe');
+      expect(workspace.quickActions.single.finalizes, isTrue);
+      // The verification queue is a pharmacist's, and this one is not.
+      expect(workspace.worklists, isEmpty);
+    });
+
+    test('a pharmacist reaches the same screen by a different route', () {
+      final workspace = buildWorkspace(wardCatalogue, [
+        'med.prescription.read',
+        'med.prescription.verify',
+      ]);
+
+      expect(workspace.navigation.map((i) => i.id), ['prescribing']);
+      expect(workspace.worklists.map((w) => w.id), ['awaiting-verification']);
+      // No prescribing action: verifying is not writing.
+      expect(workspace.quickActions, isEmpty);
+    });
+
+    test('reading medication does not offer writing it', () {
+      final workspace =
+          buildWorkspace(wardCatalogue, ['med.prescription.read']);
+      expect(workspace.navigation.map((i) => i.id), ['prescribing']);
+      expect(workspace.quickActions, isEmpty);
+      expect(workspace.worklists, isEmpty);
     });
 
     test('permissions decide what a device shows, not the section', () {

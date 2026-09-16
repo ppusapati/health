@@ -244,6 +244,15 @@ const WorkspaceCatalogue wardCatalogue = WorkspaceCatalogue(
       section: WorkspaceSection.clinical,
     ),
     NavItem(
+      id: 'prescribing',
+      label: 'Medication',
+      route: '/medications/prescribe',
+      // Read, not write. A pharmacist verifying and a prescriber writing reach
+      // the same screen, and which panels it offers is decided inside it.
+      requires: 'med.prescription.read',
+      section: WorkspaceSection.clinical,
+    ),
+    NavItem(
       id: 'billing',
       label: 'Billing',
       route: '/billing',
@@ -257,6 +266,14 @@ const WorkspaceCatalogue wardCatalogue = WorkspaceCatalogue(
       label: 'Record observations',
       requires: 'nursing.observation.write',
       finalizes: false,
+    ),
+    QuickAction(
+      id: 'prescribe',
+      label: 'Prescribe a medicine',
+      requires: 'med.prescription.write',
+      // Finalizing: a prescription is an instruction to give a drug, and the
+      // person who carries it out is not the one who tapped this.
+      finalizes: true,
     ),
     QuickAction(
       id: 'administer',
@@ -273,6 +290,12 @@ const WorkspaceCatalogue wardCatalogue = WorkspaceCatalogue(
       label: 'Doses due now',
       requires: 'nursing.administration.read',
       route: '/medications/round',
+    ),
+    Worklist(
+      id: 'awaiting-verification',
+      label: 'Prescriptions awaiting your verification',
+      requires: 'med.prescription.verify',
+      route: '/medications/prescribe',
     ),
     Worklist(
       id: 'observations-due',

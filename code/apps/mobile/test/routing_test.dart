@@ -89,6 +89,14 @@ void main() {
       expect(destinationFor('/ward'), Destination.ward);
       expect(destinationFor('/medications/round'), Destination.medicationRound);
     });
+
+    test('giving a medication and prescribing one are different screens', () {
+      // Two halves of the same requirement and two different people. Sharing a
+      // route would put the prescriber's composer in front of a nurse on a
+      // round.
+      expect(destinationFor('/medications/round'), Destination.medicationRound);
+      expect(destinationFor('/medications/prescribe'), Destination.prescribing);
+    });
   });
 
   group('navigating', () {

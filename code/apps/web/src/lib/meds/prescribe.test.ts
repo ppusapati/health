@@ -154,6 +154,28 @@ describe('validating a prescription', () => {
 		}
 	});
 
+	it('refuses a dose that parses to something impossible', () => {
+		// Number() turns all of these into a value, and Infinity is greater
+		// than zero — an infinite dose validated cleanly here until the parity
+		// corpus asked both clients the same question.
+		for (const amount of ['NaN', 'Infinity', '-Infinity', '1e3', '0x10', '1,5']) {
+			const bad = draft({ dose: { amount, unit: 'mg', freeText: '', frequencySeconds: 0 } });
+			const validity = validatePrescription(bad, { structuredDoseRequired: true });
+			expect(validity.ready, amount).toBe(false);
+			expect(validity.problems.dose, amount).toBe('The dose amount is not a number.');
+		}
+	});
+
+	it('refuses a naked decimal point, and says why', () => {
+		// .5 read as 5 is a tenfold overdose.
+		const bad = draft({ dose: { amount: '.5', unit: 'mg', freeText: '', frequencySeconds: 0 } });
+		expect(validatePrescription(bad, { structuredDoseRequired: true }).problems.dose).toBe(
+			'Write the dose with a leading zero: 0.5, not .5.'
+		);
+		const good = draft({ dose: { amount: '0.5', unit: 'mg', freeText: '', frequencySeconds: 0 } });
+		expect(validatePrescription(good, { structuredDoseRequired: true }).ready).toBe(true);
+	});
+
 	it('requires a route', () => {
 		// Oral and intravenous paracetamol are different doses, and a drug with
 		// no route is one the nurse has to guess at.
