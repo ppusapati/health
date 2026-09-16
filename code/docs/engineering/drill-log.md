@@ -270,6 +270,79 @@ Not a severity-1 defect and deliberately not in `security/defect-register.yaml`:
 nothing is lost, corrupted or exposed. That register is narrow on purpose, and
 filling it with severe-but-recoverable faults is how it stops being read.
 
+## The workload under a real kubelet
+
+This section replaces one that said no Kubernetes distribution could start a
+pod here. **That was wrong**, and it is worth being precise about how: every
+observation in it was accurate — the sandbox does set `oom_score_adj` to -998,
+`CAP_SYS_RESOURCE` is dropped, kind and k3s both failed — and the conclusion
+drawn from them was not. containerd's CRI plugin has `restrict_oom_score_adj`,
+the supported setting for rootless and constrained hosts, which clamps the
+value instead of failing. One line of kind config:
+
+```yaml
+containerdConfigPatches:
+  - |-
+    [plugins."io.containerd.grpc.v1.cri"]
+      restrict_oom_score_adj = true
+```
+
+A default configuration had been mistaken for a property of the environment,
+and "cannot be done here" is a conclusion that stops people looking.
+
+`make cluster-deploy` deploys the dev overlay to that cluster. Substituted: the
+image, because the manifests pin a digest only the release pipeline produces;
+the database Secret, because the external-secrets controller is not installed;
+and a PostgreSQL to talk to. Everything else — security context, probes,
+resource limits, service account, network policies, disruption budget — applies
+as written, and `scripts/cluster/localise.py` asserts the security context it
+passes through is the one the overlay rendered, so a future edit cannot quietly
+relax one and leave the deploy green.
+
+### What it found
+
+Four defects. Three meant the Deployment could not have rolled out in any
+cluster, and none was reachable by schema validation, by admission, or by
+running the image by hand — the first two never execute a probe or a mount, and
+the third means choosing the verb and the environment yourself, which is where
+two of these live.
+
+**Every probe was unsatisfiable.** All three were declared as `httpGet` against
+the ConnectRPC procedure paths. A Connect unary procedure is a POST; an
+`httpGet` probe issues GET and cannot be made to do otherwise. They answered
+405, the Pod never became ready, and the Deployment could never have rolled
+out. The server now serves `/healthz` and `/readyz` over plain HTTP, delegating
+to the same methods the RPC surface exposes — two implementations of "is this
+instance ready" drift, and the one the orchestrator believes is whichever it
+happens to call. `tools/infra` gained the invariant, verified against the
+original manifest before being trusted.
+
+**The Deployment could not reach any database it was willing to talk to.** The
+binary refuses any `sslmode` below `verify-ca`, rightly: `require` encrypts
+without authenticating the server. But `verify-ca` needs a CA the client
+trusts, and the manifests gave it nowhere to put one — no volume, no mount,
+only public roots in the image. Every managed PostgreSQL presents a private CA.
+The policy and the manifest contradicted each other. There is now an optional
+`core-database-ca` mount.
+
+**The dev overlay could not start.** It configures a filesystem blob backend at
+`/var/lib/health/blobs`; the base Deployment runs `readOnlyRootFilesystem` and
+mounts nothing there. The two had never been applied together.
+
+**A rolling update dropped one request in 589, intermittently.** Endpoint
+removal is asynchronous, so for a short window traffic arrives at a Pod on its
+way out. The service shut down in 72ms — reported in the previous section as a
+good result, and in fact the opposite: the cleaner the shutdown, the wider the
+race. Readiness now answers false the moment the signal lands and the process
+serves for five more seconds. See DRILL-2026-004.
+
+### What is still not covered
+
+One node, so a rollout replaces a Pod on the same kubelet, which is the easy
+case. No mesh, no external-secrets controller, no cross-zone failover, and
+nothing at production concurrency. The pre-production drills the runbooks
+describe are still required.
+
 ## Running them
 
 ```bash

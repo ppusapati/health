@@ -124,30 +124,26 @@ half-entered observation prompts, and a route naming no screen is reported with
 the route in it rather than silently redirected home — the person who can fix a
 bad catalogue entry is the one who wrote it.
 
-**P0-12's cluster deployment cannot be closed in this environment**, though
-what stays open is now narrower than the whole of it. A Kubernetes pod sandbox
-needs `CAP_SYS_RESOURCE` to set its `oom_score_adj`, and that capability is
-dropped here, so no distribution can start a pod — kind and k3s were both
-tried. Plain containers do run, which is what makes that a specific diagnosis
-rather than a broken environment, and it lets both halves either side of
-kubelet be exercised.
+**P0-12's cluster deployment is closed.** It was reported here as an
+environment limit — a pod sandbox sets `oom_score_adj` to -998, and
+`CAP_SYS_RESOURCE` is dropped — and that was a true description of a default
+configuration mistaken for a property of the environment. containerd's
+`restrict_oom_score_adj` clamps the value rather than failing, which is the
+supported setting for exactly this case. One line of kind config and every pod
+starts.
 
-The control plane half: `make manifests-admission` applies every overlay to a
-real API server, covering the four objects per overlay that `kubeconform` skips
-for want of a schema, and shows pod security refusing a privileged variant of
-the shipped Deployment.
+`make cluster-deploy` now deploys the dev overlay to a real kubelet: it rolls
+out to 1/1 with the security context read back off the running Pod, both probes
+answer on their real paths, the Milestone-1 slice and the Milestone-2 denial
+hold through the Service, and pod security refuses a privileged pod in the same
+namespace. `make drill-rollout` (DRILL-2026-004) replaces the running version
+under load and counts what was dropped.
 
-The workload half: the image runs under the container-level security context
-the Deployment declares — non-root 65532, read-only root filesystem, every
-capability dropped, no privilege escalation — answers both manifest probes,
-carries the Milestone-1 slice and the Milestone-2 cross-tenant denial end to
-end, and drains on `SIGTERM` in 72 ms against a 30 s grace period. Running it
-found a defect that no unit test would: the outbox publisher reported the same
-drain failure four times a second for as long as an outage lasted and never
-reported recovering. See [`drill-log.md`](drill-log.md).
+Running it found four defects that no amount of schema validation, admission
+checking or running the image by hand would have found — three of them meant
+the Deployment could not have worked in any cluster. They are written up in
+[`drill-log.md`](drill-log.md).
 
-**What stays open is kubelet in the middle** — the rollout, the probe
-scheduler, the disruption budget, the network policy and the mesh.
 
 The rotation, backup and disaster-recovery drills, which were also outstanding,
 **have now been executed** — against the real binary and a real PostgreSQL
