@@ -230,6 +230,13 @@ const WorkspaceCatalogue wardCatalogue = WorkspaceCatalogue(
       section: WorkspaceSection.clinical,
     ),
     NavItem(
+      id: 'orders',
+      label: 'Orders',
+      route: '/orders',
+      requires: 'orders.order.read',
+      section: WorkspaceSection.clinical,
+    ),
+    NavItem(
       id: 'medication-round',
       label: 'Medication round',
       route: '/medications/round',

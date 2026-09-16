@@ -26,10 +26,13 @@ import 'src/patient/caseload.dart';
 import 'src/patient/caseload_controller.dart';
 import 'src/api/scheduling_client.dart';
 import 'src/api/clinical_client.dart';
+import 'src/api/orders_client.dart';
 import 'src/chart/chart_controller.dart';
 import 'src/reception/reception_controller.dart';
 import 'src/screens/patient_picker_screen.dart';
+import 'src/orders/orders_controller.dart';
 import 'src/screens/chart_screen.dart';
+import 'src/screens/orders_screen.dart';
 import 'src/screens/reception_screen.dart';
 import 'src/screens/medication_round_screen.dart';
 import 'src/screens/ward_worklist_screen.dart';
@@ -89,6 +92,9 @@ class _HealthAppState extends State<HealthApp> {
   late final SchedulingClient _scheduling = SchedulingClient(_connect);
   late final ClinicalClient _clinical = ClinicalClient(_connect);
   late final ChartController _chart = ChartController(_clinical);
+  late final OrdersClient _orders = OrdersClient(_connect);
+  late final OrdersController _ordering =
+      OrdersController(_orders, _clinical, DateTime.now);
   late final CaseloadController _caseload = CaseloadController(_nursing, _empi);
   late final ReceptionController _reception =
       ReceptionController(_scheduling, _empi, DateTime.now);
@@ -264,6 +270,7 @@ class _HealthAppState extends State<HealthApp> {
     if (decision.destination == Destination.patients) await _loadCaseload();
     if (decision.destination == Destination.reception) await _loadBoard();
     if (decision.destination == Destination.chart) await _loadChart();
+    if (decision.destination == Destination.orders) await _loadInbox();
   }
 
   /// Opens a patient.
@@ -324,6 +331,15 @@ class _HealthAppState extends State<HealthApp> {
     final session = widget.session.context;
     if (session == null) return;
     await _reception.loadBoard(facilityId: session.activeFacilityId);
+    if (mounted) setState(() {});
+  }
+
+  /// Loads the ward-wide critical-result inbox.
+  ///
+  /// No patient argument: the inbox is deliberately not scoped to whoever is
+  /// open, because the results that matter are the ones nobody is looking at.
+  Future<void> _loadInbox() async {
+    await _ordering.loadInbox();
     if (mounted) setState(() {});
   }
 
@@ -407,6 +423,35 @@ class _HealthAppState extends State<HealthApp> {
           failure: _round.failure,
           onRetry: _loadPatient,
         ),
+      Destination.orders => OrdersScreen(
+          view: _ordering.view,
+          loading: _ordering.loading,
+          failure: _ordering.failure,
+          onRetry: _loadInbox,
+          onIndicationChanged: (text) {
+            _ordering.setIndication(text);
+            setState(() {});
+          },
+          onOverrideReasonChanged: (text) {
+            _ordering.setOverrideReason(text);
+            setState(() {});
+          },
+          onAcknowledgeDuplicate: (candidate) {
+            _ordering.acknowledgeDuplicate(candidate.orderId);
+            setState(() {});
+          },
+          onPlace: () async {
+            await _ordering.place();
+            if (mounted) setState(() {});
+          },
+          onAcknowledgeResult: (item, action) async {
+            await _ordering.acknowledgeResult(
+              observationId: item.observationId,
+              action: action,
+            );
+            if (mounted) setState(() {});
+          },
+        ),
       Destination.chart => ChartScreen(
           view: _chart.view,
           loading: _chart.loading,
@@ -462,6 +507,7 @@ class _HealthAppState extends State<HealthApp> {
         Destination.medicationRound => 'Medication round',
         Destination.reception => 'Reception',
         Destination.chart => 'Chart',
+        Destination.orders => 'Orders',
       };
 
   @override

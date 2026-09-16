@@ -37,6 +37,9 @@ enum Destination {
 
   /// The chart: allergies, problems, results and notes (UX-W1-02).
   chart,
+
+  /// Orders and the critical-result inbox (UX-W1-04).
+  orders,
 }
 
 /// The route string each destination answers to.
@@ -51,6 +54,7 @@ const Map<String, Destination> routes = {
   '/medications/round': Destination.medicationRound,
   '/reception': Destination.reception,
   '/chart': Destination.chart,
+  '/orders': Destination.orders,
 };
 
 /// The destination a route names, or null when nothing does.

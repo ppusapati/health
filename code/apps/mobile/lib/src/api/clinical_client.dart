@@ -93,6 +93,40 @@ class ClinicalClient {
     );
   }
 
+  /// The critical results still awaiting acknowledgement.
+  ///
+  /// Takes no patient: the inbox is ward-wide by design (SRS-CLN-012), and
+  /// scoping it to the chart somebody happens to have open hides exactly the
+  /// results nobody is looking at.
+  Future<ListCriticalResultsResponse> listCriticalResults({
+    int pageSize = 100,
+  }) {
+    return _connect.unary(
+      procedure: '$_service/ListCriticalResults',
+      request: ListCriticalResultsRequest(pageSize: pageSize),
+      parse: ListCriticalResultsResponse.fromBuffer,
+    );
+  }
+
+  /// Acknowledges a critical result with what was done about it.
+  ///
+  /// The action is the requirement, not the acknowledgement: SRS-CLN-012 asks
+  /// what was done, and "seen" closes the loop administratively while leaving
+  /// the next reader none the wiser.
+  Future<AcknowledgeCriticalResultResponse> acknowledgeCriticalResult({
+    required String observationId,
+    required String action,
+  }) {
+    return _connect.unary(
+      procedure: '$_service/AcknowledgeCriticalResult',
+      request: AcknowledgeCriticalResultRequest(
+        observationId: observationId,
+        action: action,
+      ),
+      parse: AcknowledgeCriticalResultResponse.fromBuffer,
+    );
+  }
+
   /// Signs a note, which finalises it.
   Future<SignNoteResponse> signNote({
     required String documentId,
