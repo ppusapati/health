@@ -24,7 +24,10 @@ import 'src/ui/app_shell.dart';
 import 'src/meds/round_controller.dart';
 import 'src/patient/caseload.dart';
 import 'src/patient/caseload_controller.dart';
+import 'src/api/scheduling_client.dart';
+import 'src/reception/reception_controller.dart';
 import 'src/screens/patient_picker_screen.dart';
+import 'src/screens/reception_screen.dart';
 import 'src/screens/medication_round_screen.dart';
 import 'src/screens/ward_worklist_screen.dart';
 import 'src/ui/states.dart';
@@ -80,7 +83,10 @@ class _HealthAppState extends State<HealthApp> {
   late final IdentityClient _identity = IdentityClient(_connect);
   late final NursingClient _nursing = NursingClient(_connect);
   late final EmpiClient _empi = EmpiClient(_connect);
+  late final SchedulingClient _scheduling = SchedulingClient(_connect);
   late final CaseloadController _caseload = CaseloadController(_nursing, _empi);
+  late final ReceptionController _reception =
+      ReceptionController(_scheduling, _empi, DateTime.now);
 
   late final WardController _ward =
       WardController(_nursing, DateTime.now, newIdempotencyKey);
@@ -251,6 +257,7 @@ class _HealthAppState extends State<HealthApp> {
     // screens are about a patient, and loading them before one is chosen would
     // be asking the server about nobody.
     if (decision.destination == Destination.patients) await _loadCaseload();
+    if (decision.destination == Destination.reception) await _loadBoard();
   }
 
   /// Opens a patient.
@@ -303,6 +310,14 @@ class _HealthAppState extends State<HealthApp> {
       from: now.subtract(const Duration(hours: 1)),
       to: now.add(const Duration(hours: 1)),
     );
+    if (mounted) setState(() {});
+  }
+
+  /// Loads the reception board for the facility this session is working in.
+  Future<void> _loadBoard() async {
+    final session = widget.session.context;
+    if (session == null) return;
+    await _reception.loadBoard(facilityId: session.activeFacilityId);
     if (mounted) setState(() {});
   }
 
@@ -368,6 +383,41 @@ class _HealthAppState extends State<HealthApp> {
           failure: _round.failure,
           onRetry: _loadPatient,
         ),
+      Destination.reception => ReceptionScreen(
+          view: _reception.view,
+          loading: _reception.loading,
+          failure: _reception.failure,
+          onRetry: _loadBoard,
+          onSearch: (criteria) async {
+            await _reception.search(criteria);
+            if (mounted) setState(() {});
+          },
+          onAcknowledge: (match) {
+            _reception.acknowledge(match.patientId);
+            setState(() {});
+          },
+          onCheckIn: (row) async {
+            await _reception.checkIn(
+              appointmentId: row.appointmentId,
+              facilityId: widget.session.context?.activeFacilityId ?? '',
+            );
+            if (mounted) setState(() {});
+          },
+          onOpenCandidate: (match) => _openPatient(
+            PatientSelection(
+              patientId: match.patientId,
+              // No encounter yet: reception reaches a record, not a visit. The
+              // clinical screens ask the server for the open encounter when
+              // they load, and a made-up one here would be worse than none.
+              encounterId: '',
+              displayName: match.displayName,
+              // Not a scan, so identity is not verified — the eMAR's barcode
+              // gate reads this and must not be told otherwise because the
+              // route happened to come through reception.
+              method: SelectionMethod.search,
+            ),
+          ),
+        ),
     };
   }
 
@@ -376,6 +426,7 @@ class _HealthAppState extends State<HealthApp> {
         Destination.patients => 'My patients',
         Destination.ward => 'Ward worklist',
         Destination.medicationRound => 'Medication round',
+        Destination.reception => 'Reception',
       };
 
   @override

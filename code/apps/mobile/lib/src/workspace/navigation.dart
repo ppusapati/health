@@ -187,13 +187,25 @@ const WorkspaceCatalogue waveZeroCatalogue = WorkspaceCatalogue(
 
 /// The Wave-1 catalogue for a ward device.
 ///
-/// Two entries, not six. The web shell has six workspaces because a desk has
-/// room for six; a tablet carried on a round is for the work done standing up,
-/// and offering a nurse a billing screen on it is offering them a way to get
-/// lost. Reception, the chart, orders and billing stay on the web, and this
-/// list is the argument for why the mobile shell is not simply behind.
+/// Permission-gated rather than short. An earlier version of this file carried
+/// only the two workspaces a nurse uses on a round, on the argument that a
+/// tablet is for work done standing up. That argument was about the device and
+/// it was the wrong axis: the same tablet is carried by a receptionist at a
+/// counter and handed to a clinician at a bedside, and what each of them
+/// should see is decided by what they may do, not by what the hardware is.
+///
+/// So every workspace is here, and each appears only for somebody holding the
+/// permission it needs. A nurse still sees a short list — theirs — because the
+/// permissions do the narrowing that the old comment did by omission.
 const WorkspaceCatalogue wardCatalogue = WorkspaceCatalogue(
   navigation: [
+    NavItem(
+      id: 'reception',
+      label: 'Reception',
+      route: '/reception',
+      requires: 'scheduling.queue.read',
+      section: WorkspaceSection.clinical,
+    ),
     NavItem(
       id: 'patients',
       label: 'My patients',
