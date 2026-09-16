@@ -44,7 +44,8 @@ narrowing that omission used to do.
 | UX-W1-02 chart: allergies, problems, results, notes | `lib/src/chart/`, `lib/src/screens/chart_screen.dart` |
 | UX-W1-03 ward worklist and observation charting | `lib/src/ward/`, `lib/src/screens/ward_worklist_screen.dart`, `observation_form.dart` |
 | UX-W1-04 orders and the critical-result inbox | `lib/src/orders/`, `lib/src/screens/orders_screen.dart` |
-| UX-W1-05 medication round (eMAR) | `lib/src/meds/`, `lib/src/screens/medication_round_screen.dart` |
+| UX-W1-05 medication round (eMAR) | `lib/src/meds/round.dart`, `lib/src/screens/medication_round_screen.dart` |
+| UX-W1-05 prescribing and the pharmacist's verification queue | `lib/src/meds/prescribe.dart`, `lib/src/screens/prescribe_screen.dart` |
 | UX-W1-06 billing: balance, payments, invoices | `lib/src/billing/`, `lib/src/screens/billing_screen.dart` |
 | Patient selection, which most of the above need | `lib/src/patient/caseload.dart`, `lib/src/screens/patient_picker_screen.dart` |
 

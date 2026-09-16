@@ -1719,6 +1719,175 @@
       "u"
     ]
   ],
+  "describeOutcome": [
+    "Given",
+    "Not given",
+    "Held",
+    "Refused by patient",
+    "Delayed",
+    "Outcome not recorded"
+  ],
+  "needsReason": [
+    false,
+    true,
+    true,
+    true,
+    true,
+    false
+  ],
+  "describeRefusal": [
+    "Scan the patient’s wristband.",
+    "Scan the medication.",
+    "Giving this without scanning needs a reason, and the reason is kept with the dose.",
+    "This ward does not allow giving a dose without scanning. Find a working scanner or a second nurse.",
+    "Say why the dose was not given as ordered.",
+    "Choose what happened to this dose.",
+    "This dose has already been recorded."
+  ],
+  "formatDose": [
+    "5 mg",
+    "5 mg",
+    "2.5 mg",
+    "0.125 mg",
+    "0.5 mL",
+    "12.5 mg",
+    "1000000 units",
+    "0 mg",
+    "5",
+    "0.3333333333333333 mg",
+    "-1 mg"
+  ],
+  "orderDoses": [
+    [],
+    [
+      "due-early",
+      "due-late",
+      "settled-early"
+    ],
+    [
+      "a",
+      "b"
+    ],
+    [
+      "also-settled",
+      "settled"
+    ]
+  ],
+  "evaluateAdministration": [
+    {
+      "allowed": true,
+      "overriding": false,
+      "refusals": []
+    },
+    {
+      "allowed": false,
+      "overriding": false,
+      "refusals": [
+        "patient_not_scanned",
+        "medication_not_scanned",
+        "override_not_permitted"
+      ]
+    },
+    {
+      "allowed": false,
+      "overriding": false,
+      "refusals": [
+        "medication_not_scanned",
+        "override_not_permitted"
+      ]
+    },
+    {
+      "allowed": false,
+      "overriding": false,
+      "refusals": [
+        "patient_not_scanned",
+        "override_not_permitted"
+      ]
+    },
+    {
+      "allowed": false,
+      "overriding": false,
+      "refusals": [
+        "patient_not_scanned",
+        "medication_not_scanned",
+        "override_not_permitted"
+      ]
+    },
+    {
+      "allowed": true,
+      "overriding": true,
+      "refusals": []
+    },
+    {
+      "allowed": false,
+      "overriding": false,
+      "refusals": [
+        "patient_not_scanned",
+        "medication_not_scanned",
+        "override_reason_missing"
+      ]
+    },
+    {
+      "allowed": true,
+      "overriding": false,
+      "refusals": []
+    },
+    {
+      "allowed": false,
+      "overriding": false,
+      "refusals": [
+        "outcome_missing"
+      ]
+    },
+    {
+      "allowed": false,
+      "overriding": false,
+      "refusals": [
+        "outcome_missing"
+      ]
+    },
+    {
+      "allowed": false,
+      "overriding": false,
+      "refusals": [
+        "reason_missing"
+      ]
+    },
+    {
+      "allowed": true,
+      "overriding": false,
+      "refusals": []
+    },
+    {
+      "allowed": true,
+      "overriding": false,
+      "refusals": []
+    },
+    {
+      "allowed": false,
+      "overriding": false,
+      "refusals": [
+        "reason_missing"
+      ]
+    },
+    {
+      "allowed": true,
+      "overriding": false,
+      "refusals": []
+    },
+    {
+      "allowed": false,
+      "overriding": false,
+      "refusals": [
+        "already_settled"
+      ]
+    },
+    {
+      "allowed": true,
+      "overriding": true,
+      "refusals": []
+    }
+  ],
   "sumMoney": [
     1000
   ]

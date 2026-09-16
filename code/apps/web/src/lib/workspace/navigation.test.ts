@@ -128,3 +128,34 @@ describe('the reception catalogue', () => {
 		expect(workspace.navigation.map((n) => n.id)).toContain('patient-search');
 	});
 });
+
+describe('the medication entries', () => {
+	it('offers the round to a nurse who cannot read prescriptions', () => {
+		// The two halves of UX-W1-05 are two sections of one page here, and a
+		// ward nurse holds no med.prescription.read — so without its own entry
+		// the round would be unreachable for the person who does it.
+		const workspace = buildWorkspace(receptionCatalogue, [
+			'nursing.administration.read',
+			'nursing.administration.write'
+		]);
+		expect(workspace.navigation.map((n) => n.id)).toEqual(['medication-round']);
+		expect(workspace.worklists.map((w) => w.id)).toEqual(['doses-due']);
+		expect(workspace.quickActions.map((a) => a.id)).toEqual(['administer']);
+	});
+
+	it('offers prescribing to a prescriber, and not the round', () => {
+		const workspace = buildWorkspace(receptionCatalogue, ['med.prescription.read']);
+		expect(workspace.navigation.map((n) => n.id)).toEqual(['medications']);
+	});
+
+	it('treats giving a medication as an action that finalizes something', () => {
+		// This one puts a drug into a patient.
+		const administer = receptionCatalogue.quickActions.find((a) => a.id === 'administer');
+		expect(administer?.finalizes).toBe(true);
+	});
+
+	it('points the round entry at the section rather than the top of the page', () => {
+		const round = receptionCatalogue.navigation.find((n) => n.id === 'medication-round');
+		expect(round?.href).toBe('/medications#round-heading');
+	});
+});

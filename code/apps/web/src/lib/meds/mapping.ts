@@ -21,6 +21,18 @@ import {
 	type Severity,
 	type TherapyStatus
 } from './prescribe.js';
+import {
+	AdministrationOutcome as WireOutcome,
+	type AdministrationPolicy as WireAdministrationPolicy,
+	type DueDose as WireDueDose
+} from '$gen/healthcare/nursing/v1/nursing_pb.js';
+import {
+	formatDose,
+	strictPolicy,
+	type AdministrationOutcome,
+	type PresentedDose,
+	type RoundPolicy
+} from './administer.js';
 
 function toDate(timestamp: Timestamp | undefined): Date | null {
 	return timestamp ? timestampDate(timestamp) : null;
@@ -143,4 +155,72 @@ export function toFormularyDecision(prescription: WirePrescription): {
 /** Adapts a wire Prescription's therapy status. */
 export function toTherapyStatus(prescription: WirePrescription): TherapyStatus {
 	return therapyStatuses[prescription.therapyStatus] ?? 'unspecified';
+}
+
+// --------------------------------------------------------------------------
+// Administration (nursing.v1), the other half of UX-W1-05.
+
+const outcomes: Record<WireOutcome, AdministrationOutcome> = {
+	[WireOutcome.UNSPECIFIED]: 'unspecified',
+	[WireOutcome.ADMINISTERED]: 'administered',
+	[WireOutcome.NOT_ADMINISTERED]: 'not_administered',
+	[WireOutcome.HELD]: 'held',
+	[WireOutcome.REFUSED]: 'refused',
+	[WireOutcome.DELAYED]: 'delayed'
+};
+
+/** Adapts a wire AdministrationPolicy. */
+export function toRoundPolicy(policy: WireAdministrationPolicy | undefined): RoundPolicy {
+	// The strict shape when the server sent none. Requiring a scan the
+	// deployment did not ask for is an inconvenience; skipping one it did ask
+	// for is a patient given the wrong drug.
+	if (!policy) {
+		return strictPolicy;
+	}
+	return {
+		barcodeRequired: policy.barcodeRequired,
+		overrideAllowed: policy.overrideAllowed,
+		lateAfterMinutes: Math.trunc(Number(policy.lateAfterSeconds) / 60)
+	};
+}
+
+/** Adapts a wire DueDose. */
+export function toPresentedDose(dose: WireDueDose, now: Date): PresentedDose {
+	const order = dose.order;
+	const scheduledAt = toDate(dose.scheduledAt) ?? new Date(0);
+	return {
+		orderId: order?.orderId ?? '',
+		medication: order?.medication?.display || order?.medication?.code || '',
+		doseLabel: formatDose(order?.dose?.value ?? 0, order?.dose?.unit ?? ''),
+		route: order?.route ?? '',
+		scheduledAt,
+		outstanding: dose.outstanding,
+		// From the server, as with the worklist: a browser clock that is wrong
+		// would silently reorder the round.
+		overdue: dose.overdue,
+		minutesLate: Math.floor((now.getTime() - scheduledAt.getTime()) / 60000),
+		prn: order?.prn ?? false,
+		verifiedByPharmacy: order?.verified ?? false,
+		// An outcome this build does not know is shown as unrecorded rather
+		// than guessed at. "Given" would be the dangerous guess.
+		recordedOutcome: dose.given ? (outcomes[dose.given.outcome] ?? 'unspecified') : null
+	};
+}
+
+/** The wire value for an outcome the nurse chose. */
+export function toWireOutcome(outcome: AdministrationOutcome): WireOutcome {
+	switch (outcome) {
+		case 'administered':
+			return WireOutcome.ADMINISTERED;
+		case 'not_administered':
+			return WireOutcome.NOT_ADMINISTERED;
+		case 'held':
+			return WireOutcome.HELD;
+		case 'refused':
+			return WireOutcome.REFUSED;
+		case 'delayed':
+			return WireOutcome.DELAYED;
+		case 'unspecified':
+			return WireOutcome.UNSPECIFIED;
+	}
 }

@@ -15,6 +15,7 @@ import 'package:health_mobile/src/billing/money.dart';
 import 'package:health_mobile/src/chart/notes.dart';
 import 'package:health_mobile/src/chart/safety.dart';
 import 'package:health_mobile/src/meds/prescribe.dart';
+import 'package:health_mobile/src/meds/round.dart' as round;
 import 'package:health_mobile/src/orders/composer.dart';
 import 'package:health_mobile/src/reception/search.dart';
 
@@ -561,6 +562,97 @@ void main() {
           ]))
             e.prescriptionId,
         ],
+    ];
+
+    results['describeOutcome'] = [
+      for (final o in cases['describeOutcome'])
+        round.describeOutcome(_enumBy(round.AdministrationOutcome.values, o as String)),
+    ];
+
+    results['needsReason'] = [
+      for (final o in cases['needsReason'])
+        round.needsReason(_enumBy(round.AdministrationOutcome.values, o as String)),
+    ];
+
+    results['describeRefusal'] = [
+      for (final r in cases['describeRefusal'])
+        round.describeRefusal(_enumBy(round.Refusal.values, r as String)),
+    ];
+
+    results['formatDose'] = [
+      for (final c in cases['formatDose'])
+        round.formatDose(((c as Map<String, dynamic>)['value'] as num).toDouble(),
+            c['unit'] as String),
+    ];
+
+    round.PresentedDose asDose(String orderId, bool outstanding, String scheduledAt) =>
+        round.PresentedDose(
+          orderId: orderId,
+          medication: 'Amoxicillin',
+          doseLabel: '500 mg',
+          route: 'oral',
+          scheduledAt: DateTime.parse(scheduledAt),
+          outstanding: outstanding,
+          overdue: false,
+          minutesLate: 0,
+          prn: false,
+          verifiedByPharmacy: true,
+          recordedOutcome:
+              outstanding ? null : round.AdministrationOutcome.administered,
+        );
+
+    results['orderDoses'] = [
+      for (final group in cases['orderDoses'])
+        [
+          for (final d in round.orderDoses([
+            for (final row in group)
+              asDose(row[0] as String, row[1] as bool, row[2] as String),
+          ]))
+            d.orderId,
+        ],
+    ];
+
+    results['evaluateAdministration'] = [
+      for (final c in cases['evaluateAdministration'])
+        () {
+          final m = c as Map<String, dynamic>;
+          final decision = round.evaluateAdministration(
+            dose: round.PresentedDose(
+              orderId: 'o1',
+              medication: 'Amoxicillin',
+              doseLabel: '500 mg',
+              route: 'oral',
+              scheduledAt: DateTime.parse('2026-09-16T09:00:00Z'),
+              outstanding: true,
+              overdue: false,
+              minutesLate: 0,
+              prn: false,
+              verifiedByPharmacy: true,
+              recordedOutcome: m['settled'] as bool
+                  ? round.AdministrationOutcome.administered
+                  : null,
+            ),
+            policy: round.RoundPolicy(
+              barcodeRequired: m['barcodeRequired'] as bool,
+              overrideAllowed: m['overrideAllowed'] as bool,
+              lateAfter: const Duration(minutes: 60),
+            ),
+            outcome: m['outcome'] == null
+                ? null
+                : _enumBy(round.AdministrationOutcome.values, m['outcome'] as String),
+            scan: round.Scan(
+              patient: m['patientScan'] as String,
+              medication: m['medicationScan'] as String,
+            ),
+            overrideReason: m['overrideReason'] as String,
+            reason: m['reason'] as String,
+          );
+          return {
+            'allowed': decision.allowed,
+            'overriding': decision.overriding,
+            'refusals': [for (final r in decision.refusals) _snake(r.name)],
+          };
+        }(),
     ];
 
     results['sumMoney'] = [

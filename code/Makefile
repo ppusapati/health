@@ -244,4 +244,10 @@ traceability: ## Every requirement the status doc claims is named by a test
 	python3 tools/parity/traceability.py
 
 .PHONY: ci
-ci: lint test-fitness test-infra test-security test-migrations test-contract test parity traceability ## Everything CI runs
+# The client checks are here because they were not, and the gap showed: four
+# type errors sat in the parity runner through three commits because `make ci`
+# ran neither `npm run check` nor `flutter analyze` while the workflow did. A
+# target that claims to be what CI runs has to be it, or it teaches people to
+# trust a green local run that CI will reject.
+ci: lint test-fitness test-infra test-security test-migrations test-contract test \
+	web-check web-test mobile-analyze mobile-test parity traceability ## Everything CI runs

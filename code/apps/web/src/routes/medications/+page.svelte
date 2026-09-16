@@ -19,7 +19,7 @@
   afterwards.
 -->
 <script lang="ts">
-	import { createApiClients } from '$lib/api/client.js';
+	import { createApiClients, newCorrelationId } from '$lib/api/client.js';
 	import { presentError, type PresentedError } from '$lib/api/errors.js';
 	import { PUBLIC_API_BASE_URL } from '$lib/config.js';
 	import ErrorBanner from '$lib/components/ErrorBanner.svelte';
@@ -40,7 +40,22 @@
 		type QueueEntry
 	} from '$lib/meds/prescribe.js';
 	import {
+		describeOutcome,
+		describeRefusal,
+		evaluateAdministration,
+		needsReason,
+		orderDoses,
+		settled,
+		strictPolicy,
+		type AdministrationOutcome,
+		type PresentedDose,
+		type RoundPolicy
+	} from '$lib/meds/administer.js';
+	import {
 		describePrescription,
+		toPresentedDose,
+		toRoundPolicy,
+		toWireOutcome,
 		therapyLabels,
 		toFormularyDecision,
 		toPresentedFinding,
@@ -88,9 +103,25 @@
 
 	let acting = $state('');
 
+	// The round (SRS-NUR-006/007, SRS-MED-009). The same rules as the tablet's,
+	// in $lib/meds/administer.ts, and held to it by tools/parity.
+	let doses = $state<readonly PresentedDose[]>([]);
+	let roundPolicy = $state<RoundPolicy>(strictPolicy);
+	let roundLoadedFor = $state('');
+	/** The dose currently being recorded, by order id. Empty when none is. */
+	let openDose = $state('');
+	let outcome = $state<AdministrationOutcome | null>(null);
+	let patientScan = $state('');
+	let medicationScan = $state('');
+	let overrideReason = $state('');
+	let deviationReason = $state('');
+	let recording = $state('');
+
 	const mayRead = $derived($session ? can('med.prescription.read') : false);
 	const mayPrescribeHere = $derived($session ? can('med.prescription.write') : false);
 	const mayVerify = $derived($session ? can('med.prescription.verify') : false);
+	const mayReadRound = $derived($session ? can('nursing.administration.read') : false);
+	const mayAdminister = $derived($session ? can('nursing.administration.write') : false);
 
 	const draft = $derived<PrescriptionDraft>({
 		patientId,
@@ -117,6 +148,27 @@
 	);
 	const gate = $derived(safetyGate(findings, answers));
 	const canSubmit = $derived(mayPrescribeHere && mayPrescribe(validity, gate));
+
+	/**
+	 * The local pre-flight for the dose being recorded.
+	 *
+	 * Not the control — the server enforces the same policy and its answer is
+	 * the one that counts. This exists so a nurse is told what is missing
+	 * before a round trip, and so the override is named out loud at the moment
+	 * it is being chosen.
+	 */
+	const decision = $derived.by(() => {
+		const dose = doses.find((d) => d.orderId === openDose);
+		if (!dose) return null;
+		return evaluateAdministration({
+			dose,
+			policy: roundPolicy,
+			outcome,
+			scan: { patient: patientScan, medication: medicationScan },
+			overrideReason,
+			reason: deviationReason
+		});
+	});
 
 	const severityTones = {
 		contraindicated: 'critical',
@@ -254,6 +306,92 @@
 		}
 	}
 
+	async function loadRound() {
+		if (!mayReadRound || patientId.trim() === '') return;
+		error = null;
+		try {
+			const now = new Date();
+			const response = await clients.nursing.getMedicationRound({
+				encounterId,
+				patientId,
+				from: timestampFromDate(new Date(now.getTime() - 12 * 3600 * 1000)),
+				to: timestampFromDate(new Date(now.getTime() + 12 * 3600 * 1000))
+			});
+			doses = orderDoses(response.doses.map((dose) => toPresentedDose(dose, now)));
+			// The policy comes back with the doses. A browser that cached it
+			// could skip a scan the deployment now requires.
+			roundPolicy = toRoundPolicy(response.policy);
+			roundLoadedFor = patientId;
+		} catch (err) {
+			error = presentError(err);
+		}
+	}
+
+	function openFor(dose: PresentedDose) {
+		// Everything about the previous dose goes with it. A scan or a reason
+		// left over from the last tile is a record attached to the wrong drug.
+		openDose = openDose === dose.orderId ? '' : dose.orderId;
+		outcome = null;
+		patientScan = '';
+		medicationScan = '';
+		overrideReason = '';
+		deviationReason = '';
+	}
+
+	/**
+	 * Records one administration.
+	 *
+	 * Never optimistic. An optimistic row shows the dose as given the moment
+	 * the button is pressed; if the request then fails the nurse has seen
+	 * "given" and moved on, the next nurse reads the chart, sees nothing, and
+	 * gives it again. The row is only redrawn from what the server returns.
+	 */
+	async function administer(dose: PresentedDose) {
+		if (recording !== '' || !mayAdminister) return;
+		const pre = decision;
+		if (!pre || !pre.allowed || outcome === null) return;
+
+		recording = dose.orderId;
+		error = null;
+		try {
+			await clients.nursing.administer({
+				orderId: dose.orderId,
+				scheduledAt: timestampFromDate(dose.scheduledAt),
+				givenAt: timestampFromDate(new Date()),
+				route: dose.route,
+				outcome: toWireOutcome(outcome),
+				reason: deviationReason,
+				// Sent only when it is one. Its presence changes which
+				// permission the server requires, so an empty string here
+				// would be a request to be treated as an override.
+				overrideReason: pre.overriding ? overrideReason : '',
+				// The barcodes themselves, not a pair of booleans: the server
+				// compares them against the order's patient rather than
+				// against what the screen is showing, because the screen is
+				// what the check exists to doubt. `performed` distinguishes
+				// "the check ran and matched" from "it did not run", which two
+				// empty strings cannot.
+				verification:
+					patientScan !== '' || medicationScan !== ''
+						? {
+								patientScanned: patientScan,
+								medicationScanned: medicationScan,
+								performed: patientScan !== '' && medicationScan !== ''
+							}
+						: undefined,
+				// Minted before anything is sent, so a retry after a lost
+				// response is the same operation and not a second dose.
+				idempotencyKey: newCorrelationId()
+			});
+			openDose = '';
+			await loadRound();
+		} catch (err) {
+			error = presentError(err);
+		} finally {
+			recording = '';
+		}
+	}
+
 	function time(at: Date): string {
 		return at.toLocaleString([], {
 			day: '2-digit',
@@ -272,6 +410,12 @@
 	});
 
 	$effect(() => {
+		if (mayReadRound && patientId.trim() !== '' && roundLoadedFor !== patientId) {
+			void loadRound();
+		}
+	});
+
+	$effect(() => {
 		if (mayVerify && !queueLoaded) {
 			queueLoaded = true;
 			void loadQueue();
@@ -283,7 +427,7 @@
 
 {#if !$session}
 	<EmptyState kind="permission" title="Sign in to open the drug chart" />
-{:else if !mayRead}
+{:else if !mayRead && !mayReadRound}
 	<EmptyState
 		kind="permission"
 		title="You do not have access to prescriptions"
@@ -358,7 +502,7 @@
 		</button>
 	</form>
 
-	{#if loadedFor === ''}
+	{#if loadedFor === '' && roundLoadedFor === ''}
 		<EmptyState
 			kind="search-first"
 			title="Choose a patient"
@@ -479,6 +623,138 @@
 			</section>
 		{/if}
 
+		{#if mayReadRound}
+			<!--
+			  The round (SRS-NUR-006/007, SRS-MED-009). The same rules as the
+			  ward tablet's, because a nurse who learns a round on a tablet and
+			  then does one at a workstation must not meet a second set.
+
+			  Nothing here is optimistic. A row that said "given" the moment the
+			  button was pressed, on a request that then failed, is how a dose
+			  gets given twice.
+			-->
+			<section aria-labelledby="round-heading">
+				<h2 id="round-heading">Doses due</h2>
+				{#if doses.length === 0}
+					<EmptyState kind="empty" title="No doses due in this window" />
+				{:else}
+					<ul class="panel">
+						{#each doses as dose (dose.orderId)}
+							<li class:stopped={settled(dose)}>
+								<div class="row-head">
+									<span class="title">{dose.medication} {dose.doseLabel}</span>
+									<StatusChip
+										label={dose.overdue ? 'Overdue' : 'Due'}
+										tone={dose.overdue ? 'critical' : 'neutral'}
+									/>
+									{#if dose.prn}<StatusChip label="As needed" tone="neutral" />{/if}
+									{#if !dose.verifiedByPharmacy}
+										<!--
+										  Shown because giving an unverified drug is a
+										  decision a nurse should make knowingly.
+										-->
+										<StatusChip label="Not verified by pharmacy" tone="caution" />
+									{/if}
+									{#if dose.recordedOutcome}
+										<StatusChip
+											label={describeOutcome(dose.recordedOutcome)}
+											tone={dose.recordedOutcome === 'administered' ? 'positive' : 'caution'}
+										/>
+									{/if}
+								</div>
+								<p class="row-meta">
+									<span>{dose.route}</span>
+									<span>{time(dose.scheduledAt)}</span>
+								</p>
+
+								{#if mayAdminister && !settled(dose)}
+									{#if openDose !== dose.orderId}
+										<button type="button" class="secondary" onclick={() => openFor(dose)}>
+											Record this dose
+										</button>
+									{:else}
+										<div class="record">
+											<label>
+												What happened
+												<select bind:value={outcome}>
+													<option value={null}>Choose…</option>
+													{#each ['administered', 'not_administered', 'held', 'refused', 'delayed'] as const as option (option)}
+														<option value={option}>{describeOutcome(option)}</option>
+													{/each}
+												</select>
+											</label>
+
+											{#if roundPolicy.barcodeRequired && outcome === 'administered'}
+												<label>
+													Patient wristband
+													<input bind:value={patientScan} autocomplete="off" />
+												</label>
+												<label>
+													Medication barcode
+													<input bind:value={medicationScan} autocomplete="off" />
+												</label>
+												{#if roundPolicy.overrideAllowed}
+													<label>
+														Why this is being given without scanning
+														<input bind:value={overrideReason} autocomplete="off" />
+													</label>
+												{/if}
+											{/if}
+
+											{#if outcome !== null && needsReason(outcome)}
+												<label>
+													Why it was not given as ordered
+													<input bind:value={deviationReason} autocomplete="off" />
+												</label>
+											{/if}
+
+											{#if decision && decision.refusals.length > 0}
+												<!--
+												  Everything wrong at once. A nurse told one
+												  problem at a time is a nurse making three
+												  trips to the trolley.
+												-->
+												<ul class="problems">
+													{#each decision.refusals as refusal (refusal)}
+														<li>{describeRefusal(refusal)}</li>
+													{/each}
+												</ul>
+											{/if}
+
+											{#if decision?.overriding}
+												<!--
+												  Said before the button is pressed: an
+												  override is a thing the nurse is choosing,
+												  not a consequence they discover afterwards.
+												-->
+												<p class="overriding">
+													This will be recorded as given without scanning, with your reason.
+												</p>
+											{/if}
+
+											<div class="record-actions">
+												<button
+													type="button"
+													onclick={() => administer(dose)}
+													disabled={!decision?.allowed || recording !== ''}
+												>
+													{recording === dose.orderId ? 'Recording…' : 'Record'}
+												</button>
+												<button type="button" class="secondary" onclick={() => openFor(dose)}>
+													Cancel
+												</button>
+											</div>
+										</div>
+									{/if}
+								{/if}
+							</li>
+						{/each}
+					</ul>
+				{/if}
+			</section>
+		{/if}
+
+		{#if mayRead}
 		<section aria-labelledby="chart-heading">
 			<h2 id="chart-heading">Drug chart</h2>
 			{#if prescriptions.length === 0}
@@ -536,10 +812,38 @@
 				</ul>
 			{/if}
 		</section>
+		{/if}
 	{/if}
 {/if}
 
 <style>
+	.record {
+		display: grid;
+		gap: 0.5rem;
+		margin-top: 0.5rem;
+	}
+
+	.record label {
+		display: grid;
+		gap: 0.25rem;
+	}
+
+	.record-actions {
+		display: flex;
+		gap: 0.5rem;
+	}
+
+	.problems {
+		margin: 0;
+		padding-left: 1.2rem;
+		color: #8a1c1c;
+	}
+
+	.overriding {
+		margin: 0;
+		font-weight: 600;
+	}
+
 	.picker {
 		display: flex;
 		align-items: flex-end;

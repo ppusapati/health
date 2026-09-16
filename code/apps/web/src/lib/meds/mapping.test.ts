@@ -14,8 +14,17 @@ import {
 	toFormularyDecision,
 	toPresentedFinding,
 	toQueueEntry,
-	toTherapyStatus
+	toTherapyStatus,
+	toPresentedDose,
+	toRoundPolicy,
+	toWireOutcome
 } from './mapping.js';
+import {
+	AdministrationOutcome as WireOutcome,
+	AdministrationPolicySchema,
+	DueDoseSchema
+} from '$gen/healthcare/nursing/v1/nursing_pb.js';
+import { settled } from './administer.js';
 import { safetyGate } from './prescribe.js';
 
 describe('a safety finding off the wire', () => {
@@ -139,5 +148,93 @@ describe('a prescription off the wire', () => {
 	it('reports no formulary check rather than inventing one', () => {
 		const prescription = create(PrescriptionSchema, {});
 		expect(toFormularyDecision(prescription).status).toBe('unspecified');
+	});
+});
+
+describe('adapting the round', () => {
+	const scheduled = new Date('2026-09-16T09:00:00Z');
+
+	function due(overrides: Record<string, unknown> = {}) {
+		return create(DueDoseSchema, {
+			order: {
+				orderId: 'o1',
+				medication: { code: 'AMX', display: 'Amoxicillin' },
+				dose: { value: 500, unit: 'mg' },
+				route: 'oral',
+				prn: false,
+				verified: true
+			},
+			scheduledAt: timestampFromDate(scheduled),
+			outstanding: true,
+			overdue: false,
+			...overrides
+		});
+	}
+
+	it('formats the dose from the order rather than restating it', () => {
+		expect(toPresentedDose(due(), scheduled).doseLabel).toBe('500 mg');
+	});
+
+	it('takes overdue from the server, not the browser clock', () => {
+		// A workstation with a wrong clock would otherwise silently reorder the
+		// round.
+		const late = new Date('2026-09-16T12:00:00Z');
+		const presented = toPresentedDose(due({ overdue: false }), late);
+		expect(presented.overdue).toBe(false);
+		expect(presented.minutesLate).toBe(180);
+	});
+
+	it('reports a dose with no administration as unrecorded', () => {
+		expect(toPresentedDose(due(), scheduled).recordedOutcome).toBeNull();
+	});
+
+	it('carries a recorded outcome across without flattening it', () => {
+		const held = toPresentedDose(
+			due({ given: { outcome: WireOutcome.HELD }, outstanding: false }),
+			scheduled
+		);
+		expect(held.recordedOutcome).toBe('held');
+		expect(settled(held)).toBe(true);
+	});
+
+	it('shows an outcome it cannot read as unrecorded rather than as given', () => {
+		// "Given" would be the dangerous guess: the next nurse would skip it.
+		const unknown = toPresentedDose(
+			due({ given: { outcome: 99 as WireOutcome } }),
+			scheduled
+		);
+		expect(unknown.recordedOutcome).toBe('unspecified');
+	});
+
+	it('falls back to the strict policy when the server sent none', () => {
+		// Requiring a scan the deployment did not ask for is an inconvenience;
+		// skipping one it did ask for is a patient given the wrong drug.
+		const policy = toRoundPolicy(undefined);
+		expect(policy.barcodeRequired).toBe(true);
+		expect(policy.overrideAllowed).toBe(false);
+	});
+
+	it('takes the policy the server sent, including a permissive one', () => {
+		const policy = toRoundPolicy(
+			create(AdministrationPolicySchema, {
+				barcodeRequired: false,
+				overrideAllowed: true,
+				lateAfterSeconds: 1800n
+			})
+		);
+		expect(policy).toEqual({
+			barcodeRequired: false,
+			overrideAllowed: true,
+			lateAfterMinutes: 30
+		});
+	});
+
+	it('every outcome the composer can choose has a wire value', () => {
+		const chosen = [
+			'administered', 'not_administered', 'held', 'refused', 'delayed', 'unspecified'
+		] as const;
+		const values = chosen.map(toWireOutcome);
+		// Distinct, so nothing is quietly recorded as something else.
+		expect(new Set(values).size).toBe(chosen.length);
 	});
 });

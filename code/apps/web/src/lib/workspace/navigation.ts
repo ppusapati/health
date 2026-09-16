@@ -207,6 +207,18 @@ export const receptionCatalogue: WorkspaceCatalogue = {
 			section: 'clinical'
 		},
 		{
+			id: 'medication-round',
+			label: 'Medication round',
+			// The same page, anchored at the round. Prescribing and giving are
+			// two sections of one workspace here rather than two screens, and
+			// this is the entry for somebody who only does the second — a nurse
+			// holds no med.prescription.read, so the entry above never appears
+			// for them.
+			href: '/medications#round-heading',
+			requires: 'nursing.administration.read',
+			section: 'clinical'
+		},
+		{
 			id: 'billing',
 			label: 'Billing',
 			href: '/billing',
@@ -220,6 +232,13 @@ export const receptionCatalogue: WorkspaceCatalogue = {
 			label: 'Find a patient',
 			requires: 'empi.patient.read',
 			finalizes: false
+		},
+		{
+			id: 'administer',
+			label: 'Give a medication',
+			// Finalizing: this one puts a drug into a patient.
+			requires: 'nursing.administration.write',
+			finalizes: true
 		},
 		{
 			id: 'register-patient',
@@ -250,6 +269,12 @@ export const receptionCatalogue: WorkspaceCatalogue = {
 			label: 'Critical results awaiting action',
 			requires: 'clinical.record.write',
 			href: '/orders'
+		},
+		{
+			id: 'doses-due',
+			label: 'Doses due now',
+			requires: 'nursing.administration.read',
+			href: '/medications#round-heading'
 		},
 		{
 			id: 'verification-queue',

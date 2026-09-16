@@ -40,6 +40,11 @@ import {
 	worstSeverity, orderQueue,
 	type Severity, type FormularyStatus, type FindingKind
 } from './meds/prescribe.js';
+import {
+	describeOutcome, needsReason, describeRefusal, formatDose, orderDoses,
+	evaluateAdministration,
+	type AdministrationOutcome, type PresentedDose, type Refusal
+} from './meds/administer.js';
 
 const root = resolve(__dirname, '../../../../tools/parity');
 const cases = JSON.parse(readFileSync(resolve(root, 'cases.json'), 'utf8'));
@@ -303,9 +308,13 @@ describe('parity runner', () => {
 					unbilledTotal(
 						group.map(([status, minor], n) =>
 							presentCharge({
-								chargeId: `c${n}`, display: 'D', status,
+								chargeId: `c${n}`, description: 'D', department: '',
+								quantity: 1, status,
 								total: { minor: BigInt(minor), currency: 'INR' },
-								occurredAt: null
+								covered: false, coverageNote: '',
+								// Unused by unbilledTotal; the epoch rather than null so the
+								// corpus case cannot be mistaken for a missing timestamp.
+								occurredAt: new Date(0)
 							})
 						),
 						'INR'
@@ -401,6 +410,64 @@ describe('parity runner', () => {
 				}))
 			).map((e) => e.prescriptionId)
 		);
+
+		results.describeOutcome = cases.describeOutcome.map((o: AdministrationOutcome) =>
+			describeOutcome(o)
+		);
+
+		results.needsReason = cases.needsReason.map((o: AdministrationOutcome) =>
+			needsReason(o)
+		);
+
+		results.describeRefusal = cases.describeRefusal.map((r: Refusal) =>
+			describeRefusal(r)
+		);
+
+		results.formatDose = cases.formatDose.map((c: { value: number; unit: string }) =>
+			formatDose(c.value, c.unit)
+		);
+
+		const asDose = (
+			orderId: string, outstanding: boolean, scheduledAt: string
+		): PresentedDose => ({
+			orderId, medication: 'Amoxicillin', doseLabel: '500 mg', route: 'oral',
+			scheduledAt: new Date(scheduledAt), outstanding, overdue: false,
+			minutesLate: 0, prn: false, verifiedByPharmacy: true,
+			recordedOutcome: outstanding ? null : 'administered'
+		});
+
+		results.orderDoses = cases.orderDoses.map((group: [string, boolean, string][]) =>
+			orderDoses(group.map((row) => asDose(...row))).map((d) => d.orderId)
+		);
+
+		results.evaluateAdministration = cases.evaluateAdministration.map((c: never) => {
+			const cc = c as {
+				outcome: AdministrationOutcome | null; patientScan: string;
+				medicationScan: string; barcodeRequired: boolean;
+				overrideAllowed: boolean; overrideReason: string; reason: string;
+				settled: boolean;
+			};
+			const decision = evaluateAdministration({
+				dose: {
+					...asDose('o1', true, '2026-09-16T09:00:00Z'),
+					recordedOutcome: cc.settled ? 'administered' : null
+				},
+				policy: {
+					barcodeRequired: cc.barcodeRequired,
+					overrideAllowed: cc.overrideAllowed,
+					lateAfterMinutes: 60
+				},
+				outcome: cc.outcome,
+				scan: { patient: cc.patientScan, medication: cc.medicationScan },
+				overrideReason: cc.overrideReason,
+				reason: cc.reason
+			});
+			return {
+				allowed: decision.allowed,
+				overriding: decision.overriding,
+				refusals: decision.refusals
+			};
+		});
 
 		results.sumMoney = [Number(sumMoney(
 			Array.from({ length: 100 }, () => ({ minor: 10n, currency: 'INR' })), 'INR'

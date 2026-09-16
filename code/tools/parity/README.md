@@ -15,7 +15,11 @@ they inherit the misreading.
 
 Running both implementations against the same inputs can, because the two were
 written from different readings. On its first run it found three divergences in
-238 cases, one of which was a money defect nobody's tests had noticed.
+238 cases, one of which was a money defect nobody's tests had noticed. It has
+since found four more, in the two ports that closed the one-client gap — the
+worst being a dose amount of `NaN` that passed validation on mobile, because
+`double.tryParse` accepts it and NaN fails every comparison, so `amount <= 0`
+was false.
 
 ## Running it
 
@@ -66,11 +70,30 @@ implemented, marked Implemented, and exercised by nothing at all:
 
 ## What it does not cover
 
-Rules only one client has. The web's prescribing module (`meds/prescribe.ts`)
-and the mobile administration module (`meds/round.dart`) are different jobs that
-happen to share a bounded context, and comparing them would be comparing a
-prescriber's screen with a nurse's. Screens are not compared either — only the
-logic underneath them, which is where the decisions are.
+Screens. Only the logic underneath them, which is where the decisions are: what
+gates, what refuses, what a label says. Two clients can lay the same decision
+out differently — a segmented control against a sidebar — without a clinician
+meeting a second set of rules, and holding pixel layout to parity would be
+holding the wrong thing.
+
+It used to say something else here. "Rules only one client has" was listed as
+out of scope, on the argument that the web's prescribing module and the mobile
+administration module are different jobs that happen to share a bounded
+context. That argument was about the modules and it was the wrong axis: the two
+are the two halves of UX-W1-05, and the reason each existed on one client only
+was that nobody had written the other half, not that the other half did not
+belong there. A prescriber does ward rounds with a tablet and a nurse gives
+medicines at a workstation. Both halves now exist on both clients and both are
+compared, which is what closed the gap rather than documented it.
+
+## Findings from the prescribing and administration ports
+
+| Divergence | Verdict |
+|---|---|
+| A dose amount of `NaN` validated cleanly on mobile | **Mobile defect.** `double.tryParse('NaN')` returns NaN, and NaN fails every comparison — so `amount <= 0` was false and the prescription was ready to send. `Infinity` passed on both sides, for the plainer reason that infinity is greater than zero. Both now check the shape before parsing: a dose is a plain decimal or it is not a dose, which also refuses `0x10` and `1e3`. |
+| A naked decimal point was accepted by both | **Shared defect, found by asking.** `.5` read as `5` is a tenfold overdose, which is why every medication-safety list says to write the leading zero. Both now refuse it and say why, rather than passing an ambiguous string on. |
+| `Not graded` against `Severity not graded` | **Neither wrong, both a problem** — the same finding as the allergy labels below. The long form won: the label sits beside a kind chip, and a bare "Not graded" next to "Allergy" reads as though the allergy is what was not graded. |
+| The Dart port invented two `FindingKind` members the contract does not have | **Port defect the corpus did not catch, because the corpus did not compare the kind label.** It does now. This is the failure mode the harness exists for, arriving through the one hole left in it. |
 
 ## Findings from the first run
 

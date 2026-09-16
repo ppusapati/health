@@ -317,5 +317,75 @@
     [["a", "mild", "2026-09-16T09:00:00Z"], ["b", "contraindicated", "2026-09-16T10:00:00Z"], ["c", "severe", "2026-09-16T08:00:00Z"]],
     [["old", "moderate", "2026-09-16T06:00:00Z"], ["new", "moderate", "2026-09-16T11:00:00Z"]],
     [["u", "unspecified", "2026-09-16T06:00:00Z"], ["i", "informational", "2026-09-16T11:00:00Z"]]
+  ],
+
+  "_administration": "UX-W1-05, the other half. apps/web/src/lib/meds/administer.ts and apps/mobile/lib/src/meds/round.dart.",
+
+  "describeOutcome": ["administered", "not_administered", "held", "refused", "delayed", "unspecified"],
+
+  "needsReason": ["administered", "not_administered", "held", "refused", "delayed", "unspecified"],
+
+  "describeRefusal": [
+    "patient_not_scanned", "medication_not_scanned", "override_reason_missing",
+    "override_not_permitted", "reason_missing", "outcome_missing", "already_settled"
+  ],
+
+  "formatDose": [
+    {"value": 5, "unit": "mg"},
+    {"value": 5.0, "unit": "mg"},
+    {"value": 2.5, "unit": "mg"},
+    {"value": 0.125, "unit": "mg"},
+    {"value": 0.5, "unit": "mL"},
+    {"value": 12.5, "unit": "mg"},
+    {"value": 1000000, "unit": "units"},
+    {"value": 0, "unit": "mg"},
+    {"value": 5, "unit": ""},
+    {"value": 0.3333333333333333, "unit": "mg"},
+    {"value": -1, "unit": "mg"}
+  ],
+
+  "orderDoses": [
+    [],
+    [["settled-early", false, "2026-09-16T07:00:00Z"], ["due-late", true, "2026-09-16T11:00:00Z"], ["due-early", true, "2026-09-16T08:00:00Z"]],
+    [["a", true, "2026-09-16T09:00:00Z"], ["b", true, "2026-09-16T09:00:00Z"]],
+    [["settled", false, "2026-09-16T06:00:00Z"], ["also-settled", false, "2026-09-16T05:00:00Z"]]
+  ],
+
+  "evaluateAdministration": [
+    {"_note": "A complete scanned administration under the strict default.",
+     "outcome": "administered", "patientScan": "PT-1", "medicationScan": "MED-1",
+     "barcodeRequired": true, "overrideAllowed": false, "overrideReason": "", "reason": "", "settled": false},
+    {"outcome": "administered", "patientScan": "", "medicationScan": "",
+     "barcodeRequired": true, "overrideAllowed": false, "overrideReason": "", "reason": "", "settled": false},
+    {"outcome": "administered", "patientScan": "PT-1", "medicationScan": "",
+     "barcodeRequired": true, "overrideAllowed": false, "overrideReason": "", "reason": "", "settled": false},
+    {"outcome": "administered", "patientScan": "", "medicationScan": "MED-1",
+     "barcodeRequired": true, "overrideAllowed": false, "overrideReason": "", "reason": "", "settled": false},
+    {"outcome": "administered", "patientScan": "", "medicationScan": "",
+     "barcodeRequired": true, "overrideAllowed": false, "overrideReason": "scanner broken", "reason": "", "settled": false},
+    {"outcome": "administered", "patientScan": "", "medicationScan": "",
+     "barcodeRequired": true, "overrideAllowed": true, "overrideReason": "scanner broken", "reason": "", "settled": false},
+    {"outcome": "administered", "patientScan": "", "medicationScan": "",
+     "barcodeRequired": true, "overrideAllowed": true, "overrideReason": "   ", "reason": "", "settled": false},
+    {"outcome": "administered", "patientScan": "", "medicationScan": "",
+     "barcodeRequired": false, "overrideAllowed": false, "overrideReason": "", "reason": "", "settled": false},
+    {"outcome": null, "patientScan": "", "medicationScan": "",
+     "barcodeRequired": true, "overrideAllowed": false, "overrideReason": "", "reason": "", "settled": false},
+    {"outcome": "unspecified", "patientScan": "PT-1", "medicationScan": "MED-1",
+     "barcodeRequired": true, "overrideAllowed": false, "overrideReason": "", "reason": "", "settled": false},
+    {"outcome": "held", "patientScan": "", "medicationScan": "",
+     "barcodeRequired": true, "overrideAllowed": false, "overrideReason": "", "reason": "", "settled": false},
+    {"outcome": "held", "patientScan": "", "medicationScan": "",
+     "barcodeRequired": true, "overrideAllowed": false, "overrideReason": "", "reason": "awaiting review", "settled": false},
+    {"outcome": "refused", "patientScan": "", "medicationScan": "",
+     "barcodeRequired": true, "overrideAllowed": false, "overrideReason": "", "reason": "patient declined", "settled": false},
+    {"outcome": "not_administered", "patientScan": "PT-1", "medicationScan": "MED-1",
+     "barcodeRequired": true, "overrideAllowed": false, "overrideReason": "", "reason": "   ", "settled": false},
+    {"outcome": "delayed", "patientScan": "PT-1", "medicationScan": "MED-1",
+     "barcodeRequired": true, "overrideAllowed": false, "overrideReason": "", "reason": "trolley late", "settled": false},
+    {"outcome": "administered", "patientScan": "PT-1", "medicationScan": "MED-1",
+     "barcodeRequired": true, "overrideAllowed": false, "overrideReason": "", "reason": "", "settled": true},
+    {"outcome": "administered", "patientScan": " ", "medicationScan": " ",
+     "barcodeRequired": true, "overrideAllowed": true, "overrideReason": "second nurse checked", "reason": "", "settled": false}
   ]
 }
