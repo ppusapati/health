@@ -985,6 +985,252 @@ type EncounterVisitSummary struct {
 	GeneratedAt     pgtype.Timestamptz
 }
 
+type IcuAssessment struct {
+	AssessmentID uuid.UUID
+	TenantID     uuid.UUID
+	EpisodeID    uuid.UUID
+	Kind         string
+	Scale        string
+	Score        *int32
+	Findings     []byte
+	Note         string
+	PerformedAt  pgtype.Timestamptz
+	PerformedBy  string
+	NextDueAt    pgtype.Timestamptz
+}
+
+type IcuBalanceEntry struct {
+	EntryID          uuid.UUID
+	TenantID         uuid.UUID
+	EpisodeID        uuid.UUID
+	Direction        string
+	Route            string
+	VolumeMl         float64
+	OccurredAt       pgtype.Timestamptz
+	RecordedAt       pgtype.Timestamptz
+	RecordedBy       string
+	SupersededBy     pgtype.UUID
+	Corrects         pgtype.UUID
+	CorrectionReason string
+}
+
+type IcuBundlePerformance struct {
+	PerformanceID uuid.UUID
+	TenantID      uuid.UUID
+	EpisodeID     uuid.UUID
+	Kind          string
+	Label         string
+	Version       string
+	PerformedAt   pgtype.Timestamptz
+	PerformedBy   string
+}
+
+type IcuBundleResult struct {
+	PerformanceID uuid.UUID
+	Code          string
+	State         string
+	Reason        string
+}
+
+type IcuEpisode struct {
+	EpisodeID            uuid.UUID
+	TenantID             uuid.UUID
+	EncounterID          uuid.UUID
+	PatientID            uuid.UUID
+	FacilityID           string
+	UnitID               string
+	BedID                string
+	Source               string
+	TransferredFrom      pgtype.UUID
+	ResponsibleTeam      string
+	ResponsibleClinician string
+	Status               string
+	AdmittedAt           pgtype.Timestamptz
+	ReadyAt              pgtype.Timestamptz
+	DischargedAt         pgtype.Timestamptz
+	Outcome              string
+	OutcomeNote          string
+	CreatedBy            string
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	Version              int64
+}
+
+type IcuGoal struct {
+	GoalID     uuid.UUID
+	TenantID   uuid.UUID
+	EpisodeID  uuid.UUID
+	RoundID    pgtype.UUID
+	Domain     string
+	Text       string
+	OwnerRole  string
+	OwnerID    string
+	Status     string
+	TargetAt   pgtype.Timestamptz
+	ResolvedAt pgtype.Timestamptz
+	ResolvedBy string
+	Outcome    string
+	CreatedBy  string
+	CreatedAt  pgtype.Timestamptz
+}
+
+type IcuGoalsOfCare struct {
+	GoalsOfCareID  uuid.UUID
+	TenantID       uuid.UUID
+	EpisodeID      uuid.UUID
+	Intent         string
+	Limitations    []string
+	CprStatus      string
+	DiscussedWith  string
+	Rationale      string
+	AuthorisedBy   string
+	AuthorisedRole string
+	RecordedAt     pgtype.Timestamptz
+	RecordedBy     string
+	SupersededBy   pgtype.UUID
+	SupersededAt   pgtype.Timestamptz
+	ReviewBy       pgtype.Timestamptz
+}
+
+type IcuInfusion struct {
+	InfusionID          uuid.UUID
+	TenantID            uuid.UUID
+	EpisodeID           uuid.UUID
+	PrescriptionID      pgtype.UUID
+	DrugCode            string
+	DrugDisplay         string
+	ConcentrationAmount float64
+	ConcentrationUnit   string
+	ConcentrationVolume float64
+	DoseUnit            string
+	WeightKg            float64
+	StartedAt           pgtype.Timestamptz
+	StartedBy           string
+	StoppedAt           pgtype.Timestamptz
+	StoppedBy           string
+}
+
+type IcuInvasiveDevice struct {
+	DeviceID           uuid.UUID
+	TenantID           uuid.UUID
+	EpisodeID          uuid.UUID
+	Kind               string
+	Site               string
+	Lumens             int32
+	InsertedAt         pgtype.Timestamptz
+	InsertedBy         string
+	RemovedAt          pgtype.Timestamptz
+	RemovedBy          string
+	RemovalReason      string
+	ReviewEverySeconds int64
+	LastReviewedAt     pgtype.Timestamptz
+	LastReviewedBy     string
+}
+
+type IcuObservation struct {
+	ObservationID    uuid.UUID
+	TenantID         uuid.UUID
+	EpisodeID        uuid.UUID
+	CodeSystem       string
+	Code             string
+	Display          string
+	Dimension        string
+	Value            float64
+	Unit             string
+	RawValue         float64
+	RawUnit          string
+	Normalised       bool
+	Source           string
+	Validation       string
+	DeviceID         string
+	DeviceModel      string
+	DeviceChannel    string
+	DeviceMeasuredAt pgtype.Timestamptz
+	DeviceQuality    string
+	ObservedAt       pgtype.Timestamptz
+	RecordedAt       pgtype.Timestamptz
+	RecordedBy       string
+	ValidatedBy      string
+	ValidatedAt      pgtype.Timestamptz
+	ValidationNote   string
+}
+
+type IcuRound struct {
+	RoundID     uuid.UUID
+	TenantID    uuid.UUID
+	EpisodeID   uuid.UUID
+	Attendance  []string
+	Summary     string
+	PerformedAt pgtype.Timestamptz
+	PerformedBy string
+}
+
+type IcuScore struct {
+	ScoreID        uuid.UUID
+	TenantID       uuid.UUID
+	EpisodeID      uuid.UUID
+	Name           string
+	FormulaVersion string
+	Total          int32
+	Missing        []string
+	CalculatedAt   pgtype.Timestamptz
+	CalculatedBy   string
+}
+
+type IcuScoreInput struct {
+	ScoreID       uuid.UUID
+	Code          string
+	ObservationID uuid.UUID
+	Value         float64
+	Unit          string
+	ObservedAt    pgtype.Timestamptz
+	Points        int32
+}
+
+type IcuSupport struct {
+	SupportID uuid.UUID
+	TenantID  uuid.UUID
+	EpisodeID uuid.UUID
+	Kind      string
+	Label     string
+	Modality  string
+	StartedAt pgtype.Timestamptz
+	StartedBy string
+	StoppedAt pgtype.Timestamptz
+	StoppedBy string
+	StopNote  string
+}
+
+type IcuTitration struct {
+	TitrationID uuid.UUID
+	TenantID    uuid.UUID
+	InfusionID  uuid.UUID
+	Rate        float64
+	RateUnit    string
+	Dose        float64
+	EffectiveAt pgtype.Timestamptz
+	RecordedAt  pgtype.Timestamptz
+	RecordedBy  string
+	DeviceID    string
+	Reason      string
+}
+
+type IcuVentSetting struct {
+	SettingID    uuid.UUID
+	TenantID     uuid.UUID
+	EpisodeID    uuid.UUID
+	SupportID    pgtype.UUID
+	Mode         string
+	Parameters   []byte
+	Measured     []byte
+	Units        []byte
+	DeviceID     string
+	EffectiveAt  pgtype.Timestamptz
+	RecordedAt   pgtype.Timestamptz
+	RecordedBy   string
+	ChangeReason string
+}
+
 type IdentityAccessAccount struct {
 	AccountID           uuid.UUID
 	TenantID            uuid.UUID

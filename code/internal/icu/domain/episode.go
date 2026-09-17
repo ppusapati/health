@@ -202,6 +202,9 @@ func NewEpisode(id, tenantID string, in NewEpisodeInput, createdBy string,
 		CreatedBy:            createdBy,
 		CreatedAt:            now.UTC(),
 		UpdatedAt:            now.UTC(),
+		// A freshly admitted episode is at version 1, the same as the row the
+		// adapter writes. A zero here would make the first update look stale.
+		Version: 1,
 	}, nil
 }
 
