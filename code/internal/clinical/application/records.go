@@ -494,6 +494,30 @@ func (s *Service) RecordObservation(ctx context.Context, in RecordObservationInp
 			return err
 		}
 
+		// SRS-CLN-012 with SRS-OPSNFR-003. Raised inside this transaction, so
+		// a crash between the result being recorded and the escalation being
+		// raised cannot leave a critical result nobody was ever told about.
+		// Delivery happens afterwards, driven from the row.
+		//
+		// A failure here fails the whole transaction on purpose. The
+		// alternative -- record the result and swallow the escalation error --
+		// is a critical potassium sitting in a chart with the safety net
+		// silently switched off, and the ward has no way to know. A caller
+		// who gets an error retries; a caller who gets silence does not.
+		if s.escalations != nil && observation.NeedsAcknowledgement() {
+			if err := s.escalations.RaiseCritical(ctx, scope, ports.CriticalNotice{
+				ObservationID:  observation.ID,
+				PatientID:      observation.PatientID,
+				EncounterID:    observation.EncounterID,
+				FacilityID:     session.ActiveFacilityID,
+				Display:        observation.Code.Display,
+				Interpretation: string(observation.Interpretation),
+				At:             now,
+			}); err != nil {
+				return err
+			}
+		}
+
 		out = observation
 		return s.appendAudit(ctx, session, audit.Record{
 			TenantID: session.TenantID, Action: PermClinicalWrite,

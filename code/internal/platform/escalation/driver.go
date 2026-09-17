@@ -342,3 +342,37 @@ func (d *Driver) recovered() {
 	d.reportedErr = ""
 	d.reportedAt = time.Time{}
 }
+
+// DefaultSweepInterval is how often the driver looks for work.
+//
+// Ten seconds against a fifteen-minute escalation interval: the sweep is not
+// what decides when a notice escalates, only how promptly the decision is
+// acted on. Making it much longer adds latency to every rung; making it much
+// shorter buys nothing, because the interval that matters is the policy's.
+const DefaultSweepInterval = 10 * time.Second
+
+// Run sweeps until the context is cancelled.
+//
+// Returns the context's error on a clean shutdown, so a caller can tell "we
+// were asked to stop" from "the driver died". It never returns on a sweep
+// failure: a database blip must not take escalation down for the rest of the
+// process's life, and the failure is reported through the throttled log
+// instead.
+func (d *Driver) Run(ctx context.Context, interval time.Duration) error {
+	if interval <= 0 {
+		interval = DefaultSweepInterval
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			if _, err := d.Sweep(ctx, 0); err != nil {
+				d.report(err)
+			}
+		}
+	}
+}

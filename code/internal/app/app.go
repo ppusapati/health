@@ -7,6 +7,9 @@ package app
 
 import (
 	"context"
+	"errors"
+	escalate "github.com/ppusapati/health/code/internal/clinical/adapters/escalate"
+	"github.com/ppusapati/health/code/internal/platform/escalation"
 	"net/http"
 	"time"
 
@@ -194,6 +197,16 @@ type Server struct {
 	Publisher *store.Publisher
 	Events    *eventbus.Runtime
 
+	// Escalations advances clinical notices nobody has acknowledged
+	// (SRS-OPSNFR-003). Nil where no channel is configured, which is a
+	// deployment that records escalations and tells nobody — visible in the
+	// log at startup rather than silent.
+	Escalations *escalation.Driver
+	// EscalationStore is the very store the clinical service writes through,
+	// exposed for the same reason the blob vault is: a test that built a
+	// lookalike would be proving the lookalike.
+	EscalationStore *escalation.Store
+
 	// Err carries a wiring failure. New does not return an error because every
 	// other dependency here is infallible, and a Server that cannot run its
 	// consumers must not quietly serve requests — RunBackground surfaces it.
@@ -321,12 +334,32 @@ func New(deps Deps) *Server {
 		Clock:  systemClock{},
 	})
 
+	// The escalation mechanism, and clinical's way into it. Built before the
+	// clinical service because that service takes the port.
+	escalationStore := escalation.NewStore(txManager, uuidGenerator{})
+	escalationDriver, escalationErr := escalation.NewDriver(escalation.DriverOptions{
+		Transactions: txManager,
+		Store:        escalationStore,
+		// The in-platform task inbox is the only channel this build has.
+		// Outbound channels arrive with SRS-PAT-ENG in Wave 5, and a
+		// deployment that configures one before then gets a refusal by name
+		// rather than silence.
+		Channels: []escalation.Channel{escalation.TaskInbox{}},
+		// slog.Default(), like the publisher: this package takes no logger, and
+		// the process configures the default handler at startup.
+		Logger: nil,
+	})
+
 	clinicalService := clinicalapp.NewService(clinicalapp.Deps{
 		UnitOfWork: txManager,
-		Documents:  clinicalDocuments,
-		Templates:  clinicalpostgres.TemplateRepo{Repository: clinicalRepo},
-		Records:    clinicalpostgres.RecordRepo{Repository: clinicalRepo},
-		Governance: clinicalpostgres.GovernanceRepo{Repository: clinicalRepo},
+		// SRS-CLN-012 escalates through the platform mechanism rather than by
+		// calculation. The policy field below still decides the worklist's
+		// "overdue" column; this decides who gets told.
+		Escalations: escalate.New(escalationStore),
+		Documents:   clinicalDocuments,
+		Templates:   clinicalpostgres.TemplateRepo{Repository: clinicalRepo},
+		Records:     clinicalpostgres.RecordRepo{Repository: clinicalRepo},
+		Governance:  clinicalpostgres.GovernanceRepo{Repository: clinicalRepo},
 		// Attached files go to the blob store's clinical-attachment class
 		// (SRS-CLN-014). Nil vault, nil port: a deployment that stores no
 		// binary content refuses to attach a file.
@@ -583,7 +616,9 @@ func New(deps Deps) *Server {
 		RateLimiter:     rateLimiter,
 		Publisher:       publisher,
 		Events:          events,
-		Err:             eventsErr,
+		Escalations:     escalationDriver,
+		EscalationStore: escalationStore,
+		Err:             errors.Join(eventsErr, escalationErr),
 		publishInterval: deps.PublishInterval,
 	}
 }
@@ -606,16 +641,24 @@ func (s *Server) RunBackground(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	errs := make(chan error, 2)
+	runners := 2
+	errs := make(chan error, 3)
 	go func() { errs <- s.Publisher.Run(ctx, s.publishInterval) }()
 	go func() { errs <- s.Events.Run(ctx) }()
+	if s.Escalations != nil {
+		runners++
+		go func() { errs <- s.Escalations.Run(ctx, 0) }()
+	}
 
-	// The first exit stops the other: a publisher without consumers builds a
-	// backlog, and consumers without a publisher have nothing to consume.
-	// Running on with half the pipeline is the shape of an outage nobody
-	// notices for an hour.
+	// The first exit stops the others: a publisher without consumers builds a
+	// backlog, consumers without a publisher have nothing to consume, and an
+	// escalation driver that has stopped is a ward whose unacknowledged
+	// results sit still while the screens keep working. Running on with part
+	// of the pipeline is the shape of an outage nobody notices for an hour.
 	first := <-errs
 	cancel()
-	<-errs
+	for i := 1; i < runners; i++ {
+		<-errs
+	}
 	return first
 }

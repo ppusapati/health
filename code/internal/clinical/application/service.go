@@ -80,6 +80,7 @@ type Service struct {
 	encounters  ports.EncounterDirectory
 	patients    ports.PatientSummary
 	escalation  domain.EscalationPolicy
+	escalations ports.Escalations
 	attachments ports.AttachmentStore
 	events      ports.EventAppender
 	audits      ports.AuditAppender
@@ -107,7 +108,17 @@ type Deps struct {
 	Patients ports.PatientSummary
 	// Escalation is when an unacknowledged critical result escalates
 	// (SRS-CLN-012). The zero value takes the domain default.
+	//
+	// It decides the timing of the worklist's "overdue" column. It does not
+	// tell anybody: that is Escalations below, and the two are separate
+	// because the first is a calculation this context owns and the second is a
+	// platform mechanism seven Wave-2 families share.
 	Escalation domain.EscalationPolicy
+	// Escalations persists a critical result until somebody acknowledges it
+	// (SRS-OPSNFR-003). Nil records the result and escalates nothing, which is
+	// what a deployment with no chain configured asked for — and is never a
+	// reason to fail the result.
+	Escalations ports.Escalations
 	// Attachments holds the bytes of attached files (SRS-CLN-014). Nil is a
 	// valid deployment and the default: one that stores no binary content
 	// refuses to attach a file rather than recording an attachment pointing at
@@ -130,8 +141,9 @@ func NewService(d Deps) *Service {
 		uow: d.UnitOfWork, documents: d.Documents, templates: d.Templates,
 		records: d.Records, governance: d.Governance, decisions: d.Decisions,
 		phrases: d.Phrases, timeline: d.Timeline, encounters: d.Encounters,
-		patients: d.Patients, escalation: escalation, attachments: d.Attachments,
-		events: d.Events, audits: d.Audits, ids: d.IDs, clock: d.Clock,
+		patients: d.Patients, escalation: escalation, escalations: d.Escalations,
+		attachments: d.Attachments,
+		events:      d.Events, audits: d.Audits, ids: d.IDs, clock: d.Clock,
 	}
 }
 

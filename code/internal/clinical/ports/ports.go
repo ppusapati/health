@@ -327,3 +327,40 @@ type IDGenerator interface{ NewID() string }
 
 // Clock reads the current time.
 type Clock interface{ Now() time.Time }
+
+// CriticalNotice is a result that needs somebody to say they have it.
+//
+// Deliberately without the value. The rule the event payload already follows
+// (SRS-API-009): the interpretation travels because a worklist cannot triage
+// without it, and the number does not, because a result value outside the
+// chart is clinical content outside the chart's access rules. An escalation
+// notice is read from a platform table by a mechanism that knows nothing about
+// clinical confidentiality, so it carries enough to make somebody open the
+// chart and no more.
+type CriticalNotice struct {
+	ObservationID string
+	PatientID     string
+	EncounterID   string
+	FacilityID    string
+	// Display is the test's name — "Potassium". Enough for a clinician to know
+	// whether to walk or run.
+	Display string
+	// Interpretation is the coded reading, "critically high".
+	Interpretation string
+	At             time.Time
+}
+
+// Escalations raises a notice that persists until somebody acknowledges it
+// (SRS-CLN-012, SRS-ER-016, SRS-OPSNFR-003).
+//
+// Raising is all this does. Delivery happens after the transaction commits,
+// because a clinician paged for a result that then rolled back is a clinician
+// who stops answering — and because the raise has to be inside the transaction
+// or a crash between them loses the escalation entirely.
+//
+// Nil is a valid deployment: a hospital that has configured no escalation
+// chain records the critical result and does not escalate it, which is what it
+// asked for. What it must not do is fail the result.
+type Escalations interface {
+	RaiseCritical(ctx context.Context, scope authctx.TenantScope, notice CriticalNotice) error
+}

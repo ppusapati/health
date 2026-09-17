@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"github.com/ppusapati/health/code/internal/platform/escalation"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -48,6 +49,12 @@ type clnHarness struct {
 	org        organizationv1connect.OrganizationServiceClient
 	tenantID   string
 	facility   string
+	// escalations is the very store the clinical service writes through, and
+	// driver the one the server would run. Taken from the built server rather
+	// than rebuilt, for the reason the blob vault taught: a test against a
+	// lookalike proves the lookalike.
+	escalations *escalation.Store
+	driver      *escalation.Driver
 }
 
 func newClnHarness(t *testing.T) *clnHarness {
@@ -72,11 +79,13 @@ func newClnHarness(t *testing.T) *clnHarness {
 	t.Cleanup(server.Close)
 
 	h := &clnHarness{
-		pool:       pool,
-		clinical:   clinicalv1connect.NewClinicalServiceClient(server.Client(), server.URL),
-		encounters: encounterv1connect.NewEncounterServiceClient(server.Client(), server.URL),
-		patients:   empiv1connect.NewPatientServiceClient(server.Client(), server.URL),
-		org:        organizationv1connect.NewOrganizationServiceClient(server.Client(), server.URL),
+		pool:        pool,
+		escalations: built.EscalationStore,
+		driver:      built.Escalations,
+		clinical:    clinicalv1connect.NewClinicalServiceClient(server.Client(), server.URL),
+		encounters:  encounterv1connect.NewEncounterServiceClient(server.Client(), server.URL),
+		patients:    empiv1connect.NewPatientServiceClient(server.Client(), server.URL),
+		org:         organizationv1connect.NewOrganizationServiceClient(server.Client(), server.URL),
 	}
 
 	tenant, err := h.org.CreateTenant(context.Background(),

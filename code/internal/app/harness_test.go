@@ -2,6 +2,7 @@ package app_test
 
 import (
 	"context"
+	"github.com/ppusapati/health/code/internal/platform/escalation"
 	"net/http/httptest"
 	"testing"
 
@@ -34,10 +35,13 @@ type harness struct {
 	server *httptest.Server
 	// blobs is the very vault app.New was handed, not a second one built the
 	// same way. An isolation test against a lookalike proves the lookalike.
-	blobs  *blobstore.Vault
-	org    organizationv1connect.OrganizationServiceClient
-	ident  identityaccessv1connect.IdentityServiceClient
-	health platformapiv1connect.HealthServiceClient
+	blobs *blobstore.Vault
+	// escalations is likewise the store the clinical service writes through.
+	escalations *escalation.Store
+	driver      *escalation.Driver
+	org         organizationv1connect.OrganizationServiceClient
+	ident       identityaccessv1connect.IdentityServiceClient
+	health      platformapiv1connect.HealthServiceClient
 }
 
 func newHarness(t *testing.T) *harness {
@@ -74,12 +78,14 @@ func newHarnessWithRateLimit(t *testing.T, limit platformtransport.RateLimitConf
 
 	client := server.Client()
 	return &harness{
-		pool:   pool,
-		server: server,
-		blobs:  blobs,
-		org:    organizationv1connect.NewOrganizationServiceClient(client, server.URL),
-		ident:  identityaccessv1connect.NewIdentityServiceClient(client, server.URL),
-		health: platformapiv1connect.NewHealthServiceClient(client, server.URL),
+		pool:        pool,
+		server:      server,
+		blobs:       blobs,
+		escalations: built.EscalationStore,
+		driver:      built.Escalations,
+		org:         organizationv1connect.NewOrganizationServiceClient(client, server.URL),
+		ident:       identityaccessv1connect.NewIdentityServiceClient(client, server.URL),
+		health:      platformapiv1connect.NewHealthServiceClient(client, server.URL),
 	}
 }
 
