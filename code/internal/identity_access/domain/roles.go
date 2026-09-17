@@ -206,6 +206,12 @@ var rolePermissions = map[Role][]string{
 		// Deliberately no cln.record.read: a clerk who could read the chart
 		// would have the whole clinical record of every patient they book.
 		"cln.record.write",
+		// The emergency desk books an arrival and sees who is in the
+		// department (SRS-ER-001). Deliberately no er.triage.assign: deciding
+		// how sick somebody is, is the triage nurse's assessment, and a
+		// receptionist holding it is how a chest pain waits behind a sprain.
+		"er.visit.read",
+		"er.visit.write",
 	},
 
 	// HIM resolves identities. They hold merge and unrestricted read, because
@@ -307,6 +313,28 @@ var rolePermissions = map[Role][]string{
 		// read from the flowsheet — but a doctor does not chart observations,
 		// give medication or apply restraints, so only the read is here.
 		"nur.record.read",
+
+		// The emergency department (SRS-ER). An ED physician runs the visit,
+		// calls the trauma, stroke or STEMI team, and decides where the
+		// patient goes.
+		"er.visit.read",
+		"er.visit.write",
+		"er.pathway.activate",
+		// Disposition is the decision to admit, discharge or transfer
+		// (SRS-ER-013), and it is a medical one.
+		"er.visit.dispose",
+		// Moving a patient up the queue overrules the triage nurse's
+		// assessment (SRS-ER-003). Held by the doctor who has seen the
+		// patient, and by the charge nurse running the floor; not by everyone
+		// who may record a dressing change.
+		"er.queue.override",
+		// A medico-legal case's detail — the assault, the poisoning, the
+		// police reference (SRS-ER-011). The read is separately audited every
+		// time.
+		"er.visit.read_restricted",
+		// Deliberately no er.triage.assign: triage is a nursing assessment
+		// against a published scale, and a department where anybody may
+		// restate an acuity has no scale.
 	},
 
 	// A pharmacist checks what was prescribed and decides what is dispensed
@@ -432,6 +460,19 @@ var rolePermissions = map[Role][]string{
 		// ward's job, and the ward is who knows the system has gone
 		// (SRS-NUR-018).
 		"nur.downtime.manage",
+
+		// The emergency department (SRS-ER). Triage is nursing work and this
+		// is the role that holds it: a nurse assigns acuity against the
+		// department's published scale (SRS-ER-002), records the timeline, and
+		// activates a pathway — a triage nurse who recognises a stroke calls
+		// the team rather than waiting to be given permission (SRS-ER-005).
+		"er.visit.read",
+		"er.visit.write",
+		"er.triage.assign",
+		"er.pathway.activate",
+		// Deliberately no er.visit.dispose: whether a patient is admitted,
+		// discharged or transferred is a medical decision, and a nurse who
+		// held it could discharge a patient nobody had seen.
 	},
 
 	// A downstream service moves orders through their lifecycle and does
@@ -455,6 +496,13 @@ var rolePermissions = map[Role][]string{
 		// also rostered to give medication holds the nurse role as well; the
 		// management role does not carry it, so "who may give a drug" stays
 		// answerable from the roles alone.
+
+		// The charge nurse runs the emergency floor: they read the board and
+		// move a patient up the queue (SRS-ER-003, SRS-ER-004). They do not
+		// triage and do not dispose — a manager who is also rostered to triage
+		// holds the nurse role too.
+		"er.visit.read",
+		"er.queue.override",
 	},
 }
 

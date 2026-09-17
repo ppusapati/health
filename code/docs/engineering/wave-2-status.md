@@ -15,6 +15,12 @@ test names.
 family rather than in prose, because a status document whose honest summary is
 "barely started" is one whose per-row claims have to be read carefully.
 
+One family is now built: SRS-ER, the Emergency Department, and its rows are
+below. `make traceability` reads a row naming a requirement as a claim about
+it unless the row says the work is not built, so the unbuilt ER requirements
+are named here too — a status document that had to leave them out to pass its
+own gate would be hiding exactly what a reader greps for.
+
 ## Why this document exists before the work does
 
 Wave 1 was audited twice and both times the audit found the same thing: a
@@ -78,7 +84,7 @@ clinician, and `ValidatedInputs()` is a function rather than a convention.
 
 | Family | Requirements | State |
 |---|---|---|
-| SRS-ER Emergency Department | 18 | **Not started** |
+| SRS-ER Emergency Department | 18 | **12 implemented, 2 partial, 4 not built** — see below |
 | SRS-ICU Critical Care | 18 | **Foundations only** — device ingestion and the validated-input gate |
 | SRS-OT Perioperative | 17 | **Not started** |
 | SRS-ANE Anesthesia and PACU | 11 | **Not started** |
@@ -91,6 +97,65 @@ clinician, and `ValidatedInputs()` is a function rather than a convention.
 | SRS-MRD Medical Records / HIM | 10 | **Not started** |
 | SRS-AMB, SRS-DIET, SRS-FAC, SRS-HKP, SRS-LND, SRS-MORT support services | 52 | **Not started** — except SRS-FAC-012 above |
 | SRS-OPSAPI / OPSNFR / OPSSEC / OPSWEB | 32 | **Partial** — the three foundations above |
+
+## SRS-ER — Emergency Department
+
+The department is reachable over the wire: `internal/emergency`, the
+`EmergencyService` contract, and end-to-end tests in `internal/app` that run
+against a real database through the assembled stack.
+
+Three shapes in it are worth naming, because each is a decision that could
+have gone the easy way.
+
+An emergency visit is the emergency detail of a Wave-1 encounter, not a second
+kind of encounter. The patient, the allergies and the episode belong to the
+encounter, and a department holding its own copy is a department whose chart
+disagrees with the ward's.
+
+Every interval SRS-ER-006 asks for is computed per response from the event
+timeline. Nothing stores a door-to-doctor number, because a stored one is a
+field somebody can set, and an absent interval means nobody has seen the
+patient — where a zero would be the number that makes a dashboard look best
+while the department is at its worst.
+
+A timeline event carries `occurred_at` and `recorded_at` separately and the
+timeline sorts on the first. A resuscitation is written up in arrears more
+often than not, and the gap between the two is the only thing that separates a
+contemporaneous record from a reconstruction.
+
+| Requirement | What it asks for | State |
+|---|---|---|
+| SRS-ER-001 | Create an arrival by walk-in, ambulance, referral or transfer with mode, complaint and timestamp | **Implemented** — the arrival event is written in the arriving transaction, because every clock below is measured from it |
+| SRS-ER-002 | Configurable triage acuity on an approved scale, with vitals, pain, consciousness and red flags | **Implemented** — ESI by default; missing mandatory fields are flagged rather than refused, and re-triage is the same call |
+| SRS-ER-003 | Queue by acuity and clinical override rather than arrival order | **Implemented** — an untriaged patient sorts as rank 1, and an override needs a reason in both directions |
+| SRS-ER-004 | Unknown patient with a temporary identity and later EMPI reconciliation | **Implemented** — reconciliation keeps the temporary name and rewrites nothing written under it |
+| SRS-ER-005 | Activate resuscitation, trauma, stroke, STEMI, sepsis or a local pathway | **Implemented** — the activation and the escalation notice are one transaction, on the SRS-OPSNFR-003 mechanism |
+| SRS-ER-006 | Door-to-triage, door-to-doctor and pathway timestamps from immutable events | **Implemented** — derived per response; an absent interval is absent, never zero |
+| SRS-ER-008 | Continuous resuscitation events with sequence, actor and late-entry marking | **Implemented** — two clocks and a derived `late` flag, both stored |
+| SRS-ER-009 | Administration before full order entry, under protocol and reconciled afterwards | **Implemented** — the debt is facility-wide and announced on the event stream, because one visible only inside a chart is close enough to silent |
+| SRS-ER-011 | Medico-legal flag and restricted documentation workflow | **Partial** — the flag, the restricted read and its audit are in place; statutory document handling is not |
+| SRS-ER-012 | Status board with patient, acuity, location, elapsed time and disposition barrier | **Implemented** — redaction happens in one place, and the board reports how many rows it redacted rather than being silently shorter |
+| SRS-ER-013 | Disposition with required documentation and downstream handover | **Implemented** — every refusal is returned at once, because a clinician told one gate at a time makes one attempt per gate |
+| SRS-ER-014 | ED observation beds and timers, independent of inpatient admission | **Implemented** — a separate call from admission, and an overdue review shows on the board |
+| SRS-ER-015 | Emergency discharge/referral summary from signed and validated source data only | **Partial** — the signed-summary gate is enforced at disposition; generating the summary belongs to SRS-CLN and is not built |
+| SRS-ER-016 | Critical result routes to the responsible clinician and requires acknowledgement | **Implemented** through the SRS-OPSNFR-003 mechanism and SRS-CLN-012's producer |
+| SRS-ER-007 | Stat orders and medications through Phase-1 CPOE, preserving priority and indication | **Not built** — needs the orders context to carry an emergency priority end to end |
+| SRS-ER-010 | Trauma primary and secondary survey with an injury body map | **Not built** |
+| SRS-ER-017 | Ambulance pre-arrival notification with ETA and handover | **Not built** — SHOULD, and the only non-MUST in the family |
+| SRS-ER-018 | Downtime emergency registration with later idempotent synchronization | **Not built** — the Wave-0 edge prototype (P0-13) is the pattern; nothing wires the department to it |
+
+### Who may do what
+
+The permissions are split along the jobs rather than the screens, because the
+ED is the place where one person holding every permission is most tempting and
+most wrong.
+
+A triage nurse assigns acuity and cannot decide a disposition. An ED physician
+decides the disposition and cannot assign acuity — a department where anybody
+may restate an acuity has no scale. A registration clerk books the arrival and
+does neither. The charge nurse moves a patient in the queue, which overrules a
+triage nurse's assessment and is therefore its own permission. Seeing a
+medico-legal case's detail is a fifth.
 
 ## What Wave 2 depends on
 

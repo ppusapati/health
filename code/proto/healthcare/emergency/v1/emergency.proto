@@ -1,0 +1,492 @@
+// The Emergency Department: arrival, triage, the queue, time-critical
+// pathways, the resuscitation timeline and disposition.
+//
+// Owning context : emergency  (Master Engineering Registry)
+// Owning service : EmergencyService
+// Trace          : SRS-ER-001 … SRS-ER-018
+//
+// Three shapes in this contract are deliberate.
+//
+// An EmergencyVisit carries an encounter_id and no episode of its own. A visit
+// is the emergency detail of a Wave-1 encounter rather than a second kind of
+// encounter: the patient, the allergies and the episode all belong to the
+// encounter, and a department holding its own copy is a department whose chart
+// disagrees with the ward's.
+//
+// An Event carries occurred_at and recorded_at separately, and the timeline
+// sorts on the first. A resuscitation is written up in arrears more often than
+// not, and the gap between the two is the only thing that distinguishes a
+// contemporaneous record from a reconstruction. `late` is derived from that gap
+// and travels, so a client cannot render the two alike.
+//
+// Nothing carries a door-to-triage or door-to-doctor interval as a stored
+// field. SRS-ER-006 says the dashboard "derives times from immutable events",
+// and the Intervals message below is computed per response. Its fields are
+// optional on purpose: an absent door-to-doctor means nobody has seen the
+// patient, and a zero would be the number that makes a dashboard look best
+// while the department is at its worst.
+syntax = "proto3";
+
+package healthcare.emergency.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ppusapati/health/code/gen/go/healthcare/emergency/v1;emergencyv1";
+
+// How the patient reached the department (SRS-ER-001).
+enum ArrivalMode {
+  ARRIVAL_MODE_UNSPECIFIED = 0;
+  ARRIVAL_MODE_WALK_IN = 1;
+  ARRIVAL_MODE_AMBULANCE = 2;
+  ARRIVAL_MODE_REFERRAL = 3;
+  // From another facility, which carries an obligation the others do not:
+  // somebody is expecting a reply.
+  ARRIVAL_MODE_TRANSFER = 4;
+}
+
+// Where the patient is in the department.
+enum VisitStatus {
+  VISIT_STATUS_UNSPECIFIED = 0;
+  // Booked in and not yet triaged. The clock that matters most is running.
+  VISIT_STATUS_ARRIVED = 1;
+  VISIT_STATUS_TRIAGED = 2;
+  VISIT_STATUS_IN_TREATMENT = 3;
+  // An ED observation bed (SRS-ER-014): still the department's patient, not an
+  // inpatient admission.
+  VISIT_STATUS_OBSERVATION = 4;
+  VISIT_STATUS_DISPOSED = 5;
+}
+
+// Where the patient goes (SRS-ER-013).
+enum Disposition {
+  DISPOSITION_UNSPECIFIED = 0;
+  DISPOSITION_DISCHARGE = 1;
+  DISPOSITION_OBSERVATION = 2;
+  DISPOSITION_ADMISSION = 3;
+  DISPOSITION_THEATRE = 4;
+  DISPOSITION_ICU = 5;
+  DISPOSITION_TRANSFER = 6;
+  // A decision the patient made, witnessed and counselled. Distinct from
+  // absconded because that difference is the whole of the medico-legal record.
+  DISPOSITION_LEFT_AGAINST_ADVICE = 7;
+  // The department lost the patient. A disposition because the alternative is
+  // a visit that stays open forever and a patient nobody is looking for.
+  DISPOSITION_ABSCONDED = 8;
+  DISPOSITION_DEATH = 9;
+  DISPOSITION_REFERRAL = 10;
+}
+
+// A time-critical protocol (SRS-ER-005).
+enum PathwayKind {
+  PATHWAY_KIND_UNSPECIFIED = 0;
+  PATHWAY_KIND_RESUSCITATION = 1;
+  PATHWAY_KIND_TRAUMA = 2;
+  PATHWAY_KIND_STROKE = 3;
+  PATHWAY_KIND_STEMI = 4;
+  PATHWAY_KIND_SEPSIS = 5;
+  // A locally defined protocol, named in `label`. Allowed because a department
+  // that has agreed a paediatric sepsis pathway should not wait for this
+  // enumeration.
+  PATHWAY_KIND_OTHER = 6;
+}
+
+// What happened, on the timeline (SRS-ER-008).
+enum EventKind {
+  EVENT_KIND_UNSPECIFIED = 0;
+  EVENT_KIND_ARRIVAL = 1;
+  EVENT_KIND_TRIAGE = 2;
+  // The end of door-to-doctor. Recorded when a clinician takes the patient,
+  // not when one is assigned: an assignment is a rota entry and the patient
+  // cannot tell the difference.
+  EVENT_KIND_CLINICIAN_SEEN = 3;
+  EVENT_KIND_PATHWAY_ACTIVATED = 4;
+  EVENT_KIND_MILESTONE = 5;
+  EVENT_KIND_AIRWAY = 6;
+  EVENT_KIND_CPR = 7;
+  EVENT_KIND_DEFIBRILLATION = 8;
+  EVENT_KIND_FLUID = 9;
+  EVENT_KIND_DRUG = 10;
+  EVENT_KIND_PROCEDURE = 11;
+  EVENT_KIND_OBSERVATION = 12;
+  EVENT_KIND_DISPOSITION = 13;
+}
+
+message EmergencyVisit {
+  string visit_id = 1;
+  // The Wave-1 encounter this is the emergency detail of.
+  string encounter_id = 2;
+  // Empty while the patient is unidentified (SRS-ER-004).
+  string patient_id = 3;
+  string facility_id = 4;
+
+  ArrivalMode arrival_mode = 5;
+  // What the patient or the crew said, in their words. Never coded: the first
+  // sentence is evidence, and coding it at the door loses the difference
+  // between "crushing chest pain" and "indigestion".
+  string chief_complaint = 6;
+  google.protobuf.Timestamp arrived_at = 7;
+
+  bool unidentified = 8;
+  // Kept after identification. A record that renamed its own history would
+  // make the resuscitation timeline refer to somebody who was never there.
+  string temporary_name = 9;
+
+  bool medico_legal = 10;
+  string medico_legal_ref = 11;
+
+  VisitStatus status = 12;
+  string location = 13;
+
+  Disposition disposition = 14;
+  google.protobuf.Timestamp disposed_at = 15;
+  string disposition_note = 16;
+  string receiving_service = 17;
+
+  google.protobuf.Timestamp observation_started_at = 18;
+  google.protobuf.Timestamp observation_ends_at = 19;
+
+  string created_by = 20;
+  google.protobuf.Timestamp created_at = 21;
+  google.protobuf.Timestamp updated_at = 22;
+  int64 version = 23;
+
+  // True where this caller may not see the visit's detail (SRS-ER-011). The
+  // visit still comes back: a clinician who cannot read the medico-legal
+  // documentation may still need to know the patient is in Resus 2.
+  bool restricted = 24;
+}
+
+message Triage {
+  string triage_id = 1;
+  string visit_id = 2;
+  // The scale travels with the assessment. An ESI 2 read under Manchester is a
+  // different patient.
+  string scale_name = 3;
+  string scale_version = 4;
+  string acuity_code = 5;
+  int32 acuity_rank = 6;
+
+  // The inputs, as recorded. Optional throughout: a missing observation is
+  // recorded as missing rather than as zero.
+  optional int32 respiratory_rate = 7;
+  optional int32 heart_rate = 8;
+  optional int32 systolic_bp = 9;
+  optional int32 oxygen_saturation = 10;
+  optional double temperature = 11;
+  optional int32 pain_score = 12;
+  string consciousness = 13;
+  repeated string red_flags = 14;
+
+  // What the department required and did not get. Flagged rather than refused:
+  // a nurse with a crashing patient does not stop for a temperature, and
+  // refusing the assessment produces a fabricated one.
+  repeated string missing_fields = 15;
+
+  string note = 16;
+  string assessed_by = 17;
+  google.protobuf.Timestamp assessed_at = 18;
+}
+
+// A clinician moving a patient in the queue (SRS-ER-003).
+message PriorityOverride {
+  int32 acuity_rank = 1;
+  // Required in both directions. Moving somebody down is the decision argued
+  // about afterwards.
+  string reason = 2;
+  string overridden_by = 3;
+  google.protobuf.Timestamp overridden_at = 4;
+}
+
+message MilestoneTarget {
+  string code = 1;
+  string label = 2;
+  int64 within_seconds = 3;
+}
+
+message MilestoneState {
+  MilestoneTarget target = 1;
+  bool reached = 2;
+  google.protobuf.Timestamp reached_at = 3;
+  int64 elapsed_seconds = 4;
+  // A target passed without the milestone. True while it is still missable,
+  // because a breach that only appears afterwards is one nobody could have
+  // prevented.
+  bool breached = 5;
+}
+
+message Pathway {
+  string pathway_id = 1;
+  string visit_id = 2;
+  PathwayKind kind = 3;
+  // Names a locally defined pathway.
+  string label = 4;
+  google.protobuf.Timestamp activated_at = 5;
+  string activated_by = 6;
+  // Who was called. The commonest failure in a time-critical pathway is not
+  // that nobody activated it — it is that the team nobody called did not come.
+  string notified_team = 7;
+  // The durable notice carrying the call (SRS-OPSNFR-003). Empty where the
+  // department activates by shouting across the resus room.
+  string escalation_notice_id = 8;
+  repeated MilestoneTarget targets = 9;
+  google.protobuf.Timestamp stood_down_at = 10;
+  string stood_down_reason = 11;
+}
+
+message EmergencyEvent {
+  string event_id = 1;
+  string visit_id = 2;
+  EventKind kind = 3;
+  string detail = 4;
+  // When it happened to the patient, and when somebody typed it.
+  google.protobuf.Timestamp occurred_at = 5;
+  google.protobuf.Timestamp recorded_at = 6;
+  // Breaks ties within a minute. A defibrillation and the rhythm check before
+  // it are frequently recorded at the same minute, and their order is the
+  // clinically interesting part.
+  int32 sequence = 7;
+  string actor_id = 8;
+  // Derived from the gap between the two timestamps. Travels so a client
+  // cannot render a reconstruction as a contemporaneous record.
+  bool late = 9;
+  string pathway_id = 10;
+  // The standing order a pre-order administration was given under
+  // (SRS-ER-009).
+  string protocol_id = 11;
+  bool needs_reconciliation = 12;
+  string reconciled_order_id = 13;
+}
+
+// The clocks SRS-ER-006 asks for, derived per response.
+//
+// Every field optional: an absent door-to-doctor means nobody has seen the
+// patient, and a zero is the number that makes a dashboard look best while the
+// department is at its worst.
+message Intervals {
+  optional int64 door_to_triage_seconds = 1;
+  optional int64 door_to_clinician_seconds = 2;
+  optional int64 door_to_disposition_seconds = 3;
+}
+
+// One line of the status board (SRS-ER-012).
+message BoardRow {
+  string visit_id = 1;
+  // The patient's name, or the temporary one, or "Restricted".
+  string display = 2;
+  int32 acuity_rank = 3;
+  string scale_name = 4;
+  bool triaged = 5;
+  google.protobuf.Timestamp arrived_at = 6;
+  VisitStatus status = 7;
+  string location = 8;
+  PriorityOverride override = 9;
+  int32 pending_orders = 10;
+  // The one thing stopping this patient leaving. The board's most useful
+  // column, because a department's flow problem is almost never the doctors.
+  string disposition_barrier = 11;
+  repeated PathwayKind pathways = 12;
+  int64 waiting_seconds = 13;
+  bool breaching = 14;
+  bool observation_overdue = 15;
+  // Shown in redacted form. The bed, the acuity and the clock stay; the
+  // identity and the barrier go.
+  bool restricted = 16;
+}
+
+message ArriveRequest {
+  string encounter_id = 1;
+  string patient_id = 2;
+  string facility_id = 3;
+  ArrivalMode arrival_mode = 4;
+  string chief_complaint = 5;
+  google.protobuf.Timestamp arrived_at = 6;
+  bool unidentified = 7;
+  string temporary_name = 8;
+  bool medico_legal = 9;
+  string medico_legal_ref = 10;
+  string location = 11;
+}
+
+message ArriveResponse {
+  EmergencyVisit visit = 1;
+}
+
+message GetEmergencyVisitRequest {
+  string visit_id = 1;
+}
+
+message GetEmergencyVisitResponse {
+  EmergencyVisit visit = 1;
+  repeated Triage triage = 2;
+  repeated Pathway pathways = 3;
+  // Keyed by pathway id.
+  map<string, MilestoneProgress> progress = 4;
+  repeated EmergencyEvent timeline = 5;
+  Intervals intervals = 6;
+}
+
+message MilestoneProgress {
+  repeated MilestoneState states = 1;
+}
+
+message IdentifyPatientRequest {
+  string visit_id = 1;
+  string patient_id = 2;
+}
+
+message IdentifyPatientResponse {
+  EmergencyVisit visit = 1;
+}
+
+message AssignTriageRequest {
+  string visit_id = 1;
+  string acuity_code = 2;
+  optional int32 respiratory_rate = 3;
+  optional int32 heart_rate = 4;
+  optional int32 systolic_bp = 5;
+  optional int32 oxygen_saturation = 6;
+  optional double temperature = 7;
+  optional int32 pain_score = 8;
+  string consciousness = 9;
+  repeated string red_flags = 10;
+  string note = 11;
+}
+
+message AssignTriageResponse {
+  Triage triage = 1;
+}
+
+message OverridePriorityRequest {
+  string visit_id = 1;
+  int32 acuity_rank = 2;
+  string reason = 3;
+}
+
+message OverridePriorityResponse {}
+
+message ActivatePathwayRequest {
+  string visit_id = 1;
+  PathwayKind kind = 2;
+  string label = 3;
+  string notified_team = 4;
+}
+
+message ActivatePathwayResponse {
+  Pathway pathway = 1;
+}
+
+message StandDownPathwayRequest {
+  string pathway_id = 1;
+  string reason = 2;
+}
+
+message StandDownPathwayResponse {}
+
+message RecordEmergencyEventRequest {
+  string visit_id = 1;
+  EventKind kind = 2;
+  string detail = 3;
+  google.protobuf.Timestamp occurred_at = 4;
+  int32 sequence = 5;
+  string pathway_id = 6;
+  // A medication given under a standing order before the order existed
+  // (SRS-ER-009). The protocol is required when pre_order is set.
+  string protocol_id = 7;
+  bool pre_order = 8;
+}
+
+message RecordEmergencyEventResponse {
+  EmergencyEvent event = 1;
+}
+
+message GetTimelineRequest {
+  string visit_id = 1;
+}
+
+message GetTimelineResponse {
+  repeated EmergencyEvent events = 1;
+  Intervals intervals = 2;
+}
+
+message ReconcileAdministrationRequest {
+  string event_id = 1;
+  string order_id = 2;
+}
+
+message ReconcileAdministrationResponse {}
+
+message ListUnreconciledRequest {
+  string facility_id = 1;
+  int32 page_size = 2;
+}
+
+message ListUnreconciledResponse {
+  repeated EmergencyEvent events = 1;
+}
+
+message StartObservationRequest {
+  string visit_id = 1;
+  google.protobuf.Timestamp review_at = 2;
+  string location = 3;
+}
+
+message StartObservationResponse {
+  EmergencyVisit visit = 1;
+}
+
+message DisposeRequest {
+  string visit_id = 1;
+  Disposition disposition = 2;
+  string note = 3;
+  string receiving_service = 4;
+  // The caller's assertion that the discharge summary is signed (SRS-ER-015).
+  // Passed rather than inferred: the summary is a clinical document owned by
+  // SRS-CLN, and a department deciding for itself would be a second authority
+  // on it.
+  bool summary_signed = 5;
+}
+
+message DisposeResponse {
+  EmergencyVisit visit = 1;
+}
+
+message GetBoardRequest {
+  string facility_id = 1;
+  int32 page_size = 2;
+}
+
+message GetBoardResponse {
+  repeated BoardRow rows = 1;
+  // How many rows are shown redacted, so the board can say "and 2 restricted"
+  // rather than silently showing a shorter department than exists.
+  int32 restricted = 2;
+}
+
+service EmergencyService {
+  // Arrival and identity (SRS-ER-001, SRS-ER-004).
+  rpc Arrive(ArriveRequest) returns (ArriveResponse);
+  rpc GetEmergencyVisit(GetEmergencyVisitRequest) returns (GetEmergencyVisitResponse);
+  rpc IdentifyPatient(IdentifyPatientRequest) returns (IdentifyPatientResponse);
+
+  // Triage and the queue (SRS-ER-002, SRS-ER-003, SRS-ER-012).
+  rpc AssignTriage(AssignTriageRequest) returns (AssignTriageResponse);
+  rpc OverridePriority(OverridePriorityRequest) returns (OverridePriorityResponse);
+  rpc GetBoard(GetBoardRequest) returns (GetBoardResponse);
+
+  // Time-critical pathways (SRS-ER-005).
+  rpc ActivatePathway(ActivatePathwayRequest) returns (ActivatePathwayResponse);
+  rpc StandDownPathway(StandDownPathwayRequest) returns (StandDownPathwayResponse);
+
+  // The resuscitation timeline and its clocks (SRS-ER-006, SRS-ER-008,
+  // SRS-ER-009).
+  rpc RecordEmergencyEvent(RecordEmergencyEventRequest)
+      returns (RecordEmergencyEventResponse);
+  rpc GetTimeline(GetTimelineRequest) returns (GetTimelineResponse);
+  rpc ReconcileAdministration(ReconcileAdministrationRequest)
+      returns (ReconcileAdministrationResponse);
+  rpc ListUnreconciled(ListUnreconciledRequest) returns (ListUnreconciledResponse);
+
+  // Observation and disposition (SRS-ER-013, SRS-ER-014).
+  rpc StartObservation(StartObservationRequest) returns (StartObservationResponse);
+  rpc Dispose(DisposeRequest) returns (DisposeResponse);
+}

@@ -9,7 +9,6 @@ package escalate
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -34,15 +33,16 @@ func New(store *escalation.Store) *Adapter { return &Adapter{store: store} }
 
 // RaiseCritical implements ports.Escalations.
 //
-// A tenant with no chain configured for critical results is not an error. It
-// has decided not to escalate them, which is a real configuration — a small
-// clinic where the person who ordered the test is standing next to the analyser
-// — and failing the result would be refusing to record a critical potassium
-// because nobody had filled in a form.
+// The notice is raised whether or not the tenant has configured a chain for
+// critical results. Raising and delivering are separate on purpose: the notice
+// is the durable record that somebody was supposed to be told, and the driver
+// is what finds the chain missing and says so. A clinic that configures its
+// matrix a week later still has every unacknowledged result in the mechanism
+// rather than only in the chart.
 //
-// Every other failure does propagate, and fails the caller's transaction. A
-// critical result recorded with the safety net silently switched off is the
-// outcome that has to be impossible.
+// Every failure propagates, and fails the caller's transaction. A critical
+// result recorded with the safety net silently switched off is the outcome that
+// has to be impossible.
 func (a *Adapter) RaiseCritical(ctx context.Context, scope authctx.TenantScope,
 	notice ports.CriticalNotice) error {
 
@@ -56,10 +56,6 @@ func (a *Adapter) RaiseCritical(ctx context.Context, scope authctx.TenantScope,
 		PatientID:  notice.PatientID,
 		FacilityID: notice.FacilityID,
 	}, summarise(notice), notice.At)
-
-	if errors.Is(err, escalation.ErrNoMatrix) {
-		return nil
-	}
 	return err
 }
 

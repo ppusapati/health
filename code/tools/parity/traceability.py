@@ -12,6 +12,7 @@ requirement was implemented, marked Implemented, and had nothing exercising it
 at all.
 """
 import pathlib
+import re
 import subprocess
 import sys
 
@@ -50,7 +51,49 @@ def ids(args: list[str]) -> set[str]:
     return matching(PATTERN, args)
 
 
-claimed = ids(STATUS_DOCS)
+# A row that says the work is not built is not a claim about it.
+#
+# Without this the gate cannot tell "implemented, and here is the test" from
+# "eighteen requirements, four of which nobody has started", and a status
+# document is forced to leave the unbuilt ones unnamed — which is exactly the
+# information a reader greps for. Marking a row absent is not a way round the
+# gate: it puts "not built" in the document, which is the honest outcome the
+# gate is trying to produce.
+# The row's verdict, not any sentence in it. Matched in bold because that is
+# how every state cell in these documents opens, and because "the summary
+# itself is not built" inside a **Partial** row is prose about a different
+# thing — a substring match on it would silently stop checking a requirement
+# that is claimed.
+ABSENT_VERDICT = re.compile(
+    r"\*\*\s*(?:not started|not built|not implemented|deferred)",
+    re.IGNORECASE)
+
+
+def split_claims(docs: list[str]) -> tuple[set[str], set[str]]:
+    """Return (claimed, declared absent), per line of each status document."""
+    pattern = re.compile(PATTERN.replace("(", "(?:"))
+    claimed_ids: set[str] = set()
+    absent_ids: set[str] = set()
+
+    for doc in docs:
+        path = root / doc
+        if not path.exists():
+            continue
+        for line in path.read_text().splitlines():
+            found = set(pattern.findall(line))
+            if not found:
+                continue
+            if ABSENT_VERDICT.search(line):
+                absent_ids |= found
+            else:
+                claimed_ids |= found
+
+    # A requirement claimed on one line and disclaimed on another is claimed:
+    # the stronger statement is the one somebody will act on.
+    return claimed_ids, absent_ids - claimed_ids
+
+
+claimed, absent = split_claims(STATUS_DOCS)
 tested = ids([
     "--include=*_test.go", "--include=*_test.dart", "--include=*.test.ts", ".",
 ])
@@ -84,6 +127,7 @@ else:
     print("NOTE      tools/requirements/known-ids.txt is missing; "
           "id existence was not checked")
 
-print(f"\n{len(claimed)} requirements claimed, {len(missing)} with no test naming them, "
+print(f"\n{len(claimed)} requirements claimed, {len(absent)} declared not built, "
+      f"{len(missing)} with no test naming them, "
       f"{len(unknown)} naming no real requirement")
 sys.exit(1 if missing or unknown else 0)

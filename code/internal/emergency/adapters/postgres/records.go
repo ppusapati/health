@@ -37,6 +37,14 @@ func (r VisitRepo) InsertTriage(ctx context.Context, scope authctx.TenantScope,
 		flags = append(flags, string(flag))
 	}
 
+	// Both arrays are NOT NULL, and an empty assessment gap is a nil slice in
+	// Go. Empty and absent are the same thing here, and a NULL would make the
+	// read side distinguish two states the domain does not have.
+	missing := t.Missing
+	if missing == nil {
+		missing = []string{}
+	}
+
 	return r.queries(ctx).InsertTriage(ctx, sqlcgen.InsertTriageParams{
 		TriageID: triageID, TenantID: tenantID, VisitID: visitID,
 		ScaleName: t.ScaleName, ScaleVersion: t.ScaleVersion,
@@ -52,7 +60,7 @@ func (r VisitRepo) InsertTriage(ctx context.Context, scope authctx.TenantScope,
 		// Stored rather than recomputed on read: what a department required at
 		// triage is configurable and may have changed since, and a gap
 		// recorded under yesterday's rules is still the gap that existed.
-		MissingFields: t.Missing,
+		MissingFields: missing,
 		Note:          t.Note,
 		AssessedBy:    t.AssessedBy, AssessedAt: stamp(t.AssessedAt),
 	})

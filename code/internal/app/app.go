@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/ppusapati/health/code/gen/go/healthcare/billing/v1/billingv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/clinical/v1/clinicalv1connect"
+	"github.com/ppusapati/health/code/gen/go/healthcare/emergency/v1/emergencyv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/empi/v1/empiv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/encounter/v1/encounterv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/identity_access/v1/identityaccessv1connect"
@@ -34,6 +35,10 @@ import (
 	clinicalpostgres "github.com/ppusapati/health/code/internal/clinical/adapters/postgres"
 	clinicalapp "github.com/ppusapati/health/code/internal/clinical/application"
 	clinicaltransport "github.com/ppusapati/health/code/internal/clinical/transport"
+	emergencyescalate "github.com/ppusapati/health/code/internal/emergency/adapters/escalate"
+	emergencypostgres "github.com/ppusapati/health/code/internal/emergency/adapters/postgres"
+	emergencyapp "github.com/ppusapati/health/code/internal/emergency/application"
+	emergencytransport "github.com/ppusapati/health/code/internal/emergency/transport"
 	"github.com/ppusapati/health/code/internal/empi/adapters/photostore"
 	empipostgres "github.com/ppusapati/health/code/internal/empi/adapters/postgres"
 	empiapp "github.com/ppusapati/health/code/internal/empi/application"
@@ -175,6 +180,15 @@ type Deps struct {
 	// one that answers "verified", which would be a safety control present in
 	// the code and absent in effect.
 	MedicationOrders nursingports.MedicationOrders
+
+	// Emergency is what a deployment has decided about its emergency
+	// department: which triage scale it has approved, what must be measured at
+	// triage, and what each disposition requires (SRS-ER-002, SRS-ER-013).
+	//
+	// The zero value takes ESI and the default disposition gates, which is a
+	// default rather than a refusal: patients arrive whether or not anybody has
+	// configured the department.
+	Emergency emergencyapp.Config
 }
 
 // Server holds the assembled HTTP handler and the services behind it.
@@ -185,6 +199,7 @@ type Server struct {
 	Scheduling   *schedulingapp.Service
 	Encounters   *encounterapp.Service
 	Clinical     *clinicalapp.Service
+	Emergency    *emergencyapp.Service
 	Nursing      *nursingapp.Service
 	Orders       *ordersapp.Service
 	Medication   *medicationapp.Service
@@ -402,6 +417,27 @@ func New(deps Deps) *Server {
 		Clock:  systemClock{},
 	})
 
+	emergencyRepo := emergencypostgres.New(txManager)
+	emergencyService := emergencyapp.NewService(emergencyapp.Deps{
+		UnitOfWork: txManager,
+		Visits:     emergencypostgres.VisitRepo{Repository: emergencyRepo},
+		// Whether the Wave-1 encounter still accepts content is the encounter
+		// context's fact (SRS-ENC-005), reached through a port. A department
+		// keeping its own copy is one that charts a dressing change into a
+		// discharged episode.
+		Encounters: emergencypostgres.NewEncounters(
+			encounterpostgres.EncounterRepo{Repository: encounterRepo}),
+		// SRS-ER-005 activates the team through the platform escalation
+		// mechanism rather than by shouting into a log: a trauma call that
+		// nobody acknowledged has to be visible as such.
+		Escalations: emergencyescalate.New(escalationStore),
+		Events:      platformStore,
+		Audits:      store.AuditAppenderFunc(platformStore.AppendAudit),
+		IDs:         uuidGenerator{},
+		Clock:       systemClock{},
+		Config:      deps.Emergency,
+	})
+
 	medicationRepo := medicationpostgres.New(txManager)
 	medicationTerminology := medicationpostgres.NewTerminology(medicationRepo)
 	medicationService := medicationapp.NewService(medicationapp.Deps{
@@ -552,6 +588,8 @@ func New(deps Deps) *Server {
 		nursingtransport.NewHandler(nursingService, time.Now), interceptors))
 	mux.Handle(ordersv1connect.NewOrderServiceHandler(
 		orderstransport.NewHandler(ordersService), interceptors))
+	mux.Handle(emergencyv1connect.NewEmergencyServiceHandler(
+		emergencytransport.NewHandler(emergencyService), interceptors))
 	billingRepo := billingpostgres.New(txManager)
 	billingService := billingapp.NewService(billingapp.Deps{
 		UnitOfWork: txManager,
@@ -608,6 +646,7 @@ func New(deps Deps) *Server {
 		Scheduling:      schedulingService,
 		Encounters:      encounterService,
 		Clinical:        clinicalService,
+		Emergency:       emergencyService,
 		Nursing:         nursingService,
 		Orders:          ordersService,
 		Medication:      medicationService,

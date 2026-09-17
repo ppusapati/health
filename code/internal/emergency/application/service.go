@@ -179,7 +179,16 @@ func (s *Service) appendAudit(ctx context.Context, session authctx.Session,
 	if s.audits == nil {
 		return nil
 	}
-	r.ActorID, r.OccurredAt = session.SubjectID, now
+	r.AuditID = s.ids.NewID()
+	r.ActorID = session.SubjectID
+	r.CorrelationID = session.CorrelationID
+	r.RequestID = session.RequestID
+	r.PurposeOfUse = string(session.Purpose)
+	r.BreakGlass = session.BreakGlass
+	r.OccurredAt = now.UTC()
+	if r.TenantID == "" {
+		r.TenantID = session.TenantID
+	}
 	return s.audits.Append(ctx, r)
 }
 
