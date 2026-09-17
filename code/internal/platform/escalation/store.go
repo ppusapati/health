@@ -330,6 +330,16 @@ func (s *Store) RecordDelivery(ctx context.Context, noticeID string, delivery De
 		})
 }
 
+// Claimed is a notice the sweep picked up, with whether it has ever been told
+// to anybody.
+type Claimed struct {
+	Notice Notice
+	// Delivered is false for a notice raised by a transaction that committed
+	// and a process that then died before delivering it. The sweep's job for
+	// one of those is to deliver level zero, not to escalate past it.
+	Delivered bool
+}
+
 // ClaimDue locks the pending notices that may be due, for one sweep.
 //
 // Not filtered by policy here: the SQL returns pending notices whose last
@@ -337,7 +347,7 @@ func (s *Store) RecordDelivery(ctx context.Context, noticeID string, delivery De
 // policy. Keeping the arithmetic in Go means a tenant changing its intervals
 // takes effect on notices already outstanding, which is the point of changing
 // them, and does not need a migration.
-func (s *Store) ClaimDue(ctx context.Context, before time.Time, limit int) ([]Notice, error) {
+func (s *Store) ClaimDue(ctx context.Context, before time.Time, limit int) ([]Claimed, error) {
 	if limit <= 0 {
 		limit = 100
 	}
@@ -347,9 +357,20 @@ func (s *Store) ClaimDue(ctx context.Context, before time.Time, limit int) ([]No
 	if err != nil {
 		return nil, fmt.Errorf("claim due escalations: %w", err)
 	}
-	out := make([]Notice, 0, len(rows))
+	out := make([]Claimed, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, noticeFrom(row))
+		out = append(out, Claimed{
+			Notice: noticeFrom(sqlcgen.PlatformEscalationNotice{
+				NoticeID: row.NoticeID, TenantID: row.TenantID,
+				SubjectKind: row.SubjectKind, SubjectID: row.SubjectID,
+				PatientID: row.PatientID, FacilityID: row.FacilityID,
+				Summary: row.Summary, State: row.State, Level: row.Level,
+				RaisedAt: row.RaisedAt, LastEscalatedAt: row.LastEscalatedAt,
+				AcknowledgedBy: row.AcknowledgedBy, AcknowledgedAt: row.AcknowledgedAt,
+				ClosedReason: row.ClosedReason, UpdatedAt: row.UpdatedAt,
+			}),
+			Delivered: row.Delivered,
+		})
 	}
 	return out, nil
 }

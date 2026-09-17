@@ -94,6 +94,28 @@ func raise(t *testing.T, store *escalation.Store, tx *pgtx.Manager, now time.Tim
 	return notice
 }
 
+// raiseAndTell is the ordinary path: raise inside a transaction, then deliver
+// level zero once it has committed. Tests about escalation start here, because
+// a notice nobody has been told about is a different case — and has its own
+// test below.
+func raiseAndTell(t *testing.T, store *escalation.Store, tx *pgtx.Manager,
+	now time.Time, channel escalation.Channel) escalation.Notice {
+
+	t.Helper()
+	notice := raise(t, store, tx, now)
+	driver, err := escalation.NewDriver(escalation.DriverOptions{
+		Transactions: tx, Store: store, Channels: []escalation.Channel{channel},
+		Now: func() time.Time { return now }, Logger: slog.New(slog.DiscardHandler),
+	})
+	if err != nil {
+		t.Fatalf("driver: %v", err)
+	}
+	if err := driver.Deliver(context.Background(), scope(), notice); err != nil {
+		t.Fatalf("deliver: %v", err)
+	}
+	return notice
+}
+
 func TestAMatrixSurvivesAStorageRoundTrip(t *testing.T) {
 	store, tx := harness(t)
 	now := time.Date(2026, time.September, 17, 9, 0, 0, 0, time.UTC)
@@ -323,11 +345,17 @@ func TestASweepDoesNotEscalateBeforeItIsDue(t *testing.T) {
 	store, tx := harness(t)
 	start := time.Date(2026, time.September, 17, 9, 0, 0, 0, time.UTC)
 	saveChain(t, store, tx, start)
-	raise(t, store, tx, start)
+
+	told := &recorder{}
+	raiseAndTell(t, store, tx, start, told)
+	if len(told.told()) != 1 {
+		t.Fatalf("level zero was not delivered: %v", told.told())
+	}
 
 	channel := &recorder{}
 	driver, err := escalation.NewDriver(escalation.DriverOptions{
 		Transactions: tx, Store: store, Channels: []escalation.Channel{channel},
+		Roster: roster{"ed_registrar": {"registrar-on-call"}},
 		Now:    func() time.Time { return start.Add(14 * time.Minute) },
 		Logger: slog.New(slog.DiscardHandler),
 	})
@@ -343,7 +371,7 @@ func TestASweepDoesNotEscalateBeforeItIsDue(t *testing.T) {
 		t.Fatalf("%d escalated after fourteen minutes", escalated)
 	}
 	if len(channel.told()) != 0 {
-		t.Fatalf("somebody was told early: %v", channel.told())
+		t.Fatalf("the next rung was told early: %v", channel.told())
 	}
 }
 
@@ -393,7 +421,11 @@ func TestARotaWithNobodyOnItIsRecordedRatherThanSkipped(t *testing.T) {
 	store, tx := harness(t)
 	start := time.Date(2026, time.September, 17, 9, 0, 0, 0, time.UTC)
 	saveChain(t, store, tx, start)
-	notice := raise(t, store, tx, start)
+
+	// Level zero goes to a named clinician and fails: nobody is at a screen.
+	// The chain then escalates into a rota with nobody on it, which is the
+	// case under test.
+	notice := raiseAndTell(t, store, tx, start, &recorder{fail: errors.New("no session")})
 
 	channel := &recorder{}
 	driver, err := escalation.NewDriver(escalation.DriverOptions{
@@ -406,8 +438,8 @@ func TestARotaWithNobodyOnItIsRecordedRatherThanSkipped(t *testing.T) {
 	if err != nil {
 		t.Fatalf("driver: %v", err)
 	}
-	if _, err := driver.Sweep(context.Background(), 10); err != nil {
-		t.Fatalf("sweep: %v", err)
+	if escalated, err := driver.Sweep(context.Background(), 10); err != nil || escalated != 1 {
+		t.Fatalf("sweep escalated %d: %v", escalated, err)
 	}
 
 	var reread escalation.Notice
@@ -419,12 +451,16 @@ func TestARotaWithNobodyOnItIsRecordedRatherThanSkipped(t *testing.T) {
 	if reread.Reached() {
 		t.Fatal("an empty rota reported reaching somebody")
 	}
-	if len(reread.Deliveries) == 0 {
-		t.Fatal("an empty rota left no record at all")
+	if len(reread.Deliveries) < 2 {
+		t.Fatalf("%d deliveries recorded; the empty rota left no record",
+			len(reread.Deliveries))
 	}
 	last := reread.Deliveries[len(reread.Deliveries)-1]
 	if last.Delivered() {
 		t.Fatalf("the failed attempt was recorded as delivered: %+v", last)
+	}
+	if last.Level != 1 {
+		t.Fatalf("the failed attempt was recorded at level %d, want 1", last.Level)
 	}
 }
 
@@ -501,5 +537,54 @@ func TestANoticeIsNotVisibleToAnotherTenant(t *testing.T) {
 	})
 	if !errors.Is(err, escalation.ErrNoNotice) {
 		t.Fatalf("a second tenant read the notice: %v", err)
+	}
+}
+
+// TestANoticeNobodyDeliveredIsStillDelivered closes the window between the
+// raising transaction committing and the delivery that follows it.
+//
+// A process that dies in that window has committed a critical result and told
+// nobody about it. The notice is a row, so the next sweep finds it — and has to
+// deliver level zero rather than escalate past it, or the first rung is skipped
+// and the ordering clinician never hears.
+func TestANoticeNobodyDeliveredIsStillDelivered(t *testing.T) {
+	store, tx := harness(t)
+	start := time.Date(2026, time.September, 17, 9, 0, 0, 0, time.UTC)
+	saveChain(t, store, tx, start)
+
+	// Raised and committed. Nothing delivers: this is the crash.
+	notice := raise(t, store, tx, start)
+
+	channel := &recorder{}
+	driver, err := escalation.NewDriver(escalation.DriverOptions{
+		Transactions: tx, Store: store, Channels: []escalation.Channel{channel},
+		Roster: roster{"ed_registrar": {"registrar-on-call"}},
+		Now:    func() time.Time { return start.Add(20 * time.Minute) },
+		Logger: slog.New(slog.DiscardHandler),
+	})
+	if err != nil {
+		t.Fatalf("driver: %v", err)
+	}
+	if _, err := driver.Sweep(context.Background(), 10); err != nil {
+		t.Fatalf("sweep: %v", err)
+	}
+
+	// Level zero, not level one: the registrar is not told before the clinician
+	// who ordered the test.
+	if got := channel.told(); len(got) != 1 || got[0] != "ordering-clinician" {
+		t.Fatalf("the recovering sweep told %v, want the ordering clinician", got)
+	}
+
+	var reread escalation.Notice
+	_ = tx.WithinTx(context.Background(), func(ctx context.Context) error {
+		var err error
+		reread, err = store.Notice(ctx, scope(), notice.ID)
+		return err
+	})
+	if reread.Level != 0 {
+		t.Fatalf("the notice jumped to level %d before anybody was told", reread.Level)
+	}
+	if !reread.Reached() {
+		t.Fatal("the recovering sweep recorded no successful delivery")
 	}
 }

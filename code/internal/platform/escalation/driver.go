@@ -143,7 +143,7 @@ func (d *Driver) Deliver(ctx context.Context, scope authctx.TenantScope, notice 
 func (d *Driver) Sweep(ctx context.Context, limit int) (int, error) {
 	now := d.now()
 
-	var claimed []Notice
+	var claimed []Claimed
 	err := d.tx.WithinTx(ctx, func(ctx context.Context) error {
 		var err error
 		// Everything pending is a candidate; the policy decides. The cheap
@@ -158,12 +158,26 @@ func (d *Driver) Sweep(ctx context.Context, limit int) (int, error) {
 	}
 
 	escalated := 0
-	for _, notice := range claimed {
+	for _, item := range claimed {
+		notice := item.Notice
 		// The sweep has no caller. See authctx.SystemScope: this grants the
 		// tenant scope the row already names, never permission, and
 		// everything it reaches is a mechanism rather than a clinical
 		// decision.
 		scope := authctx.SystemScope(notice.TenantID)
+
+		// A notice nobody has ever been told about is delivered at its
+		// current rung rather than escalated past it. This is the window
+		// between the raising transaction committing and the delivery that
+		// follows it: a process that dies in there must not cost the first
+		// notification, which is the thing SRS-OPSNFR-003 is about.
+		if !item.Delivered {
+			if err := d.Deliver(ctx, scope, notice); err != nil {
+				d.report(err)
+			}
+			continue
+		}
+
 		policy, err := d.policies.Policy(ctx, scope, notice.Subject.Kind)
 		if err != nil {
 			d.report(err)

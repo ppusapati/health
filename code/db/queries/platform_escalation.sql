@@ -61,17 +61,30 @@ WHERE tenant_id = $1 AND subject_kind = $2 AND subject_id = $3;
 -- name: ClaimDueEscalations :many
 -- What the driver sweeps.
 --
+-- `delivered` is what makes a notice self-driving. Raising happens inside the
+-- transaction that made the thing worth escalating; delivering happens after
+-- that transaction commits, because a consultant woken for a transaction that
+-- then rolled back is a consultant who stops answering. Between those two
+-- moments the process can die — and if the sweep could not tell a notice that
+-- has been told to somebody from one that never was, that death would silently
+-- eat the first notification. Which is precisely what SRS-OPSNFR-003 is about.
+--
 -- FOR UPDATE SKIP LOCKED for the same reason the outbox uses it: two replicas
 -- both running the driver must not both escalate the same notice, and a
 -- replica that dies mid-sweep must not hold the rest of the queue. The due
 -- calculation is in Go, not here, so the policy can change without a migration
 -- -- this returns the pending notices that could plausibly be due and the
 -- caller decides.
-SELECT * FROM platform_escalation.notice
-WHERE state = 'pending' AND last_escalated_at <= $1
-ORDER BY last_escalated_at
+SELECT n.*,
+       EXISTS (
+           SELECT 1 FROM platform_escalation.delivery d
+           WHERE d.notice_id = n.notice_id
+       ) AS delivered
+FROM platform_escalation.notice n
+WHERE n.state = 'pending' AND n.last_escalated_at <= $1
+ORDER BY n.last_escalated_at
 LIMIT $2
-FOR UPDATE SKIP LOCKED;
+FOR UPDATE OF n SKIP LOCKED;
 
 -- name: UpdateEscalationNotice :exec
 UPDATE platform_escalation.notice
