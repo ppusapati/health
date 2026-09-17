@@ -2,6 +2,7 @@
 package transport
 
 import (
+	"strings"
 	"time"
 
 	clinicalv1 "github.com/ppusapati/health/code/gen/go/healthcare/clinical/v1"
@@ -550,6 +551,19 @@ func observationToProto(o domain.Observation) *clinicalv1.Observation {
 		PerformerId: o.PerformerID, DeviceId: o.DeviceID,
 		SourceSystem: o.SourceSystem, Note: o.Note, AmendsId: o.AmendsID,
 		RecordedBy: o.RecordedBy, RecordedAt: timestamp(o.RecordedAt),
+		// SRS-ICU-003. Both travel, always: a client that showed a provisional
+		// monitor value the way it shows a typed measurement would undo the
+		// distinction these carry.
+		Source: observationSourceToProto[o.Source],
+		// An unmapped stored state goes out as PENDING rather than as
+		// UNSPECIFIED. A client reading "unspecified" might render it as an
+		// ordinary value; reading "pending" it renders it as provisional,
+		// which is the safe direction for a reading nobody can classify.
+		Validation:     validationOnTheWire(o.Validation),
+		Device:         deviceSourceToProto(o.Device),
+		ValidatedBy:    o.ValidatedBy,
+		ValidatedAt:    timestamp(o.ValidatedAt),
+		ValidationNote: o.ValidationNote,
 	}
 	if o.ReferenceLow != nil {
 		out.ReferenceLow = *o.ReferenceLow
@@ -873,4 +887,57 @@ func domainQuantity(q *clinicalv1.Quantity) domain.Quantity {
 		return domain.Quantity{}
 	}
 	return domain.Quantity{Value: q.GetValue(), Unit: q.GetUnit()}
+}
+
+// Device-sourced observations (SRS-ICU-003).
+
+var observationSourceToProto = map[domain.SourceKind]clinicalv1.ObservationSource{
+	domain.SourceManual:   clinicalv1.ObservationSource_OBSERVATION_SOURCE_MANUAL,
+	domain.SourceDevice:   clinicalv1.ObservationSource_OBSERVATION_SOURCE_DEVICE,
+	domain.SourceImported: clinicalv1.ObservationSource_OBSERVATION_SOURCE_IMPORTED,
+	// SourceUnknown has no wire value on purpose. A reading this build cannot
+	// classify goes out as UNSPECIFIED, which a client reads as "not stated"
+	// rather than as one of the three it knows — and the validation state
+	// beside it says pending, which is the answer that matters.
+	domain.SourceUnknown: clinicalv1.ObservationSource_OBSERVATION_SOURCE_UNSPECIFIED,
+}
+
+var validationToProto = map[domain.Validation]clinicalv1.ValidationState{
+	domain.ValidationNotRequired: clinicalv1.ValidationState_VALIDATION_STATE_NOT_REQUIRED,
+	domain.ValidationPending:     clinicalv1.ValidationState_VALIDATION_STATE_PENDING,
+	domain.ValidationConfirmed:   clinicalv1.ValidationState_VALIDATION_STATE_CONFIRMED,
+	domain.ValidationRejected:    clinicalv1.ValidationState_VALIDATION_STATE_REJECTED,
+}
+
+func deviceSourceToProto(d domain.DeviceSource) *clinicalv1.DeviceSource {
+	if strings.TrimSpace(d.DeviceID) == "" {
+		return nil
+	}
+	return &clinicalv1.DeviceSource{
+		DeviceId: d.DeviceID, Channel: d.Channel, Quality: d.Quality,
+		ObservedAt: timestamp(d.ObservedAt), ReceivedAt: timestamp(d.ReceivedAt),
+	}
+}
+
+func deviceSourceFromProto(in *clinicalv1.DeviceSource) domain.DeviceSource {
+	if in == nil {
+		return domain.DeviceSource{}
+	}
+	return domain.DeviceSource{
+		DeviceID: in.GetDeviceId(), Channel: in.GetChannel(),
+		Quality:    in.GetQuality(),
+		ObservedAt: fromTimestamp(in.GetObservedAt()),
+		ReceivedAt: fromTimestamp(in.GetReceivedAt()),
+	}
+}
+
+// validationOnTheWire renders a validation state, defaulting to pending.
+//
+// Never UNSPECIFIED. A client that meets an unknown state has to render it as
+// something, and "provisional" is the reading that cannot hurt anybody.
+func validationOnTheWire(v domain.Validation) clinicalv1.ValidationState {
+	if mapped, ok := validationToProto[v]; ok {
+		return mapped
+	}
+	return clinicalv1.ValidationState_VALIDATION_STATE_PENDING
 }

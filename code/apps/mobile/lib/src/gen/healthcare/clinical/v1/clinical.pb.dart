@@ -1405,6 +1405,12 @@ class Observation extends $pb.GeneratedMessage {
     $core.String? amendsId,
     $core.String? recordedBy,
     $0.Timestamp? recordedAt,
+    ObservationSource? source,
+    ValidationState? validation,
+    DeviceSource? device,
+    $core.String? validatedBy,
+    $0.Timestamp? validatedAt,
+    $core.String? validationNote,
   }) {
     final result = create();
     if (observationId != null) result.observationId = observationId;
@@ -1431,6 +1437,12 @@ class Observation extends $pb.GeneratedMessage {
     if (amendsId != null) result.amendsId = amendsId;
     if (recordedBy != null) result.recordedBy = recordedBy;
     if (recordedAt != null) result.recordedAt = recordedAt;
+    if (source != null) result.source = source;
+    if (validation != null) result.validation = validation;
+    if (device != null) result.device = device;
+    if (validatedBy != null) result.validatedBy = validatedBy;
+    if (validatedAt != null) result.validatedAt = validatedAt;
+    if (validationNote != null) result.validationNote = validationNote;
     return result;
   }
 
@@ -1478,6 +1490,16 @@ class Observation extends $pb.GeneratedMessage {
     ..aOS(22, _omitFieldNames ? '' : 'recordedBy')
     ..aOM<$0.Timestamp>(23, _omitFieldNames ? '' : 'recordedAt',
         subBuilder: $0.Timestamp.create)
+    ..aE<ObservationSource>(24, _omitFieldNames ? '' : 'source',
+        enumValues: ObservationSource.values)
+    ..aE<ValidationState>(25, _omitFieldNames ? '' : 'validation',
+        enumValues: ValidationState.values)
+    ..aOM<DeviceSource>(26, _omitFieldNames ? '' : 'device',
+        subBuilder: DeviceSource.create)
+    ..aOS(27, _omitFieldNames ? '' : 'validatedBy')
+    ..aOM<$0.Timestamp>(28, _omitFieldNames ? '' : 'validatedAt',
+        subBuilder: $0.Timestamp.create)
+    ..aOS(29, _omitFieldNames ? '' : 'validationNote')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1728,6 +1750,630 @@ class Observation extends $pb.GeneratedMessage {
   void clearRecordedAt() => $_clearField(23);
   @$pb.TagNumber(23)
   $0.Timestamp ensureRecordedAt() => $_ensure(22);
+
+  /// Where the reading came from and whether a human has accepted it into the
+  /// chart (SRS-ICU-003). A client that showed a provisional monitor value the
+  /// same way it shows a typed measurement would undo the distinction these
+  /// fields exist to carry, so both travel and neither is optional.
+  @$pb.TagNumber(24)
+  ObservationSource get source => $_getN(23);
+  @$pb.TagNumber(24)
+  set source(ObservationSource value) => $_setField(24, value);
+  @$pb.TagNumber(24)
+  $core.bool hasSource() => $_has(23);
+  @$pb.TagNumber(24)
+  void clearSource() => $_clearField(24);
+
+  @$pb.TagNumber(25)
+  ValidationState get validation => $_getN(24);
+  @$pb.TagNumber(25)
+  set validation(ValidationState value) => $_setField(25, value);
+  @$pb.TagNumber(25)
+  $core.bool hasValidation() => $_has(24);
+  @$pb.TagNumber(25)
+  void clearValidation() => $_clearField(25);
+
+  @$pb.TagNumber(26)
+  DeviceSource get device => $_getN(25);
+  @$pb.TagNumber(26)
+  set device(DeviceSource value) => $_setField(26, value);
+  @$pb.TagNumber(26)
+  $core.bool hasDevice() => $_has(25);
+  @$pb.TagNumber(26)
+  void clearDevice() => $_clearField(26);
+  @$pb.TagNumber(26)
+  DeviceSource ensureDevice() => $_ensure(25);
+
+  @$pb.TagNumber(27)
+  $core.String get validatedBy => $_getSZ(26);
+  @$pb.TagNumber(27)
+  set validatedBy($core.String value) => $_setString(26, value);
+  @$pb.TagNumber(27)
+  $core.bool hasValidatedBy() => $_has(26);
+  @$pb.TagNumber(27)
+  void clearValidatedBy() => $_clearField(27);
+
+  @$pb.TagNumber(28)
+  $0.Timestamp get validatedAt => $_getN(27);
+  @$pb.TagNumber(28)
+  set validatedAt($0.Timestamp value) => $_setField(28, value);
+  @$pb.TagNumber(28)
+  $core.bool hasValidatedAt() => $_has(27);
+  @$pb.TagNumber(28)
+  void clearValidatedAt() => $_clearField(28);
+  @$pb.TagNumber(28)
+  $0.Timestamp ensureValidatedAt() => $_ensure(27);
+
+  /// Why a reading was rejected. A run of rejections with reasons is how a
+  /// failing probe is found.
+  @$pb.TagNumber(29)
+  $core.String get validationNote => $_getSZ(28);
+  @$pb.TagNumber(29)
+  set validationNote($core.String value) => $_setString(28, value);
+  @$pb.TagNumber(29)
+  $core.bool hasValidationNote() => $_has(28);
+  @$pb.TagNumber(29)
+  void clearValidationNote() => $_clearField(29);
+}
+
+/// Device identity and quality metadata (SRS-ICU-003).
+class DeviceSource extends $pb.GeneratedMessage {
+  factory DeviceSource({
+    $core.String? deviceId,
+    $core.String? channel,
+    $core.String? quality,
+    $0.Timestamp? observedAt,
+    $0.Timestamp? receivedAt,
+  }) {
+    final result = create();
+    if (deviceId != null) result.deviceId = deviceId;
+    if (channel != null) result.channel = channel;
+    if (quality != null) result.quality = quality;
+    if (observedAt != null) result.observedAt = observedAt;
+    if (receivedAt != null) result.receivedAt = receivedAt;
+    return result;
+  }
+
+  DeviceSource._();
+
+  factory DeviceSource.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory DeviceSource.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'DeviceSource',
+      package: const $pb.PackageName(
+          _omitMessageNames ? '' : 'healthcare.clinical.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'deviceId')
+    ..aOS(2, _omitFieldNames ? '' : 'channel')
+    ..aOS(3, _omitFieldNames ? '' : 'quality')
+    ..aOM<$0.Timestamp>(4, _omitFieldNames ? '' : 'observedAt',
+        subBuilder: $0.Timestamp.create)
+    ..aOM<$0.Timestamp>(5, _omitFieldNames ? '' : 'receivedAt',
+        subBuilder: $0.Timestamp.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  DeviceSource clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  DeviceSource copyWith(void Function(DeviceSource) updates) =>
+      super.copyWith((message) => updates(message as DeviceSource))
+          as DeviceSource;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static DeviceSource create() => DeviceSource._();
+  @$core.override
+  DeviceSource createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static DeviceSource getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<DeviceSource>(create);
+  static DeviceSource? _defaultInstance;
+
+  /// Required for a device reading: a run of implausible values almost always
+  /// means one device, and a reading that cannot name its own is one nobody can
+  /// trace to the probe that caused it.
+  @$pb.TagNumber(1)
+  $core.String get deviceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set deviceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasDeviceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearDeviceId() => $_clearField(1);
+
+  /// Which parameter of the device this came from — "SpO2", "ART". A monitor
+  /// produces several streams and they fail independently.
+  @$pb.TagNumber(2)
+  $core.String get channel => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set channel($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasChannel() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearChannel() => $_clearField(2);
+
+  /// What the device said about its own signal, verbatim: "good", "artefact",
+  /// "searching". Not normalised, because every vendor has its own vocabulary
+  /// and flattening it would lose the difference between "the device said
+  /// nothing" and "the device said a word we do not know".
+  @$pb.TagNumber(3)
+  $core.String get quality => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set quality($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasQuality() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearQuality() => $_clearField(3);
+
+  /// The device's own clock, and ours. Two fields because the gap between them
+  /// is what makes a feed stale, and one timestamp cannot show it.
+  @$pb.TagNumber(4)
+  $0.Timestamp get observedAt => $_getN(3);
+  @$pb.TagNumber(4)
+  set observedAt($0.Timestamp value) => $_setField(4, value);
+  @$pb.TagNumber(4)
+  $core.bool hasObservedAt() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearObservedAt() => $_clearField(4);
+  @$pb.TagNumber(4)
+  $0.Timestamp ensureObservedAt() => $_ensure(3);
+
+  @$pb.TagNumber(5)
+  $0.Timestamp get receivedAt => $_getN(4);
+  @$pb.TagNumber(5)
+  set receivedAt($0.Timestamp value) => $_setField(5, value);
+  @$pb.TagNumber(5)
+  $core.bool hasReceivedAt() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearReceivedAt() => $_clearField(5);
+  @$pb.TagNumber(5)
+  $0.Timestamp ensureReceivedAt() => $_ensure(4);
+}
+
+class IngestDeviceReadingRequest extends $pb.GeneratedMessage {
+  factory IngestDeviceReadingRequest({
+    $core.String? patientId,
+    $core.String? encounterId,
+    Coding? code,
+    Quantity? value,
+    DeviceSource? device,
+  }) {
+    final result = create();
+    if (patientId != null) result.patientId = patientId;
+    if (encounterId != null) result.encounterId = encounterId;
+    if (code != null) result.code = code;
+    if (value != null) result.value = value;
+    if (device != null) result.device = device;
+    return result;
+  }
+
+  IngestDeviceReadingRequest._();
+
+  factory IngestDeviceReadingRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory IngestDeviceReadingRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'IngestDeviceReadingRequest',
+      package: const $pb.PackageName(
+          _omitMessageNames ? '' : 'healthcare.clinical.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'patientId')
+    ..aOS(2, _omitFieldNames ? '' : 'encounterId')
+    ..aOM<Coding>(3, _omitFieldNames ? '' : 'code', subBuilder: Coding.create)
+    ..aOM<Quantity>(4, _omitFieldNames ? '' : 'value',
+        subBuilder: Quantity.create)
+    ..aOM<DeviceSource>(5, _omitFieldNames ? '' : 'device',
+        subBuilder: DeviceSource.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  IngestDeviceReadingRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  IngestDeviceReadingRequest copyWith(
+          void Function(IngestDeviceReadingRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as IngestDeviceReadingRequest))
+          as IngestDeviceReadingRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static IngestDeviceReadingRequest create() => IngestDeviceReadingRequest._();
+  @$core.override
+  IngestDeviceReadingRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static IngestDeviceReadingRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<IngestDeviceReadingRequest>(create);
+  static IngestDeviceReadingRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get patientId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set patientId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasPatientId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearPatientId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get encounterId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set encounterId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasEncounterId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearEncounterId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  Coding get code => $_getN(2);
+  @$pb.TagNumber(3)
+  set code(Coding value) => $_setField(3, value);
+  @$pb.TagNumber(3)
+  $core.bool hasCode() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearCode() => $_clearField(3);
+  @$pb.TagNumber(3)
+  Coding ensureCode() => $_ensure(2);
+
+  @$pb.TagNumber(4)
+  Quantity get value => $_getN(3);
+  @$pb.TagNumber(4)
+  set value(Quantity value) => $_setField(4, value);
+  @$pb.TagNumber(4)
+  $core.bool hasValue() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearValue() => $_clearField(4);
+  @$pb.TagNumber(4)
+  Quantity ensureValue() => $_ensure(3);
+
+  @$pb.TagNumber(5)
+  DeviceSource get device => $_getN(4);
+  @$pb.TagNumber(5)
+  set device(DeviceSource value) => $_setField(5, value);
+  @$pb.TagNumber(5)
+  $core.bool hasDevice() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearDevice() => $_clearField(5);
+  @$pb.TagNumber(5)
+  DeviceSource ensureDevice() => $_ensure(4);
+}
+
+class IngestDeviceReadingResponse extends $pb.GeneratedMessage {
+  factory IngestDeviceReadingResponse({
+    Observation? observation,
+  }) {
+    final result = create();
+    if (observation != null) result.observation = observation;
+    return result;
+  }
+
+  IngestDeviceReadingResponse._();
+
+  factory IngestDeviceReadingResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory IngestDeviceReadingResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'IngestDeviceReadingResponse',
+      package: const $pb.PackageName(
+          _omitMessageNames ? '' : 'healthcare.clinical.v1'),
+      createEmptyInstance: create)
+    ..aOM<Observation>(1, _omitFieldNames ? '' : 'observation',
+        subBuilder: Observation.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  IngestDeviceReadingResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  IngestDeviceReadingResponse copyWith(
+          void Function(IngestDeviceReadingResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as IngestDeviceReadingResponse))
+          as IngestDeviceReadingResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static IngestDeviceReadingResponse create() =>
+      IngestDeviceReadingResponse._();
+  @$core.override
+  IngestDeviceReadingResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static IngestDeviceReadingResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<IngestDeviceReadingResponse>(create);
+  static IngestDeviceReadingResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  Observation get observation => $_getN(0);
+  @$pb.TagNumber(1)
+  set observation(Observation value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasObservation() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearObservation() => $_clearField(1);
+  @$pb.TagNumber(1)
+  Observation ensureObservation() => $_ensure(0);
+}
+
+class DecideReadingRequest extends $pb.GeneratedMessage {
+  factory DecideReadingRequest({
+    $core.String? observationId,
+    $core.bool? accept,
+    $core.String? reason,
+  }) {
+    final result = create();
+    if (observationId != null) result.observationId = observationId;
+    if (accept != null) result.accept = accept;
+    if (reason != null) result.reason = reason;
+    return result;
+  }
+
+  DecideReadingRequest._();
+
+  factory DecideReadingRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory DecideReadingRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'DecideReadingRequest',
+      package: const $pb.PackageName(
+          _omitMessageNames ? '' : 'healthcare.clinical.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'observationId')
+    ..aOB(2, _omitFieldNames ? '' : 'accept')
+    ..aOS(3, _omitFieldNames ? '' : 'reason')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  DecideReadingRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  DecideReadingRequest copyWith(void Function(DecideReadingRequest) updates) =>
+      super.copyWith((message) => updates(message as DecideReadingRequest))
+          as DecideReadingRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static DecideReadingRequest create() => DecideReadingRequest._();
+  @$core.override
+  DecideReadingRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static DecideReadingRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<DecideReadingRequest>(create);
+  static DecideReadingRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get observationId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set observationId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasObservationId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearObservationId() => $_clearField(1);
+
+  /// True to confirm the reading into the chart, false to mark it an artefact.
+  @$pb.TagNumber(2)
+  $core.bool get accept => $_getBF(1);
+  @$pb.TagNumber(2)
+  set accept($core.bool value) => $_setBool(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasAccept() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearAccept() => $_clearField(2);
+
+  /// Required on a rejection. A column of the word "artefact" with no reasons
+  /// is not how a failing probe gets found.
+  @$pb.TagNumber(3)
+  $core.String get reason => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set reason($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasReason() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearReason() => $_clearField(3);
+}
+
+class DecideReadingResponse extends $pb.GeneratedMessage {
+  factory DecideReadingResponse({
+    Observation? observation,
+  }) {
+    final result = create();
+    if (observation != null) result.observation = observation;
+    return result;
+  }
+
+  DecideReadingResponse._();
+
+  factory DecideReadingResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory DecideReadingResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'DecideReadingResponse',
+      package: const $pb.PackageName(
+          _omitMessageNames ? '' : 'healthcare.clinical.v1'),
+      createEmptyInstance: create)
+    ..aOM<Observation>(1, _omitFieldNames ? '' : 'observation',
+        subBuilder: Observation.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  DecideReadingResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  DecideReadingResponse copyWith(
+          void Function(DecideReadingResponse) updates) =>
+      super.copyWith((message) => updates(message as DecideReadingResponse))
+          as DecideReadingResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static DecideReadingResponse create() => DecideReadingResponse._();
+  @$core.override
+  DecideReadingResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static DecideReadingResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<DecideReadingResponse>(create);
+  static DecideReadingResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  Observation get observation => $_getN(0);
+  @$pb.TagNumber(1)
+  set observation(Observation value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasObservation() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearObservation() => $_clearField(1);
+  @$pb.TagNumber(1)
+  Observation ensureObservation() => $_ensure(0);
+}
+
+class ListProvisionalReadingsRequest extends $pb.GeneratedMessage {
+  factory ListProvisionalReadingsRequest({
+    $core.String? patientId,
+    $core.int? pageSize,
+  }) {
+    final result = create();
+    if (patientId != null) result.patientId = patientId;
+    if (pageSize != null) result.pageSize = pageSize;
+    return result;
+  }
+
+  ListProvisionalReadingsRequest._();
+
+  factory ListProvisionalReadingsRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ListProvisionalReadingsRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ListProvisionalReadingsRequest',
+      package: const $pb.PackageName(
+          _omitMessageNames ? '' : 'healthcare.clinical.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'patientId')
+    ..aI(2, _omitFieldNames ? '' : 'pageSize')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListProvisionalReadingsRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListProvisionalReadingsRequest copyWith(
+          void Function(ListProvisionalReadingsRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as ListProvisionalReadingsRequest))
+          as ListProvisionalReadingsRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ListProvisionalReadingsRequest create() =>
+      ListProvisionalReadingsRequest._();
+  @$core.override
+  ListProvisionalReadingsRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ListProvisionalReadingsRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ListProvisionalReadingsRequest>(create);
+  static ListProvisionalReadingsRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get patientId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set patientId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasPatientId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearPatientId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.int get pageSize => $_getIZ(1);
+  @$pb.TagNumber(2)
+  set pageSize($core.int value) => $_setSignedInt32(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasPageSize() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearPageSize() => $_clearField(2);
+}
+
+class ListProvisionalReadingsResponse extends $pb.GeneratedMessage {
+  factory ListProvisionalReadingsResponse({
+    $core.Iterable<Observation>? observations,
+  }) {
+    final result = create();
+    if (observations != null) result.observations.addAll(observations);
+    return result;
+  }
+
+  ListProvisionalReadingsResponse._();
+
+  factory ListProvisionalReadingsResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ListProvisionalReadingsResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ListProvisionalReadingsResponse',
+      package: const $pb.PackageName(
+          _omitMessageNames ? '' : 'healthcare.clinical.v1'),
+      createEmptyInstance: create)
+    ..pPM<Observation>(1, _omitFieldNames ? '' : 'observations',
+        subBuilder: Observation.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListProvisionalReadingsResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListProvisionalReadingsResponse copyWith(
+          void Function(ListProvisionalReadingsResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as ListProvisionalReadingsResponse))
+          as ListProvisionalReadingsResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ListProvisionalReadingsResponse create() =>
+      ListProvisionalReadingsResponse._();
+  @$core.override
+  ListProvisionalReadingsResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ListProvisionalReadingsResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ListProvisionalReadingsResponse>(
+          create);
+  static ListProvisionalReadingsResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $pb.PbList<Observation> get observations => $_getList(0);
 }
 
 class CriticalAcknowledgement extends $pb.GeneratedMessage {
@@ -11852,6 +12498,28 @@ class ClinicalServiceApi {
           $pb.ClientContext? ctx, RecordObservationRequest request) =>
       _client.invoke<RecordObservationResponse>(ctx, 'ClinicalService',
           'RecordObservation', request, RecordObservationResponse());
+
+  /// Device-sourced readings (SRS-ICU-003). Ingest puts a monitor value on the
+  /// chart as provisional; DecideReading is the only path by which one becomes
+  /// a chart value, and it needs the clinical write permission rather than the
+  /// interface credential that ingested it — an interface that could confirm
+  /// its own readings would make the distinction meaningless.
+  $async.Future<IngestDeviceReadingResponse> ingestDeviceReading(
+          $pb.ClientContext? ctx, IngestDeviceReadingRequest request) =>
+      _client.invoke<IngestDeviceReadingResponse>(ctx, 'ClinicalService',
+          'IngestDeviceReading', request, IngestDeviceReadingResponse());
+  $async.Future<DecideReadingResponse> decideReading(
+          $pb.ClientContext? ctx, DecideReadingRequest request) =>
+      _client.invoke<DecideReadingResponse>(ctx, 'ClinicalService',
+          'DecideReading', request, DecideReadingResponse());
+  $async.Future<ListProvisionalReadingsResponse> listProvisionalReadings(
+          $pb.ClientContext? ctx, ListProvisionalReadingsRequest request) =>
+      _client.invoke<ListProvisionalReadingsResponse>(
+          ctx,
+          'ClinicalService',
+          'ListProvisionalReadings',
+          request,
+          ListProvisionalReadingsResponse());
   $async.Future<ListObservationsResponse> listObservations(
           $pb.ClientContext? ctx, ListObservationsRequest request) =>
       _client.invoke<ListObservationsResponse>(ctx, 'ClinicalService',

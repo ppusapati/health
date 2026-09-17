@@ -97,6 +97,15 @@ const (
 	// ClinicalServiceRecordObservationProcedure is the fully-qualified name of the ClinicalService's
 	// RecordObservation RPC.
 	ClinicalServiceRecordObservationProcedure = "/healthcare.clinical.v1.ClinicalService/RecordObservation"
+	// ClinicalServiceIngestDeviceReadingProcedure is the fully-qualified name of the ClinicalService's
+	// IngestDeviceReading RPC.
+	ClinicalServiceIngestDeviceReadingProcedure = "/healthcare.clinical.v1.ClinicalService/IngestDeviceReading"
+	// ClinicalServiceDecideReadingProcedure is the fully-qualified name of the ClinicalService's
+	// DecideReading RPC.
+	ClinicalServiceDecideReadingProcedure = "/healthcare.clinical.v1.ClinicalService/DecideReading"
+	// ClinicalServiceListProvisionalReadingsProcedure is the fully-qualified name of the
+	// ClinicalService's ListProvisionalReadings RPC.
+	ClinicalServiceListProvisionalReadingsProcedure = "/healthcare.clinical.v1.ClinicalService/ListProvisionalReadings"
 	// ClinicalServiceListObservationsProcedure is the fully-qualified name of the ClinicalService's
 	// ListObservations RPC.
 	ClinicalServiceListObservationsProcedure = "/healthcare.clinical.v1.ClinicalService/ListObservations"
@@ -207,6 +216,14 @@ type ClinicalServiceClient interface {
 	// SRS-CLN-005, SRS-CLN-010, SRS-CLN-011. Criticality is supplied by the
 	// authoritative diagnostic service and never inferred here.
 	RecordObservation(context.Context, *connect.Request[v1.RecordObservationRequest]) (*connect.Response[v1.RecordObservationResponse], error)
+	// Device-sourced readings (SRS-ICU-003). Ingest puts a monitor value on the
+	// chart as provisional; DecideReading is the only path by which one becomes
+	// a chart value, and it needs the clinical write permission rather than the
+	// interface credential that ingested it — an interface that could confirm
+	// its own readings would make the distinction meaningless.
+	IngestDeviceReading(context.Context, *connect.Request[v1.IngestDeviceReadingRequest]) (*connect.Response[v1.IngestDeviceReadingResponse], error)
+	DecideReading(context.Context, *connect.Request[v1.DecideReadingRequest]) (*connect.Response[v1.DecideReadingResponse], error)
+	ListProvisionalReadings(context.Context, *connect.Request[v1.ListProvisionalReadingsRequest]) (*connect.Response[v1.ListProvisionalReadingsResponse], error)
 	ListObservations(context.Context, *connect.Request[v1.ListObservationsRequest]) (*connect.Response[v1.ListObservationsResponse], error)
 	// SRS-CLN-012. Unacknowledged critical results escalate according to policy.
 	ListCriticalResults(context.Context, *connect.Request[v1.ListCriticalResultsRequest]) (*connect.Response[v1.ListCriticalResultsResponse], error)
@@ -369,6 +386,24 @@ func NewClinicalServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+ClinicalServiceRecordObservationProcedure,
 			connect.WithSchema(clinicalServiceMethods.ByName("RecordObservation")),
+			connect.WithClientOptions(opts...),
+		),
+		ingestDeviceReading: connect.NewClient[v1.IngestDeviceReadingRequest, v1.IngestDeviceReadingResponse](
+			httpClient,
+			baseURL+ClinicalServiceIngestDeviceReadingProcedure,
+			connect.WithSchema(clinicalServiceMethods.ByName("IngestDeviceReading")),
+			connect.WithClientOptions(opts...),
+		),
+		decideReading: connect.NewClient[v1.DecideReadingRequest, v1.DecideReadingResponse](
+			httpClient,
+			baseURL+ClinicalServiceDecideReadingProcedure,
+			connect.WithSchema(clinicalServiceMethods.ByName("DecideReading")),
+			connect.WithClientOptions(opts...),
+		),
+		listProvisionalReadings: connect.NewClient[v1.ListProvisionalReadingsRequest, v1.ListProvisionalReadingsResponse](
+			httpClient,
+			baseURL+ClinicalServiceListProvisionalReadingsProcedure,
+			connect.WithSchema(clinicalServiceMethods.ByName("ListProvisionalReadings")),
 			connect.WithClientOptions(opts...),
 		),
 		listObservations: connect.NewClient[v1.ListObservationsRequest, v1.ListObservationsResponse](
@@ -550,6 +585,9 @@ type clinicalServiceClient struct {
 	verifyAllergy             *connect.Client[v1.VerifyAllergyRequest, v1.VerifyAllergyResponse]
 	listAllergies             *connect.Client[v1.ListAllergiesRequest, v1.ListAllergiesResponse]
 	recordObservation         *connect.Client[v1.RecordObservationRequest, v1.RecordObservationResponse]
+	ingestDeviceReading       *connect.Client[v1.IngestDeviceReadingRequest, v1.IngestDeviceReadingResponse]
+	decideReading             *connect.Client[v1.DecideReadingRequest, v1.DecideReadingResponse]
+	listProvisionalReadings   *connect.Client[v1.ListProvisionalReadingsRequest, v1.ListProvisionalReadingsResponse]
 	listObservations          *connect.Client[v1.ListObservationsRequest, v1.ListObservationsResponse]
 	listCriticalResults       *connect.Client[v1.ListCriticalResultsRequest, v1.ListCriticalResultsResponse]
 	acknowledgeCriticalResult *connect.Client[v1.AcknowledgeCriticalResultRequest, v1.AcknowledgeCriticalResultResponse]
@@ -666,6 +704,21 @@ func (c *clinicalServiceClient) ListAllergies(ctx context.Context, req *connect.
 // RecordObservation calls healthcare.clinical.v1.ClinicalService.RecordObservation.
 func (c *clinicalServiceClient) RecordObservation(ctx context.Context, req *connect.Request[v1.RecordObservationRequest]) (*connect.Response[v1.RecordObservationResponse], error) {
 	return c.recordObservation.CallUnary(ctx, req)
+}
+
+// IngestDeviceReading calls healthcare.clinical.v1.ClinicalService.IngestDeviceReading.
+func (c *clinicalServiceClient) IngestDeviceReading(ctx context.Context, req *connect.Request[v1.IngestDeviceReadingRequest]) (*connect.Response[v1.IngestDeviceReadingResponse], error) {
+	return c.ingestDeviceReading.CallUnary(ctx, req)
+}
+
+// DecideReading calls healthcare.clinical.v1.ClinicalService.DecideReading.
+func (c *clinicalServiceClient) DecideReading(ctx context.Context, req *connect.Request[v1.DecideReadingRequest]) (*connect.Response[v1.DecideReadingResponse], error) {
+	return c.decideReading.CallUnary(ctx, req)
+}
+
+// ListProvisionalReadings calls healthcare.clinical.v1.ClinicalService.ListProvisionalReadings.
+func (c *clinicalServiceClient) ListProvisionalReadings(ctx context.Context, req *connect.Request[v1.ListProvisionalReadingsRequest]) (*connect.Response[v1.ListProvisionalReadingsResponse], error) {
+	return c.listProvisionalReadings.CallUnary(ctx, req)
 }
 
 // ListObservations calls healthcare.clinical.v1.ClinicalService.ListObservations.
@@ -829,6 +882,14 @@ type ClinicalServiceHandler interface {
 	// SRS-CLN-005, SRS-CLN-010, SRS-CLN-011. Criticality is supplied by the
 	// authoritative diagnostic service and never inferred here.
 	RecordObservation(context.Context, *connect.Request[v1.RecordObservationRequest]) (*connect.Response[v1.RecordObservationResponse], error)
+	// Device-sourced readings (SRS-ICU-003). Ingest puts a monitor value on the
+	// chart as provisional; DecideReading is the only path by which one becomes
+	// a chart value, and it needs the clinical write permission rather than the
+	// interface credential that ingested it — an interface that could confirm
+	// its own readings would make the distinction meaningless.
+	IngestDeviceReading(context.Context, *connect.Request[v1.IngestDeviceReadingRequest]) (*connect.Response[v1.IngestDeviceReadingResponse], error)
+	DecideReading(context.Context, *connect.Request[v1.DecideReadingRequest]) (*connect.Response[v1.DecideReadingResponse], error)
+	ListProvisionalReadings(context.Context, *connect.Request[v1.ListProvisionalReadingsRequest]) (*connect.Response[v1.ListProvisionalReadingsResponse], error)
 	ListObservations(context.Context, *connect.Request[v1.ListObservationsRequest]) (*connect.Response[v1.ListObservationsResponse], error)
 	// SRS-CLN-012. Unacknowledged critical results escalate according to policy.
 	ListCriticalResults(context.Context, *connect.Request[v1.ListCriticalResultsRequest]) (*connect.Response[v1.ListCriticalResultsResponse], error)
@@ -987,6 +1048,24 @@ func NewClinicalServiceHandler(svc ClinicalServiceHandler, opts ...connect.Handl
 		ClinicalServiceRecordObservationProcedure,
 		svc.RecordObservation,
 		connect.WithSchema(clinicalServiceMethods.ByName("RecordObservation")),
+		connect.WithHandlerOptions(opts...),
+	)
+	clinicalServiceIngestDeviceReadingHandler := connect.NewUnaryHandler(
+		ClinicalServiceIngestDeviceReadingProcedure,
+		svc.IngestDeviceReading,
+		connect.WithSchema(clinicalServiceMethods.ByName("IngestDeviceReading")),
+		connect.WithHandlerOptions(opts...),
+	)
+	clinicalServiceDecideReadingHandler := connect.NewUnaryHandler(
+		ClinicalServiceDecideReadingProcedure,
+		svc.DecideReading,
+		connect.WithSchema(clinicalServiceMethods.ByName("DecideReading")),
+		connect.WithHandlerOptions(opts...),
+	)
+	clinicalServiceListProvisionalReadingsHandler := connect.NewUnaryHandler(
+		ClinicalServiceListProvisionalReadingsProcedure,
+		svc.ListProvisionalReadings,
+		connect.WithSchema(clinicalServiceMethods.ByName("ListProvisionalReadings")),
 		connect.WithHandlerOptions(opts...),
 	)
 	clinicalServiceListObservationsHandler := connect.NewUnaryHandler(
@@ -1183,6 +1262,12 @@ func NewClinicalServiceHandler(svc ClinicalServiceHandler, opts ...connect.Handl
 			clinicalServiceListAllergiesHandler.ServeHTTP(w, r)
 		case ClinicalServiceRecordObservationProcedure:
 			clinicalServiceRecordObservationHandler.ServeHTTP(w, r)
+		case ClinicalServiceIngestDeviceReadingProcedure:
+			clinicalServiceIngestDeviceReadingHandler.ServeHTTP(w, r)
+		case ClinicalServiceDecideReadingProcedure:
+			clinicalServiceDecideReadingHandler.ServeHTTP(w, r)
+		case ClinicalServiceListProvisionalReadingsProcedure:
+			clinicalServiceListProvisionalReadingsHandler.ServeHTTP(w, r)
 		case ClinicalServiceListObservationsProcedure:
 			clinicalServiceListObservationsHandler.ServeHTTP(w, r)
 		case ClinicalServiceListCriticalResultsProcedure:
@@ -1314,6 +1399,18 @@ func (UnimplementedClinicalServiceHandler) ListAllergies(context.Context, *conne
 
 func (UnimplementedClinicalServiceHandler) RecordObservation(context.Context, *connect.Request[v1.RecordObservationRequest]) (*connect.Response[v1.RecordObservationResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.clinical.v1.ClinicalService.RecordObservation is not implemented"))
+}
+
+func (UnimplementedClinicalServiceHandler) IngestDeviceReading(context.Context, *connect.Request[v1.IngestDeviceReadingRequest]) (*connect.Response[v1.IngestDeviceReadingResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.clinical.v1.ClinicalService.IngestDeviceReading is not implemented"))
+}
+
+func (UnimplementedClinicalServiceHandler) DecideReading(context.Context, *connect.Request[v1.DecideReadingRequest]) (*connect.Response[v1.DecideReadingResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.clinical.v1.ClinicalService.DecideReading is not implemented"))
+}
+
+func (UnimplementedClinicalServiceHandler) ListProvisionalReadings(context.Context, *connect.Request[v1.ListProvisionalReadingsRequest]) (*connect.Response[v1.ListProvisionalReadingsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.clinical.v1.ClinicalService.ListProvisionalReadings is not implemented"))
 }
 
 func (UnimplementedClinicalServiceHandler) ListObservations(context.Context, *connect.Request[v1.ListObservationsRequest]) (*connect.Response[v1.ListObservationsResponse], error) {

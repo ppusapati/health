@@ -57,6 +57,12 @@ abstract class ClinicalServiceBase extends $pb.GeneratedService {
       $pb.ServerContext ctx, $1.ListAllergiesRequest request);
   $async.Future<$1.RecordObservationResponse> recordObservation(
       $pb.ServerContext ctx, $1.RecordObservationRequest request);
+  $async.Future<$1.IngestDeviceReadingResponse> ingestDeviceReading(
+      $pb.ServerContext ctx, $1.IngestDeviceReadingRequest request);
+  $async.Future<$1.DecideReadingResponse> decideReading(
+      $pb.ServerContext ctx, $1.DecideReadingRequest request);
+  $async.Future<$1.ListProvisionalReadingsResponse> listProvisionalReadings(
+      $pb.ServerContext ctx, $1.ListProvisionalReadingsRequest request);
   $async.Future<$1.ListObservationsResponse> listObservations(
       $pb.ServerContext ctx, $1.ListObservationsRequest request);
   $async.Future<$1.ListCriticalResultsResponse> listCriticalResults(
@@ -148,6 +154,12 @@ abstract class ClinicalServiceBase extends $pb.GeneratedService {
         return $1.ListAllergiesRequest();
       case 'RecordObservation':
         return $1.RecordObservationRequest();
+      case 'IngestDeviceReading':
+        return $1.IngestDeviceReadingRequest();
+      case 'DecideReading':
+        return $1.DecideReadingRequest();
+      case 'ListProvisionalReadings':
+        return $1.ListProvisionalReadingsRequest();
       case 'ListObservations':
         return $1.ListObservationsRequest();
       case 'ListCriticalResults':
@@ -244,6 +256,14 @@ abstract class ClinicalServiceBase extends $pb.GeneratedService {
         return listAllergies(ctx, request as $1.ListAllergiesRequest);
       case 'RecordObservation':
         return recordObservation(ctx, request as $1.RecordObservationRequest);
+      case 'IngestDeviceReading':
+        return ingestDeviceReading(
+            ctx, request as $1.IngestDeviceReadingRequest);
+      case 'DecideReading':
+        return decideReading(ctx, request as $1.DecideReadingRequest);
+      case 'ListProvisionalReadings':
+        return listProvisionalReadings(
+            ctx, request as $1.ListProvisionalReadingsRequest);
       case 'ListObservations':
         return listObservations(ctx, request as $1.ListObservationsRequest);
       case 'ListCriticalResults':

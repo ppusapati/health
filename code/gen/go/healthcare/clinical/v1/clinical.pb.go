@@ -1413,6 +1413,126 @@ func (ConsultStatus) EnumDescriptor() ([]byte, []int) {
 	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{22}
 }
 
+// Where an observation came from (SRS-ICU-003).
+type ObservationSource int32
+
+const (
+	ObservationSource_OBSERVATION_SOURCE_UNSPECIFIED ObservationSource = 0
+	// Typed by a person who was looking at the patient. Validated by
+	// construction: the human was the instrument.
+	ObservationSource_OBSERVATION_SOURCE_MANUAL ObservationSource = 1
+	// Off a monitor or analyser at the bedside. Starts unvalidated.
+	ObservationSource_OBSERVATION_SOURCE_DEVICE ObservationSource = 2
+	// From another system authoritative for it — a laboratory, another hospital
+	// (SRS-CLN-010). Validated where it arrived, not here.
+	ObservationSource_OBSERVATION_SOURCE_IMPORTED ObservationSource = 3
+)
+
+// Enum value maps for ObservationSource.
+var (
+	ObservationSource_name = map[int32]string{
+		0: "OBSERVATION_SOURCE_UNSPECIFIED",
+		1: "OBSERVATION_SOURCE_MANUAL",
+		2: "OBSERVATION_SOURCE_DEVICE",
+		3: "OBSERVATION_SOURCE_IMPORTED",
+	}
+	ObservationSource_value = map[string]int32{
+		"OBSERVATION_SOURCE_UNSPECIFIED": 0,
+		"OBSERVATION_SOURCE_MANUAL":      1,
+		"OBSERVATION_SOURCE_DEVICE":      2,
+		"OBSERVATION_SOURCE_IMPORTED":    3,
+	}
+)
+
+func (x ObservationSource) Enum() *ObservationSource {
+	p := new(ObservationSource)
+	*p = x
+	return p
+}
+
+func (x ObservationSource) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ObservationSource) Descriptor() protoreflect.EnumDescriptor {
+	return file_healthcare_clinical_v1_clinical_proto_enumTypes[23].Descriptor()
+}
+
+func (ObservationSource) Type() protoreflect.EnumType {
+	return &file_healthcare_clinical_v1_clinical_proto_enumTypes[23]
+}
+
+func (x ObservationSource) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ObservationSource.Descriptor instead.
+func (ObservationSource) EnumDescriptor() ([]byte, []int) {
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{23}
+}
+
+// Whether a human has accepted a reading into the chart (SRS-ICU-003).
+type ValidationState int32
+
+const (
+	ValidationState_VALIDATION_STATE_UNSPECIFIED ValidationState = 0
+	// The source is already authoritative and nobody has to confirm it.
+	ValidationState_VALIDATION_STATE_NOT_REQUIRED ValidationState = 1
+	// A device reading nobody has looked at. Shown on the chart and excluded
+	// from anything computed (SRS-ICU-009).
+	ValidationState_VALIDATION_STATE_PENDING   ValidationState = 2
+	ValidationState_VALIDATION_STATE_CONFIRMED ValidationState = 3
+	// Marked an artefact — the probe was off, the line was being flushed. Kept
+	// rather than deleted, because a run of rejections is how a failing probe is
+	// found.
+	ValidationState_VALIDATION_STATE_REJECTED ValidationState = 4
+)
+
+// Enum value maps for ValidationState.
+var (
+	ValidationState_name = map[int32]string{
+		0: "VALIDATION_STATE_UNSPECIFIED",
+		1: "VALIDATION_STATE_NOT_REQUIRED",
+		2: "VALIDATION_STATE_PENDING",
+		3: "VALIDATION_STATE_CONFIRMED",
+		4: "VALIDATION_STATE_REJECTED",
+	}
+	ValidationState_value = map[string]int32{
+		"VALIDATION_STATE_UNSPECIFIED":  0,
+		"VALIDATION_STATE_NOT_REQUIRED": 1,
+		"VALIDATION_STATE_PENDING":      2,
+		"VALIDATION_STATE_CONFIRMED":    3,
+		"VALIDATION_STATE_REJECTED":     4,
+	}
+)
+
+func (x ValidationState) Enum() *ValidationState {
+	p := new(ValidationState)
+	*p = x
+	return p
+}
+
+func (x ValidationState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ValidationState) Descriptor() protoreflect.EnumDescriptor {
+	return file_healthcare_clinical_v1_clinical_proto_enumTypes[24].Descriptor()
+}
+
+func (ValidationState) Type() protoreflect.EnumType {
+	return &file_healthcare_clinical_v1_clinical_proto_enumTypes[24]
+}
+
+func (x ValidationState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ValidationState.Descriptor instead.
+func (ValidationState) EnumDescriptor() ([]byte, []int) {
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{24}
+}
+
 // A coded concept from a terminology.
 //
 // System and code together, never code alone: "C50" means breast cancer in
@@ -2423,13 +2543,25 @@ type Observation struct {
 	DeviceId    string                 `protobuf:"bytes,18,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
 	// Empty for something recorded here; set for anything imported
 	// (SRS-CLN-010).
-	SourceSystem  string                 `protobuf:"bytes,19,opt,name=source_system,json=sourceSystem,proto3" json:"source_system,omitempty"`
-	Note          string                 `protobuf:"bytes,20,opt,name=note,proto3" json:"note,omitempty"`
-	AmendsId      string                 `protobuf:"bytes,21,opt,name=amends_id,json=amendsId,proto3" json:"amends_id,omitempty"`
-	RecordedBy    string                 `protobuf:"bytes,22,opt,name=recorded_by,json=recordedBy,proto3" json:"recorded_by,omitempty"`
-	RecordedAt    *timestamppb.Timestamp `protobuf:"bytes,23,opt,name=recorded_at,json=recordedAt,proto3" json:"recorded_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	SourceSystem string                 `protobuf:"bytes,19,opt,name=source_system,json=sourceSystem,proto3" json:"source_system,omitempty"`
+	Note         string                 `protobuf:"bytes,20,opt,name=note,proto3" json:"note,omitempty"`
+	AmendsId     string                 `protobuf:"bytes,21,opt,name=amends_id,json=amendsId,proto3" json:"amends_id,omitempty"`
+	RecordedBy   string                 `protobuf:"bytes,22,opt,name=recorded_by,json=recordedBy,proto3" json:"recorded_by,omitempty"`
+	RecordedAt   *timestamppb.Timestamp `protobuf:"bytes,23,opt,name=recorded_at,json=recordedAt,proto3" json:"recorded_at,omitempty"`
+	// Where the reading came from and whether a human has accepted it into the
+	// chart (SRS-ICU-003). A client that showed a provisional monitor value the
+	// same way it shows a typed measurement would undo the distinction these
+	// fields exist to carry, so both travel and neither is optional.
+	Source      ObservationSource      `protobuf:"varint,24,opt,name=source,proto3,enum=healthcare.clinical.v1.ObservationSource" json:"source,omitempty"`
+	Validation  ValidationState        `protobuf:"varint,25,opt,name=validation,proto3,enum=healthcare.clinical.v1.ValidationState" json:"validation,omitempty"`
+	Device      *DeviceSource          `protobuf:"bytes,26,opt,name=device,proto3" json:"device,omitempty"`
+	ValidatedBy string                 `protobuf:"bytes,27,opt,name=validated_by,json=validatedBy,proto3" json:"validated_by,omitempty"`
+	ValidatedAt *timestamppb.Timestamp `protobuf:"bytes,28,opt,name=validated_at,json=validatedAt,proto3" json:"validated_at,omitempty"`
+	// Why a reading was rejected. A run of rejections with reasons is how a
+	// failing probe is found.
+	ValidationNote string `protobuf:"bytes,29,opt,name=validation_note,json=validationNote,proto3" json:"validation_note,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *Observation) Reset() {
@@ -2623,6 +2755,459 @@ func (x *Observation) GetRecordedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *Observation) GetSource() ObservationSource {
+	if x != nil {
+		return x.Source
+	}
+	return ObservationSource_OBSERVATION_SOURCE_UNSPECIFIED
+}
+
+func (x *Observation) GetValidation() ValidationState {
+	if x != nil {
+		return x.Validation
+	}
+	return ValidationState_VALIDATION_STATE_UNSPECIFIED
+}
+
+func (x *Observation) GetDevice() *DeviceSource {
+	if x != nil {
+		return x.Device
+	}
+	return nil
+}
+
+func (x *Observation) GetValidatedBy() string {
+	if x != nil {
+		return x.ValidatedBy
+	}
+	return ""
+}
+
+func (x *Observation) GetValidatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ValidatedAt
+	}
+	return nil
+}
+
+func (x *Observation) GetValidationNote() string {
+	if x != nil {
+		return x.ValidationNote
+	}
+	return ""
+}
+
+// Device identity and quality metadata (SRS-ICU-003).
+type DeviceSource struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Required for a device reading: a run of implausible values almost always
+	// means one device, and a reading that cannot name its own is one nobody can
+	// trace to the probe that caused it.
+	DeviceId string `protobuf:"bytes,1,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
+	// Which parameter of the device this came from — "SpO2", "ART". A monitor
+	// produces several streams and they fail independently.
+	Channel string `protobuf:"bytes,2,opt,name=channel,proto3" json:"channel,omitempty"`
+	// What the device said about its own signal, verbatim: "good", "artefact",
+	// "searching". Not normalised, because every vendor has its own vocabulary
+	// and flattening it would lose the difference between "the device said
+	// nothing" and "the device said a word we do not know".
+	Quality string `protobuf:"bytes,3,opt,name=quality,proto3" json:"quality,omitempty"`
+	// The device's own clock, and ours. Two fields because the gap between them
+	// is what makes a feed stale, and one timestamp cannot show it.
+	ObservedAt    *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=observed_at,json=observedAt,proto3" json:"observed_at,omitempty"`
+	ReceivedAt    *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=received_at,json=receivedAt,proto3" json:"received_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeviceSource) Reset() {
+	*x = DeviceSource{}
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeviceSource) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeviceSource) ProtoMessage() {}
+
+func (x *DeviceSource) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeviceSource.ProtoReflect.Descriptor instead.
+func (*DeviceSource) Descriptor() ([]byte, []int) {
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *DeviceSource) GetDeviceId() string {
+	if x != nil {
+		return x.DeviceId
+	}
+	return ""
+}
+
+func (x *DeviceSource) GetChannel() string {
+	if x != nil {
+		return x.Channel
+	}
+	return ""
+}
+
+func (x *DeviceSource) GetQuality() string {
+	if x != nil {
+		return x.Quality
+	}
+	return ""
+}
+
+func (x *DeviceSource) GetObservedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ObservedAt
+	}
+	return nil
+}
+
+func (x *DeviceSource) GetReceivedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ReceivedAt
+	}
+	return nil
+}
+
+type IngestDeviceReadingRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PatientId     string                 `protobuf:"bytes,1,opt,name=patient_id,json=patientId,proto3" json:"patient_id,omitempty"`
+	EncounterId   string                 `protobuf:"bytes,2,opt,name=encounter_id,json=encounterId,proto3" json:"encounter_id,omitempty"`
+	Code          *Coding                `protobuf:"bytes,3,opt,name=code,proto3" json:"code,omitempty"`
+	Value         *Quantity              `protobuf:"bytes,4,opt,name=value,proto3" json:"value,omitempty"`
+	Device        *DeviceSource          `protobuf:"bytes,5,opt,name=device,proto3" json:"device,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IngestDeviceReadingRequest) Reset() {
+	*x = IngestDeviceReadingRequest{}
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IngestDeviceReadingRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IngestDeviceReadingRequest) ProtoMessage() {}
+
+func (x *IngestDeviceReadingRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IngestDeviceReadingRequest.ProtoReflect.Descriptor instead.
+func (*IngestDeviceReadingRequest) Descriptor() ([]byte, []int) {
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *IngestDeviceReadingRequest) GetPatientId() string {
+	if x != nil {
+		return x.PatientId
+	}
+	return ""
+}
+
+func (x *IngestDeviceReadingRequest) GetEncounterId() string {
+	if x != nil {
+		return x.EncounterId
+	}
+	return ""
+}
+
+func (x *IngestDeviceReadingRequest) GetCode() *Coding {
+	if x != nil {
+		return x.Code
+	}
+	return nil
+}
+
+func (x *IngestDeviceReadingRequest) GetValue() *Quantity {
+	if x != nil {
+		return x.Value
+	}
+	return nil
+}
+
+func (x *IngestDeviceReadingRequest) GetDevice() *DeviceSource {
+	if x != nil {
+		return x.Device
+	}
+	return nil
+}
+
+type IngestDeviceReadingResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Observation   *Observation           `protobuf:"bytes,1,opt,name=observation,proto3" json:"observation,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IngestDeviceReadingResponse) Reset() {
+	*x = IngestDeviceReadingResponse{}
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IngestDeviceReadingResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IngestDeviceReadingResponse) ProtoMessage() {}
+
+func (x *IngestDeviceReadingResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IngestDeviceReadingResponse.ProtoReflect.Descriptor instead.
+func (*IngestDeviceReadingResponse) Descriptor() ([]byte, []int) {
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *IngestDeviceReadingResponse) GetObservation() *Observation {
+	if x != nil {
+		return x.Observation
+	}
+	return nil
+}
+
+type DecideReadingRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ObservationId string                 `protobuf:"bytes,1,opt,name=observation_id,json=observationId,proto3" json:"observation_id,omitempty"`
+	// True to confirm the reading into the chart, false to mark it an artefact.
+	Accept bool `protobuf:"varint,2,opt,name=accept,proto3" json:"accept,omitempty"`
+	// Required on a rejection. A column of the word "artefact" with no reasons
+	// is not how a failing probe gets found.
+	Reason        string `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DecideReadingRequest) Reset() {
+	*x = DecideReadingRequest{}
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DecideReadingRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DecideReadingRequest) ProtoMessage() {}
+
+func (x *DecideReadingRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DecideReadingRequest.ProtoReflect.Descriptor instead.
+func (*DecideReadingRequest) Descriptor() ([]byte, []int) {
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *DecideReadingRequest) GetObservationId() string {
+	if x != nil {
+		return x.ObservationId
+	}
+	return ""
+}
+
+func (x *DecideReadingRequest) GetAccept() bool {
+	if x != nil {
+		return x.Accept
+	}
+	return false
+}
+
+func (x *DecideReadingRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type DecideReadingResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Observation   *Observation           `protobuf:"bytes,1,opt,name=observation,proto3" json:"observation,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DecideReadingResponse) Reset() {
+	*x = DecideReadingResponse{}
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DecideReadingResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DecideReadingResponse) ProtoMessage() {}
+
+func (x *DecideReadingResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DecideReadingResponse.ProtoReflect.Descriptor instead.
+func (*DecideReadingResponse) Descriptor() ([]byte, []int) {
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *DecideReadingResponse) GetObservation() *Observation {
+	if x != nil {
+		return x.Observation
+	}
+	return nil
+}
+
+type ListProvisionalReadingsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PatientId     string                 `protobuf:"bytes,1,opt,name=patient_id,json=patientId,proto3" json:"patient_id,omitempty"`
+	PageSize      int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListProvisionalReadingsRequest) Reset() {
+	*x = ListProvisionalReadingsRequest{}
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListProvisionalReadingsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListProvisionalReadingsRequest) ProtoMessage() {}
+
+func (x *ListProvisionalReadingsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListProvisionalReadingsRequest.ProtoReflect.Descriptor instead.
+func (*ListProvisionalReadingsRequest) Descriptor() ([]byte, []int) {
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *ListProvisionalReadingsRequest) GetPatientId() string {
+	if x != nil {
+		return x.PatientId
+	}
+	return ""
+}
+
+func (x *ListProvisionalReadingsRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+type ListProvisionalReadingsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Observations  []*Observation         `protobuf:"bytes,1,rep,name=observations,proto3" json:"observations,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListProvisionalReadingsResponse) Reset() {
+	*x = ListProvisionalReadingsResponse{}
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListProvisionalReadingsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListProvisionalReadingsResponse) ProtoMessage() {}
+
+func (x *ListProvisionalReadingsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListProvisionalReadingsResponse.ProtoReflect.Descriptor instead.
+func (*ListProvisionalReadingsResponse) Descriptor() ([]byte, []int) {
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *ListProvisionalReadingsResponse) GetObservations() []*Observation {
+	if x != nil {
+		return x.Observations
+	}
+	return nil
+}
+
 type CriticalAcknowledgement struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	AcknowledgementId string                 `protobuf:"bytes,1,opt,name=acknowledgement_id,json=acknowledgementId,proto3" json:"acknowledgement_id,omitempty"`
@@ -2643,7 +3228,7 @@ type CriticalAcknowledgement struct {
 
 func (x *CriticalAcknowledgement) Reset() {
 	*x = CriticalAcknowledgement{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[11]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2655,7 +3240,7 @@ func (x *CriticalAcknowledgement) String() string {
 func (*CriticalAcknowledgement) ProtoMessage() {}
 
 func (x *CriticalAcknowledgement) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[11]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2668,7 +3253,7 @@ func (x *CriticalAcknowledgement) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CriticalAcknowledgement.ProtoReflect.Descriptor instead.
 func (*CriticalAcknowledgement) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{11}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *CriticalAcknowledgement) GetAcknowledgementId() string {
@@ -2737,7 +3322,7 @@ type Performer struct {
 
 func (x *Performer) Reset() {
 	*x = Performer{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[12]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2749,7 +3334,7 @@ func (x *Performer) String() string {
 func (*Performer) ProtoMessage() {}
 
 func (x *Performer) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[12]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2762,7 +3347,7 @@ func (x *Performer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Performer.ProtoReflect.Descriptor instead.
 func (*Performer) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{12}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *Performer) GetSubjectId() string {
@@ -2810,7 +3395,7 @@ type Procedure struct {
 
 func (x *Procedure) Reset() {
 	*x = Procedure{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[13]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2822,7 +3407,7 @@ func (x *Procedure) String() string {
 func (*Procedure) ProtoMessage() {}
 
 func (x *Procedure) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[13]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2835,7 +3420,7 @@ func (x *Procedure) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Procedure.ProtoReflect.Descriptor instead.
 func (*Procedure) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{13}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *Procedure) GetProcedureId() string {
@@ -2984,7 +3569,7 @@ type Goal struct {
 
 func (x *Goal) Reset() {
 	*x = Goal{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[14]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2996,7 +3581,7 @@ func (x *Goal) String() string {
 func (*Goal) ProtoMessage() {}
 
 func (x *Goal) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[14]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3009,7 +3594,7 @@ func (x *Goal) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Goal.ProtoReflect.Descriptor instead.
 func (*Goal) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{14}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *Goal) GetGoalId() string {
@@ -3065,7 +3650,7 @@ type Activity struct {
 
 func (x *Activity) Reset() {
 	*x = Activity{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[15]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3077,7 +3662,7 @@ func (x *Activity) String() string {
 func (*Activity) ProtoMessage() {}
 
 func (x *Activity) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[15]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3090,7 +3675,7 @@ func (x *Activity) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Activity.ProtoReflect.Descriptor instead.
 func (*Activity) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{15}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *Activity) GetActivityId() string {
@@ -3157,7 +3742,7 @@ type CarePlan struct {
 
 func (x *CarePlan) Reset() {
 	*x = CarePlan{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[16]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3169,7 +3754,7 @@ func (x *CarePlan) String() string {
 func (*CarePlan) ProtoMessage() {}
 
 func (x *CarePlan) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[16]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3182,7 +3767,7 @@ func (x *CarePlan) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CarePlan.ProtoReflect.Descriptor instead.
 func (*CarePlan) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{16}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *CarePlan) GetCarePlanId() string {
@@ -3291,7 +3876,7 @@ type Provenance struct {
 
 func (x *Provenance) Reset() {
 	*x = Provenance{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[17]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3303,7 +3888,7 @@ func (x *Provenance) String() string {
 func (*Provenance) ProtoMessage() {}
 
 func (x *Provenance) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[17]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3316,7 +3901,7 @@ func (x *Provenance) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Provenance.ProtoReflect.Descriptor instead.
 func (*Provenance) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{17}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *Provenance) GetProvenanceId() string {
@@ -3415,7 +4000,7 @@ type Attachment struct {
 
 func (x *Attachment) Reset() {
 	*x = Attachment{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[18]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3427,7 +4012,7 @@ func (x *Attachment) String() string {
 func (*Attachment) ProtoMessage() {}
 
 func (x *Attachment) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[18]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3440,7 +4025,7 @@ func (x *Attachment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Attachment.ProtoReflect.Descriptor instead.
 func (*Attachment) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{18}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *Attachment) GetAttachmentId() string {
@@ -3573,7 +4158,7 @@ type ClinicalConsent struct {
 
 func (x *ClinicalConsent) Reset() {
 	*x = ClinicalConsent{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[19]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3585,7 +4170,7 @@ func (x *ClinicalConsent) String() string {
 func (*ClinicalConsent) ProtoMessage() {}
 
 func (x *ClinicalConsent) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[19]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3598,7 +4183,7 @@ func (x *ClinicalConsent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClinicalConsent.ProtoReflect.Descriptor instead.
 func (*ClinicalConsent) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{19}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ClinicalConsent) GetConsentId() string {
@@ -3713,7 +4298,7 @@ type CalculatorInput struct {
 
 func (x *CalculatorInput) Reset() {
 	*x = CalculatorInput{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[20]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3725,7 +4310,7 @@ func (x *CalculatorInput) String() string {
 func (*CalculatorInput) ProtoMessage() {}
 
 func (x *CalculatorInput) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[20]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3738,7 +4323,7 @@ func (x *CalculatorInput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CalculatorInput.ProtoReflect.Descriptor instead.
 func (*CalculatorInput) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{20}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *CalculatorInput) GetName() string {
@@ -3795,7 +4380,7 @@ type CalculatorResult struct {
 
 func (x *CalculatorResult) Reset() {
 	*x = CalculatorResult{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[21]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3807,7 +4392,7 @@ func (x *CalculatorResult) String() string {
 func (*CalculatorResult) ProtoMessage() {}
 
 func (x *CalculatorResult) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[21]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3820,7 +4405,7 @@ func (x *CalculatorResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CalculatorResult.ProtoReflect.Descriptor instead.
 func (*CalculatorResult) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{21}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *CalculatorResult) GetResultId() string {
@@ -3943,7 +4528,7 @@ type CDSAlert struct {
 
 func (x *CDSAlert) Reset() {
 	*x = CDSAlert{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[22]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3955,7 +4540,7 @@ func (x *CDSAlert) String() string {
 func (*CDSAlert) ProtoMessage() {}
 
 func (x *CDSAlert) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[22]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3968,7 +4553,7 @@ func (x *CDSAlert) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CDSAlert.ProtoReflect.Descriptor instead.
 func (*CDSAlert) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{22}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *CDSAlert) GetAlertId() string {
@@ -4103,7 +4688,7 @@ type Consult struct {
 
 func (x *Consult) Reset() {
 	*x = Consult{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[23]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4115,7 +4700,7 @@ func (x *Consult) String() string {
 func (*Consult) ProtoMessage() {}
 
 func (x *Consult) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[23]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4128,7 +4713,7 @@ func (x *Consult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Consult.ProtoReflect.Descriptor instead.
 func (*Consult) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{23}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *Consult) GetConsultId() string {
@@ -4262,7 +4847,7 @@ type RegistryMembership struct {
 
 func (x *RegistryMembership) Reset() {
 	*x = RegistryMembership{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[24]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4274,7 +4859,7 @@ func (x *RegistryMembership) String() string {
 func (*RegistryMembership) ProtoMessage() {}
 
 func (x *RegistryMembership) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[24]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4287,7 +4872,7 @@ func (x *RegistryMembership) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegistryMembership.ProtoReflect.Descriptor instead.
 func (*RegistryMembership) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{24}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *RegistryMembership) GetMembershipId() string {
@@ -4366,7 +4951,7 @@ type SmartPhrase struct {
 
 func (x *SmartPhrase) Reset() {
 	*x = SmartPhrase{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[25]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4378,7 +4963,7 @@ func (x *SmartPhrase) String() string {
 func (*SmartPhrase) ProtoMessage() {}
 
 func (x *SmartPhrase) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[25]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4391,7 +4976,7 @@ func (x *SmartPhrase) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SmartPhrase.ProtoReflect.Descriptor instead.
 func (*SmartPhrase) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{25}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *SmartPhrase) GetPhraseId() string {
@@ -4434,7 +5019,7 @@ type BannerIdentifier struct {
 
 func (x *BannerIdentifier) Reset() {
 	*x = BannerIdentifier{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[26]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4446,7 +5031,7 @@ func (x *BannerIdentifier) String() string {
 func (*BannerIdentifier) ProtoMessage() {}
 
 func (x *BannerIdentifier) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[26]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4459,7 +5044,7 @@ func (x *BannerIdentifier) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BannerIdentifier.ProtoReflect.Descriptor instead.
 func (*BannerIdentifier) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{26}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *BannerIdentifier) GetSystem() string {
@@ -4498,7 +5083,7 @@ type BannerAlert struct {
 
 func (x *BannerAlert) Reset() {
 	*x = BannerAlert{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[27]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4510,7 +5095,7 @@ func (x *BannerAlert) String() string {
 func (*BannerAlert) ProtoMessage() {}
 
 func (x *BannerAlert) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[27]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4523,7 +5108,7 @@ func (x *BannerAlert) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BannerAlert.ProtoReflect.Descriptor instead.
 func (*BannerAlert) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{27}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *BannerAlert) GetSeverity() string {
@@ -4576,7 +5161,7 @@ type Banner struct {
 
 func (x *Banner) Reset() {
 	*x = Banner{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[28]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4588,7 +5173,7 @@ func (x *Banner) String() string {
 func (*Banner) ProtoMessage() {}
 
 func (x *Banner) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[28]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4601,7 +5186,7 @@ func (x *Banner) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Banner.ProtoReflect.Descriptor instead.
 func (*Banner) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{28}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *Banner) GetPatientId() string {
@@ -4680,7 +5265,7 @@ type WriteNoteRequest struct {
 
 func (x *WriteNoteRequest) Reset() {
 	*x = WriteNoteRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[29]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4692,7 +5277,7 @@ func (x *WriteNoteRequest) String() string {
 func (*WriteNoteRequest) ProtoMessage() {}
 
 func (x *WriteNoteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[29]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4705,7 +5290,7 @@ func (x *WriteNoteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WriteNoteRequest.ProtoReflect.Descriptor instead.
 func (*WriteNoteRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{29}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *WriteNoteRequest) GetDocumentId() string {
@@ -4794,7 +5379,7 @@ type WriteNoteResponse struct {
 
 func (x *WriteNoteResponse) Reset() {
 	*x = WriteNoteResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[30]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4806,7 +5391,7 @@ func (x *WriteNoteResponse) String() string {
 func (*WriteNoteResponse) ProtoMessage() {}
 
 func (x *WriteNoteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[30]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4819,7 +5404,7 @@ func (x *WriteNoteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WriteNoteResponse.ProtoReflect.Descriptor instead.
 func (*WriteNoteResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{30}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *WriteNoteResponse) GetDocument() *Document {
@@ -4840,7 +5425,7 @@ type SignNoteRequest struct {
 
 func (x *SignNoteRequest) Reset() {
 	*x = SignNoteRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[31]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4852,7 +5437,7 @@ func (x *SignNoteRequest) String() string {
 func (*SignNoteRequest) ProtoMessage() {}
 
 func (x *SignNoteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[31]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4865,7 +5450,7 @@ func (x *SignNoteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SignNoteRequest.ProtoReflect.Descriptor instead.
 func (*SignNoteRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{31}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *SignNoteRequest) GetDocumentId() string {
@@ -4898,7 +5483,7 @@ type SignNoteResponse struct {
 
 func (x *SignNoteResponse) Reset() {
 	*x = SignNoteResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[32]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4910,7 +5495,7 @@ func (x *SignNoteResponse) String() string {
 func (*SignNoteResponse) ProtoMessage() {}
 
 func (x *SignNoteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[32]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4923,7 +5508,7 @@ func (x *SignNoteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SignNoteResponse.ProtoReflect.Descriptor instead.
 func (*SignNoteResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{32}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *SignNoteResponse) GetDocument() *Document {
@@ -4949,7 +5534,7 @@ type AmendNoteRequest struct {
 
 func (x *AmendNoteRequest) Reset() {
 	*x = AmendNoteRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[33]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4961,7 +5546,7 @@ func (x *AmendNoteRequest) String() string {
 func (*AmendNoteRequest) ProtoMessage() {}
 
 func (x *AmendNoteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[33]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4974,7 +5559,7 @@ func (x *AmendNoteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AmendNoteRequest.ProtoReflect.Descriptor instead.
 func (*AmendNoteRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{33}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *AmendNoteRequest) GetDocumentId() string {
@@ -5028,7 +5613,7 @@ type AmendNoteResponse struct {
 
 func (x *AmendNoteResponse) Reset() {
 	*x = AmendNoteResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[34]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5040,7 +5625,7 @@ func (x *AmendNoteResponse) String() string {
 func (*AmendNoteResponse) ProtoMessage() {}
 
 func (x *AmendNoteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[34]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5053,7 +5638,7 @@ func (x *AmendNoteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AmendNoteResponse.ProtoReflect.Descriptor instead.
 func (*AmendNoteResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{34}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *AmendNoteResponse) GetDocument() *Document {
@@ -5073,7 +5658,7 @@ type RetractNoteRequest struct {
 
 func (x *RetractNoteRequest) Reset() {
 	*x = RetractNoteRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[35]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5085,7 +5670,7 @@ func (x *RetractNoteRequest) String() string {
 func (*RetractNoteRequest) ProtoMessage() {}
 
 func (x *RetractNoteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[35]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5098,7 +5683,7 @@ func (x *RetractNoteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RetractNoteRequest.ProtoReflect.Descriptor instead.
 func (*RetractNoteRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{35}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *RetractNoteRequest) GetDocumentId() string {
@@ -5123,7 +5708,7 @@ type RetractNoteResponse struct {
 
 func (x *RetractNoteResponse) Reset() {
 	*x = RetractNoteResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[36]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5135,7 +5720,7 @@ func (x *RetractNoteResponse) String() string {
 func (*RetractNoteResponse) ProtoMessage() {}
 
 func (x *RetractNoteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[36]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5148,7 +5733,7 @@ func (x *RetractNoteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RetractNoteResponse.ProtoReflect.Descriptor instead.
 func (*RetractNoteResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{36}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{43}
 }
 
 type GetNoteRequest struct {
@@ -5160,7 +5745,7 @@ type GetNoteRequest struct {
 
 func (x *GetNoteRequest) Reset() {
 	*x = GetNoteRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[37]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5172,7 +5757,7 @@ func (x *GetNoteRequest) String() string {
 func (*GetNoteRequest) ProtoMessage() {}
 
 func (x *GetNoteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[37]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5185,7 +5770,7 @@ func (x *GetNoteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetNoteRequest.ProtoReflect.Descriptor instead.
 func (*GetNoteRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{37}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *GetNoteRequest) GetDocumentId() string {
@@ -5204,7 +5789,7 @@ type GetNoteResponse struct {
 
 func (x *GetNoteResponse) Reset() {
 	*x = GetNoteResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[38]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5216,7 +5801,7 @@ func (x *GetNoteResponse) String() string {
 func (*GetNoteResponse) ProtoMessage() {}
 
 func (x *GetNoteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[38]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5229,7 +5814,7 @@ func (x *GetNoteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetNoteResponse.ProtoReflect.Descriptor instead.
 func (*GetNoteResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{38}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *GetNoteResponse) GetDocument() *Document {
@@ -5252,7 +5837,7 @@ type ListNotesRequest struct {
 
 func (x *ListNotesRequest) Reset() {
 	*x = ListNotesRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[39]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5264,7 +5849,7 @@ func (x *ListNotesRequest) String() string {
 func (*ListNotesRequest) ProtoMessage() {}
 
 func (x *ListNotesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[39]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5277,7 +5862,7 @@ func (x *ListNotesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListNotesRequest.ProtoReflect.Descriptor instead.
 func (*ListNotesRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{39}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *ListNotesRequest) GetPatientId() string {
@@ -5324,7 +5909,7 @@ type ListNotesResponse struct {
 
 func (x *ListNotesResponse) Reset() {
 	*x = ListNotesResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[40]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5336,7 +5921,7 @@ func (x *ListNotesResponse) String() string {
 func (*ListNotesResponse) ProtoMessage() {}
 
 func (x *ListNotesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[40]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5349,7 +5934,7 @@ func (x *ListNotesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListNotesResponse.ProtoReflect.Descriptor instead.
 func (*ListNotesResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{40}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *ListNotesResponse) GetDocuments() []*Document {
@@ -5368,7 +5953,7 @@ type DefineTemplateRequest struct {
 
 func (x *DefineTemplateRequest) Reset() {
 	*x = DefineTemplateRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[41]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5380,7 +5965,7 @@ func (x *DefineTemplateRequest) String() string {
 func (*DefineTemplateRequest) ProtoMessage() {}
 
 func (x *DefineTemplateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[41]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5393,7 +5978,7 @@ func (x *DefineTemplateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DefineTemplateRequest.ProtoReflect.Descriptor instead.
 func (*DefineTemplateRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{41}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *DefineTemplateRequest) GetTemplate() *Template {
@@ -5411,7 +5996,7 @@ type DefineTemplateResponse struct {
 
 func (x *DefineTemplateResponse) Reset() {
 	*x = DefineTemplateResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[42]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5423,7 +6008,7 @@ func (x *DefineTemplateResponse) String() string {
 func (*DefineTemplateResponse) ProtoMessage() {}
 
 func (x *DefineTemplateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[42]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5436,7 +6021,7 @@ func (x *DefineTemplateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DefineTemplateResponse.ProtoReflect.Descriptor instead.
 func (*DefineTemplateResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{42}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{49}
 }
 
 type ListTemplatesRequest struct {
@@ -5450,7 +6035,7 @@ type ListTemplatesRequest struct {
 
 func (x *ListTemplatesRequest) Reset() {
 	*x = ListTemplatesRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[43]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5462,7 +6047,7 @@ func (x *ListTemplatesRequest) String() string {
 func (*ListTemplatesRequest) ProtoMessage() {}
 
 func (x *ListTemplatesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[43]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5475,7 +6060,7 @@ func (x *ListTemplatesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTemplatesRequest.ProtoReflect.Descriptor instead.
 func (*ListTemplatesRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{43}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *ListTemplatesRequest) GetKind() DocumentKind {
@@ -5508,7 +6093,7 @@ type ListTemplatesResponse struct {
 
 func (x *ListTemplatesResponse) Reset() {
 	*x = ListTemplatesResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[44]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5520,7 +6105,7 @@ func (x *ListTemplatesResponse) String() string {
 func (*ListTemplatesResponse) ProtoMessage() {}
 
 func (x *ListTemplatesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[44]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5533,7 +6118,7 @@ func (x *ListTemplatesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTemplatesResponse.ProtoReflect.Descriptor instead.
 func (*ListTemplatesResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{44}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *ListTemplatesResponse) GetTemplates() []*Template {
@@ -5553,7 +6138,7 @@ type RetireTemplateRequest struct {
 
 func (x *RetireTemplateRequest) Reset() {
 	*x = RetireTemplateRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[45]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5565,7 +6150,7 @@ func (x *RetireTemplateRequest) String() string {
 func (*RetireTemplateRequest) ProtoMessage() {}
 
 func (x *RetireTemplateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[45]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5578,7 +6163,7 @@ func (x *RetireTemplateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RetireTemplateRequest.ProtoReflect.Descriptor instead.
 func (*RetireTemplateRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{45}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *RetireTemplateRequest) GetTemplateId() string {
@@ -5603,7 +6188,7 @@ type RetireTemplateResponse struct {
 
 func (x *RetireTemplateResponse) Reset() {
 	*x = RetireTemplateResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[46]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5615,7 +6200,7 @@ func (x *RetireTemplateResponse) String() string {
 func (*RetireTemplateResponse) ProtoMessage() {}
 
 func (x *RetireTemplateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[46]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5628,7 +6213,7 @@ func (x *RetireTemplateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RetireTemplateResponse.ProtoReflect.Descriptor instead.
 func (*RetireTemplateResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{46}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{53}
 }
 
 type DefineSmartPhraseRequest struct {
@@ -5645,7 +6230,7 @@ type DefineSmartPhraseRequest struct {
 
 func (x *DefineSmartPhraseRequest) Reset() {
 	*x = DefineSmartPhraseRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[47]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5657,7 +6242,7 @@ func (x *DefineSmartPhraseRequest) String() string {
 func (*DefineSmartPhraseRequest) ProtoMessage() {}
 
 func (x *DefineSmartPhraseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[47]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5670,7 +6255,7 @@ func (x *DefineSmartPhraseRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DefineSmartPhraseRequest.ProtoReflect.Descriptor instead.
 func (*DefineSmartPhraseRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{47}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *DefineSmartPhraseRequest) GetShortcut() string {
@@ -5703,7 +6288,7 @@ type DefineSmartPhraseResponse struct {
 
 func (x *DefineSmartPhraseResponse) Reset() {
 	*x = DefineSmartPhraseResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[48]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5715,7 +6300,7 @@ func (x *DefineSmartPhraseResponse) String() string {
 func (*DefineSmartPhraseResponse) ProtoMessage() {}
 
 func (x *DefineSmartPhraseResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[48]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5728,7 +6313,7 @@ func (x *DefineSmartPhraseResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DefineSmartPhraseResponse.ProtoReflect.Descriptor instead.
 func (*DefineSmartPhraseResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{48}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *DefineSmartPhraseResponse) GetPhrase() *SmartPhrase {
@@ -5746,7 +6331,7 @@ type ListSmartPhrasesRequest struct {
 
 func (x *ListSmartPhrasesRequest) Reset() {
 	*x = ListSmartPhrasesRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[49]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5758,7 +6343,7 @@ func (x *ListSmartPhrasesRequest) String() string {
 func (*ListSmartPhrasesRequest) ProtoMessage() {}
 
 func (x *ListSmartPhrasesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[49]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5771,7 +6356,7 @@ func (x *ListSmartPhrasesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSmartPhrasesRequest.ProtoReflect.Descriptor instead.
 func (*ListSmartPhrasesRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{49}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{56}
 }
 
 type ListSmartPhrasesResponse struct {
@@ -5783,7 +6368,7 @@ type ListSmartPhrasesResponse struct {
 
 func (x *ListSmartPhrasesResponse) Reset() {
 	*x = ListSmartPhrasesResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[50]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5795,7 +6380,7 @@ func (x *ListSmartPhrasesResponse) String() string {
 func (*ListSmartPhrasesResponse) ProtoMessage() {}
 
 func (x *ListSmartPhrasesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[50]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5808,7 +6393,7 @@ func (x *ListSmartPhrasesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSmartPhrasesResponse.ProtoReflect.Descriptor instead.
 func (*ListSmartPhrasesResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{50}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *ListSmartPhrasesResponse) GetPhrases() []*SmartPhrase {
@@ -5834,7 +6419,7 @@ type RecordProblemRequest struct {
 
 func (x *RecordProblemRequest) Reset() {
 	*x = RecordProblemRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[51]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5846,7 +6431,7 @@ func (x *RecordProblemRequest) String() string {
 func (*RecordProblemRequest) ProtoMessage() {}
 
 func (x *RecordProblemRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[51]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5859,7 +6444,7 @@ func (x *RecordProblemRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordProblemRequest.ProtoReflect.Descriptor instead.
 func (*RecordProblemRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{51}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *RecordProblemRequest) GetPatientId() string {
@@ -5927,7 +6512,7 @@ type RecordProblemResponse struct {
 
 func (x *RecordProblemResponse) Reset() {
 	*x = RecordProblemResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[52]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5939,7 +6524,7 @@ func (x *RecordProblemResponse) String() string {
 func (*RecordProblemResponse) ProtoMessage() {}
 
 func (x *RecordProblemResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[52]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5952,7 +6537,7 @@ func (x *RecordProblemResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordProblemResponse.ProtoReflect.Descriptor instead.
 func (*RecordProblemResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{52}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *RecordProblemResponse) GetProblem() *Problem {
@@ -5973,7 +6558,7 @@ type UpdateProblemRequest struct {
 
 func (x *UpdateProblemRequest) Reset() {
 	*x = UpdateProblemRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[53]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5985,7 +6570,7 @@ func (x *UpdateProblemRequest) String() string {
 func (*UpdateProblemRequest) ProtoMessage() {}
 
 func (x *UpdateProblemRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[53]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5998,7 +6583,7 @@ func (x *UpdateProblemRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateProblemRequest.ProtoReflect.Descriptor instead.
 func (*UpdateProblemRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{53}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *UpdateProblemRequest) GetProblemId() string {
@@ -6031,7 +6616,7 @@ type UpdateProblemResponse struct {
 
 func (x *UpdateProblemResponse) Reset() {
 	*x = UpdateProblemResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[54]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6043,7 +6628,7 @@ func (x *UpdateProblemResponse) String() string {
 func (*UpdateProblemResponse) ProtoMessage() {}
 
 func (x *UpdateProblemResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[54]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6056,7 +6641,7 @@ func (x *UpdateProblemResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateProblemResponse.ProtoReflect.Descriptor instead.
 func (*UpdateProblemResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{54}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *UpdateProblemResponse) GetProblem() *Problem {
@@ -6077,7 +6662,7 @@ type ListProblemsRequest struct {
 
 func (x *ListProblemsRequest) Reset() {
 	*x = ListProblemsRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[55]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6089,7 +6674,7 @@ func (x *ListProblemsRequest) String() string {
 func (*ListProblemsRequest) ProtoMessage() {}
 
 func (x *ListProblemsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[55]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6102,7 +6687,7 @@ func (x *ListProblemsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListProblemsRequest.ProtoReflect.Descriptor instead.
 func (*ListProblemsRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{55}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *ListProblemsRequest) GetPatientId() string {
@@ -6135,7 +6720,7 @@ type ListProblemsResponse struct {
 
 func (x *ListProblemsResponse) Reset() {
 	*x = ListProblemsResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[56]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6147,7 +6732,7 @@ func (x *ListProblemsResponse) String() string {
 func (*ListProblemsResponse) ProtoMessage() {}
 
 func (x *ListProblemsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[56]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6160,7 +6745,7 @@ func (x *ListProblemsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListProblemsResponse.ProtoReflect.Descriptor instead.
 func (*ListProblemsResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{56}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *ListProblemsResponse) GetProblems() []*Problem {
@@ -6188,7 +6773,7 @@ type RecordAllergyRequest struct {
 
 func (x *RecordAllergyRequest) Reset() {
 	*x = RecordAllergyRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[57]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6200,7 +6785,7 @@ func (x *RecordAllergyRequest) String() string {
 func (*RecordAllergyRequest) ProtoMessage() {}
 
 func (x *RecordAllergyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[57]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6213,7 +6798,7 @@ func (x *RecordAllergyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordAllergyRequest.ProtoReflect.Descriptor instead.
 func (*RecordAllergyRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{57}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *RecordAllergyRequest) GetPatientId() string {
@@ -6295,7 +6880,7 @@ type RecordAllergyResponse struct {
 
 func (x *RecordAllergyResponse) Reset() {
 	*x = RecordAllergyResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[58]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6307,7 +6892,7 @@ func (x *RecordAllergyResponse) String() string {
 func (*RecordAllergyResponse) ProtoMessage() {}
 
 func (x *RecordAllergyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[58]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6320,7 +6905,7 @@ func (x *RecordAllergyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordAllergyResponse.ProtoReflect.Descriptor instead.
 func (*RecordAllergyResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{58}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *RecordAllergyResponse) GetAllergy() *Allergy {
@@ -6340,7 +6925,7 @@ type VerifyAllergyRequest struct {
 
 func (x *VerifyAllergyRequest) Reset() {
 	*x = VerifyAllergyRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[59]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6352,7 +6937,7 @@ func (x *VerifyAllergyRequest) String() string {
 func (*VerifyAllergyRequest) ProtoMessage() {}
 
 func (x *VerifyAllergyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[59]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6365,7 +6950,7 @@ func (x *VerifyAllergyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VerifyAllergyRequest.ProtoReflect.Descriptor instead.
 func (*VerifyAllergyRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{59}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *VerifyAllergyRequest) GetAllergyId() string {
@@ -6391,7 +6976,7 @@ type VerifyAllergyResponse struct {
 
 func (x *VerifyAllergyResponse) Reset() {
 	*x = VerifyAllergyResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[60]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6403,7 +6988,7 @@ func (x *VerifyAllergyResponse) String() string {
 func (*VerifyAllergyResponse) ProtoMessage() {}
 
 func (x *VerifyAllergyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[60]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6416,7 +7001,7 @@ func (x *VerifyAllergyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VerifyAllergyResponse.ProtoReflect.Descriptor instead.
 func (*VerifyAllergyResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{60}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *VerifyAllergyResponse) GetAllergy() *Allergy {
@@ -6437,7 +7022,7 @@ type ListAllergiesRequest struct {
 
 func (x *ListAllergiesRequest) Reset() {
 	*x = ListAllergiesRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[61]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6449,7 +7034,7 @@ func (x *ListAllergiesRequest) String() string {
 func (*ListAllergiesRequest) ProtoMessage() {}
 
 func (x *ListAllergiesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[61]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6462,7 +7047,7 @@ func (x *ListAllergiesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAllergiesRequest.ProtoReflect.Descriptor instead.
 func (*ListAllergiesRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{61}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *ListAllergiesRequest) GetPatientId() string {
@@ -6495,7 +7080,7 @@ type ListAllergiesResponse struct {
 
 func (x *ListAllergiesResponse) Reset() {
 	*x = ListAllergiesResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[62]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6507,7 +7092,7 @@ func (x *ListAllergiesResponse) String() string {
 func (*ListAllergiesResponse) ProtoMessage() {}
 
 func (x *ListAllergiesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[62]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6520,7 +7105,7 @@ func (x *ListAllergiesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAllergiesResponse.ProtoReflect.Descriptor instead.
 func (*ListAllergiesResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{62}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *ListAllergiesResponse) GetAllergies() []*Allergy {
@@ -6562,7 +7147,7 @@ type RecordObservationRequest struct {
 
 func (x *RecordObservationRequest) Reset() {
 	*x = RecordObservationRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[63]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6574,7 +7159,7 @@ func (x *RecordObservationRequest) String() string {
 func (*RecordObservationRequest) ProtoMessage() {}
 
 func (x *RecordObservationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[63]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6587,7 +7172,7 @@ func (x *RecordObservationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordObservationRequest.ProtoReflect.Descriptor instead.
 func (*RecordObservationRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{63}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *RecordObservationRequest) GetPatientId() string {
@@ -6746,7 +7331,7 @@ type RecordObservationResponse struct {
 
 func (x *RecordObservationResponse) Reset() {
 	*x = RecordObservationResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[64]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6758,7 +7343,7 @@ func (x *RecordObservationResponse) String() string {
 func (*RecordObservationResponse) ProtoMessage() {}
 
 func (x *RecordObservationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[64]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6771,7 +7356,7 @@ func (x *RecordObservationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordObservationResponse.ProtoReflect.Descriptor instead.
 func (*RecordObservationResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{64}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *RecordObservationResponse) GetObservation() *Observation {
@@ -6794,7 +7379,7 @@ type ListObservationsRequest struct {
 
 func (x *ListObservationsRequest) Reset() {
 	*x = ListObservationsRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[65]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6806,7 +7391,7 @@ func (x *ListObservationsRequest) String() string {
 func (*ListObservationsRequest) ProtoMessage() {}
 
 func (x *ListObservationsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[65]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6819,7 +7404,7 @@ func (x *ListObservationsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListObservationsRequest.ProtoReflect.Descriptor instead.
 func (*ListObservationsRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{65}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *ListObservationsRequest) GetPatientId() string {
@@ -6859,7 +7444,7 @@ type ListObservationsResponse struct {
 
 func (x *ListObservationsResponse) Reset() {
 	*x = ListObservationsResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[66]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6871,7 +7456,7 @@ func (x *ListObservationsResponse) String() string {
 func (*ListObservationsResponse) ProtoMessage() {}
 
 func (x *ListObservationsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[66]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6884,7 +7469,7 @@ func (x *ListObservationsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListObservationsResponse.ProtoReflect.Descriptor instead.
 func (*ListObservationsResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{66}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *ListObservationsResponse) GetObservations() []*Observation {
@@ -6907,7 +7492,7 @@ type CriticalResult struct {
 
 func (x *CriticalResult) Reset() {
 	*x = CriticalResult{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[67]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6919,7 +7504,7 @@ func (x *CriticalResult) String() string {
 func (*CriticalResult) ProtoMessage() {}
 
 func (x *CriticalResult) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[67]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6932,7 +7517,7 @@ func (x *CriticalResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CriticalResult.ProtoReflect.Descriptor instead.
 func (*CriticalResult) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{67}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{74}
 }
 
 func (x *CriticalResult) GetObservation() *Observation {
@@ -6958,7 +7543,7 @@ type ListCriticalResultsRequest struct {
 
 func (x *ListCriticalResultsRequest) Reset() {
 	*x = ListCriticalResultsRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[68]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6970,7 +7555,7 @@ func (x *ListCriticalResultsRequest) String() string {
 func (*ListCriticalResultsRequest) ProtoMessage() {}
 
 func (x *ListCriticalResultsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[68]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6983,7 +7568,7 @@ func (x *ListCriticalResultsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCriticalResultsRequest.ProtoReflect.Descriptor instead.
 func (*ListCriticalResultsRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{68}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *ListCriticalResultsRequest) GetPageSize() int32 {
@@ -7002,7 +7587,7 @@ type ListCriticalResultsResponse struct {
 
 func (x *ListCriticalResultsResponse) Reset() {
 	*x = ListCriticalResultsResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[69]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7014,7 +7599,7 @@ func (x *ListCriticalResultsResponse) String() string {
 func (*ListCriticalResultsResponse) ProtoMessage() {}
 
 func (x *ListCriticalResultsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[69]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7027,7 +7612,7 @@ func (x *ListCriticalResultsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCriticalResultsResponse.ProtoReflect.Descriptor instead.
 func (*ListCriticalResultsResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{69}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *ListCriticalResultsResponse) GetResults() []*CriticalResult {
@@ -7048,7 +7633,7 @@ type AcknowledgeCriticalResultRequest struct {
 
 func (x *AcknowledgeCriticalResultRequest) Reset() {
 	*x = AcknowledgeCriticalResultRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[70]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7060,7 +7645,7 @@ func (x *AcknowledgeCriticalResultRequest) String() string {
 func (*AcknowledgeCriticalResultRequest) ProtoMessage() {}
 
 func (x *AcknowledgeCriticalResultRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[70]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7073,7 +7658,7 @@ func (x *AcknowledgeCriticalResultRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AcknowledgeCriticalResultRequest.ProtoReflect.Descriptor instead.
 func (*AcknowledgeCriticalResultRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{70}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{77}
 }
 
 func (x *AcknowledgeCriticalResultRequest) GetObservationId() string {
@@ -7099,7 +7684,7 @@ type AcknowledgeCriticalResultResponse struct {
 
 func (x *AcknowledgeCriticalResultResponse) Reset() {
 	*x = AcknowledgeCriticalResultResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[71]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7111,7 +7696,7 @@ func (x *AcknowledgeCriticalResultResponse) String() string {
 func (*AcknowledgeCriticalResultResponse) ProtoMessage() {}
 
 func (x *AcknowledgeCriticalResultResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[71]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7124,7 +7709,7 @@ func (x *AcknowledgeCriticalResultResponse) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use AcknowledgeCriticalResultResponse.ProtoReflect.Descriptor instead.
 func (*AcknowledgeCriticalResultResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{71}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{78}
 }
 
 func (x *AcknowledgeCriticalResultResponse) GetAcknowledgement() *CriticalAcknowledgement {
@@ -7162,7 +7747,7 @@ type RecordProcedureRequest struct {
 
 func (x *RecordProcedureRequest) Reset() {
 	*x = RecordProcedureRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[72]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7174,7 +7759,7 @@ func (x *RecordProcedureRequest) String() string {
 func (*RecordProcedureRequest) ProtoMessage() {}
 
 func (x *RecordProcedureRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[72]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7187,7 +7772,7 @@ func (x *RecordProcedureRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordProcedureRequest.ProtoReflect.Descriptor instead.
 func (*RecordProcedureRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{72}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{79}
 }
 
 func (x *RecordProcedureRequest) GetPatientId() string {
@@ -7325,7 +7910,7 @@ type RecordProcedureResponse struct {
 
 func (x *RecordProcedureResponse) Reset() {
 	*x = RecordProcedureResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[73]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[80]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7337,7 +7922,7 @@ func (x *RecordProcedureResponse) String() string {
 func (*RecordProcedureResponse) ProtoMessage() {}
 
 func (x *RecordProcedureResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[73]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[80]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7350,7 +7935,7 @@ func (x *RecordProcedureResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordProcedureResponse.ProtoReflect.Descriptor instead.
 func (*RecordProcedureResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{73}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{80}
 }
 
 func (x *RecordProcedureResponse) GetProcedure() *Procedure {
@@ -7371,7 +7956,7 @@ type ListProceduresRequest struct {
 
 func (x *ListProceduresRequest) Reset() {
 	*x = ListProceduresRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[74]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[81]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7383,7 +7968,7 @@ func (x *ListProceduresRequest) String() string {
 func (*ListProceduresRequest) ProtoMessage() {}
 
 func (x *ListProceduresRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[74]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[81]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7396,7 +7981,7 @@ func (x *ListProceduresRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListProceduresRequest.ProtoReflect.Descriptor instead.
 func (*ListProceduresRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{74}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{81}
 }
 
 func (x *ListProceduresRequest) GetPatientId() string {
@@ -7429,7 +8014,7 @@ type ListProceduresResponse struct {
 
 func (x *ListProceduresResponse) Reset() {
 	*x = ListProceduresResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[75]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[82]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7441,7 +8026,7 @@ func (x *ListProceduresResponse) String() string {
 func (*ListProceduresResponse) ProtoMessage() {}
 
 func (x *ListProceduresResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[75]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[82]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7454,7 +8039,7 @@ func (x *ListProceduresResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListProceduresResponse.ProtoReflect.Descriptor instead.
 func (*ListProceduresResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{75}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{82}
 }
 
 func (x *ListProceduresResponse) GetProcedures() []*Procedure {
@@ -7481,7 +8066,7 @@ type CreateCarePlanRequest struct {
 
 func (x *CreateCarePlanRequest) Reset() {
 	*x = CreateCarePlanRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[76]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[83]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7493,7 +8078,7 @@ func (x *CreateCarePlanRequest) String() string {
 func (*CreateCarePlanRequest) ProtoMessage() {}
 
 func (x *CreateCarePlanRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[76]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[83]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7506,7 +8091,7 @@ func (x *CreateCarePlanRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateCarePlanRequest.ProtoReflect.Descriptor instead.
 func (*CreateCarePlanRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{76}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{83}
 }
 
 func (x *CreateCarePlanRequest) GetPatientId() string {
@@ -7581,7 +8166,7 @@ type CreateCarePlanResponse struct {
 
 func (x *CreateCarePlanResponse) Reset() {
 	*x = CreateCarePlanResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[77]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[84]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7593,7 +8178,7 @@ func (x *CreateCarePlanResponse) String() string {
 func (*CreateCarePlanResponse) ProtoMessage() {}
 
 func (x *CreateCarePlanResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[77]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[84]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7606,7 +8191,7 @@ func (x *CreateCarePlanResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateCarePlanResponse.ProtoReflect.Descriptor instead.
 func (*CreateCarePlanResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{77}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{84}
 }
 
 func (x *CreateCarePlanResponse) GetCarePlan() *CarePlan {
@@ -7629,7 +8214,7 @@ type UpdateCarePlanRequest struct {
 
 func (x *UpdateCarePlanRequest) Reset() {
 	*x = UpdateCarePlanRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[78]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[85]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7641,7 +8226,7 @@ func (x *UpdateCarePlanRequest) String() string {
 func (*UpdateCarePlanRequest) ProtoMessage() {}
 
 func (x *UpdateCarePlanRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[78]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[85]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7654,7 +8239,7 @@ func (x *UpdateCarePlanRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateCarePlanRequest.ProtoReflect.Descriptor instead.
 func (*UpdateCarePlanRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{78}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{85}
 }
 
 func (x *UpdateCarePlanRequest) GetCarePlanId() string {
@@ -7701,7 +8286,7 @@ type UpdateCarePlanResponse struct {
 
 func (x *UpdateCarePlanResponse) Reset() {
 	*x = UpdateCarePlanResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[79]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[86]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7713,7 +8298,7 @@ func (x *UpdateCarePlanResponse) String() string {
 func (*UpdateCarePlanResponse) ProtoMessage() {}
 
 func (x *UpdateCarePlanResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[79]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[86]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7726,7 +8311,7 @@ func (x *UpdateCarePlanResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateCarePlanResponse.ProtoReflect.Descriptor instead.
 func (*UpdateCarePlanResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{79}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{86}
 }
 
 func (x *UpdateCarePlanResponse) GetCarePlan() *CarePlan {
@@ -7747,7 +8332,7 @@ type ListCarePlansRequest struct {
 
 func (x *ListCarePlansRequest) Reset() {
 	*x = ListCarePlansRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[80]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[87]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7759,7 +8344,7 @@ func (x *ListCarePlansRequest) String() string {
 func (*ListCarePlansRequest) ProtoMessage() {}
 
 func (x *ListCarePlansRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[80]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[87]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7772,7 +8357,7 @@ func (x *ListCarePlansRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCarePlansRequest.ProtoReflect.Descriptor instead.
 func (*ListCarePlansRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{80}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{87}
 }
 
 func (x *ListCarePlansRequest) GetPatientId() string {
@@ -7805,7 +8390,7 @@ type ListCarePlansResponse struct {
 
 func (x *ListCarePlansResponse) Reset() {
 	*x = ListCarePlansResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[81]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[88]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7817,7 +8402,7 @@ func (x *ListCarePlansResponse) String() string {
 func (*ListCarePlansResponse) ProtoMessage() {}
 
 func (x *ListCarePlansResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[81]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[88]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7830,7 +8415,7 @@ func (x *ListCarePlansResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCarePlansResponse.ProtoReflect.Descriptor instead.
 func (*ListCarePlansResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{81}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{88}
 }
 
 func (x *ListCarePlansResponse) GetCarePlans() []*CarePlan {
@@ -7852,7 +8437,7 @@ type GetBannerRequest struct {
 
 func (x *GetBannerRequest) Reset() {
 	*x = GetBannerRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[82]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[89]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7864,7 +8449,7 @@ func (x *GetBannerRequest) String() string {
 func (*GetBannerRequest) ProtoMessage() {}
 
 func (x *GetBannerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[82]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[89]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7877,7 +8462,7 @@ func (x *GetBannerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetBannerRequest.ProtoReflect.Descriptor instead.
 func (*GetBannerRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{82}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{89}
 }
 
 func (x *GetBannerRequest) GetPatientId() string {
@@ -7903,7 +8488,7 @@ type GetBannerResponse struct {
 
 func (x *GetBannerResponse) Reset() {
 	*x = GetBannerResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[83]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[90]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7915,7 +8500,7 @@ func (x *GetBannerResponse) String() string {
 func (*GetBannerResponse) ProtoMessage() {}
 
 func (x *GetBannerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[83]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[90]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7928,7 +8513,7 @@ func (x *GetBannerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetBannerResponse.ProtoReflect.Descriptor instead.
 func (*GetBannerResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{83}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{90}
 }
 
 func (x *GetBannerResponse) GetBanner() *Banner {
@@ -7958,7 +8543,7 @@ type RecordConsentRequest struct {
 
 func (x *RecordConsentRequest) Reset() {
 	*x = RecordConsentRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[84]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[91]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7970,7 +8555,7 @@ func (x *RecordConsentRequest) String() string {
 func (*RecordConsentRequest) ProtoMessage() {}
 
 func (x *RecordConsentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[84]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[91]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7983,7 +8568,7 @@ func (x *RecordConsentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordConsentRequest.ProtoReflect.Descriptor instead.
 func (*RecordConsentRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{84}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{91}
 }
 
 func (x *RecordConsentRequest) GetPatientId() string {
@@ -8079,7 +8664,7 @@ type RecordConsentResponse struct {
 
 func (x *RecordConsentResponse) Reset() {
 	*x = RecordConsentResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[85]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[92]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8091,7 +8676,7 @@ func (x *RecordConsentResponse) String() string {
 func (*RecordConsentResponse) ProtoMessage() {}
 
 func (x *RecordConsentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[85]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[92]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8104,7 +8689,7 @@ func (x *RecordConsentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordConsentResponse.ProtoReflect.Descriptor instead.
 func (*RecordConsentResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{85}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{92}
 }
 
 func (x *RecordConsentResponse) GetConsent() *ClinicalConsent {
@@ -8123,7 +8708,7 @@ type WithdrawConsentRequest struct {
 
 func (x *WithdrawConsentRequest) Reset() {
 	*x = WithdrawConsentRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[86]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[93]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8135,7 +8720,7 @@ func (x *WithdrawConsentRequest) String() string {
 func (*WithdrawConsentRequest) ProtoMessage() {}
 
 func (x *WithdrawConsentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[86]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[93]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8148,7 +8733,7 @@ func (x *WithdrawConsentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WithdrawConsentRequest.ProtoReflect.Descriptor instead.
 func (*WithdrawConsentRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{86}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{93}
 }
 
 func (x *WithdrawConsentRequest) GetConsentId() string {
@@ -8166,7 +8751,7 @@ type WithdrawConsentResponse struct {
 
 func (x *WithdrawConsentResponse) Reset() {
 	*x = WithdrawConsentResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[87]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[94]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8178,7 +8763,7 @@ func (x *WithdrawConsentResponse) String() string {
 func (*WithdrawConsentResponse) ProtoMessage() {}
 
 func (x *WithdrawConsentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[87]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[94]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8191,7 +8776,7 @@ func (x *WithdrawConsentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WithdrawConsentResponse.ProtoReflect.Descriptor instead.
 func (*WithdrawConsentResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{87}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{94}
 }
 
 type ListConsentsRequest struct {
@@ -8205,7 +8790,7 @@ type ListConsentsRequest struct {
 
 func (x *ListConsentsRequest) Reset() {
 	*x = ListConsentsRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[88]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[95]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8217,7 +8802,7 @@ func (x *ListConsentsRequest) String() string {
 func (*ListConsentsRequest) ProtoMessage() {}
 
 func (x *ListConsentsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[88]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[95]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8230,7 +8815,7 @@ func (x *ListConsentsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListConsentsRequest.ProtoReflect.Descriptor instead.
 func (*ListConsentsRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{88}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{95}
 }
 
 func (x *ListConsentsRequest) GetPatientId() string {
@@ -8263,7 +8848,7 @@ type ListConsentsResponse struct {
 
 func (x *ListConsentsResponse) Reset() {
 	*x = ListConsentsResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[89]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[96]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8275,7 +8860,7 @@ func (x *ListConsentsResponse) String() string {
 func (*ListConsentsResponse) ProtoMessage() {}
 
 func (x *ListConsentsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[89]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[96]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8288,7 +8873,7 @@ func (x *ListConsentsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListConsentsResponse.ProtoReflect.Descriptor instead.
 func (*ListConsentsResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{89}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{96}
 }
 
 func (x *ListConsentsResponse) GetConsents() []*ClinicalConsent {
@@ -8351,7 +8936,7 @@ type AttachFileRequest struct {
 
 func (x *AttachFileRequest) Reset() {
 	*x = AttachFileRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[90]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[97]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8363,7 +8948,7 @@ func (x *AttachFileRequest) String() string {
 func (*AttachFileRequest) ProtoMessage() {}
 
 func (x *AttachFileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[90]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[97]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8376,7 +8961,7 @@ func (x *AttachFileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AttachFileRequest.ProtoReflect.Descriptor instead.
 func (*AttachFileRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{90}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{97}
 }
 
 func (x *AttachFileRequest) GetParentType() string {
@@ -8489,7 +9074,7 @@ type AttachFileResponse struct {
 
 func (x *AttachFileResponse) Reset() {
 	*x = AttachFileResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[91]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[98]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8501,7 +9086,7 @@ func (x *AttachFileResponse) String() string {
 func (*AttachFileResponse) ProtoMessage() {}
 
 func (x *AttachFileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[91]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[98]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8514,7 +9099,7 @@ func (x *AttachFileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AttachFileResponse.ProtoReflect.Descriptor instead.
 func (*AttachFileResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{91}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{98}
 }
 
 func (x *AttachFileResponse) GetAttachment() *Attachment {
@@ -8535,7 +9120,7 @@ type ListAttachmentsRequest struct {
 
 func (x *ListAttachmentsRequest) Reset() {
 	*x = ListAttachmentsRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[92]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[99]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8547,7 +9132,7 @@ func (x *ListAttachmentsRequest) String() string {
 func (*ListAttachmentsRequest) ProtoMessage() {}
 
 func (x *ListAttachmentsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[92]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[99]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8560,7 +9145,7 @@ func (x *ListAttachmentsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAttachmentsRequest.ProtoReflect.Descriptor instead.
 func (*ListAttachmentsRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{92}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{99}
 }
 
 func (x *ListAttachmentsRequest) GetParentType() string {
@@ -8593,7 +9178,7 @@ type ListAttachmentsResponse struct {
 
 func (x *ListAttachmentsResponse) Reset() {
 	*x = ListAttachmentsResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[93]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[100]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8605,7 +9190,7 @@ func (x *ListAttachmentsResponse) String() string {
 func (*ListAttachmentsResponse) ProtoMessage() {}
 
 func (x *ListAttachmentsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[93]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[100]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8618,7 +9203,7 @@ func (x *ListAttachmentsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAttachmentsResponse.ProtoReflect.Descriptor instead.
 func (*ListAttachmentsResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{93}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{100}
 }
 
 func (x *ListAttachmentsResponse) GetAttachments() []*Attachment {
@@ -8638,7 +9223,7 @@ type GetProvenanceRequest struct {
 
 func (x *GetProvenanceRequest) Reset() {
 	*x = GetProvenanceRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[94]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[101]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8650,7 +9235,7 @@ func (x *GetProvenanceRequest) String() string {
 func (*GetProvenanceRequest) ProtoMessage() {}
 
 func (x *GetProvenanceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[94]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[101]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8663,7 +9248,7 @@ func (x *GetProvenanceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProvenanceRequest.ProtoReflect.Descriptor instead.
 func (*GetProvenanceRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{94}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{101}
 }
 
 func (x *GetProvenanceRequest) GetRecordType() string {
@@ -8689,7 +9274,7 @@ type GetProvenanceResponse struct {
 
 func (x *GetProvenanceResponse) Reset() {
 	*x = GetProvenanceResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[95]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[102]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8701,7 +9286,7 @@ func (x *GetProvenanceResponse) String() string {
 func (*GetProvenanceResponse) ProtoMessage() {}
 
 func (x *GetProvenanceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[95]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[102]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8714,7 +9299,7 @@ func (x *GetProvenanceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProvenanceResponse.ProtoReflect.Descriptor instead.
 func (*GetProvenanceResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{95}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{102}
 }
 
 func (x *GetProvenanceResponse) GetProvenance() []*Provenance {
@@ -8743,7 +9328,7 @@ type StoreCalculationRequest struct {
 
 func (x *StoreCalculationRequest) Reset() {
 	*x = StoreCalculationRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[96]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[103]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8755,7 +9340,7 @@ func (x *StoreCalculationRequest) String() string {
 func (*StoreCalculationRequest) ProtoMessage() {}
 
 func (x *StoreCalculationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[96]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[103]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8768,7 +9353,7 @@ func (x *StoreCalculationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StoreCalculationRequest.ProtoReflect.Descriptor instead.
 func (*StoreCalculationRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{96}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{103}
 }
 
 func (x *StoreCalculationRequest) GetPatientId() string {
@@ -8850,7 +9435,7 @@ type StoreCalculationResponse struct {
 
 func (x *StoreCalculationResponse) Reset() {
 	*x = StoreCalculationResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[97]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[104]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8862,7 +9447,7 @@ func (x *StoreCalculationResponse) String() string {
 func (*StoreCalculationResponse) ProtoMessage() {}
 
 func (x *StoreCalculationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[97]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[104]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8875,7 +9460,7 @@ func (x *StoreCalculationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StoreCalculationResponse.ProtoReflect.Descriptor instead.
 func (*StoreCalculationResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{97}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{104}
 }
 
 func (x *StoreCalculationResponse) GetResult() *CalculatorResult {
@@ -8896,7 +9481,7 @@ type ListCalculationsRequest struct {
 
 func (x *ListCalculationsRequest) Reset() {
 	*x = ListCalculationsRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[98]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[105]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8908,7 +9493,7 @@ func (x *ListCalculationsRequest) String() string {
 func (*ListCalculationsRequest) ProtoMessage() {}
 
 func (x *ListCalculationsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[98]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[105]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8921,7 +9506,7 @@ func (x *ListCalculationsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCalculationsRequest.ProtoReflect.Descriptor instead.
 func (*ListCalculationsRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{98}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{105}
 }
 
 func (x *ListCalculationsRequest) GetPatientId() string {
@@ -8956,7 +9541,7 @@ type ListCalculationsResponse struct {
 
 func (x *ListCalculationsResponse) Reset() {
 	*x = ListCalculationsResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[99]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[106]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8968,7 +9553,7 @@ func (x *ListCalculationsResponse) String() string {
 func (*ListCalculationsResponse) ProtoMessage() {}
 
 func (x *ListCalculationsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[99]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[106]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8981,7 +9566,7 @@ func (x *ListCalculationsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCalculationsResponse.ProtoReflect.Descriptor instead.
 func (*ListCalculationsResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{99}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{106}
 }
 
 func (x *ListCalculationsResponse) GetResults() []*CalculatorResult {
@@ -9007,7 +9592,7 @@ type RaiseAlertRequest struct {
 
 func (x *RaiseAlertRequest) Reset() {
 	*x = RaiseAlertRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[100]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[107]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9019,7 +9604,7 @@ func (x *RaiseAlertRequest) String() string {
 func (*RaiseAlertRequest) ProtoMessage() {}
 
 func (x *RaiseAlertRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[100]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[107]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9032,7 +9617,7 @@ func (x *RaiseAlertRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RaiseAlertRequest.ProtoReflect.Descriptor instead.
 func (*RaiseAlertRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{100}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{107}
 }
 
 func (x *RaiseAlertRequest) GetPatientId() string {
@@ -9100,7 +9685,7 @@ type RaiseAlertResponse struct {
 
 func (x *RaiseAlertResponse) Reset() {
 	*x = RaiseAlertResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[101]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[108]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9112,7 +9697,7 @@ func (x *RaiseAlertResponse) String() string {
 func (*RaiseAlertResponse) ProtoMessage() {}
 
 func (x *RaiseAlertResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[101]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[108]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9125,7 +9710,7 @@ func (x *RaiseAlertResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RaiseAlertResponse.ProtoReflect.Descriptor instead.
 func (*RaiseAlertResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{101}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{108}
 }
 
 func (x *RaiseAlertResponse) GetAlert() *CDSAlert {
@@ -9147,7 +9732,7 @@ type RespondToAlertRequest struct {
 
 func (x *RespondToAlertRequest) Reset() {
 	*x = RespondToAlertRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[102]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[109]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9159,7 +9744,7 @@ func (x *RespondToAlertRequest) String() string {
 func (*RespondToAlertRequest) ProtoMessage() {}
 
 func (x *RespondToAlertRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[102]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[109]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9172,7 +9757,7 @@ func (x *RespondToAlertRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RespondToAlertRequest.ProtoReflect.Descriptor instead.
 func (*RespondToAlertRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{102}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{109}
 }
 
 func (x *RespondToAlertRequest) GetAlertId() string {
@@ -9212,7 +9797,7 @@ type RespondToAlertResponse struct {
 
 func (x *RespondToAlertResponse) Reset() {
 	*x = RespondToAlertResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[103]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[110]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9224,7 +9809,7 @@ func (x *RespondToAlertResponse) String() string {
 func (*RespondToAlertResponse) ProtoMessage() {}
 
 func (x *RespondToAlertResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[103]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[110]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9237,7 +9822,7 @@ func (x *RespondToAlertResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RespondToAlertResponse.ProtoReflect.Descriptor instead.
 func (*RespondToAlertResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{103}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{110}
 }
 
 func (x *RespondToAlertResponse) GetAlert() *CDSAlert {
@@ -9261,7 +9846,7 @@ type ListAlertsRequest struct {
 
 func (x *ListAlertsRequest) Reset() {
 	*x = ListAlertsRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[104]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[111]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9273,7 +9858,7 @@ func (x *ListAlertsRequest) String() string {
 func (*ListAlertsRequest) ProtoMessage() {}
 
 func (x *ListAlertsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[104]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[111]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9286,7 +9871,7 @@ func (x *ListAlertsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAlertsRequest.ProtoReflect.Descriptor instead.
 func (*ListAlertsRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{104}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{111}
 }
 
 func (x *ListAlertsRequest) GetPatientId() string {
@@ -9326,7 +9911,7 @@ type ListAlertsResponse struct {
 
 func (x *ListAlertsResponse) Reset() {
 	*x = ListAlertsResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[105]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[112]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9338,7 +9923,7 @@ func (x *ListAlertsResponse) String() string {
 func (*ListAlertsResponse) ProtoMessage() {}
 
 func (x *ListAlertsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[105]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[112]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9351,7 +9936,7 @@ func (x *ListAlertsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAlertsResponse.ProtoReflect.Descriptor instead.
 func (*ListAlertsResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{105}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{112}
 }
 
 func (x *ListAlertsResponse) GetAlerts() []*CDSAlert {
@@ -9375,7 +9960,7 @@ type RequestConsultRequest struct {
 
 func (x *RequestConsultRequest) Reset() {
 	*x = RequestConsultRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[106]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[113]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9387,7 +9972,7 @@ func (x *RequestConsultRequest) String() string {
 func (*RequestConsultRequest) ProtoMessage() {}
 
 func (x *RequestConsultRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[106]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[113]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9400,7 +9985,7 @@ func (x *RequestConsultRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestConsultRequest.ProtoReflect.Descriptor instead.
 func (*RequestConsultRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{106}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{113}
 }
 
 func (x *RequestConsultRequest) GetPatientId() string {
@@ -9454,7 +10039,7 @@ type RequestConsultResponse struct {
 
 func (x *RequestConsultResponse) Reset() {
 	*x = RequestConsultResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[107]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[114]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9466,7 +10051,7 @@ func (x *RequestConsultResponse) String() string {
 func (*RequestConsultResponse) ProtoMessage() {}
 
 func (x *RequestConsultResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[107]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[114]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9479,7 +10064,7 @@ func (x *RequestConsultResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestConsultResponse.ProtoReflect.Descriptor instead.
 func (*RequestConsultResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{107}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{114}
 }
 
 func (x *RequestConsultResponse) GetConsult() *Consult {
@@ -9503,7 +10088,7 @@ type RespondToConsultRequest struct {
 
 func (x *RespondToConsultRequest) Reset() {
 	*x = RespondToConsultRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[108]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[115]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9515,7 +10100,7 @@ func (x *RespondToConsultRequest) String() string {
 func (*RespondToConsultRequest) ProtoMessage() {}
 
 func (x *RespondToConsultRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[108]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[115]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9528,7 +10113,7 @@ func (x *RespondToConsultRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RespondToConsultRequest.ProtoReflect.Descriptor instead.
 func (*RespondToConsultRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{108}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{115}
 }
 
 func (x *RespondToConsultRequest) GetConsultId() string {
@@ -9575,7 +10160,7 @@ type RespondToConsultResponse struct {
 
 func (x *RespondToConsultResponse) Reset() {
 	*x = RespondToConsultResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[109]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[116]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9587,7 +10172,7 @@ func (x *RespondToConsultResponse) String() string {
 func (*RespondToConsultResponse) ProtoMessage() {}
 
 func (x *RespondToConsultResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[109]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[116]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9600,7 +10185,7 @@ func (x *RespondToConsultResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RespondToConsultResponse.ProtoReflect.Descriptor instead.
 func (*RespondToConsultResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{109}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{116}
 }
 
 func (x *RespondToConsultResponse) GetConsult() *Consult {
@@ -9622,7 +10207,7 @@ type ListConsultsRequest struct {
 
 func (x *ListConsultsRequest) Reset() {
 	*x = ListConsultsRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[110]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[117]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9634,7 +10219,7 @@ func (x *ListConsultsRequest) String() string {
 func (*ListConsultsRequest) ProtoMessage() {}
 
 func (x *ListConsultsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[110]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[117]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9647,7 +10232,7 @@ func (x *ListConsultsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListConsultsRequest.ProtoReflect.Descriptor instead.
 func (*ListConsultsRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{110}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{117}
 }
 
 func (x *ListConsultsRequest) GetPatientId() string {
@@ -9687,7 +10272,7 @@ type ListConsultsResponse struct {
 
 func (x *ListConsultsResponse) Reset() {
 	*x = ListConsultsResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[111]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[118]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9699,7 +10284,7 @@ func (x *ListConsultsResponse) String() string {
 func (*ListConsultsResponse) ProtoMessage() {}
 
 func (x *ListConsultsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[111]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[118]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9712,7 +10297,7 @@ func (x *ListConsultsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListConsultsResponse.ProtoReflect.Descriptor instead.
 func (*ListConsultsResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{111}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{118}
 }
 
 func (x *ListConsultsResponse) GetConsults() []*Consult {
@@ -9736,7 +10321,7 @@ type EnrolInRegistryRequest struct {
 
 func (x *EnrolInRegistryRequest) Reset() {
 	*x = EnrolInRegistryRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[112]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[119]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9748,7 +10333,7 @@ func (x *EnrolInRegistryRequest) String() string {
 func (*EnrolInRegistryRequest) ProtoMessage() {}
 
 func (x *EnrolInRegistryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[112]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[119]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9761,7 +10346,7 @@ func (x *EnrolInRegistryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnrolInRegistryRequest.ProtoReflect.Descriptor instead.
 func (*EnrolInRegistryRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{112}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{119}
 }
 
 func (x *EnrolInRegistryRequest) GetPatientId() string {
@@ -9815,7 +10400,7 @@ type EnrolInRegistryResponse struct {
 
 func (x *EnrolInRegistryResponse) Reset() {
 	*x = EnrolInRegistryResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[113]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[120]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9827,7 +10412,7 @@ func (x *EnrolInRegistryResponse) String() string {
 func (*EnrolInRegistryResponse) ProtoMessage() {}
 
 func (x *EnrolInRegistryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[113]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[120]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9840,7 +10425,7 @@ func (x *EnrolInRegistryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnrolInRegistryResponse.ProtoReflect.Descriptor instead.
 func (*EnrolInRegistryResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{113}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{120}
 }
 
 func (x *EnrolInRegistryResponse) GetMembership() *RegistryMembership {
@@ -9861,7 +10446,7 @@ type ExitRegistryRequest struct {
 
 func (x *ExitRegistryRequest) Reset() {
 	*x = ExitRegistryRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[114]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[121]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9873,7 +10458,7 @@ func (x *ExitRegistryRequest) String() string {
 func (*ExitRegistryRequest) ProtoMessage() {}
 
 func (x *ExitRegistryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[114]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[121]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9886,7 +10471,7 @@ func (x *ExitRegistryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExitRegistryRequest.ProtoReflect.Descriptor instead.
 func (*ExitRegistryRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{114}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{121}
 }
 
 func (x *ExitRegistryRequest) GetMembershipId() string {
@@ -9918,7 +10503,7 @@ type ExitRegistryResponse struct {
 
 func (x *ExitRegistryResponse) Reset() {
 	*x = ExitRegistryResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[115]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[122]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9930,7 +10515,7 @@ func (x *ExitRegistryResponse) String() string {
 func (*ExitRegistryResponse) ProtoMessage() {}
 
 func (x *ExitRegistryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[115]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[122]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9943,7 +10528,7 @@ func (x *ExitRegistryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExitRegistryResponse.ProtoReflect.Descriptor instead.
 func (*ExitRegistryResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{115}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{122}
 }
 
 type ListRegistryMembershipsRequest struct {
@@ -9958,7 +10543,7 @@ type ListRegistryMembershipsRequest struct {
 
 func (x *ListRegistryMembershipsRequest) Reset() {
 	*x = ListRegistryMembershipsRequest{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[116]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[123]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9970,7 +10555,7 @@ func (x *ListRegistryMembershipsRequest) String() string {
 func (*ListRegistryMembershipsRequest) ProtoMessage() {}
 
 func (x *ListRegistryMembershipsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[116]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[123]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9983,7 +10568,7 @@ func (x *ListRegistryMembershipsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRegistryMembershipsRequest.ProtoReflect.Descriptor instead.
 func (*ListRegistryMembershipsRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{116}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{123}
 }
 
 func (x *ListRegistryMembershipsRequest) GetPatientId() string {
@@ -10023,7 +10608,7 @@ type ListRegistryMembershipsResponse struct {
 
 func (x *ListRegistryMembershipsResponse) Reset() {
 	*x = ListRegistryMembershipsResponse{}
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[117]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[124]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10035,7 +10620,7 @@ func (x *ListRegistryMembershipsResponse) String() string {
 func (*ListRegistryMembershipsResponse) ProtoMessage() {}
 
 func (x *ListRegistryMembershipsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[117]
+	mi := &file_healthcare_clinical_v1_clinical_proto_msgTypes[124]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10048,7 +10633,7 @@ func (x *ListRegistryMembershipsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRegistryMembershipsResponse.ProtoReflect.Descriptor instead.
 func (*ListRegistryMembershipsResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{117}
+	return file_healthcare_clinical_v1_clinical_proto_rawDescGZIP(), []int{124}
 }
 
 func (x *ListRegistryMembershipsResponse) GetMemberships() []*RegistryMembership {
@@ -10169,7 +10754,8 @@ const file_healthcare_clinical_v1_clinical_proto_rawDesc = "" +
 	"\aversion\x18\r \x01(\x03R\aversion\"4\n" +
 	"\bQuantity\x12\x14\n" +
 	"\x05value\x18\x01 \x01(\x01R\x05value\x12\x12\n" +
-	"\x04unit\x18\x02 \x01(\tR\x04unit\"\x99\b\n" +
+	"\x04unit\x18\x02 \x01(\tR\x04unit\"\xee\n" +
+	"\n" +
 	"\vObservation\x12%\n" +
 	"\x0eobservation_id\x18\x01 \x01(\tR\robservationId\x12\x1d\n" +
 	"\n" +
@@ -10199,7 +10785,44 @@ const file_healthcare_clinical_v1_clinical_proto_rawDesc = "" +
 	"\vrecorded_by\x18\x16 \x01(\tR\n" +
 	"recordedBy\x12;\n" +
 	"\vrecorded_at\x18\x17 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"recordedAt\"\xf6\x02\n" +
+	"recordedAt\x12A\n" +
+	"\x06source\x18\x18 \x01(\x0e2).healthcare.clinical.v1.ObservationSourceR\x06source\x12G\n" +
+	"\n" +
+	"validation\x18\x19 \x01(\x0e2'.healthcare.clinical.v1.ValidationStateR\n" +
+	"validation\x12<\n" +
+	"\x06device\x18\x1a \x01(\v2$.healthcare.clinical.v1.DeviceSourceR\x06device\x12!\n" +
+	"\fvalidated_by\x18\x1b \x01(\tR\vvalidatedBy\x12=\n" +
+	"\fvalidated_at\x18\x1c \x01(\v2\x1a.google.protobuf.TimestampR\vvalidatedAt\x12'\n" +
+	"\x0fvalidation_note\x18\x1d \x01(\tR\x0evalidationNote\"\xd9\x01\n" +
+	"\fDeviceSource\x12\x1b\n" +
+	"\tdevice_id\x18\x01 \x01(\tR\bdeviceId\x12\x18\n" +
+	"\achannel\x18\x02 \x01(\tR\achannel\x12\x18\n" +
+	"\aquality\x18\x03 \x01(\tR\aquality\x12;\n" +
+	"\vobserved_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"observedAt\x12;\n" +
+	"\vreceived_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"receivedAt\"\x88\x02\n" +
+	"\x1aIngestDeviceReadingRequest\x12\x1d\n" +
+	"\n" +
+	"patient_id\x18\x01 \x01(\tR\tpatientId\x12!\n" +
+	"\fencounter_id\x18\x02 \x01(\tR\vencounterId\x122\n" +
+	"\x04code\x18\x03 \x01(\v2\x1e.healthcare.clinical.v1.CodingR\x04code\x126\n" +
+	"\x05value\x18\x04 \x01(\v2 .healthcare.clinical.v1.QuantityR\x05value\x12<\n" +
+	"\x06device\x18\x05 \x01(\v2$.healthcare.clinical.v1.DeviceSourceR\x06device\"d\n" +
+	"\x1bIngestDeviceReadingResponse\x12E\n" +
+	"\vobservation\x18\x01 \x01(\v2#.healthcare.clinical.v1.ObservationR\vobservation\"m\n" +
+	"\x14DecideReadingRequest\x12%\n" +
+	"\x0eobservation_id\x18\x01 \x01(\tR\robservationId\x12\x16\n" +
+	"\x06accept\x18\x02 \x01(\bR\x06accept\x12\x16\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\"^\n" +
+	"\x15DecideReadingResponse\x12E\n" +
+	"\vobservation\x18\x01 \x01(\v2#.healthcare.clinical.v1.ObservationR\vobservation\"\\\n" +
+	"\x1eListProvisionalReadingsRequest\x12\x1d\n" +
+	"\n" +
+	"patient_id\x18\x01 \x01(\tR\tpatientId\x12\x1b\n" +
+	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\"j\n" +
+	"\x1fListProvisionalReadingsResponse\x12G\n" +
+	"\fobservations\x18\x01 \x03(\v2#.healthcare.clinical.v1.ObservationR\fobservations\"\xf6\x02\n" +
 	"\x17CriticalAcknowledgement\x12-\n" +
 	"\x12acknowledgement_id\x18\x01 \x01(\tR\x11acknowledgementId\x12%\n" +
 	"\x0eobservation_id\x18\x02 \x01(\tR\robservationId\x12\x1d\n" +
@@ -11047,7 +11670,18 @@ const file_healthcare_clinical_v1_clinical_proto_rawDesc = "" +
 	"\x17CONSULT_STATUS_ACCEPTED\x10\x02\x12\x1b\n" +
 	"\x17CONSULT_STATUS_ANSWERED\x10\x03\x12\x1b\n" +
 	"\x17CONSULT_STATUS_DECLINED\x10\x04\x12\x1c\n" +
-	"\x18CONSULT_STATUS_CANCELLED\x10\x052\xc3&\n" +
+	"\x18CONSULT_STATUS_CANCELLED\x10\x05*\x96\x01\n" +
+	"\x11ObservationSource\x12\"\n" +
+	"\x1eOBSERVATION_SOURCE_UNSPECIFIED\x10\x00\x12\x1d\n" +
+	"\x19OBSERVATION_SOURCE_MANUAL\x10\x01\x12\x1d\n" +
+	"\x19OBSERVATION_SOURCE_DEVICE\x10\x02\x12\x1f\n" +
+	"\x1bOBSERVATION_SOURCE_IMPORTED\x10\x03*\xb3\x01\n" +
+	"\x0fValidationState\x12 \n" +
+	"\x1cVALIDATION_STATE_UNSPECIFIED\x10\x00\x12!\n" +
+	"\x1dVALIDATION_STATE_NOT_REQUIRED\x10\x01\x12\x1c\n" +
+	"\x18VALIDATION_STATE_PENDING\x10\x02\x12\x1e\n" +
+	"\x1aVALIDATION_STATE_CONFIRMED\x10\x03\x12\x1d\n" +
+	"\x19VALIDATION_STATE_REJECTED\x10\x042\xbe)\n" +
 	"\x0fClinicalService\x12`\n" +
 	"\tWriteNote\x12(.healthcare.clinical.v1.WriteNoteRequest\x1a).healthcare.clinical.v1.WriteNoteResponse\x12]\n" +
 	"\bSignNote\x12'.healthcare.clinical.v1.SignNoteRequest\x1a(.healthcare.clinical.v1.SignNoteResponse\x12`\n" +
@@ -11066,7 +11700,10 @@ const file_healthcare_clinical_v1_clinical_proto_rawDesc = "" +
 	"\rRecordAllergy\x12,.healthcare.clinical.v1.RecordAllergyRequest\x1a-.healthcare.clinical.v1.RecordAllergyResponse\x12l\n" +
 	"\rVerifyAllergy\x12,.healthcare.clinical.v1.VerifyAllergyRequest\x1a-.healthcare.clinical.v1.VerifyAllergyResponse\x12l\n" +
 	"\rListAllergies\x12,.healthcare.clinical.v1.ListAllergiesRequest\x1a-.healthcare.clinical.v1.ListAllergiesResponse\x12x\n" +
-	"\x11RecordObservation\x120.healthcare.clinical.v1.RecordObservationRequest\x1a1.healthcare.clinical.v1.RecordObservationResponse\x12u\n" +
+	"\x11RecordObservation\x120.healthcare.clinical.v1.RecordObservationRequest\x1a1.healthcare.clinical.v1.RecordObservationResponse\x12~\n" +
+	"\x13IngestDeviceReading\x122.healthcare.clinical.v1.IngestDeviceReadingRequest\x1a3.healthcare.clinical.v1.IngestDeviceReadingResponse\x12l\n" +
+	"\rDecideReading\x12,.healthcare.clinical.v1.DecideReadingRequest\x1a-.healthcare.clinical.v1.DecideReadingResponse\x12\x8a\x01\n" +
+	"\x17ListProvisionalReadings\x126.healthcare.clinical.v1.ListProvisionalReadingsRequest\x1a7.healthcare.clinical.v1.ListProvisionalReadingsResponse\x12u\n" +
 	"\x10ListObservations\x12/.healthcare.clinical.v1.ListObservationsRequest\x1a0.healthcare.clinical.v1.ListObservationsResponse\x12~\n" +
 	"\x13ListCriticalResults\x122.healthcare.clinical.v1.ListCriticalResultsRequest\x1a3.healthcare.clinical.v1.ListCriticalResultsResponse\x12\x90\x01\n" +
 	"\x19AcknowledgeCriticalResult\x128.healthcare.clinical.v1.AcknowledgeCriticalResultRequest\x1a9.healthcare.clinical.v1.AcknowledgeCriticalResultResponse\x12r\n" +
@@ -11109,8 +11746,8 @@ func file_healthcare_clinical_v1_clinical_proto_rawDescGZIP() []byte {
 	return file_healthcare_clinical_v1_clinical_proto_rawDescData
 }
 
-var file_healthcare_clinical_v1_clinical_proto_enumTypes = make([]protoimpl.EnumInfo, 23)
-var file_healthcare_clinical_v1_clinical_proto_msgTypes = make([]protoimpl.MessageInfo, 118)
+var file_healthcare_clinical_v1_clinical_proto_enumTypes = make([]protoimpl.EnumInfo, 25)
+var file_healthcare_clinical_v1_clinical_proto_msgTypes = make([]protoimpl.MessageInfo, 125)
 var file_healthcare_clinical_v1_clinical_proto_goTypes = []any{
 	(Confidentiality)(0),                      // 0: healthcare.clinical.v1.Confidentiality
 	(DocumentStatus)(0),                       // 1: healthcare.clinical.v1.DocumentStatus
@@ -11135,411 +11772,438 @@ var file_healthcare_clinical_v1_clinical_proto_goTypes = []any{
 	(AlertOutcome)(0),                         // 20: healthcare.clinical.v1.AlertOutcome
 	(ConsultUrgency)(0),                       // 21: healthcare.clinical.v1.ConsultUrgency
 	(ConsultStatus)(0),                        // 22: healthcare.clinical.v1.ConsultStatus
-	(*Coding)(nil),                            // 23: healthcare.clinical.v1.Coding
-	(*PatientContext)(nil),                    // 24: healthcare.clinical.v1.PatientContext
-	(*Section)(nil),                           // 25: healthcare.clinical.v1.Section
-	(*Signature)(nil),                         // 26: healthcare.clinical.v1.Signature
-	(*Document)(nil),                          // 27: healthcare.clinical.v1.Document
-	(*Template)(nil),                          // 28: healthcare.clinical.v1.Template
-	(*Problem)(nil),                           // 29: healthcare.clinical.v1.Problem
-	(*Reaction)(nil),                          // 30: healthcare.clinical.v1.Reaction
-	(*Allergy)(nil),                           // 31: healthcare.clinical.v1.Allergy
-	(*Quantity)(nil),                          // 32: healthcare.clinical.v1.Quantity
-	(*Observation)(nil),                       // 33: healthcare.clinical.v1.Observation
-	(*CriticalAcknowledgement)(nil),           // 34: healthcare.clinical.v1.CriticalAcknowledgement
-	(*Performer)(nil),                         // 35: healthcare.clinical.v1.Performer
-	(*Procedure)(nil),                         // 36: healthcare.clinical.v1.Procedure
-	(*Goal)(nil),                              // 37: healthcare.clinical.v1.Goal
-	(*Activity)(nil),                          // 38: healthcare.clinical.v1.Activity
-	(*CarePlan)(nil),                          // 39: healthcare.clinical.v1.CarePlan
-	(*Provenance)(nil),                        // 40: healthcare.clinical.v1.Provenance
-	(*Attachment)(nil),                        // 41: healthcare.clinical.v1.Attachment
-	(*ClinicalConsent)(nil),                   // 42: healthcare.clinical.v1.ClinicalConsent
-	(*CalculatorInput)(nil),                   // 43: healthcare.clinical.v1.CalculatorInput
-	(*CalculatorResult)(nil),                  // 44: healthcare.clinical.v1.CalculatorResult
-	(*CDSAlert)(nil),                          // 45: healthcare.clinical.v1.CDSAlert
-	(*Consult)(nil),                           // 46: healthcare.clinical.v1.Consult
-	(*RegistryMembership)(nil),                // 47: healthcare.clinical.v1.RegistryMembership
-	(*SmartPhrase)(nil),                       // 48: healthcare.clinical.v1.SmartPhrase
-	(*BannerIdentifier)(nil),                  // 49: healthcare.clinical.v1.BannerIdentifier
-	(*BannerAlert)(nil),                       // 50: healthcare.clinical.v1.BannerAlert
-	(*Banner)(nil),                            // 51: healthcare.clinical.v1.Banner
-	(*WriteNoteRequest)(nil),                  // 52: healthcare.clinical.v1.WriteNoteRequest
-	(*WriteNoteResponse)(nil),                 // 53: healthcare.clinical.v1.WriteNoteResponse
-	(*SignNoteRequest)(nil),                   // 54: healthcare.clinical.v1.SignNoteRequest
-	(*SignNoteResponse)(nil),                  // 55: healthcare.clinical.v1.SignNoteResponse
-	(*AmendNoteRequest)(nil),                  // 56: healthcare.clinical.v1.AmendNoteRequest
-	(*AmendNoteResponse)(nil),                 // 57: healthcare.clinical.v1.AmendNoteResponse
-	(*RetractNoteRequest)(nil),                // 58: healthcare.clinical.v1.RetractNoteRequest
-	(*RetractNoteResponse)(nil),               // 59: healthcare.clinical.v1.RetractNoteResponse
-	(*GetNoteRequest)(nil),                    // 60: healthcare.clinical.v1.GetNoteRequest
-	(*GetNoteResponse)(nil),                   // 61: healthcare.clinical.v1.GetNoteResponse
-	(*ListNotesRequest)(nil),                  // 62: healthcare.clinical.v1.ListNotesRequest
-	(*ListNotesResponse)(nil),                 // 63: healthcare.clinical.v1.ListNotesResponse
-	(*DefineTemplateRequest)(nil),             // 64: healthcare.clinical.v1.DefineTemplateRequest
-	(*DefineTemplateResponse)(nil),            // 65: healthcare.clinical.v1.DefineTemplateResponse
-	(*ListTemplatesRequest)(nil),              // 66: healthcare.clinical.v1.ListTemplatesRequest
-	(*ListTemplatesResponse)(nil),             // 67: healthcare.clinical.v1.ListTemplatesResponse
-	(*RetireTemplateRequest)(nil),             // 68: healthcare.clinical.v1.RetireTemplateRequest
-	(*RetireTemplateResponse)(nil),            // 69: healthcare.clinical.v1.RetireTemplateResponse
-	(*DefineSmartPhraseRequest)(nil),          // 70: healthcare.clinical.v1.DefineSmartPhraseRequest
-	(*DefineSmartPhraseResponse)(nil),         // 71: healthcare.clinical.v1.DefineSmartPhraseResponse
-	(*ListSmartPhrasesRequest)(nil),           // 72: healthcare.clinical.v1.ListSmartPhrasesRequest
-	(*ListSmartPhrasesResponse)(nil),          // 73: healthcare.clinical.v1.ListSmartPhrasesResponse
-	(*RecordProblemRequest)(nil),              // 74: healthcare.clinical.v1.RecordProblemRequest
-	(*RecordProblemResponse)(nil),             // 75: healthcare.clinical.v1.RecordProblemResponse
-	(*UpdateProblemRequest)(nil),              // 76: healthcare.clinical.v1.UpdateProblemRequest
-	(*UpdateProblemResponse)(nil),             // 77: healthcare.clinical.v1.UpdateProblemResponse
-	(*ListProblemsRequest)(nil),               // 78: healthcare.clinical.v1.ListProblemsRequest
-	(*ListProblemsResponse)(nil),              // 79: healthcare.clinical.v1.ListProblemsResponse
-	(*RecordAllergyRequest)(nil),              // 80: healthcare.clinical.v1.RecordAllergyRequest
-	(*RecordAllergyResponse)(nil),             // 81: healthcare.clinical.v1.RecordAllergyResponse
-	(*VerifyAllergyRequest)(nil),              // 82: healthcare.clinical.v1.VerifyAllergyRequest
-	(*VerifyAllergyResponse)(nil),             // 83: healthcare.clinical.v1.VerifyAllergyResponse
-	(*ListAllergiesRequest)(nil),              // 84: healthcare.clinical.v1.ListAllergiesRequest
-	(*ListAllergiesResponse)(nil),             // 85: healthcare.clinical.v1.ListAllergiesResponse
-	(*RecordObservationRequest)(nil),          // 86: healthcare.clinical.v1.RecordObservationRequest
-	(*RecordObservationResponse)(nil),         // 87: healthcare.clinical.v1.RecordObservationResponse
-	(*ListObservationsRequest)(nil),           // 88: healthcare.clinical.v1.ListObservationsRequest
-	(*ListObservationsResponse)(nil),          // 89: healthcare.clinical.v1.ListObservationsResponse
-	(*CriticalResult)(nil),                    // 90: healthcare.clinical.v1.CriticalResult
-	(*ListCriticalResultsRequest)(nil),        // 91: healthcare.clinical.v1.ListCriticalResultsRequest
-	(*ListCriticalResultsResponse)(nil),       // 92: healthcare.clinical.v1.ListCriticalResultsResponse
-	(*AcknowledgeCriticalResultRequest)(nil),  // 93: healthcare.clinical.v1.AcknowledgeCriticalResultRequest
-	(*AcknowledgeCriticalResultResponse)(nil), // 94: healthcare.clinical.v1.AcknowledgeCriticalResultResponse
-	(*RecordProcedureRequest)(nil),            // 95: healthcare.clinical.v1.RecordProcedureRequest
-	(*RecordProcedureResponse)(nil),           // 96: healthcare.clinical.v1.RecordProcedureResponse
-	(*ListProceduresRequest)(nil),             // 97: healthcare.clinical.v1.ListProceduresRequest
-	(*ListProceduresResponse)(nil),            // 98: healthcare.clinical.v1.ListProceduresResponse
-	(*CreateCarePlanRequest)(nil),             // 99: healthcare.clinical.v1.CreateCarePlanRequest
-	(*CreateCarePlanResponse)(nil),            // 100: healthcare.clinical.v1.CreateCarePlanResponse
-	(*UpdateCarePlanRequest)(nil),             // 101: healthcare.clinical.v1.UpdateCarePlanRequest
-	(*UpdateCarePlanResponse)(nil),            // 102: healthcare.clinical.v1.UpdateCarePlanResponse
-	(*ListCarePlansRequest)(nil),              // 103: healthcare.clinical.v1.ListCarePlansRequest
-	(*ListCarePlansResponse)(nil),             // 104: healthcare.clinical.v1.ListCarePlansResponse
-	(*GetBannerRequest)(nil),                  // 105: healthcare.clinical.v1.GetBannerRequest
-	(*GetBannerResponse)(nil),                 // 106: healthcare.clinical.v1.GetBannerResponse
-	(*RecordConsentRequest)(nil),              // 107: healthcare.clinical.v1.RecordConsentRequest
-	(*RecordConsentResponse)(nil),             // 108: healthcare.clinical.v1.RecordConsentResponse
-	(*WithdrawConsentRequest)(nil),            // 109: healthcare.clinical.v1.WithdrawConsentRequest
-	(*WithdrawConsentResponse)(nil),           // 110: healthcare.clinical.v1.WithdrawConsentResponse
-	(*ListConsentsRequest)(nil),               // 111: healthcare.clinical.v1.ListConsentsRequest
-	(*ListConsentsResponse)(nil),              // 112: healthcare.clinical.v1.ListConsentsResponse
-	(*AttachFileRequest)(nil),                 // 113: healthcare.clinical.v1.AttachFileRequest
-	(*AttachFileResponse)(nil),                // 114: healthcare.clinical.v1.AttachFileResponse
-	(*ListAttachmentsRequest)(nil),            // 115: healthcare.clinical.v1.ListAttachmentsRequest
-	(*ListAttachmentsResponse)(nil),           // 116: healthcare.clinical.v1.ListAttachmentsResponse
-	(*GetProvenanceRequest)(nil),              // 117: healthcare.clinical.v1.GetProvenanceRequest
-	(*GetProvenanceResponse)(nil),             // 118: healthcare.clinical.v1.GetProvenanceResponse
-	(*StoreCalculationRequest)(nil),           // 119: healthcare.clinical.v1.StoreCalculationRequest
-	(*StoreCalculationResponse)(nil),          // 120: healthcare.clinical.v1.StoreCalculationResponse
-	(*ListCalculationsRequest)(nil),           // 121: healthcare.clinical.v1.ListCalculationsRequest
-	(*ListCalculationsResponse)(nil),          // 122: healthcare.clinical.v1.ListCalculationsResponse
-	(*RaiseAlertRequest)(nil),                 // 123: healthcare.clinical.v1.RaiseAlertRequest
-	(*RaiseAlertResponse)(nil),                // 124: healthcare.clinical.v1.RaiseAlertResponse
-	(*RespondToAlertRequest)(nil),             // 125: healthcare.clinical.v1.RespondToAlertRequest
-	(*RespondToAlertResponse)(nil),            // 126: healthcare.clinical.v1.RespondToAlertResponse
-	(*ListAlertsRequest)(nil),                 // 127: healthcare.clinical.v1.ListAlertsRequest
-	(*ListAlertsResponse)(nil),                // 128: healthcare.clinical.v1.ListAlertsResponse
-	(*RequestConsultRequest)(nil),             // 129: healthcare.clinical.v1.RequestConsultRequest
-	(*RequestConsultResponse)(nil),            // 130: healthcare.clinical.v1.RequestConsultResponse
-	(*RespondToConsultRequest)(nil),           // 131: healthcare.clinical.v1.RespondToConsultRequest
-	(*RespondToConsultResponse)(nil),          // 132: healthcare.clinical.v1.RespondToConsultResponse
-	(*ListConsultsRequest)(nil),               // 133: healthcare.clinical.v1.ListConsultsRequest
-	(*ListConsultsResponse)(nil),              // 134: healthcare.clinical.v1.ListConsultsResponse
-	(*EnrolInRegistryRequest)(nil),            // 135: healthcare.clinical.v1.EnrolInRegistryRequest
-	(*EnrolInRegistryResponse)(nil),           // 136: healthcare.clinical.v1.EnrolInRegistryResponse
-	(*ExitRegistryRequest)(nil),               // 137: healthcare.clinical.v1.ExitRegistryRequest
-	(*ExitRegistryResponse)(nil),              // 138: healthcare.clinical.v1.ExitRegistryResponse
-	(*ListRegistryMembershipsRequest)(nil),    // 139: healthcare.clinical.v1.ListRegistryMembershipsRequest
-	(*ListRegistryMembershipsResponse)(nil),   // 140: healthcare.clinical.v1.ListRegistryMembershipsResponse
-	(*timestamppb.Timestamp)(nil),             // 141: google.protobuf.Timestamp
+	(ObservationSource)(0),                    // 23: healthcare.clinical.v1.ObservationSource
+	(ValidationState)(0),                      // 24: healthcare.clinical.v1.ValidationState
+	(*Coding)(nil),                            // 25: healthcare.clinical.v1.Coding
+	(*PatientContext)(nil),                    // 26: healthcare.clinical.v1.PatientContext
+	(*Section)(nil),                           // 27: healthcare.clinical.v1.Section
+	(*Signature)(nil),                         // 28: healthcare.clinical.v1.Signature
+	(*Document)(nil),                          // 29: healthcare.clinical.v1.Document
+	(*Template)(nil),                          // 30: healthcare.clinical.v1.Template
+	(*Problem)(nil),                           // 31: healthcare.clinical.v1.Problem
+	(*Reaction)(nil),                          // 32: healthcare.clinical.v1.Reaction
+	(*Allergy)(nil),                           // 33: healthcare.clinical.v1.Allergy
+	(*Quantity)(nil),                          // 34: healthcare.clinical.v1.Quantity
+	(*Observation)(nil),                       // 35: healthcare.clinical.v1.Observation
+	(*DeviceSource)(nil),                      // 36: healthcare.clinical.v1.DeviceSource
+	(*IngestDeviceReadingRequest)(nil),        // 37: healthcare.clinical.v1.IngestDeviceReadingRequest
+	(*IngestDeviceReadingResponse)(nil),       // 38: healthcare.clinical.v1.IngestDeviceReadingResponse
+	(*DecideReadingRequest)(nil),              // 39: healthcare.clinical.v1.DecideReadingRequest
+	(*DecideReadingResponse)(nil),             // 40: healthcare.clinical.v1.DecideReadingResponse
+	(*ListProvisionalReadingsRequest)(nil),    // 41: healthcare.clinical.v1.ListProvisionalReadingsRequest
+	(*ListProvisionalReadingsResponse)(nil),   // 42: healthcare.clinical.v1.ListProvisionalReadingsResponse
+	(*CriticalAcknowledgement)(nil),           // 43: healthcare.clinical.v1.CriticalAcknowledgement
+	(*Performer)(nil),                         // 44: healthcare.clinical.v1.Performer
+	(*Procedure)(nil),                         // 45: healthcare.clinical.v1.Procedure
+	(*Goal)(nil),                              // 46: healthcare.clinical.v1.Goal
+	(*Activity)(nil),                          // 47: healthcare.clinical.v1.Activity
+	(*CarePlan)(nil),                          // 48: healthcare.clinical.v1.CarePlan
+	(*Provenance)(nil),                        // 49: healthcare.clinical.v1.Provenance
+	(*Attachment)(nil),                        // 50: healthcare.clinical.v1.Attachment
+	(*ClinicalConsent)(nil),                   // 51: healthcare.clinical.v1.ClinicalConsent
+	(*CalculatorInput)(nil),                   // 52: healthcare.clinical.v1.CalculatorInput
+	(*CalculatorResult)(nil),                  // 53: healthcare.clinical.v1.CalculatorResult
+	(*CDSAlert)(nil),                          // 54: healthcare.clinical.v1.CDSAlert
+	(*Consult)(nil),                           // 55: healthcare.clinical.v1.Consult
+	(*RegistryMembership)(nil),                // 56: healthcare.clinical.v1.RegistryMembership
+	(*SmartPhrase)(nil),                       // 57: healthcare.clinical.v1.SmartPhrase
+	(*BannerIdentifier)(nil),                  // 58: healthcare.clinical.v1.BannerIdentifier
+	(*BannerAlert)(nil),                       // 59: healthcare.clinical.v1.BannerAlert
+	(*Banner)(nil),                            // 60: healthcare.clinical.v1.Banner
+	(*WriteNoteRequest)(nil),                  // 61: healthcare.clinical.v1.WriteNoteRequest
+	(*WriteNoteResponse)(nil),                 // 62: healthcare.clinical.v1.WriteNoteResponse
+	(*SignNoteRequest)(nil),                   // 63: healthcare.clinical.v1.SignNoteRequest
+	(*SignNoteResponse)(nil),                  // 64: healthcare.clinical.v1.SignNoteResponse
+	(*AmendNoteRequest)(nil),                  // 65: healthcare.clinical.v1.AmendNoteRequest
+	(*AmendNoteResponse)(nil),                 // 66: healthcare.clinical.v1.AmendNoteResponse
+	(*RetractNoteRequest)(nil),                // 67: healthcare.clinical.v1.RetractNoteRequest
+	(*RetractNoteResponse)(nil),               // 68: healthcare.clinical.v1.RetractNoteResponse
+	(*GetNoteRequest)(nil),                    // 69: healthcare.clinical.v1.GetNoteRequest
+	(*GetNoteResponse)(nil),                   // 70: healthcare.clinical.v1.GetNoteResponse
+	(*ListNotesRequest)(nil),                  // 71: healthcare.clinical.v1.ListNotesRequest
+	(*ListNotesResponse)(nil),                 // 72: healthcare.clinical.v1.ListNotesResponse
+	(*DefineTemplateRequest)(nil),             // 73: healthcare.clinical.v1.DefineTemplateRequest
+	(*DefineTemplateResponse)(nil),            // 74: healthcare.clinical.v1.DefineTemplateResponse
+	(*ListTemplatesRequest)(nil),              // 75: healthcare.clinical.v1.ListTemplatesRequest
+	(*ListTemplatesResponse)(nil),             // 76: healthcare.clinical.v1.ListTemplatesResponse
+	(*RetireTemplateRequest)(nil),             // 77: healthcare.clinical.v1.RetireTemplateRequest
+	(*RetireTemplateResponse)(nil),            // 78: healthcare.clinical.v1.RetireTemplateResponse
+	(*DefineSmartPhraseRequest)(nil),          // 79: healthcare.clinical.v1.DefineSmartPhraseRequest
+	(*DefineSmartPhraseResponse)(nil),         // 80: healthcare.clinical.v1.DefineSmartPhraseResponse
+	(*ListSmartPhrasesRequest)(nil),           // 81: healthcare.clinical.v1.ListSmartPhrasesRequest
+	(*ListSmartPhrasesResponse)(nil),          // 82: healthcare.clinical.v1.ListSmartPhrasesResponse
+	(*RecordProblemRequest)(nil),              // 83: healthcare.clinical.v1.RecordProblemRequest
+	(*RecordProblemResponse)(nil),             // 84: healthcare.clinical.v1.RecordProblemResponse
+	(*UpdateProblemRequest)(nil),              // 85: healthcare.clinical.v1.UpdateProblemRequest
+	(*UpdateProblemResponse)(nil),             // 86: healthcare.clinical.v1.UpdateProblemResponse
+	(*ListProblemsRequest)(nil),               // 87: healthcare.clinical.v1.ListProblemsRequest
+	(*ListProblemsResponse)(nil),              // 88: healthcare.clinical.v1.ListProblemsResponse
+	(*RecordAllergyRequest)(nil),              // 89: healthcare.clinical.v1.RecordAllergyRequest
+	(*RecordAllergyResponse)(nil),             // 90: healthcare.clinical.v1.RecordAllergyResponse
+	(*VerifyAllergyRequest)(nil),              // 91: healthcare.clinical.v1.VerifyAllergyRequest
+	(*VerifyAllergyResponse)(nil),             // 92: healthcare.clinical.v1.VerifyAllergyResponse
+	(*ListAllergiesRequest)(nil),              // 93: healthcare.clinical.v1.ListAllergiesRequest
+	(*ListAllergiesResponse)(nil),             // 94: healthcare.clinical.v1.ListAllergiesResponse
+	(*RecordObservationRequest)(nil),          // 95: healthcare.clinical.v1.RecordObservationRequest
+	(*RecordObservationResponse)(nil),         // 96: healthcare.clinical.v1.RecordObservationResponse
+	(*ListObservationsRequest)(nil),           // 97: healthcare.clinical.v1.ListObservationsRequest
+	(*ListObservationsResponse)(nil),          // 98: healthcare.clinical.v1.ListObservationsResponse
+	(*CriticalResult)(nil),                    // 99: healthcare.clinical.v1.CriticalResult
+	(*ListCriticalResultsRequest)(nil),        // 100: healthcare.clinical.v1.ListCriticalResultsRequest
+	(*ListCriticalResultsResponse)(nil),       // 101: healthcare.clinical.v1.ListCriticalResultsResponse
+	(*AcknowledgeCriticalResultRequest)(nil),  // 102: healthcare.clinical.v1.AcknowledgeCriticalResultRequest
+	(*AcknowledgeCriticalResultResponse)(nil), // 103: healthcare.clinical.v1.AcknowledgeCriticalResultResponse
+	(*RecordProcedureRequest)(nil),            // 104: healthcare.clinical.v1.RecordProcedureRequest
+	(*RecordProcedureResponse)(nil),           // 105: healthcare.clinical.v1.RecordProcedureResponse
+	(*ListProceduresRequest)(nil),             // 106: healthcare.clinical.v1.ListProceduresRequest
+	(*ListProceduresResponse)(nil),            // 107: healthcare.clinical.v1.ListProceduresResponse
+	(*CreateCarePlanRequest)(nil),             // 108: healthcare.clinical.v1.CreateCarePlanRequest
+	(*CreateCarePlanResponse)(nil),            // 109: healthcare.clinical.v1.CreateCarePlanResponse
+	(*UpdateCarePlanRequest)(nil),             // 110: healthcare.clinical.v1.UpdateCarePlanRequest
+	(*UpdateCarePlanResponse)(nil),            // 111: healthcare.clinical.v1.UpdateCarePlanResponse
+	(*ListCarePlansRequest)(nil),              // 112: healthcare.clinical.v1.ListCarePlansRequest
+	(*ListCarePlansResponse)(nil),             // 113: healthcare.clinical.v1.ListCarePlansResponse
+	(*GetBannerRequest)(nil),                  // 114: healthcare.clinical.v1.GetBannerRequest
+	(*GetBannerResponse)(nil),                 // 115: healthcare.clinical.v1.GetBannerResponse
+	(*RecordConsentRequest)(nil),              // 116: healthcare.clinical.v1.RecordConsentRequest
+	(*RecordConsentResponse)(nil),             // 117: healthcare.clinical.v1.RecordConsentResponse
+	(*WithdrawConsentRequest)(nil),            // 118: healthcare.clinical.v1.WithdrawConsentRequest
+	(*WithdrawConsentResponse)(nil),           // 119: healthcare.clinical.v1.WithdrawConsentResponse
+	(*ListConsentsRequest)(nil),               // 120: healthcare.clinical.v1.ListConsentsRequest
+	(*ListConsentsResponse)(nil),              // 121: healthcare.clinical.v1.ListConsentsResponse
+	(*AttachFileRequest)(nil),                 // 122: healthcare.clinical.v1.AttachFileRequest
+	(*AttachFileResponse)(nil),                // 123: healthcare.clinical.v1.AttachFileResponse
+	(*ListAttachmentsRequest)(nil),            // 124: healthcare.clinical.v1.ListAttachmentsRequest
+	(*ListAttachmentsResponse)(nil),           // 125: healthcare.clinical.v1.ListAttachmentsResponse
+	(*GetProvenanceRequest)(nil),              // 126: healthcare.clinical.v1.GetProvenanceRequest
+	(*GetProvenanceResponse)(nil),             // 127: healthcare.clinical.v1.GetProvenanceResponse
+	(*StoreCalculationRequest)(nil),           // 128: healthcare.clinical.v1.StoreCalculationRequest
+	(*StoreCalculationResponse)(nil),          // 129: healthcare.clinical.v1.StoreCalculationResponse
+	(*ListCalculationsRequest)(nil),           // 130: healthcare.clinical.v1.ListCalculationsRequest
+	(*ListCalculationsResponse)(nil),          // 131: healthcare.clinical.v1.ListCalculationsResponse
+	(*RaiseAlertRequest)(nil),                 // 132: healthcare.clinical.v1.RaiseAlertRequest
+	(*RaiseAlertResponse)(nil),                // 133: healthcare.clinical.v1.RaiseAlertResponse
+	(*RespondToAlertRequest)(nil),             // 134: healthcare.clinical.v1.RespondToAlertRequest
+	(*RespondToAlertResponse)(nil),            // 135: healthcare.clinical.v1.RespondToAlertResponse
+	(*ListAlertsRequest)(nil),                 // 136: healthcare.clinical.v1.ListAlertsRequest
+	(*ListAlertsResponse)(nil),                // 137: healthcare.clinical.v1.ListAlertsResponse
+	(*RequestConsultRequest)(nil),             // 138: healthcare.clinical.v1.RequestConsultRequest
+	(*RequestConsultResponse)(nil),            // 139: healthcare.clinical.v1.RequestConsultResponse
+	(*RespondToConsultRequest)(nil),           // 140: healthcare.clinical.v1.RespondToConsultRequest
+	(*RespondToConsultResponse)(nil),          // 141: healthcare.clinical.v1.RespondToConsultResponse
+	(*ListConsultsRequest)(nil),               // 142: healthcare.clinical.v1.ListConsultsRequest
+	(*ListConsultsResponse)(nil),              // 143: healthcare.clinical.v1.ListConsultsResponse
+	(*EnrolInRegistryRequest)(nil),            // 144: healthcare.clinical.v1.EnrolInRegistryRequest
+	(*EnrolInRegistryResponse)(nil),           // 145: healthcare.clinical.v1.EnrolInRegistryResponse
+	(*ExitRegistryRequest)(nil),               // 146: healthcare.clinical.v1.ExitRegistryRequest
+	(*ExitRegistryResponse)(nil),              // 147: healthcare.clinical.v1.ExitRegistryResponse
+	(*ListRegistryMembershipsRequest)(nil),    // 148: healthcare.clinical.v1.ListRegistryMembershipsRequest
+	(*ListRegistryMembershipsResponse)(nil),   // 149: healthcare.clinical.v1.ListRegistryMembershipsResponse
+	(*timestamppb.Timestamp)(nil),             // 150: google.protobuf.Timestamp
 }
 var file_healthcare_clinical_v1_clinical_proto_depIdxs = []int32{
-	141, // 0: healthcare.clinical.v1.PatientContext.opened_at:type_name -> google.protobuf.Timestamp
+	150, // 0: healthcare.clinical.v1.PatientContext.opened_at:type_name -> google.protobuf.Timestamp
 	3,   // 1: healthcare.clinical.v1.Signature.meaning:type_name -> healthcare.clinical.v1.SignatureMeaning
-	141, // 2: healthcare.clinical.v1.Signature.signed_at:type_name -> google.protobuf.Timestamp
+	150, // 2: healthcare.clinical.v1.Signature.signed_at:type_name -> google.protobuf.Timestamp
 	2,   // 3: healthcare.clinical.v1.Document.kind:type_name -> healthcare.clinical.v1.DocumentKind
-	25,  // 4: healthcare.clinical.v1.Document.sections:type_name -> healthcare.clinical.v1.Section
+	27,  // 4: healthcare.clinical.v1.Document.sections:type_name -> healthcare.clinical.v1.Section
 	1,   // 5: healthcare.clinical.v1.Document.status:type_name -> healthcare.clinical.v1.DocumentStatus
 	0,   // 6: healthcare.clinical.v1.Document.confidentiality:type_name -> healthcare.clinical.v1.Confidentiality
-	26,  // 7: healthcare.clinical.v1.Document.signatures:type_name -> healthcare.clinical.v1.Signature
-	141, // 8: healthcare.clinical.v1.Document.created_at:type_name -> google.protobuf.Timestamp
-	141, // 9: healthcare.clinical.v1.Document.updated_at:type_name -> google.protobuf.Timestamp
+	28,  // 7: healthcare.clinical.v1.Document.signatures:type_name -> healthcare.clinical.v1.Signature
+	150, // 8: healthcare.clinical.v1.Document.created_at:type_name -> google.protobuf.Timestamp
+	150, // 9: healthcare.clinical.v1.Document.updated_at:type_name -> google.protobuf.Timestamp
 	2,   // 10: healthcare.clinical.v1.Template.kind:type_name -> healthcare.clinical.v1.DocumentKind
-	23,  // 11: healthcare.clinical.v1.Problem.code:type_name -> healthcare.clinical.v1.Coding
+	25,  // 11: healthcare.clinical.v1.Problem.code:type_name -> healthcare.clinical.v1.Coding
 	4,   // 12: healthcare.clinical.v1.Problem.status:type_name -> healthcare.clinical.v1.ProblemStatus
-	141, // 13: healthcare.clinical.v1.Problem.onset_at:type_name -> google.protobuf.Timestamp
-	141, // 14: healthcare.clinical.v1.Problem.resolved_at:type_name -> google.protobuf.Timestamp
+	150, // 13: healthcare.clinical.v1.Problem.onset_at:type_name -> google.protobuf.Timestamp
+	150, // 14: healthcare.clinical.v1.Problem.resolved_at:type_name -> google.protobuf.Timestamp
 	0,   // 15: healthcare.clinical.v1.Problem.confidentiality:type_name -> healthcare.clinical.v1.Confidentiality
-	141, // 16: healthcare.clinical.v1.Problem.recorded_at:type_name -> google.protobuf.Timestamp
-	23,  // 17: healthcare.clinical.v1.Reaction.manifestation:type_name -> healthcare.clinical.v1.Coding
-	23,  // 18: healthcare.clinical.v1.Allergy.substance:type_name -> healthcare.clinical.v1.Coding
+	150, // 16: healthcare.clinical.v1.Problem.recorded_at:type_name -> google.protobuf.Timestamp
+	25,  // 17: healthcare.clinical.v1.Reaction.manifestation:type_name -> healthcare.clinical.v1.Coding
+	25,  // 18: healthcare.clinical.v1.Allergy.substance:type_name -> healthcare.clinical.v1.Coding
 	5,   // 19: healthcare.clinical.v1.Allergy.kind:type_name -> healthcare.clinical.v1.AllergyKind
 	6,   // 20: healthcare.clinical.v1.Allergy.criticality:type_name -> healthcare.clinical.v1.AllergyCriticality
 	7,   // 21: healthcare.clinical.v1.Allergy.verification:type_name -> healthcare.clinical.v1.AllergyVerification
-	30,  // 22: healthcare.clinical.v1.Allergy.reactions:type_name -> healthcare.clinical.v1.Reaction
-	141, // 23: healthcare.clinical.v1.Allergy.onset_at:type_name -> google.protobuf.Timestamp
-	141, // 24: healthcare.clinical.v1.Allergy.recorded_at:type_name -> google.protobuf.Timestamp
-	23,  // 25: healthcare.clinical.v1.Observation.code:type_name -> healthcare.clinical.v1.Coding
-	32,  // 26: healthcare.clinical.v1.Observation.value:type_name -> healthcare.clinical.v1.Quantity
-	23,  // 27: healthcare.clinical.v1.Observation.coded_value:type_name -> healthcare.clinical.v1.Coding
+	32,  // 22: healthcare.clinical.v1.Allergy.reactions:type_name -> healthcare.clinical.v1.Reaction
+	150, // 23: healthcare.clinical.v1.Allergy.onset_at:type_name -> google.protobuf.Timestamp
+	150, // 24: healthcare.clinical.v1.Allergy.recorded_at:type_name -> google.protobuf.Timestamp
+	25,  // 25: healthcare.clinical.v1.Observation.code:type_name -> healthcare.clinical.v1.Coding
+	34,  // 26: healthcare.clinical.v1.Observation.value:type_name -> healthcare.clinical.v1.Quantity
+	25,  // 27: healthcare.clinical.v1.Observation.coded_value:type_name -> healthcare.clinical.v1.Coding
 	8,   // 28: healthcare.clinical.v1.Observation.interpretation:type_name -> healthcare.clinical.v1.Interpretation
 	9,   // 29: healthcare.clinical.v1.Observation.status:type_name -> healthcare.clinical.v1.ObservationStatus
-	141, // 30: healthcare.clinical.v1.Observation.effective_at:type_name -> google.protobuf.Timestamp
-	141, // 31: healthcare.clinical.v1.Observation.issued_at:type_name -> google.protobuf.Timestamp
-	141, // 32: healthcare.clinical.v1.Observation.recorded_at:type_name -> google.protobuf.Timestamp
-	141, // 33: healthcare.clinical.v1.CriticalAcknowledgement.acknowledged_at:type_name -> google.protobuf.Timestamp
-	141, // 34: healthcare.clinical.v1.CriticalAcknowledgement.notified_at:type_name -> google.protobuf.Timestamp
-	23,  // 35: healthcare.clinical.v1.Procedure.code:type_name -> healthcare.clinical.v1.Coding
-	10,  // 36: healthcare.clinical.v1.Procedure.status:type_name -> healthcare.clinical.v1.ProcedureStatus
-	23,  // 37: healthcare.clinical.v1.Procedure.indication:type_name -> healthcare.clinical.v1.Coding
-	35,  // 38: healthcare.clinical.v1.Procedure.performers:type_name -> healthcare.clinical.v1.Performer
-	23,  // 39: healthcare.clinical.v1.Procedure.body_site:type_name -> healthcare.clinical.v1.Coding
-	11,  // 40: healthcare.clinical.v1.Procedure.laterality:type_name -> healthcare.clinical.v1.Laterality
-	23,  // 41: healthcare.clinical.v1.Procedure.complications:type_name -> healthcare.clinical.v1.Coding
-	141, // 42: healthcare.clinical.v1.Procedure.performed_start:type_name -> google.protobuf.Timestamp
-	141, // 43: healthcare.clinical.v1.Procedure.performed_end:type_name -> google.protobuf.Timestamp
-	141, // 44: healthcare.clinical.v1.Procedure.recorded_at:type_name -> google.protobuf.Timestamp
-	13,  // 45: healthcare.clinical.v1.Goal.status:type_name -> healthcare.clinical.v1.GoalStatus
-	141, // 46: healthcare.clinical.v1.Goal.target_date:type_name -> google.protobuf.Timestamp
-	141, // 47: healthcare.clinical.v1.Goal.achieved_at:type_name -> google.protobuf.Timestamp
-	14,  // 48: healthcare.clinical.v1.Activity.status:type_name -> healthcare.clinical.v1.ActivityStatus
-	141, // 49: healthcare.clinical.v1.Activity.scheduled_for:type_name -> google.protobuf.Timestamp
-	12,  // 50: healthcare.clinical.v1.CarePlan.status:type_name -> healthcare.clinical.v1.CarePlanStatus
-	37,  // 51: healthcare.clinical.v1.CarePlan.goals:type_name -> healthcare.clinical.v1.Goal
-	38,  // 52: healthcare.clinical.v1.CarePlan.activities:type_name -> healthcare.clinical.v1.Activity
-	141, // 53: healthcare.clinical.v1.CarePlan.starts_at:type_name -> google.protobuf.Timestamp
-	141, // 54: healthcare.clinical.v1.CarePlan.ends_at:type_name -> google.protobuf.Timestamp
-	141, // 55: healthcare.clinical.v1.Provenance.ingested_at:type_name -> google.protobuf.Timestamp
-	141, // 56: healthcare.clinical.v1.Provenance.authored_at:type_name -> google.protobuf.Timestamp
-	15,  // 57: healthcare.clinical.v1.Attachment.kind:type_name -> healthcare.clinical.v1.AttachmentKind
-	0,   // 58: healthcare.clinical.v1.Attachment.confidentiality:type_name -> healthcare.clinical.v1.Confidentiality
-	141, // 59: healthcare.clinical.v1.Attachment.captured_at:type_name -> google.protobuf.Timestamp
-	141, // 60: healthcare.clinical.v1.Attachment.uploaded_at:type_name -> google.protobuf.Timestamp
-	16,  // 61: healthcare.clinical.v1.ClinicalConsent.kind:type_name -> healthcare.clinical.v1.ConsentKind
-	23,  // 62: healthcare.clinical.v1.ClinicalConsent.procedure_code:type_name -> healthcare.clinical.v1.Coding
-	17,  // 63: healthcare.clinical.v1.ClinicalConsent.status:type_name -> healthcare.clinical.v1.ConsentStatus
-	18,  // 64: healthcare.clinical.v1.ClinicalConsent.given_by:type_name -> healthcare.clinical.v1.ConsentGiver
-	141, // 65: healthcare.clinical.v1.ClinicalConsent.valid_from:type_name -> google.protobuf.Timestamp
-	141, // 66: healthcare.clinical.v1.ClinicalConsent.valid_until:type_name -> google.protobuf.Timestamp
-	43,  // 67: healthcare.clinical.v1.CalculatorResult.inputs:type_name -> healthcare.clinical.v1.CalculatorInput
-	141, // 68: healthcare.clinical.v1.CalculatorResult.calculated_at:type_name -> google.protobuf.Timestamp
-	19,  // 69: healthcare.clinical.v1.CDSAlert.level:type_name -> healthcare.clinical.v1.AlertLevel
-	20,  // 70: healthcare.clinical.v1.CDSAlert.outcome:type_name -> healthcare.clinical.v1.AlertOutcome
-	141, // 71: healthcare.clinical.v1.CDSAlert.fired_at:type_name -> google.protobuf.Timestamp
-	141, // 72: healthcare.clinical.v1.CDSAlert.responded_at:type_name -> google.protobuf.Timestamp
-	21,  // 73: healthcare.clinical.v1.Consult.urgency:type_name -> healthcare.clinical.v1.ConsultUrgency
-	22,  // 74: healthcare.clinical.v1.Consult.status:type_name -> healthcare.clinical.v1.ConsultStatus
-	141, // 75: healthcare.clinical.v1.Consult.requested_at:type_name -> google.protobuf.Timestamp
-	141, // 76: healthcare.clinical.v1.Consult.responded_at:type_name -> google.protobuf.Timestamp
-	141, // 77: healthcare.clinical.v1.RegistryMembership.enrolled_at:type_name -> google.protobuf.Timestamp
-	141, // 78: healthcare.clinical.v1.RegistryMembership.exited_at:type_name -> google.protobuf.Timestamp
-	49,  // 79: healthcare.clinical.v1.Banner.identifiers:type_name -> healthcare.clinical.v1.BannerIdentifier
-	50,  // 80: healthcare.clinical.v1.Banner.alerts:type_name -> healthcare.clinical.v1.BannerAlert
-	2,   // 81: healthcare.clinical.v1.WriteNoteRequest.kind:type_name -> healthcare.clinical.v1.DocumentKind
-	25,  // 82: healthcare.clinical.v1.WriteNoteRequest.sections:type_name -> healthcare.clinical.v1.Section
-	0,   // 83: healthcare.clinical.v1.WriteNoteRequest.confidentiality:type_name -> healthcare.clinical.v1.Confidentiality
-	24,  // 84: healthcare.clinical.v1.WriteNoteRequest.context:type_name -> healthcare.clinical.v1.PatientContext
-	27,  // 85: healthcare.clinical.v1.WriteNoteResponse.document:type_name -> healthcare.clinical.v1.Document
-	3,   // 86: healthcare.clinical.v1.SignNoteRequest.meaning:type_name -> healthcare.clinical.v1.SignatureMeaning
-	24,  // 87: healthcare.clinical.v1.SignNoteRequest.context:type_name -> healthcare.clinical.v1.PatientContext
-	27,  // 88: healthcare.clinical.v1.SignNoteResponse.document:type_name -> healthcare.clinical.v1.Document
-	25,  // 89: healthcare.clinical.v1.AmendNoteRequest.sections:type_name -> healthcare.clinical.v1.Section
-	24,  // 90: healthcare.clinical.v1.AmendNoteRequest.context:type_name -> healthcare.clinical.v1.PatientContext
-	27,  // 91: healthcare.clinical.v1.AmendNoteResponse.document:type_name -> healthcare.clinical.v1.Document
-	27,  // 92: healthcare.clinical.v1.GetNoteResponse.document:type_name -> healthcare.clinical.v1.Document
-	2,   // 93: healthcare.clinical.v1.ListNotesRequest.kind:type_name -> healthcare.clinical.v1.DocumentKind
-	27,  // 94: healthcare.clinical.v1.ListNotesResponse.documents:type_name -> healthcare.clinical.v1.Document
-	28,  // 95: healthcare.clinical.v1.DefineTemplateRequest.template:type_name -> healthcare.clinical.v1.Template
-	2,   // 96: healthcare.clinical.v1.ListTemplatesRequest.kind:type_name -> healthcare.clinical.v1.DocumentKind
-	28,  // 97: healthcare.clinical.v1.ListTemplatesResponse.templates:type_name -> healthcare.clinical.v1.Template
-	48,  // 98: healthcare.clinical.v1.DefineSmartPhraseResponse.phrase:type_name -> healthcare.clinical.v1.SmartPhrase
-	48,  // 99: healthcare.clinical.v1.ListSmartPhrasesResponse.phrases:type_name -> healthcare.clinical.v1.SmartPhrase
-	23,  // 100: healthcare.clinical.v1.RecordProblemRequest.code:type_name -> healthcare.clinical.v1.Coding
-	4,   // 101: healthcare.clinical.v1.RecordProblemRequest.status:type_name -> healthcare.clinical.v1.ProblemStatus
-	141, // 102: healthcare.clinical.v1.RecordProblemRequest.onset_at:type_name -> google.protobuf.Timestamp
-	0,   // 103: healthcare.clinical.v1.RecordProblemRequest.confidentiality:type_name -> healthcare.clinical.v1.Confidentiality
-	24,  // 104: healthcare.clinical.v1.RecordProblemRequest.context:type_name -> healthcare.clinical.v1.PatientContext
-	29,  // 105: healthcare.clinical.v1.RecordProblemResponse.problem:type_name -> healthcare.clinical.v1.Problem
-	4,   // 106: healthcare.clinical.v1.UpdateProblemRequest.status:type_name -> healthcare.clinical.v1.ProblemStatus
-	141, // 107: healthcare.clinical.v1.UpdateProblemRequest.resolved_at:type_name -> google.protobuf.Timestamp
-	29,  // 108: healthcare.clinical.v1.UpdateProblemResponse.problem:type_name -> healthcare.clinical.v1.Problem
-	29,  // 109: healthcare.clinical.v1.ListProblemsResponse.problems:type_name -> healthcare.clinical.v1.Problem
-	23,  // 110: healthcare.clinical.v1.RecordAllergyRequest.substance:type_name -> healthcare.clinical.v1.Coding
-	5,   // 111: healthcare.clinical.v1.RecordAllergyRequest.kind:type_name -> healthcare.clinical.v1.AllergyKind
-	6,   // 112: healthcare.clinical.v1.RecordAllergyRequest.criticality:type_name -> healthcare.clinical.v1.AllergyCriticality
-	7,   // 113: healthcare.clinical.v1.RecordAllergyRequest.verification:type_name -> healthcare.clinical.v1.AllergyVerification
-	30,  // 114: healthcare.clinical.v1.RecordAllergyRequest.reactions:type_name -> healthcare.clinical.v1.Reaction
-	141, // 115: healthcare.clinical.v1.RecordAllergyRequest.onset_at:type_name -> google.protobuf.Timestamp
-	24,  // 116: healthcare.clinical.v1.RecordAllergyRequest.context:type_name -> healthcare.clinical.v1.PatientContext
-	31,  // 117: healthcare.clinical.v1.RecordAllergyResponse.allergy:type_name -> healthcare.clinical.v1.Allergy
-	7,   // 118: healthcare.clinical.v1.VerifyAllergyRequest.verification:type_name -> healthcare.clinical.v1.AllergyVerification
-	31,  // 119: healthcare.clinical.v1.VerifyAllergyResponse.allergy:type_name -> healthcare.clinical.v1.Allergy
-	31,  // 120: healthcare.clinical.v1.ListAllergiesResponse.allergies:type_name -> healthcare.clinical.v1.Allergy
-	23,  // 121: healthcare.clinical.v1.RecordObservationRequest.code:type_name -> healthcare.clinical.v1.Coding
-	32,  // 122: healthcare.clinical.v1.RecordObservationRequest.value:type_name -> healthcare.clinical.v1.Quantity
-	23,  // 123: healthcare.clinical.v1.RecordObservationRequest.coded_value:type_name -> healthcare.clinical.v1.Coding
-	8,   // 124: healthcare.clinical.v1.RecordObservationRequest.interpretation:type_name -> healthcare.clinical.v1.Interpretation
-	9,   // 125: healthcare.clinical.v1.RecordObservationRequest.status:type_name -> healthcare.clinical.v1.ObservationStatus
-	141, // 126: healthcare.clinical.v1.RecordObservationRequest.effective_at:type_name -> google.protobuf.Timestamp
-	141, // 127: healthcare.clinical.v1.RecordObservationRequest.issued_at:type_name -> google.protobuf.Timestamp
-	40,  // 128: healthcare.clinical.v1.RecordObservationRequest.provenance:type_name -> healthcare.clinical.v1.Provenance
-	24,  // 129: healthcare.clinical.v1.RecordObservationRequest.context:type_name -> healthcare.clinical.v1.PatientContext
-	33,  // 130: healthcare.clinical.v1.RecordObservationResponse.observation:type_name -> healthcare.clinical.v1.Observation
-	33,  // 131: healthcare.clinical.v1.ListObservationsResponse.observations:type_name -> healthcare.clinical.v1.Observation
-	33,  // 132: healthcare.clinical.v1.CriticalResult.observation:type_name -> healthcare.clinical.v1.Observation
-	90,  // 133: healthcare.clinical.v1.ListCriticalResultsResponse.results:type_name -> healthcare.clinical.v1.CriticalResult
-	34,  // 134: healthcare.clinical.v1.AcknowledgeCriticalResultResponse.acknowledgement:type_name -> healthcare.clinical.v1.CriticalAcknowledgement
-	23,  // 135: healthcare.clinical.v1.RecordProcedureRequest.code:type_name -> healthcare.clinical.v1.Coding
-	10,  // 136: healthcare.clinical.v1.RecordProcedureRequest.status:type_name -> healthcare.clinical.v1.ProcedureStatus
-	23,  // 137: healthcare.clinical.v1.RecordProcedureRequest.indication:type_name -> healthcare.clinical.v1.Coding
-	35,  // 138: healthcare.clinical.v1.RecordProcedureRequest.performers:type_name -> healthcare.clinical.v1.Performer
-	23,  // 139: healthcare.clinical.v1.RecordProcedureRequest.body_site:type_name -> healthcare.clinical.v1.Coding
-	11,  // 140: healthcare.clinical.v1.RecordProcedureRequest.laterality:type_name -> healthcare.clinical.v1.Laterality
-	23,  // 141: healthcare.clinical.v1.RecordProcedureRequest.complications:type_name -> healthcare.clinical.v1.Coding
-	141, // 142: healthcare.clinical.v1.RecordProcedureRequest.performed_start:type_name -> google.protobuf.Timestamp
-	141, // 143: healthcare.clinical.v1.RecordProcedureRequest.performed_end:type_name -> google.protobuf.Timestamp
-	24,  // 144: healthcare.clinical.v1.RecordProcedureRequest.context:type_name -> healthcare.clinical.v1.PatientContext
-	36,  // 145: healthcare.clinical.v1.RecordProcedureResponse.procedure:type_name -> healthcare.clinical.v1.Procedure
-	36,  // 146: healthcare.clinical.v1.ListProceduresResponse.procedures:type_name -> healthcare.clinical.v1.Procedure
-	37,  // 147: healthcare.clinical.v1.CreateCarePlanRequest.goals:type_name -> healthcare.clinical.v1.Goal
-	38,  // 148: healthcare.clinical.v1.CreateCarePlanRequest.activities:type_name -> healthcare.clinical.v1.Activity
-	141, // 149: healthcare.clinical.v1.CreateCarePlanRequest.starts_at:type_name -> google.protobuf.Timestamp
-	141, // 150: healthcare.clinical.v1.CreateCarePlanRequest.ends_at:type_name -> google.protobuf.Timestamp
-	39,  // 151: healthcare.clinical.v1.CreateCarePlanResponse.care_plan:type_name -> healthcare.clinical.v1.CarePlan
-	12,  // 152: healthcare.clinical.v1.UpdateCarePlanRequest.status:type_name -> healthcare.clinical.v1.CarePlanStatus
-	37,  // 153: healthcare.clinical.v1.UpdateCarePlanRequest.goals:type_name -> healthcare.clinical.v1.Goal
-	38,  // 154: healthcare.clinical.v1.UpdateCarePlanRequest.activities:type_name -> healthcare.clinical.v1.Activity
-	39,  // 155: healthcare.clinical.v1.UpdateCarePlanResponse.care_plan:type_name -> healthcare.clinical.v1.CarePlan
-	39,  // 156: healthcare.clinical.v1.ListCarePlansResponse.care_plans:type_name -> healthcare.clinical.v1.CarePlan
-	51,  // 157: healthcare.clinical.v1.GetBannerResponse.banner:type_name -> healthcare.clinical.v1.Banner
-	16,  // 158: healthcare.clinical.v1.RecordConsentRequest.kind:type_name -> healthcare.clinical.v1.ConsentKind
-	23,  // 159: healthcare.clinical.v1.RecordConsentRequest.procedure_code:type_name -> healthcare.clinical.v1.Coding
-	17,  // 160: healthcare.clinical.v1.RecordConsentRequest.status:type_name -> healthcare.clinical.v1.ConsentStatus
-	18,  // 161: healthcare.clinical.v1.RecordConsentRequest.given_by:type_name -> healthcare.clinical.v1.ConsentGiver
-	141, // 162: healthcare.clinical.v1.RecordConsentRequest.valid_from:type_name -> google.protobuf.Timestamp
-	141, // 163: healthcare.clinical.v1.RecordConsentRequest.valid_until:type_name -> google.protobuf.Timestamp
-	42,  // 164: healthcare.clinical.v1.RecordConsentResponse.consent:type_name -> healthcare.clinical.v1.ClinicalConsent
-	16,  // 165: healthcare.clinical.v1.ListConsentsRequest.kind:type_name -> healthcare.clinical.v1.ConsentKind
-	42,  // 166: healthcare.clinical.v1.ListConsentsResponse.consents:type_name -> healthcare.clinical.v1.ClinicalConsent
-	15,  // 167: healthcare.clinical.v1.AttachFileRequest.kind:type_name -> healthcare.clinical.v1.AttachmentKind
-	0,   // 168: healthcare.clinical.v1.AttachFileRequest.confidentiality:type_name -> healthcare.clinical.v1.Confidentiality
-	141, // 169: healthcare.clinical.v1.AttachFileRequest.captured_at:type_name -> google.protobuf.Timestamp
-	40,  // 170: healthcare.clinical.v1.AttachFileRequest.provenance:type_name -> healthcare.clinical.v1.Provenance
-	41,  // 171: healthcare.clinical.v1.AttachFileResponse.attachment:type_name -> healthcare.clinical.v1.Attachment
-	41,  // 172: healthcare.clinical.v1.ListAttachmentsResponse.attachments:type_name -> healthcare.clinical.v1.Attachment
-	40,  // 173: healthcare.clinical.v1.GetProvenanceResponse.provenance:type_name -> healthcare.clinical.v1.Provenance
-	43,  // 174: healthcare.clinical.v1.StoreCalculationRequest.inputs:type_name -> healthcare.clinical.v1.CalculatorInput
-	44,  // 175: healthcare.clinical.v1.StoreCalculationResponse.result:type_name -> healthcare.clinical.v1.CalculatorResult
-	44,  // 176: healthcare.clinical.v1.ListCalculationsResponse.results:type_name -> healthcare.clinical.v1.CalculatorResult
-	19,  // 177: healthcare.clinical.v1.RaiseAlertRequest.level:type_name -> healthcare.clinical.v1.AlertLevel
-	45,  // 178: healthcare.clinical.v1.RaiseAlertResponse.alert:type_name -> healthcare.clinical.v1.CDSAlert
-	20,  // 179: healthcare.clinical.v1.RespondToAlertRequest.outcome:type_name -> healthcare.clinical.v1.AlertOutcome
-	45,  // 180: healthcare.clinical.v1.RespondToAlertResponse.alert:type_name -> healthcare.clinical.v1.CDSAlert
-	20,  // 181: healthcare.clinical.v1.ListAlertsRequest.outcome:type_name -> healthcare.clinical.v1.AlertOutcome
-	45,  // 182: healthcare.clinical.v1.ListAlertsResponse.alerts:type_name -> healthcare.clinical.v1.CDSAlert
-	21,  // 183: healthcare.clinical.v1.RequestConsultRequest.urgency:type_name -> healthcare.clinical.v1.ConsultUrgency
-	46,  // 184: healthcare.clinical.v1.RequestConsultResponse.consult:type_name -> healthcare.clinical.v1.Consult
-	46,  // 185: healthcare.clinical.v1.RespondToConsultResponse.consult:type_name -> healthcare.clinical.v1.Consult
-	46,  // 186: healthcare.clinical.v1.ListConsultsResponse.consults:type_name -> healthcare.clinical.v1.Consult
-	141, // 187: healthcare.clinical.v1.EnrolInRegistryRequest.enrolled_at:type_name -> google.protobuf.Timestamp
-	47,  // 188: healthcare.clinical.v1.EnrolInRegistryResponse.membership:type_name -> healthcare.clinical.v1.RegistryMembership
-	141, // 189: healthcare.clinical.v1.ExitRegistryRequest.exited_at:type_name -> google.protobuf.Timestamp
-	47,  // 190: healthcare.clinical.v1.ListRegistryMembershipsResponse.memberships:type_name -> healthcare.clinical.v1.RegistryMembership
-	52,  // 191: healthcare.clinical.v1.ClinicalService.WriteNote:input_type -> healthcare.clinical.v1.WriteNoteRequest
-	54,  // 192: healthcare.clinical.v1.ClinicalService.SignNote:input_type -> healthcare.clinical.v1.SignNoteRequest
-	56,  // 193: healthcare.clinical.v1.ClinicalService.AmendNote:input_type -> healthcare.clinical.v1.AmendNoteRequest
-	58,  // 194: healthcare.clinical.v1.ClinicalService.RetractNote:input_type -> healthcare.clinical.v1.RetractNoteRequest
-	60,  // 195: healthcare.clinical.v1.ClinicalService.GetNote:input_type -> healthcare.clinical.v1.GetNoteRequest
-	62,  // 196: healthcare.clinical.v1.ClinicalService.ListNotes:input_type -> healthcare.clinical.v1.ListNotesRequest
-	64,  // 197: healthcare.clinical.v1.ClinicalService.DefineTemplate:input_type -> healthcare.clinical.v1.DefineTemplateRequest
-	66,  // 198: healthcare.clinical.v1.ClinicalService.ListTemplates:input_type -> healthcare.clinical.v1.ListTemplatesRequest
-	68,  // 199: healthcare.clinical.v1.ClinicalService.RetireTemplate:input_type -> healthcare.clinical.v1.RetireTemplateRequest
-	70,  // 200: healthcare.clinical.v1.ClinicalService.DefineSmartPhrase:input_type -> healthcare.clinical.v1.DefineSmartPhraseRequest
-	72,  // 201: healthcare.clinical.v1.ClinicalService.ListSmartPhrases:input_type -> healthcare.clinical.v1.ListSmartPhrasesRequest
-	74,  // 202: healthcare.clinical.v1.ClinicalService.RecordProblem:input_type -> healthcare.clinical.v1.RecordProblemRequest
-	76,  // 203: healthcare.clinical.v1.ClinicalService.UpdateProblem:input_type -> healthcare.clinical.v1.UpdateProblemRequest
-	78,  // 204: healthcare.clinical.v1.ClinicalService.ListProblems:input_type -> healthcare.clinical.v1.ListProblemsRequest
-	80,  // 205: healthcare.clinical.v1.ClinicalService.RecordAllergy:input_type -> healthcare.clinical.v1.RecordAllergyRequest
-	82,  // 206: healthcare.clinical.v1.ClinicalService.VerifyAllergy:input_type -> healthcare.clinical.v1.VerifyAllergyRequest
-	84,  // 207: healthcare.clinical.v1.ClinicalService.ListAllergies:input_type -> healthcare.clinical.v1.ListAllergiesRequest
-	86,  // 208: healthcare.clinical.v1.ClinicalService.RecordObservation:input_type -> healthcare.clinical.v1.RecordObservationRequest
-	88,  // 209: healthcare.clinical.v1.ClinicalService.ListObservations:input_type -> healthcare.clinical.v1.ListObservationsRequest
-	91,  // 210: healthcare.clinical.v1.ClinicalService.ListCriticalResults:input_type -> healthcare.clinical.v1.ListCriticalResultsRequest
-	93,  // 211: healthcare.clinical.v1.ClinicalService.AcknowledgeCriticalResult:input_type -> healthcare.clinical.v1.AcknowledgeCriticalResultRequest
-	95,  // 212: healthcare.clinical.v1.ClinicalService.RecordProcedure:input_type -> healthcare.clinical.v1.RecordProcedureRequest
-	97,  // 213: healthcare.clinical.v1.ClinicalService.ListProcedures:input_type -> healthcare.clinical.v1.ListProceduresRequest
-	99,  // 214: healthcare.clinical.v1.ClinicalService.CreateCarePlan:input_type -> healthcare.clinical.v1.CreateCarePlanRequest
-	101, // 215: healthcare.clinical.v1.ClinicalService.UpdateCarePlan:input_type -> healthcare.clinical.v1.UpdateCarePlanRequest
-	103, // 216: healthcare.clinical.v1.ClinicalService.ListCarePlans:input_type -> healthcare.clinical.v1.ListCarePlansRequest
-	105, // 217: healthcare.clinical.v1.ClinicalService.GetBanner:input_type -> healthcare.clinical.v1.GetBannerRequest
-	107, // 218: healthcare.clinical.v1.ClinicalService.RecordConsent:input_type -> healthcare.clinical.v1.RecordConsentRequest
-	109, // 219: healthcare.clinical.v1.ClinicalService.WithdrawConsent:input_type -> healthcare.clinical.v1.WithdrawConsentRequest
-	111, // 220: healthcare.clinical.v1.ClinicalService.ListConsents:input_type -> healthcare.clinical.v1.ListConsentsRequest
-	113, // 221: healthcare.clinical.v1.ClinicalService.AttachFile:input_type -> healthcare.clinical.v1.AttachFileRequest
-	115, // 222: healthcare.clinical.v1.ClinicalService.ListAttachments:input_type -> healthcare.clinical.v1.ListAttachmentsRequest
-	117, // 223: healthcare.clinical.v1.ClinicalService.GetProvenance:input_type -> healthcare.clinical.v1.GetProvenanceRequest
-	119, // 224: healthcare.clinical.v1.ClinicalService.StoreCalculation:input_type -> healthcare.clinical.v1.StoreCalculationRequest
-	121, // 225: healthcare.clinical.v1.ClinicalService.ListCalculations:input_type -> healthcare.clinical.v1.ListCalculationsRequest
-	123, // 226: healthcare.clinical.v1.ClinicalService.RaiseAlert:input_type -> healthcare.clinical.v1.RaiseAlertRequest
-	125, // 227: healthcare.clinical.v1.ClinicalService.RespondToAlert:input_type -> healthcare.clinical.v1.RespondToAlertRequest
-	127, // 228: healthcare.clinical.v1.ClinicalService.ListAlerts:input_type -> healthcare.clinical.v1.ListAlertsRequest
-	129, // 229: healthcare.clinical.v1.ClinicalService.RequestConsult:input_type -> healthcare.clinical.v1.RequestConsultRequest
-	131, // 230: healthcare.clinical.v1.ClinicalService.RespondToConsult:input_type -> healthcare.clinical.v1.RespondToConsultRequest
-	133, // 231: healthcare.clinical.v1.ClinicalService.ListConsults:input_type -> healthcare.clinical.v1.ListConsultsRequest
-	135, // 232: healthcare.clinical.v1.ClinicalService.EnrolInRegistry:input_type -> healthcare.clinical.v1.EnrolInRegistryRequest
-	137, // 233: healthcare.clinical.v1.ClinicalService.ExitRegistry:input_type -> healthcare.clinical.v1.ExitRegistryRequest
-	139, // 234: healthcare.clinical.v1.ClinicalService.ListRegistryMemberships:input_type -> healthcare.clinical.v1.ListRegistryMembershipsRequest
-	53,  // 235: healthcare.clinical.v1.ClinicalService.WriteNote:output_type -> healthcare.clinical.v1.WriteNoteResponse
-	55,  // 236: healthcare.clinical.v1.ClinicalService.SignNote:output_type -> healthcare.clinical.v1.SignNoteResponse
-	57,  // 237: healthcare.clinical.v1.ClinicalService.AmendNote:output_type -> healthcare.clinical.v1.AmendNoteResponse
-	59,  // 238: healthcare.clinical.v1.ClinicalService.RetractNote:output_type -> healthcare.clinical.v1.RetractNoteResponse
-	61,  // 239: healthcare.clinical.v1.ClinicalService.GetNote:output_type -> healthcare.clinical.v1.GetNoteResponse
-	63,  // 240: healthcare.clinical.v1.ClinicalService.ListNotes:output_type -> healthcare.clinical.v1.ListNotesResponse
-	65,  // 241: healthcare.clinical.v1.ClinicalService.DefineTemplate:output_type -> healthcare.clinical.v1.DefineTemplateResponse
-	67,  // 242: healthcare.clinical.v1.ClinicalService.ListTemplates:output_type -> healthcare.clinical.v1.ListTemplatesResponse
-	69,  // 243: healthcare.clinical.v1.ClinicalService.RetireTemplate:output_type -> healthcare.clinical.v1.RetireTemplateResponse
-	71,  // 244: healthcare.clinical.v1.ClinicalService.DefineSmartPhrase:output_type -> healthcare.clinical.v1.DefineSmartPhraseResponse
-	73,  // 245: healthcare.clinical.v1.ClinicalService.ListSmartPhrases:output_type -> healthcare.clinical.v1.ListSmartPhrasesResponse
-	75,  // 246: healthcare.clinical.v1.ClinicalService.RecordProblem:output_type -> healthcare.clinical.v1.RecordProblemResponse
-	77,  // 247: healthcare.clinical.v1.ClinicalService.UpdateProblem:output_type -> healthcare.clinical.v1.UpdateProblemResponse
-	79,  // 248: healthcare.clinical.v1.ClinicalService.ListProblems:output_type -> healthcare.clinical.v1.ListProblemsResponse
-	81,  // 249: healthcare.clinical.v1.ClinicalService.RecordAllergy:output_type -> healthcare.clinical.v1.RecordAllergyResponse
-	83,  // 250: healthcare.clinical.v1.ClinicalService.VerifyAllergy:output_type -> healthcare.clinical.v1.VerifyAllergyResponse
-	85,  // 251: healthcare.clinical.v1.ClinicalService.ListAllergies:output_type -> healthcare.clinical.v1.ListAllergiesResponse
-	87,  // 252: healthcare.clinical.v1.ClinicalService.RecordObservation:output_type -> healthcare.clinical.v1.RecordObservationResponse
-	89,  // 253: healthcare.clinical.v1.ClinicalService.ListObservations:output_type -> healthcare.clinical.v1.ListObservationsResponse
-	92,  // 254: healthcare.clinical.v1.ClinicalService.ListCriticalResults:output_type -> healthcare.clinical.v1.ListCriticalResultsResponse
-	94,  // 255: healthcare.clinical.v1.ClinicalService.AcknowledgeCriticalResult:output_type -> healthcare.clinical.v1.AcknowledgeCriticalResultResponse
-	96,  // 256: healthcare.clinical.v1.ClinicalService.RecordProcedure:output_type -> healthcare.clinical.v1.RecordProcedureResponse
-	98,  // 257: healthcare.clinical.v1.ClinicalService.ListProcedures:output_type -> healthcare.clinical.v1.ListProceduresResponse
-	100, // 258: healthcare.clinical.v1.ClinicalService.CreateCarePlan:output_type -> healthcare.clinical.v1.CreateCarePlanResponse
-	102, // 259: healthcare.clinical.v1.ClinicalService.UpdateCarePlan:output_type -> healthcare.clinical.v1.UpdateCarePlanResponse
-	104, // 260: healthcare.clinical.v1.ClinicalService.ListCarePlans:output_type -> healthcare.clinical.v1.ListCarePlansResponse
-	106, // 261: healthcare.clinical.v1.ClinicalService.GetBanner:output_type -> healthcare.clinical.v1.GetBannerResponse
-	108, // 262: healthcare.clinical.v1.ClinicalService.RecordConsent:output_type -> healthcare.clinical.v1.RecordConsentResponse
-	110, // 263: healthcare.clinical.v1.ClinicalService.WithdrawConsent:output_type -> healthcare.clinical.v1.WithdrawConsentResponse
-	112, // 264: healthcare.clinical.v1.ClinicalService.ListConsents:output_type -> healthcare.clinical.v1.ListConsentsResponse
-	114, // 265: healthcare.clinical.v1.ClinicalService.AttachFile:output_type -> healthcare.clinical.v1.AttachFileResponse
-	116, // 266: healthcare.clinical.v1.ClinicalService.ListAttachments:output_type -> healthcare.clinical.v1.ListAttachmentsResponse
-	118, // 267: healthcare.clinical.v1.ClinicalService.GetProvenance:output_type -> healthcare.clinical.v1.GetProvenanceResponse
-	120, // 268: healthcare.clinical.v1.ClinicalService.StoreCalculation:output_type -> healthcare.clinical.v1.StoreCalculationResponse
-	122, // 269: healthcare.clinical.v1.ClinicalService.ListCalculations:output_type -> healthcare.clinical.v1.ListCalculationsResponse
-	124, // 270: healthcare.clinical.v1.ClinicalService.RaiseAlert:output_type -> healthcare.clinical.v1.RaiseAlertResponse
-	126, // 271: healthcare.clinical.v1.ClinicalService.RespondToAlert:output_type -> healthcare.clinical.v1.RespondToAlertResponse
-	128, // 272: healthcare.clinical.v1.ClinicalService.ListAlerts:output_type -> healthcare.clinical.v1.ListAlertsResponse
-	130, // 273: healthcare.clinical.v1.ClinicalService.RequestConsult:output_type -> healthcare.clinical.v1.RequestConsultResponse
-	132, // 274: healthcare.clinical.v1.ClinicalService.RespondToConsult:output_type -> healthcare.clinical.v1.RespondToConsultResponse
-	134, // 275: healthcare.clinical.v1.ClinicalService.ListConsults:output_type -> healthcare.clinical.v1.ListConsultsResponse
-	136, // 276: healthcare.clinical.v1.ClinicalService.EnrolInRegistry:output_type -> healthcare.clinical.v1.EnrolInRegistryResponse
-	138, // 277: healthcare.clinical.v1.ClinicalService.ExitRegistry:output_type -> healthcare.clinical.v1.ExitRegistryResponse
-	140, // 278: healthcare.clinical.v1.ClinicalService.ListRegistryMemberships:output_type -> healthcare.clinical.v1.ListRegistryMembershipsResponse
-	235, // [235:279] is the sub-list for method output_type
-	191, // [191:235] is the sub-list for method input_type
-	191, // [191:191] is the sub-list for extension type_name
-	191, // [191:191] is the sub-list for extension extendee
-	0,   // [0:191] is the sub-list for field type_name
+	150, // 30: healthcare.clinical.v1.Observation.effective_at:type_name -> google.protobuf.Timestamp
+	150, // 31: healthcare.clinical.v1.Observation.issued_at:type_name -> google.protobuf.Timestamp
+	150, // 32: healthcare.clinical.v1.Observation.recorded_at:type_name -> google.protobuf.Timestamp
+	23,  // 33: healthcare.clinical.v1.Observation.source:type_name -> healthcare.clinical.v1.ObservationSource
+	24,  // 34: healthcare.clinical.v1.Observation.validation:type_name -> healthcare.clinical.v1.ValidationState
+	36,  // 35: healthcare.clinical.v1.Observation.device:type_name -> healthcare.clinical.v1.DeviceSource
+	150, // 36: healthcare.clinical.v1.Observation.validated_at:type_name -> google.protobuf.Timestamp
+	150, // 37: healthcare.clinical.v1.DeviceSource.observed_at:type_name -> google.protobuf.Timestamp
+	150, // 38: healthcare.clinical.v1.DeviceSource.received_at:type_name -> google.protobuf.Timestamp
+	25,  // 39: healthcare.clinical.v1.IngestDeviceReadingRequest.code:type_name -> healthcare.clinical.v1.Coding
+	34,  // 40: healthcare.clinical.v1.IngestDeviceReadingRequest.value:type_name -> healthcare.clinical.v1.Quantity
+	36,  // 41: healthcare.clinical.v1.IngestDeviceReadingRequest.device:type_name -> healthcare.clinical.v1.DeviceSource
+	35,  // 42: healthcare.clinical.v1.IngestDeviceReadingResponse.observation:type_name -> healthcare.clinical.v1.Observation
+	35,  // 43: healthcare.clinical.v1.DecideReadingResponse.observation:type_name -> healthcare.clinical.v1.Observation
+	35,  // 44: healthcare.clinical.v1.ListProvisionalReadingsResponse.observations:type_name -> healthcare.clinical.v1.Observation
+	150, // 45: healthcare.clinical.v1.CriticalAcknowledgement.acknowledged_at:type_name -> google.protobuf.Timestamp
+	150, // 46: healthcare.clinical.v1.CriticalAcknowledgement.notified_at:type_name -> google.protobuf.Timestamp
+	25,  // 47: healthcare.clinical.v1.Procedure.code:type_name -> healthcare.clinical.v1.Coding
+	10,  // 48: healthcare.clinical.v1.Procedure.status:type_name -> healthcare.clinical.v1.ProcedureStatus
+	25,  // 49: healthcare.clinical.v1.Procedure.indication:type_name -> healthcare.clinical.v1.Coding
+	44,  // 50: healthcare.clinical.v1.Procedure.performers:type_name -> healthcare.clinical.v1.Performer
+	25,  // 51: healthcare.clinical.v1.Procedure.body_site:type_name -> healthcare.clinical.v1.Coding
+	11,  // 52: healthcare.clinical.v1.Procedure.laterality:type_name -> healthcare.clinical.v1.Laterality
+	25,  // 53: healthcare.clinical.v1.Procedure.complications:type_name -> healthcare.clinical.v1.Coding
+	150, // 54: healthcare.clinical.v1.Procedure.performed_start:type_name -> google.protobuf.Timestamp
+	150, // 55: healthcare.clinical.v1.Procedure.performed_end:type_name -> google.protobuf.Timestamp
+	150, // 56: healthcare.clinical.v1.Procedure.recorded_at:type_name -> google.protobuf.Timestamp
+	13,  // 57: healthcare.clinical.v1.Goal.status:type_name -> healthcare.clinical.v1.GoalStatus
+	150, // 58: healthcare.clinical.v1.Goal.target_date:type_name -> google.protobuf.Timestamp
+	150, // 59: healthcare.clinical.v1.Goal.achieved_at:type_name -> google.protobuf.Timestamp
+	14,  // 60: healthcare.clinical.v1.Activity.status:type_name -> healthcare.clinical.v1.ActivityStatus
+	150, // 61: healthcare.clinical.v1.Activity.scheduled_for:type_name -> google.protobuf.Timestamp
+	12,  // 62: healthcare.clinical.v1.CarePlan.status:type_name -> healthcare.clinical.v1.CarePlanStatus
+	46,  // 63: healthcare.clinical.v1.CarePlan.goals:type_name -> healthcare.clinical.v1.Goal
+	47,  // 64: healthcare.clinical.v1.CarePlan.activities:type_name -> healthcare.clinical.v1.Activity
+	150, // 65: healthcare.clinical.v1.CarePlan.starts_at:type_name -> google.protobuf.Timestamp
+	150, // 66: healthcare.clinical.v1.CarePlan.ends_at:type_name -> google.protobuf.Timestamp
+	150, // 67: healthcare.clinical.v1.Provenance.ingested_at:type_name -> google.protobuf.Timestamp
+	150, // 68: healthcare.clinical.v1.Provenance.authored_at:type_name -> google.protobuf.Timestamp
+	15,  // 69: healthcare.clinical.v1.Attachment.kind:type_name -> healthcare.clinical.v1.AttachmentKind
+	0,   // 70: healthcare.clinical.v1.Attachment.confidentiality:type_name -> healthcare.clinical.v1.Confidentiality
+	150, // 71: healthcare.clinical.v1.Attachment.captured_at:type_name -> google.protobuf.Timestamp
+	150, // 72: healthcare.clinical.v1.Attachment.uploaded_at:type_name -> google.protobuf.Timestamp
+	16,  // 73: healthcare.clinical.v1.ClinicalConsent.kind:type_name -> healthcare.clinical.v1.ConsentKind
+	25,  // 74: healthcare.clinical.v1.ClinicalConsent.procedure_code:type_name -> healthcare.clinical.v1.Coding
+	17,  // 75: healthcare.clinical.v1.ClinicalConsent.status:type_name -> healthcare.clinical.v1.ConsentStatus
+	18,  // 76: healthcare.clinical.v1.ClinicalConsent.given_by:type_name -> healthcare.clinical.v1.ConsentGiver
+	150, // 77: healthcare.clinical.v1.ClinicalConsent.valid_from:type_name -> google.protobuf.Timestamp
+	150, // 78: healthcare.clinical.v1.ClinicalConsent.valid_until:type_name -> google.protobuf.Timestamp
+	52,  // 79: healthcare.clinical.v1.CalculatorResult.inputs:type_name -> healthcare.clinical.v1.CalculatorInput
+	150, // 80: healthcare.clinical.v1.CalculatorResult.calculated_at:type_name -> google.protobuf.Timestamp
+	19,  // 81: healthcare.clinical.v1.CDSAlert.level:type_name -> healthcare.clinical.v1.AlertLevel
+	20,  // 82: healthcare.clinical.v1.CDSAlert.outcome:type_name -> healthcare.clinical.v1.AlertOutcome
+	150, // 83: healthcare.clinical.v1.CDSAlert.fired_at:type_name -> google.protobuf.Timestamp
+	150, // 84: healthcare.clinical.v1.CDSAlert.responded_at:type_name -> google.protobuf.Timestamp
+	21,  // 85: healthcare.clinical.v1.Consult.urgency:type_name -> healthcare.clinical.v1.ConsultUrgency
+	22,  // 86: healthcare.clinical.v1.Consult.status:type_name -> healthcare.clinical.v1.ConsultStatus
+	150, // 87: healthcare.clinical.v1.Consult.requested_at:type_name -> google.protobuf.Timestamp
+	150, // 88: healthcare.clinical.v1.Consult.responded_at:type_name -> google.protobuf.Timestamp
+	150, // 89: healthcare.clinical.v1.RegistryMembership.enrolled_at:type_name -> google.protobuf.Timestamp
+	150, // 90: healthcare.clinical.v1.RegistryMembership.exited_at:type_name -> google.protobuf.Timestamp
+	58,  // 91: healthcare.clinical.v1.Banner.identifiers:type_name -> healthcare.clinical.v1.BannerIdentifier
+	59,  // 92: healthcare.clinical.v1.Banner.alerts:type_name -> healthcare.clinical.v1.BannerAlert
+	2,   // 93: healthcare.clinical.v1.WriteNoteRequest.kind:type_name -> healthcare.clinical.v1.DocumentKind
+	27,  // 94: healthcare.clinical.v1.WriteNoteRequest.sections:type_name -> healthcare.clinical.v1.Section
+	0,   // 95: healthcare.clinical.v1.WriteNoteRequest.confidentiality:type_name -> healthcare.clinical.v1.Confidentiality
+	26,  // 96: healthcare.clinical.v1.WriteNoteRequest.context:type_name -> healthcare.clinical.v1.PatientContext
+	29,  // 97: healthcare.clinical.v1.WriteNoteResponse.document:type_name -> healthcare.clinical.v1.Document
+	3,   // 98: healthcare.clinical.v1.SignNoteRequest.meaning:type_name -> healthcare.clinical.v1.SignatureMeaning
+	26,  // 99: healthcare.clinical.v1.SignNoteRequest.context:type_name -> healthcare.clinical.v1.PatientContext
+	29,  // 100: healthcare.clinical.v1.SignNoteResponse.document:type_name -> healthcare.clinical.v1.Document
+	27,  // 101: healthcare.clinical.v1.AmendNoteRequest.sections:type_name -> healthcare.clinical.v1.Section
+	26,  // 102: healthcare.clinical.v1.AmendNoteRequest.context:type_name -> healthcare.clinical.v1.PatientContext
+	29,  // 103: healthcare.clinical.v1.AmendNoteResponse.document:type_name -> healthcare.clinical.v1.Document
+	29,  // 104: healthcare.clinical.v1.GetNoteResponse.document:type_name -> healthcare.clinical.v1.Document
+	2,   // 105: healthcare.clinical.v1.ListNotesRequest.kind:type_name -> healthcare.clinical.v1.DocumentKind
+	29,  // 106: healthcare.clinical.v1.ListNotesResponse.documents:type_name -> healthcare.clinical.v1.Document
+	30,  // 107: healthcare.clinical.v1.DefineTemplateRequest.template:type_name -> healthcare.clinical.v1.Template
+	2,   // 108: healthcare.clinical.v1.ListTemplatesRequest.kind:type_name -> healthcare.clinical.v1.DocumentKind
+	30,  // 109: healthcare.clinical.v1.ListTemplatesResponse.templates:type_name -> healthcare.clinical.v1.Template
+	57,  // 110: healthcare.clinical.v1.DefineSmartPhraseResponse.phrase:type_name -> healthcare.clinical.v1.SmartPhrase
+	57,  // 111: healthcare.clinical.v1.ListSmartPhrasesResponse.phrases:type_name -> healthcare.clinical.v1.SmartPhrase
+	25,  // 112: healthcare.clinical.v1.RecordProblemRequest.code:type_name -> healthcare.clinical.v1.Coding
+	4,   // 113: healthcare.clinical.v1.RecordProblemRequest.status:type_name -> healthcare.clinical.v1.ProblemStatus
+	150, // 114: healthcare.clinical.v1.RecordProblemRequest.onset_at:type_name -> google.protobuf.Timestamp
+	0,   // 115: healthcare.clinical.v1.RecordProblemRequest.confidentiality:type_name -> healthcare.clinical.v1.Confidentiality
+	26,  // 116: healthcare.clinical.v1.RecordProblemRequest.context:type_name -> healthcare.clinical.v1.PatientContext
+	31,  // 117: healthcare.clinical.v1.RecordProblemResponse.problem:type_name -> healthcare.clinical.v1.Problem
+	4,   // 118: healthcare.clinical.v1.UpdateProblemRequest.status:type_name -> healthcare.clinical.v1.ProblemStatus
+	150, // 119: healthcare.clinical.v1.UpdateProblemRequest.resolved_at:type_name -> google.protobuf.Timestamp
+	31,  // 120: healthcare.clinical.v1.UpdateProblemResponse.problem:type_name -> healthcare.clinical.v1.Problem
+	31,  // 121: healthcare.clinical.v1.ListProblemsResponse.problems:type_name -> healthcare.clinical.v1.Problem
+	25,  // 122: healthcare.clinical.v1.RecordAllergyRequest.substance:type_name -> healthcare.clinical.v1.Coding
+	5,   // 123: healthcare.clinical.v1.RecordAllergyRequest.kind:type_name -> healthcare.clinical.v1.AllergyKind
+	6,   // 124: healthcare.clinical.v1.RecordAllergyRequest.criticality:type_name -> healthcare.clinical.v1.AllergyCriticality
+	7,   // 125: healthcare.clinical.v1.RecordAllergyRequest.verification:type_name -> healthcare.clinical.v1.AllergyVerification
+	32,  // 126: healthcare.clinical.v1.RecordAllergyRequest.reactions:type_name -> healthcare.clinical.v1.Reaction
+	150, // 127: healthcare.clinical.v1.RecordAllergyRequest.onset_at:type_name -> google.protobuf.Timestamp
+	26,  // 128: healthcare.clinical.v1.RecordAllergyRequest.context:type_name -> healthcare.clinical.v1.PatientContext
+	33,  // 129: healthcare.clinical.v1.RecordAllergyResponse.allergy:type_name -> healthcare.clinical.v1.Allergy
+	7,   // 130: healthcare.clinical.v1.VerifyAllergyRequest.verification:type_name -> healthcare.clinical.v1.AllergyVerification
+	33,  // 131: healthcare.clinical.v1.VerifyAllergyResponse.allergy:type_name -> healthcare.clinical.v1.Allergy
+	33,  // 132: healthcare.clinical.v1.ListAllergiesResponse.allergies:type_name -> healthcare.clinical.v1.Allergy
+	25,  // 133: healthcare.clinical.v1.RecordObservationRequest.code:type_name -> healthcare.clinical.v1.Coding
+	34,  // 134: healthcare.clinical.v1.RecordObservationRequest.value:type_name -> healthcare.clinical.v1.Quantity
+	25,  // 135: healthcare.clinical.v1.RecordObservationRequest.coded_value:type_name -> healthcare.clinical.v1.Coding
+	8,   // 136: healthcare.clinical.v1.RecordObservationRequest.interpretation:type_name -> healthcare.clinical.v1.Interpretation
+	9,   // 137: healthcare.clinical.v1.RecordObservationRequest.status:type_name -> healthcare.clinical.v1.ObservationStatus
+	150, // 138: healthcare.clinical.v1.RecordObservationRequest.effective_at:type_name -> google.protobuf.Timestamp
+	150, // 139: healthcare.clinical.v1.RecordObservationRequest.issued_at:type_name -> google.protobuf.Timestamp
+	49,  // 140: healthcare.clinical.v1.RecordObservationRequest.provenance:type_name -> healthcare.clinical.v1.Provenance
+	26,  // 141: healthcare.clinical.v1.RecordObservationRequest.context:type_name -> healthcare.clinical.v1.PatientContext
+	35,  // 142: healthcare.clinical.v1.RecordObservationResponse.observation:type_name -> healthcare.clinical.v1.Observation
+	35,  // 143: healthcare.clinical.v1.ListObservationsResponse.observations:type_name -> healthcare.clinical.v1.Observation
+	35,  // 144: healthcare.clinical.v1.CriticalResult.observation:type_name -> healthcare.clinical.v1.Observation
+	99,  // 145: healthcare.clinical.v1.ListCriticalResultsResponse.results:type_name -> healthcare.clinical.v1.CriticalResult
+	43,  // 146: healthcare.clinical.v1.AcknowledgeCriticalResultResponse.acknowledgement:type_name -> healthcare.clinical.v1.CriticalAcknowledgement
+	25,  // 147: healthcare.clinical.v1.RecordProcedureRequest.code:type_name -> healthcare.clinical.v1.Coding
+	10,  // 148: healthcare.clinical.v1.RecordProcedureRequest.status:type_name -> healthcare.clinical.v1.ProcedureStatus
+	25,  // 149: healthcare.clinical.v1.RecordProcedureRequest.indication:type_name -> healthcare.clinical.v1.Coding
+	44,  // 150: healthcare.clinical.v1.RecordProcedureRequest.performers:type_name -> healthcare.clinical.v1.Performer
+	25,  // 151: healthcare.clinical.v1.RecordProcedureRequest.body_site:type_name -> healthcare.clinical.v1.Coding
+	11,  // 152: healthcare.clinical.v1.RecordProcedureRequest.laterality:type_name -> healthcare.clinical.v1.Laterality
+	25,  // 153: healthcare.clinical.v1.RecordProcedureRequest.complications:type_name -> healthcare.clinical.v1.Coding
+	150, // 154: healthcare.clinical.v1.RecordProcedureRequest.performed_start:type_name -> google.protobuf.Timestamp
+	150, // 155: healthcare.clinical.v1.RecordProcedureRequest.performed_end:type_name -> google.protobuf.Timestamp
+	26,  // 156: healthcare.clinical.v1.RecordProcedureRequest.context:type_name -> healthcare.clinical.v1.PatientContext
+	45,  // 157: healthcare.clinical.v1.RecordProcedureResponse.procedure:type_name -> healthcare.clinical.v1.Procedure
+	45,  // 158: healthcare.clinical.v1.ListProceduresResponse.procedures:type_name -> healthcare.clinical.v1.Procedure
+	46,  // 159: healthcare.clinical.v1.CreateCarePlanRequest.goals:type_name -> healthcare.clinical.v1.Goal
+	47,  // 160: healthcare.clinical.v1.CreateCarePlanRequest.activities:type_name -> healthcare.clinical.v1.Activity
+	150, // 161: healthcare.clinical.v1.CreateCarePlanRequest.starts_at:type_name -> google.protobuf.Timestamp
+	150, // 162: healthcare.clinical.v1.CreateCarePlanRequest.ends_at:type_name -> google.protobuf.Timestamp
+	48,  // 163: healthcare.clinical.v1.CreateCarePlanResponse.care_plan:type_name -> healthcare.clinical.v1.CarePlan
+	12,  // 164: healthcare.clinical.v1.UpdateCarePlanRequest.status:type_name -> healthcare.clinical.v1.CarePlanStatus
+	46,  // 165: healthcare.clinical.v1.UpdateCarePlanRequest.goals:type_name -> healthcare.clinical.v1.Goal
+	47,  // 166: healthcare.clinical.v1.UpdateCarePlanRequest.activities:type_name -> healthcare.clinical.v1.Activity
+	48,  // 167: healthcare.clinical.v1.UpdateCarePlanResponse.care_plan:type_name -> healthcare.clinical.v1.CarePlan
+	48,  // 168: healthcare.clinical.v1.ListCarePlansResponse.care_plans:type_name -> healthcare.clinical.v1.CarePlan
+	60,  // 169: healthcare.clinical.v1.GetBannerResponse.banner:type_name -> healthcare.clinical.v1.Banner
+	16,  // 170: healthcare.clinical.v1.RecordConsentRequest.kind:type_name -> healthcare.clinical.v1.ConsentKind
+	25,  // 171: healthcare.clinical.v1.RecordConsentRequest.procedure_code:type_name -> healthcare.clinical.v1.Coding
+	17,  // 172: healthcare.clinical.v1.RecordConsentRequest.status:type_name -> healthcare.clinical.v1.ConsentStatus
+	18,  // 173: healthcare.clinical.v1.RecordConsentRequest.given_by:type_name -> healthcare.clinical.v1.ConsentGiver
+	150, // 174: healthcare.clinical.v1.RecordConsentRequest.valid_from:type_name -> google.protobuf.Timestamp
+	150, // 175: healthcare.clinical.v1.RecordConsentRequest.valid_until:type_name -> google.protobuf.Timestamp
+	51,  // 176: healthcare.clinical.v1.RecordConsentResponse.consent:type_name -> healthcare.clinical.v1.ClinicalConsent
+	16,  // 177: healthcare.clinical.v1.ListConsentsRequest.kind:type_name -> healthcare.clinical.v1.ConsentKind
+	51,  // 178: healthcare.clinical.v1.ListConsentsResponse.consents:type_name -> healthcare.clinical.v1.ClinicalConsent
+	15,  // 179: healthcare.clinical.v1.AttachFileRequest.kind:type_name -> healthcare.clinical.v1.AttachmentKind
+	0,   // 180: healthcare.clinical.v1.AttachFileRequest.confidentiality:type_name -> healthcare.clinical.v1.Confidentiality
+	150, // 181: healthcare.clinical.v1.AttachFileRequest.captured_at:type_name -> google.protobuf.Timestamp
+	49,  // 182: healthcare.clinical.v1.AttachFileRequest.provenance:type_name -> healthcare.clinical.v1.Provenance
+	50,  // 183: healthcare.clinical.v1.AttachFileResponse.attachment:type_name -> healthcare.clinical.v1.Attachment
+	50,  // 184: healthcare.clinical.v1.ListAttachmentsResponse.attachments:type_name -> healthcare.clinical.v1.Attachment
+	49,  // 185: healthcare.clinical.v1.GetProvenanceResponse.provenance:type_name -> healthcare.clinical.v1.Provenance
+	52,  // 186: healthcare.clinical.v1.StoreCalculationRequest.inputs:type_name -> healthcare.clinical.v1.CalculatorInput
+	53,  // 187: healthcare.clinical.v1.StoreCalculationResponse.result:type_name -> healthcare.clinical.v1.CalculatorResult
+	53,  // 188: healthcare.clinical.v1.ListCalculationsResponse.results:type_name -> healthcare.clinical.v1.CalculatorResult
+	19,  // 189: healthcare.clinical.v1.RaiseAlertRequest.level:type_name -> healthcare.clinical.v1.AlertLevel
+	54,  // 190: healthcare.clinical.v1.RaiseAlertResponse.alert:type_name -> healthcare.clinical.v1.CDSAlert
+	20,  // 191: healthcare.clinical.v1.RespondToAlertRequest.outcome:type_name -> healthcare.clinical.v1.AlertOutcome
+	54,  // 192: healthcare.clinical.v1.RespondToAlertResponse.alert:type_name -> healthcare.clinical.v1.CDSAlert
+	20,  // 193: healthcare.clinical.v1.ListAlertsRequest.outcome:type_name -> healthcare.clinical.v1.AlertOutcome
+	54,  // 194: healthcare.clinical.v1.ListAlertsResponse.alerts:type_name -> healthcare.clinical.v1.CDSAlert
+	21,  // 195: healthcare.clinical.v1.RequestConsultRequest.urgency:type_name -> healthcare.clinical.v1.ConsultUrgency
+	55,  // 196: healthcare.clinical.v1.RequestConsultResponse.consult:type_name -> healthcare.clinical.v1.Consult
+	55,  // 197: healthcare.clinical.v1.RespondToConsultResponse.consult:type_name -> healthcare.clinical.v1.Consult
+	55,  // 198: healthcare.clinical.v1.ListConsultsResponse.consults:type_name -> healthcare.clinical.v1.Consult
+	150, // 199: healthcare.clinical.v1.EnrolInRegistryRequest.enrolled_at:type_name -> google.protobuf.Timestamp
+	56,  // 200: healthcare.clinical.v1.EnrolInRegistryResponse.membership:type_name -> healthcare.clinical.v1.RegistryMembership
+	150, // 201: healthcare.clinical.v1.ExitRegistryRequest.exited_at:type_name -> google.protobuf.Timestamp
+	56,  // 202: healthcare.clinical.v1.ListRegistryMembershipsResponse.memberships:type_name -> healthcare.clinical.v1.RegistryMembership
+	61,  // 203: healthcare.clinical.v1.ClinicalService.WriteNote:input_type -> healthcare.clinical.v1.WriteNoteRequest
+	63,  // 204: healthcare.clinical.v1.ClinicalService.SignNote:input_type -> healthcare.clinical.v1.SignNoteRequest
+	65,  // 205: healthcare.clinical.v1.ClinicalService.AmendNote:input_type -> healthcare.clinical.v1.AmendNoteRequest
+	67,  // 206: healthcare.clinical.v1.ClinicalService.RetractNote:input_type -> healthcare.clinical.v1.RetractNoteRequest
+	69,  // 207: healthcare.clinical.v1.ClinicalService.GetNote:input_type -> healthcare.clinical.v1.GetNoteRequest
+	71,  // 208: healthcare.clinical.v1.ClinicalService.ListNotes:input_type -> healthcare.clinical.v1.ListNotesRequest
+	73,  // 209: healthcare.clinical.v1.ClinicalService.DefineTemplate:input_type -> healthcare.clinical.v1.DefineTemplateRequest
+	75,  // 210: healthcare.clinical.v1.ClinicalService.ListTemplates:input_type -> healthcare.clinical.v1.ListTemplatesRequest
+	77,  // 211: healthcare.clinical.v1.ClinicalService.RetireTemplate:input_type -> healthcare.clinical.v1.RetireTemplateRequest
+	79,  // 212: healthcare.clinical.v1.ClinicalService.DefineSmartPhrase:input_type -> healthcare.clinical.v1.DefineSmartPhraseRequest
+	81,  // 213: healthcare.clinical.v1.ClinicalService.ListSmartPhrases:input_type -> healthcare.clinical.v1.ListSmartPhrasesRequest
+	83,  // 214: healthcare.clinical.v1.ClinicalService.RecordProblem:input_type -> healthcare.clinical.v1.RecordProblemRequest
+	85,  // 215: healthcare.clinical.v1.ClinicalService.UpdateProblem:input_type -> healthcare.clinical.v1.UpdateProblemRequest
+	87,  // 216: healthcare.clinical.v1.ClinicalService.ListProblems:input_type -> healthcare.clinical.v1.ListProblemsRequest
+	89,  // 217: healthcare.clinical.v1.ClinicalService.RecordAllergy:input_type -> healthcare.clinical.v1.RecordAllergyRequest
+	91,  // 218: healthcare.clinical.v1.ClinicalService.VerifyAllergy:input_type -> healthcare.clinical.v1.VerifyAllergyRequest
+	93,  // 219: healthcare.clinical.v1.ClinicalService.ListAllergies:input_type -> healthcare.clinical.v1.ListAllergiesRequest
+	95,  // 220: healthcare.clinical.v1.ClinicalService.RecordObservation:input_type -> healthcare.clinical.v1.RecordObservationRequest
+	37,  // 221: healthcare.clinical.v1.ClinicalService.IngestDeviceReading:input_type -> healthcare.clinical.v1.IngestDeviceReadingRequest
+	39,  // 222: healthcare.clinical.v1.ClinicalService.DecideReading:input_type -> healthcare.clinical.v1.DecideReadingRequest
+	41,  // 223: healthcare.clinical.v1.ClinicalService.ListProvisionalReadings:input_type -> healthcare.clinical.v1.ListProvisionalReadingsRequest
+	97,  // 224: healthcare.clinical.v1.ClinicalService.ListObservations:input_type -> healthcare.clinical.v1.ListObservationsRequest
+	100, // 225: healthcare.clinical.v1.ClinicalService.ListCriticalResults:input_type -> healthcare.clinical.v1.ListCriticalResultsRequest
+	102, // 226: healthcare.clinical.v1.ClinicalService.AcknowledgeCriticalResult:input_type -> healthcare.clinical.v1.AcknowledgeCriticalResultRequest
+	104, // 227: healthcare.clinical.v1.ClinicalService.RecordProcedure:input_type -> healthcare.clinical.v1.RecordProcedureRequest
+	106, // 228: healthcare.clinical.v1.ClinicalService.ListProcedures:input_type -> healthcare.clinical.v1.ListProceduresRequest
+	108, // 229: healthcare.clinical.v1.ClinicalService.CreateCarePlan:input_type -> healthcare.clinical.v1.CreateCarePlanRequest
+	110, // 230: healthcare.clinical.v1.ClinicalService.UpdateCarePlan:input_type -> healthcare.clinical.v1.UpdateCarePlanRequest
+	112, // 231: healthcare.clinical.v1.ClinicalService.ListCarePlans:input_type -> healthcare.clinical.v1.ListCarePlansRequest
+	114, // 232: healthcare.clinical.v1.ClinicalService.GetBanner:input_type -> healthcare.clinical.v1.GetBannerRequest
+	116, // 233: healthcare.clinical.v1.ClinicalService.RecordConsent:input_type -> healthcare.clinical.v1.RecordConsentRequest
+	118, // 234: healthcare.clinical.v1.ClinicalService.WithdrawConsent:input_type -> healthcare.clinical.v1.WithdrawConsentRequest
+	120, // 235: healthcare.clinical.v1.ClinicalService.ListConsents:input_type -> healthcare.clinical.v1.ListConsentsRequest
+	122, // 236: healthcare.clinical.v1.ClinicalService.AttachFile:input_type -> healthcare.clinical.v1.AttachFileRequest
+	124, // 237: healthcare.clinical.v1.ClinicalService.ListAttachments:input_type -> healthcare.clinical.v1.ListAttachmentsRequest
+	126, // 238: healthcare.clinical.v1.ClinicalService.GetProvenance:input_type -> healthcare.clinical.v1.GetProvenanceRequest
+	128, // 239: healthcare.clinical.v1.ClinicalService.StoreCalculation:input_type -> healthcare.clinical.v1.StoreCalculationRequest
+	130, // 240: healthcare.clinical.v1.ClinicalService.ListCalculations:input_type -> healthcare.clinical.v1.ListCalculationsRequest
+	132, // 241: healthcare.clinical.v1.ClinicalService.RaiseAlert:input_type -> healthcare.clinical.v1.RaiseAlertRequest
+	134, // 242: healthcare.clinical.v1.ClinicalService.RespondToAlert:input_type -> healthcare.clinical.v1.RespondToAlertRequest
+	136, // 243: healthcare.clinical.v1.ClinicalService.ListAlerts:input_type -> healthcare.clinical.v1.ListAlertsRequest
+	138, // 244: healthcare.clinical.v1.ClinicalService.RequestConsult:input_type -> healthcare.clinical.v1.RequestConsultRequest
+	140, // 245: healthcare.clinical.v1.ClinicalService.RespondToConsult:input_type -> healthcare.clinical.v1.RespondToConsultRequest
+	142, // 246: healthcare.clinical.v1.ClinicalService.ListConsults:input_type -> healthcare.clinical.v1.ListConsultsRequest
+	144, // 247: healthcare.clinical.v1.ClinicalService.EnrolInRegistry:input_type -> healthcare.clinical.v1.EnrolInRegistryRequest
+	146, // 248: healthcare.clinical.v1.ClinicalService.ExitRegistry:input_type -> healthcare.clinical.v1.ExitRegistryRequest
+	148, // 249: healthcare.clinical.v1.ClinicalService.ListRegistryMemberships:input_type -> healthcare.clinical.v1.ListRegistryMembershipsRequest
+	62,  // 250: healthcare.clinical.v1.ClinicalService.WriteNote:output_type -> healthcare.clinical.v1.WriteNoteResponse
+	64,  // 251: healthcare.clinical.v1.ClinicalService.SignNote:output_type -> healthcare.clinical.v1.SignNoteResponse
+	66,  // 252: healthcare.clinical.v1.ClinicalService.AmendNote:output_type -> healthcare.clinical.v1.AmendNoteResponse
+	68,  // 253: healthcare.clinical.v1.ClinicalService.RetractNote:output_type -> healthcare.clinical.v1.RetractNoteResponse
+	70,  // 254: healthcare.clinical.v1.ClinicalService.GetNote:output_type -> healthcare.clinical.v1.GetNoteResponse
+	72,  // 255: healthcare.clinical.v1.ClinicalService.ListNotes:output_type -> healthcare.clinical.v1.ListNotesResponse
+	74,  // 256: healthcare.clinical.v1.ClinicalService.DefineTemplate:output_type -> healthcare.clinical.v1.DefineTemplateResponse
+	76,  // 257: healthcare.clinical.v1.ClinicalService.ListTemplates:output_type -> healthcare.clinical.v1.ListTemplatesResponse
+	78,  // 258: healthcare.clinical.v1.ClinicalService.RetireTemplate:output_type -> healthcare.clinical.v1.RetireTemplateResponse
+	80,  // 259: healthcare.clinical.v1.ClinicalService.DefineSmartPhrase:output_type -> healthcare.clinical.v1.DefineSmartPhraseResponse
+	82,  // 260: healthcare.clinical.v1.ClinicalService.ListSmartPhrases:output_type -> healthcare.clinical.v1.ListSmartPhrasesResponse
+	84,  // 261: healthcare.clinical.v1.ClinicalService.RecordProblem:output_type -> healthcare.clinical.v1.RecordProblemResponse
+	86,  // 262: healthcare.clinical.v1.ClinicalService.UpdateProblem:output_type -> healthcare.clinical.v1.UpdateProblemResponse
+	88,  // 263: healthcare.clinical.v1.ClinicalService.ListProblems:output_type -> healthcare.clinical.v1.ListProblemsResponse
+	90,  // 264: healthcare.clinical.v1.ClinicalService.RecordAllergy:output_type -> healthcare.clinical.v1.RecordAllergyResponse
+	92,  // 265: healthcare.clinical.v1.ClinicalService.VerifyAllergy:output_type -> healthcare.clinical.v1.VerifyAllergyResponse
+	94,  // 266: healthcare.clinical.v1.ClinicalService.ListAllergies:output_type -> healthcare.clinical.v1.ListAllergiesResponse
+	96,  // 267: healthcare.clinical.v1.ClinicalService.RecordObservation:output_type -> healthcare.clinical.v1.RecordObservationResponse
+	38,  // 268: healthcare.clinical.v1.ClinicalService.IngestDeviceReading:output_type -> healthcare.clinical.v1.IngestDeviceReadingResponse
+	40,  // 269: healthcare.clinical.v1.ClinicalService.DecideReading:output_type -> healthcare.clinical.v1.DecideReadingResponse
+	42,  // 270: healthcare.clinical.v1.ClinicalService.ListProvisionalReadings:output_type -> healthcare.clinical.v1.ListProvisionalReadingsResponse
+	98,  // 271: healthcare.clinical.v1.ClinicalService.ListObservations:output_type -> healthcare.clinical.v1.ListObservationsResponse
+	101, // 272: healthcare.clinical.v1.ClinicalService.ListCriticalResults:output_type -> healthcare.clinical.v1.ListCriticalResultsResponse
+	103, // 273: healthcare.clinical.v1.ClinicalService.AcknowledgeCriticalResult:output_type -> healthcare.clinical.v1.AcknowledgeCriticalResultResponse
+	105, // 274: healthcare.clinical.v1.ClinicalService.RecordProcedure:output_type -> healthcare.clinical.v1.RecordProcedureResponse
+	107, // 275: healthcare.clinical.v1.ClinicalService.ListProcedures:output_type -> healthcare.clinical.v1.ListProceduresResponse
+	109, // 276: healthcare.clinical.v1.ClinicalService.CreateCarePlan:output_type -> healthcare.clinical.v1.CreateCarePlanResponse
+	111, // 277: healthcare.clinical.v1.ClinicalService.UpdateCarePlan:output_type -> healthcare.clinical.v1.UpdateCarePlanResponse
+	113, // 278: healthcare.clinical.v1.ClinicalService.ListCarePlans:output_type -> healthcare.clinical.v1.ListCarePlansResponse
+	115, // 279: healthcare.clinical.v1.ClinicalService.GetBanner:output_type -> healthcare.clinical.v1.GetBannerResponse
+	117, // 280: healthcare.clinical.v1.ClinicalService.RecordConsent:output_type -> healthcare.clinical.v1.RecordConsentResponse
+	119, // 281: healthcare.clinical.v1.ClinicalService.WithdrawConsent:output_type -> healthcare.clinical.v1.WithdrawConsentResponse
+	121, // 282: healthcare.clinical.v1.ClinicalService.ListConsents:output_type -> healthcare.clinical.v1.ListConsentsResponse
+	123, // 283: healthcare.clinical.v1.ClinicalService.AttachFile:output_type -> healthcare.clinical.v1.AttachFileResponse
+	125, // 284: healthcare.clinical.v1.ClinicalService.ListAttachments:output_type -> healthcare.clinical.v1.ListAttachmentsResponse
+	127, // 285: healthcare.clinical.v1.ClinicalService.GetProvenance:output_type -> healthcare.clinical.v1.GetProvenanceResponse
+	129, // 286: healthcare.clinical.v1.ClinicalService.StoreCalculation:output_type -> healthcare.clinical.v1.StoreCalculationResponse
+	131, // 287: healthcare.clinical.v1.ClinicalService.ListCalculations:output_type -> healthcare.clinical.v1.ListCalculationsResponse
+	133, // 288: healthcare.clinical.v1.ClinicalService.RaiseAlert:output_type -> healthcare.clinical.v1.RaiseAlertResponse
+	135, // 289: healthcare.clinical.v1.ClinicalService.RespondToAlert:output_type -> healthcare.clinical.v1.RespondToAlertResponse
+	137, // 290: healthcare.clinical.v1.ClinicalService.ListAlerts:output_type -> healthcare.clinical.v1.ListAlertsResponse
+	139, // 291: healthcare.clinical.v1.ClinicalService.RequestConsult:output_type -> healthcare.clinical.v1.RequestConsultResponse
+	141, // 292: healthcare.clinical.v1.ClinicalService.RespondToConsult:output_type -> healthcare.clinical.v1.RespondToConsultResponse
+	143, // 293: healthcare.clinical.v1.ClinicalService.ListConsults:output_type -> healthcare.clinical.v1.ListConsultsResponse
+	145, // 294: healthcare.clinical.v1.ClinicalService.EnrolInRegistry:output_type -> healthcare.clinical.v1.EnrolInRegistryResponse
+	147, // 295: healthcare.clinical.v1.ClinicalService.ExitRegistry:output_type -> healthcare.clinical.v1.ExitRegistryResponse
+	149, // 296: healthcare.clinical.v1.ClinicalService.ListRegistryMemberships:output_type -> healthcare.clinical.v1.ListRegistryMembershipsResponse
+	250, // [250:297] is the sub-list for method output_type
+	203, // [203:250] is the sub-list for method input_type
+	203, // [203:203] is the sub-list for extension type_name
+	203, // [203:203] is the sub-list for extension extendee
+	0,   // [0:203] is the sub-list for field type_name
 }
 
 func init() { file_healthcare_clinical_v1_clinical_proto_init() }
@@ -11552,8 +12216,8 @@ func file_healthcare_clinical_v1_clinical_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_healthcare_clinical_v1_clinical_proto_rawDesc), len(file_healthcare_clinical_v1_clinical_proto_rawDesc)),
-			NumEnums:      23,
-			NumMessages:   118,
+			NumEnums:      25,
+			NumMessages:   125,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

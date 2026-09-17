@@ -458,6 +458,105 @@ message Observation {
   string amends_id = 21;
   string recorded_by = 22;
   google.protobuf.Timestamp recorded_at = 23;
+
+  // Where the reading came from and whether a human has accepted it into the
+  // chart (SRS-ICU-003). A client that showed a provisional monitor value the
+  // same way it shows a typed measurement would undo the distinction these
+  // fields exist to carry, so both travel and neither is optional.
+  ObservationSource source = 24;
+  ValidationState validation = 25;
+  DeviceSource device = 26;
+  string validated_by = 27;
+  google.protobuf.Timestamp validated_at = 28;
+  // Why a reading was rejected. A run of rejections with reasons is how a
+  // failing probe is found.
+  string validation_note = 29;
+}
+
+// Where an observation came from (SRS-ICU-003).
+enum ObservationSource {
+  OBSERVATION_SOURCE_UNSPECIFIED = 0;
+  // Typed by a person who was looking at the patient. Validated by
+  // construction: the human was the instrument.
+  OBSERVATION_SOURCE_MANUAL = 1;
+  // Off a monitor or analyser at the bedside. Starts unvalidated.
+  OBSERVATION_SOURCE_DEVICE = 2;
+  // From another system authoritative for it — a laboratory, another hospital
+  // (SRS-CLN-010). Validated where it arrived, not here.
+  OBSERVATION_SOURCE_IMPORTED = 3;
+}
+
+// Whether a human has accepted a reading into the chart (SRS-ICU-003).
+enum ValidationState {
+  VALIDATION_STATE_UNSPECIFIED = 0;
+  // The source is already authoritative and nobody has to confirm it.
+  VALIDATION_STATE_NOT_REQUIRED = 1;
+  // A device reading nobody has looked at. Shown on the chart and excluded
+  // from anything computed (SRS-ICU-009).
+  VALIDATION_STATE_PENDING = 2;
+  VALIDATION_STATE_CONFIRMED = 3;
+  // Marked an artefact — the probe was off, the line was being flushed. Kept
+  // rather than deleted, because a run of rejections is how a failing probe is
+  // found.
+  VALIDATION_STATE_REJECTED = 4;
+}
+
+// Device identity and quality metadata (SRS-ICU-003).
+message DeviceSource {
+  // Required for a device reading: a run of implausible values almost always
+  // means one device, and a reading that cannot name its own is one nobody can
+  // trace to the probe that caused it.
+  string device_id = 1;
+  // Which parameter of the device this came from — "SpO2", "ART". A monitor
+  // produces several streams and they fail independently.
+  string channel = 2;
+  // What the device said about its own signal, verbatim: "good", "artefact",
+  // "searching". Not normalised, because every vendor has its own vocabulary
+  // and flattening it would lose the difference between "the device said
+  // nothing" and "the device said a word we do not know".
+  string quality = 3;
+  // The device's own clock, and ours. Two fields because the gap between them
+  // is what makes a feed stale, and one timestamp cannot show it.
+  google.protobuf.Timestamp observed_at = 4;
+  google.protobuf.Timestamp received_at = 5;
+}
+
+message IngestDeviceReadingRequest {
+  string patient_id = 1;
+  string encounter_id = 2;
+  Coding code = 3;
+  Quantity value = 4;
+  DeviceSource device = 5;
+  // Deliberately narrower than RecordObservationRequest. A monitor does not
+  // supply an interpretation, does not amend earlier readings, and does not
+  // carry provenance from another hospital — and a path that accepted those
+  // from a device feed would be a way to write them without a person.
+}
+
+message IngestDeviceReadingResponse {
+  Observation observation = 1;
+}
+
+message DecideReadingRequest {
+  string observation_id = 1;
+  // True to confirm the reading into the chart, false to mark it an artefact.
+  bool accept = 2;
+  // Required on a rejection. A column of the word "artefact" with no reasons
+  // is not how a failing probe gets found.
+  string reason = 3;
+}
+
+message DecideReadingResponse {
+  Observation observation = 1;
+}
+
+message ListProvisionalReadingsRequest {
+  string patient_id = 1;
+  int32 page_size = 2;
+}
+
+message ListProvisionalReadingsResponse {
+  repeated Observation observations = 1;
 }
 
 message CriticalAcknowledgement {
@@ -1347,6 +1446,17 @@ service ClinicalService {
   // SRS-CLN-005, SRS-CLN-010, SRS-CLN-011. Criticality is supplied by the
   // authoritative diagnostic service and never inferred here.
   rpc RecordObservation(RecordObservationRequest) returns (RecordObservationResponse);
+
+  // Device-sourced readings (SRS-ICU-003). Ingest puts a monitor value on the
+  // chart as provisional; DecideReading is the only path by which one becomes
+  // a chart value, and it needs the clinical write permission rather than the
+  // interface credential that ingested it — an interface that could confirm
+  // its own readings would make the distinction meaningless.
+  rpc IngestDeviceReading(IngestDeviceReadingRequest)
+      returns (IngestDeviceReadingResponse);
+  rpc DecideReading(DecideReadingRequest) returns (DecideReadingResponse);
+  rpc ListProvisionalReadings(ListProvisionalReadingsRequest)
+      returns (ListProvisionalReadingsResponse);
   rpc ListObservations(ListObservationsRequest) returns (ListObservationsResponse);
 
   // SRS-CLN-012. Unacknowledged critical results escalate according to policy.

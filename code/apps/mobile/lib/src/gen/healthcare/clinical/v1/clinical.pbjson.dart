@@ -466,6 +466,42 @@ final $typed_data.Uint8List consultStatusDescriptor = $convert.base64Decode(
     'T05TVUxUX1NUQVRVU19BTlNXRVJFRBADEhsKF0NPTlNVTFRfU1RBVFVTX0RFQ0xJTkVEEAQSHA'
     'oYQ09OU1VMVF9TVEFUVVNfQ0FOQ0VMTEVEEAU=');
 
+@$core.Deprecated('Use observationSourceDescriptor instead')
+const ObservationSource$json = {
+  '1': 'ObservationSource',
+  '2': [
+    {'1': 'OBSERVATION_SOURCE_UNSPECIFIED', '2': 0},
+    {'1': 'OBSERVATION_SOURCE_MANUAL', '2': 1},
+    {'1': 'OBSERVATION_SOURCE_DEVICE', '2': 2},
+    {'1': 'OBSERVATION_SOURCE_IMPORTED', '2': 3},
+  ],
+};
+
+/// Descriptor for `ObservationSource`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List observationSourceDescriptor = $convert.base64Decode(
+    'ChFPYnNlcnZhdGlvblNvdXJjZRIiCh5PQlNFUlZBVElPTl9TT1VSQ0VfVU5TUEVDSUZJRUQQAB'
+    'IdChlPQlNFUlZBVElPTl9TT1VSQ0VfTUFOVUFMEAESHQoZT0JTRVJWQVRJT05fU09VUkNFX0RF'
+    'VklDRRACEh8KG09CU0VSVkFUSU9OX1NPVVJDRV9JTVBPUlRFRBAD');
+
+@$core.Deprecated('Use validationStateDescriptor instead')
+const ValidationState$json = {
+  '1': 'ValidationState',
+  '2': [
+    {'1': 'VALIDATION_STATE_UNSPECIFIED', '2': 0},
+    {'1': 'VALIDATION_STATE_NOT_REQUIRED', '2': 1},
+    {'1': 'VALIDATION_STATE_PENDING', '2': 2},
+    {'1': 'VALIDATION_STATE_CONFIRMED', '2': 3},
+    {'1': 'VALIDATION_STATE_REJECTED', '2': 4},
+  ],
+};
+
+/// Descriptor for `ValidationState`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List validationStateDescriptor = $convert.base64Decode(
+    'Cg9WYWxpZGF0aW9uU3RhdGUSIAocVkFMSURBVElPTl9TVEFURV9VTlNQRUNJRklFRBAAEiEKHV'
+    'ZBTElEQVRJT05fU1RBVEVfTk9UX1JFUVVJUkVEEAESHAoYVkFMSURBVElPTl9TVEFURV9QRU5E'
+    'SU5HEAISHgoaVkFMSURBVElPTl9TVEFURV9DT05GSVJNRUQQAxIdChlWQUxJREFUSU9OX1NUQV'
+    'RFX1JFSkVDVEVEEAQ=');
+
 @$core.Deprecated('Use codingDescriptor instead')
 const Coding$json = {
   '1': 'Coding',
@@ -977,6 +1013,40 @@ const Observation$json = {
       '6': '.google.protobuf.Timestamp',
       '10': 'recordedAt'
     },
+    {
+      '1': 'source',
+      '3': 24,
+      '4': 1,
+      '5': 14,
+      '6': '.healthcare.clinical.v1.ObservationSource',
+      '10': 'source'
+    },
+    {
+      '1': 'validation',
+      '3': 25,
+      '4': 1,
+      '5': 14,
+      '6': '.healthcare.clinical.v1.ValidationState',
+      '10': 'validation'
+    },
+    {
+      '1': 'device',
+      '3': 26,
+      '4': 1,
+      '5': 11,
+      '6': '.healthcare.clinical.v1.DeviceSource',
+      '10': 'device'
+    },
+    {'1': 'validated_by', '3': 27, '4': 1, '5': 9, '10': 'validatedBy'},
+    {
+      '1': 'validated_at',
+      '3': 28,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'validatedAt'
+    },
+    {'1': 'validation_note', '3': 29, '4': 1, '5': 9, '10': 'validationNote'},
   ],
 };
 
@@ -1000,7 +1070,180 @@ final $typed_data.Uint8List observationDescriptor = $convert.base64Decode(
     'Zvcm1lcklkEhsKCWRldmljZV9pZBgSIAEoCVIIZGV2aWNlSWQSIwoNc291cmNlX3N5c3RlbRgT'
     'IAEoCVIMc291cmNlU3lzdGVtEhIKBG5vdGUYFCABKAlSBG5vdGUSGwoJYW1lbmRzX2lkGBUgAS'
     'gJUghhbWVuZHNJZBIfCgtyZWNvcmRlZF9ieRgWIAEoCVIKcmVjb3JkZWRCeRI7CgtyZWNvcmRl'
-    'ZF9hdBgXIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBSCnJlY29yZGVkQXQ=');
+    'ZF9hdBgXIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBSCnJlY29yZGVkQXQSQQoGc2'
+    '91cmNlGBggASgOMikuaGVhbHRoY2FyZS5jbGluaWNhbC52MS5PYnNlcnZhdGlvblNvdXJjZVIG'
+    'c291cmNlEkcKCnZhbGlkYXRpb24YGSABKA4yJy5oZWFsdGhjYXJlLmNsaW5pY2FsLnYxLlZhbG'
+    'lkYXRpb25TdGF0ZVIKdmFsaWRhdGlvbhI8CgZkZXZpY2UYGiABKAsyJC5oZWFsdGhjYXJlLmNs'
+    'aW5pY2FsLnYxLkRldmljZVNvdXJjZVIGZGV2aWNlEiEKDHZhbGlkYXRlZF9ieRgbIAEoCVILdm'
+    'FsaWRhdGVkQnkSPQoMdmFsaWRhdGVkX2F0GBwgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVz'
+    'dGFtcFILdmFsaWRhdGVkQXQSJwoPdmFsaWRhdGlvbl9ub3RlGB0gASgJUg52YWxpZGF0aW9uTm'
+    '90ZQ==');
+
+@$core.Deprecated('Use deviceSourceDescriptor instead')
+const DeviceSource$json = {
+  '1': 'DeviceSource',
+  '2': [
+    {'1': 'device_id', '3': 1, '4': 1, '5': 9, '10': 'deviceId'},
+    {'1': 'channel', '3': 2, '4': 1, '5': 9, '10': 'channel'},
+    {'1': 'quality', '3': 3, '4': 1, '5': 9, '10': 'quality'},
+    {
+      '1': 'observed_at',
+      '3': 4,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'observedAt'
+    },
+    {
+      '1': 'received_at',
+      '3': 5,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'receivedAt'
+    },
+  ],
+};
+
+/// Descriptor for `DeviceSource`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List deviceSourceDescriptor = $convert.base64Decode(
+    'CgxEZXZpY2VTb3VyY2USGwoJZGV2aWNlX2lkGAEgASgJUghkZXZpY2VJZBIYCgdjaGFubmVsGA'
+    'IgASgJUgdjaGFubmVsEhgKB3F1YWxpdHkYAyABKAlSB3F1YWxpdHkSOwoLb2JzZXJ2ZWRfYXQY'
+    'BCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wUgpvYnNlcnZlZEF0EjsKC3JlY2Vpdm'
+    'VkX2F0GAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcFIKcmVjZWl2ZWRBdA==');
+
+@$core.Deprecated('Use ingestDeviceReadingRequestDescriptor instead')
+const IngestDeviceReadingRequest$json = {
+  '1': 'IngestDeviceReadingRequest',
+  '2': [
+    {'1': 'patient_id', '3': 1, '4': 1, '5': 9, '10': 'patientId'},
+    {'1': 'encounter_id', '3': 2, '4': 1, '5': 9, '10': 'encounterId'},
+    {
+      '1': 'code',
+      '3': 3,
+      '4': 1,
+      '5': 11,
+      '6': '.healthcare.clinical.v1.Coding',
+      '10': 'code'
+    },
+    {
+      '1': 'value',
+      '3': 4,
+      '4': 1,
+      '5': 11,
+      '6': '.healthcare.clinical.v1.Quantity',
+      '10': 'value'
+    },
+    {
+      '1': 'device',
+      '3': 5,
+      '4': 1,
+      '5': 11,
+      '6': '.healthcare.clinical.v1.DeviceSource',
+      '10': 'device'
+    },
+  ],
+};
+
+/// Descriptor for `IngestDeviceReadingRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List ingestDeviceReadingRequestDescriptor = $convert.base64Decode(
+    'ChpJbmdlc3REZXZpY2VSZWFkaW5nUmVxdWVzdBIdCgpwYXRpZW50X2lkGAEgASgJUglwYXRpZW'
+    '50SWQSIQoMZW5jb3VudGVyX2lkGAIgASgJUgtlbmNvdW50ZXJJZBIyCgRjb2RlGAMgASgLMh4u'
+    'aGVhbHRoY2FyZS5jbGluaWNhbC52MS5Db2RpbmdSBGNvZGUSNgoFdmFsdWUYBCABKAsyIC5oZW'
+    'FsdGhjYXJlLmNsaW5pY2FsLnYxLlF1YW50aXR5UgV2YWx1ZRI8CgZkZXZpY2UYBSABKAsyJC5o'
+    'ZWFsdGhjYXJlLmNsaW5pY2FsLnYxLkRldmljZVNvdXJjZVIGZGV2aWNl');
+
+@$core.Deprecated('Use ingestDeviceReadingResponseDescriptor instead')
+const IngestDeviceReadingResponse$json = {
+  '1': 'IngestDeviceReadingResponse',
+  '2': [
+    {
+      '1': 'observation',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.healthcare.clinical.v1.Observation',
+      '10': 'observation'
+    },
+  ],
+};
+
+/// Descriptor for `IngestDeviceReadingResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List ingestDeviceReadingResponseDescriptor =
+    $convert.base64Decode(
+        'ChtJbmdlc3REZXZpY2VSZWFkaW5nUmVzcG9uc2USRQoLb2JzZXJ2YXRpb24YASABKAsyIy5oZW'
+        'FsdGhjYXJlLmNsaW5pY2FsLnYxLk9ic2VydmF0aW9uUgtvYnNlcnZhdGlvbg==');
+
+@$core.Deprecated('Use decideReadingRequestDescriptor instead')
+const DecideReadingRequest$json = {
+  '1': 'DecideReadingRequest',
+  '2': [
+    {'1': 'observation_id', '3': 1, '4': 1, '5': 9, '10': 'observationId'},
+    {'1': 'accept', '3': 2, '4': 1, '5': 8, '10': 'accept'},
+    {'1': 'reason', '3': 3, '4': 1, '5': 9, '10': 'reason'},
+  ],
+};
+
+/// Descriptor for `DecideReadingRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List decideReadingRequestDescriptor = $convert.base64Decode(
+    'ChREZWNpZGVSZWFkaW5nUmVxdWVzdBIlCg5vYnNlcnZhdGlvbl9pZBgBIAEoCVINb2JzZXJ2YX'
+    'Rpb25JZBIWCgZhY2NlcHQYAiABKAhSBmFjY2VwdBIWCgZyZWFzb24YAyABKAlSBnJlYXNvbg==');
+
+@$core.Deprecated('Use decideReadingResponseDescriptor instead')
+const DecideReadingResponse$json = {
+  '1': 'DecideReadingResponse',
+  '2': [
+    {
+      '1': 'observation',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.healthcare.clinical.v1.Observation',
+      '10': 'observation'
+    },
+  ],
+};
+
+/// Descriptor for `DecideReadingResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List decideReadingResponseDescriptor = $convert.base64Decode(
+    'ChVEZWNpZGVSZWFkaW5nUmVzcG9uc2USRQoLb2JzZXJ2YXRpb24YASABKAsyIy5oZWFsdGhjYX'
+    'JlLmNsaW5pY2FsLnYxLk9ic2VydmF0aW9uUgtvYnNlcnZhdGlvbg==');
+
+@$core.Deprecated('Use listProvisionalReadingsRequestDescriptor instead')
+const ListProvisionalReadingsRequest$json = {
+  '1': 'ListProvisionalReadingsRequest',
+  '2': [
+    {'1': 'patient_id', '3': 1, '4': 1, '5': 9, '10': 'patientId'},
+    {'1': 'page_size', '3': 2, '4': 1, '5': 5, '10': 'pageSize'},
+  ],
+};
+
+/// Descriptor for `ListProvisionalReadingsRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List listProvisionalReadingsRequestDescriptor =
+    $convert.base64Decode(
+        'Ch5MaXN0UHJvdmlzaW9uYWxSZWFkaW5nc1JlcXVlc3QSHQoKcGF0aWVudF9pZBgBIAEoCVIJcG'
+        'F0aWVudElkEhsKCXBhZ2Vfc2l6ZRgCIAEoBVIIcGFnZVNpemU=');
+
+@$core.Deprecated('Use listProvisionalReadingsResponseDescriptor instead')
+const ListProvisionalReadingsResponse$json = {
+  '1': 'ListProvisionalReadingsResponse',
+  '2': [
+    {
+      '1': 'observations',
+      '3': 1,
+      '4': 3,
+      '5': 11,
+      '6': '.healthcare.clinical.v1.Observation',
+      '10': 'observations'
+    },
+  ],
+};
+
+/// Descriptor for `ListProvisionalReadingsResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List listProvisionalReadingsResponseDescriptor =
+    $convert.base64Decode(
+        'Ch9MaXN0UHJvdmlzaW9uYWxSZWFkaW5nc1Jlc3BvbnNlEkcKDG9ic2VydmF0aW9ucxgBIAMoCz'
+        'IjLmhlYWx0aGNhcmUuY2xpbmljYWwudjEuT2JzZXJ2YXRpb25SDG9ic2VydmF0aW9ucw==');
 
 @$core.Deprecated('Use criticalAcknowledgementDescriptor instead')
 const CriticalAcknowledgement$json = {
@@ -4226,6 +4469,21 @@ const $core.Map<$core.String, $core.dynamic> ClinicalServiceBase$json = {
       '3': '.healthcare.clinical.v1.RecordObservationResponse'
     },
     {
+      '1': 'IngestDeviceReading',
+      '2': '.healthcare.clinical.v1.IngestDeviceReadingRequest',
+      '3': '.healthcare.clinical.v1.IngestDeviceReadingResponse'
+    },
+    {
+      '1': 'DecideReading',
+      '2': '.healthcare.clinical.v1.DecideReadingRequest',
+      '3': '.healthcare.clinical.v1.DecideReadingResponse'
+    },
+    {
+      '1': 'ListProvisionalReadings',
+      '2': '.healthcare.clinical.v1.ListProvisionalReadingsRequest',
+      '3': '.healthcare.clinical.v1.ListProvisionalReadingsResponse'
+    },
+    {
       '1': 'ListObservations',
       '2': '.healthcare.clinical.v1.ListObservationsRequest',
       '3': '.healthcare.clinical.v1.ListObservationsResponse'
@@ -4417,6 +4675,17 @@ const $core.Map<$core.String, $core.Map<$core.String, $core.dynamic>>
   '.healthcare.clinical.v1.RecordObservationResponse':
       RecordObservationResponse$json,
   '.healthcare.clinical.v1.Observation': Observation$json,
+  '.healthcare.clinical.v1.DeviceSource': DeviceSource$json,
+  '.healthcare.clinical.v1.IngestDeviceReadingRequest':
+      IngestDeviceReadingRequest$json,
+  '.healthcare.clinical.v1.IngestDeviceReadingResponse':
+      IngestDeviceReadingResponse$json,
+  '.healthcare.clinical.v1.DecideReadingRequest': DecideReadingRequest$json,
+  '.healthcare.clinical.v1.DecideReadingResponse': DecideReadingResponse$json,
+  '.healthcare.clinical.v1.ListProvisionalReadingsRequest':
+      ListProvisionalReadingsRequest$json,
+  '.healthcare.clinical.v1.ListProvisionalReadingsResponse':
+      ListProvisionalReadingsResponse$json,
   '.healthcare.clinical.v1.ListObservationsRequest':
       ListObservationsRequest$json,
   '.healthcare.clinical.v1.ListObservationsResponse':
@@ -4544,57 +4813,64 @@ final $typed_data.Uint8List clinicalServiceDescriptor = $convert.base64Decode(
     'ZXJnaWVzUmVxdWVzdBotLmhlYWx0aGNhcmUuY2xpbmljYWwudjEuTGlzdEFsbGVyZ2llc1Jlc3'
     'BvbnNlEngKEVJlY29yZE9ic2VydmF0aW9uEjAuaGVhbHRoY2FyZS5jbGluaWNhbC52MS5SZWNv'
     'cmRPYnNlcnZhdGlvblJlcXVlc3QaMS5oZWFsdGhjYXJlLmNsaW5pY2FsLnYxLlJlY29yZE9ic2'
-    'VydmF0aW9uUmVzcG9uc2USdQoQTGlzdE9ic2VydmF0aW9ucxIvLmhlYWx0aGNhcmUuY2xpbmlj'
-    'YWwudjEuTGlzdE9ic2VydmF0aW9uc1JlcXVlc3QaMC5oZWFsdGhjYXJlLmNsaW5pY2FsLnYxLk'
-    'xpc3RPYnNlcnZhdGlvbnNSZXNwb25zZRJ+ChNMaXN0Q3JpdGljYWxSZXN1bHRzEjIuaGVhbHRo'
-    'Y2FyZS5jbGluaWNhbC52MS5MaXN0Q3JpdGljYWxSZXN1bHRzUmVxdWVzdBozLmhlYWx0aGNhcm'
-    'UuY2xpbmljYWwudjEuTGlzdENyaXRpY2FsUmVzdWx0c1Jlc3BvbnNlEpABChlBY2tub3dsZWRn'
-    'ZUNyaXRpY2FsUmVzdWx0EjguaGVhbHRoY2FyZS5jbGluaWNhbC52MS5BY2tub3dsZWRnZUNyaX'
-    'RpY2FsUmVzdWx0UmVxdWVzdBo5LmhlYWx0aGNhcmUuY2xpbmljYWwudjEuQWNrbm93bGVkZ2VD'
-    'cml0aWNhbFJlc3VsdFJlc3BvbnNlEnIKD1JlY29yZFByb2NlZHVyZRIuLmhlYWx0aGNhcmUuY2'
-    'xpbmljYWwudjEuUmVjb3JkUHJvY2VkdXJlUmVxdWVzdBovLmhlYWx0aGNhcmUuY2xpbmljYWwu'
-    'djEuUmVjb3JkUHJvY2VkdXJlUmVzcG9uc2USbwoOTGlzdFByb2NlZHVyZXMSLS5oZWFsdGhjYX'
-    'JlLmNsaW5pY2FsLnYxLkxpc3RQcm9jZWR1cmVzUmVxdWVzdBouLmhlYWx0aGNhcmUuY2xpbmlj'
-    'YWwudjEuTGlzdFByb2NlZHVyZXNSZXNwb25zZRJvCg5DcmVhdGVDYXJlUGxhbhItLmhlYWx0aG'
-    'NhcmUuY2xpbmljYWwudjEuQ3JlYXRlQ2FyZVBsYW5SZXF1ZXN0Gi4uaGVhbHRoY2FyZS5jbGlu'
-    'aWNhbC52MS5DcmVhdGVDYXJlUGxhblJlc3BvbnNlEm8KDlVwZGF0ZUNhcmVQbGFuEi0uaGVhbH'
-    'RoY2FyZS5jbGluaWNhbC52MS5VcGRhdGVDYXJlUGxhblJlcXVlc3QaLi5oZWFsdGhjYXJlLmNs'
-    'aW5pY2FsLnYxLlVwZGF0ZUNhcmVQbGFuUmVzcG9uc2USbAoNTGlzdENhcmVQbGFucxIsLmhlYW'
-    'x0aGNhcmUuY2xpbmljYWwudjEuTGlzdENhcmVQbGFuc1JlcXVlc3QaLS5oZWFsdGhjYXJlLmNs'
-    'aW5pY2FsLnYxLkxpc3RDYXJlUGxhbnNSZXNwb25zZRJgCglHZXRCYW5uZXISKC5oZWFsdGhjYX'
-    'JlLmNsaW5pY2FsLnYxLkdldEJhbm5lclJlcXVlc3QaKS5oZWFsdGhjYXJlLmNsaW5pY2FsLnYx'
-    'LkdldEJhbm5lclJlc3BvbnNlEmwKDVJlY29yZENvbnNlbnQSLC5oZWFsdGhjYXJlLmNsaW5pY2'
-    'FsLnYxLlJlY29yZENvbnNlbnRSZXF1ZXN0Gi0uaGVhbHRoY2FyZS5jbGluaWNhbC52MS5SZWNv'
-    'cmRDb25zZW50UmVzcG9uc2UScgoPV2l0aGRyYXdDb25zZW50Ei4uaGVhbHRoY2FyZS5jbGluaW'
-    'NhbC52MS5XaXRoZHJhd0NvbnNlbnRSZXF1ZXN0Gi8uaGVhbHRoY2FyZS5jbGluaWNhbC52MS5X'
-    'aXRoZHJhd0NvbnNlbnRSZXNwb25zZRJpCgxMaXN0Q29uc2VudHMSKy5oZWFsdGhjYXJlLmNsaW'
-    '5pY2FsLnYxLkxpc3RDb25zZW50c1JlcXVlc3QaLC5oZWFsdGhjYXJlLmNsaW5pY2FsLnYxLkxp'
-    'c3RDb25zZW50c1Jlc3BvbnNlEmMKCkF0dGFjaEZpbGUSKS5oZWFsdGhjYXJlLmNsaW5pY2FsLn'
-    'YxLkF0dGFjaEZpbGVSZXF1ZXN0GiouaGVhbHRoY2FyZS5jbGluaWNhbC52MS5BdHRhY2hGaWxl'
-    'UmVzcG9uc2UScgoPTGlzdEF0dGFjaG1lbnRzEi4uaGVhbHRoY2FyZS5jbGluaWNhbC52MS5MaX'
-    'N0QXR0YWNobWVudHNSZXF1ZXN0Gi8uaGVhbHRoY2FyZS5jbGluaWNhbC52MS5MaXN0QXR0YWNo'
-    'bWVudHNSZXNwb25zZRJsCg1HZXRQcm92ZW5hbmNlEiwuaGVhbHRoY2FyZS5jbGluaWNhbC52MS'
-    '5HZXRQcm92ZW5hbmNlUmVxdWVzdBotLmhlYWx0aGNhcmUuY2xpbmljYWwudjEuR2V0UHJvdmVu'
-    'YW5jZVJlc3BvbnNlEnUKEFN0b3JlQ2FsY3VsYXRpb24SLy5oZWFsdGhjYXJlLmNsaW5pY2FsLn'
-    'YxLlN0b3JlQ2FsY3VsYXRpb25SZXF1ZXN0GjAuaGVhbHRoY2FyZS5jbGluaWNhbC52MS5TdG9y'
-    'ZUNhbGN1bGF0aW9uUmVzcG9uc2USdQoQTGlzdENhbGN1bGF0aW9ucxIvLmhlYWx0aGNhcmUuY2'
-    'xpbmljYWwudjEuTGlzdENhbGN1bGF0aW9uc1JlcXVlc3QaMC5oZWFsdGhjYXJlLmNsaW5pY2Fs'
-    'LnYxLkxpc3RDYWxjdWxhdGlvbnNSZXNwb25zZRJjCgpSYWlzZUFsZXJ0EikuaGVhbHRoY2FyZS'
-    '5jbGluaWNhbC52MS5SYWlzZUFsZXJ0UmVxdWVzdBoqLmhlYWx0aGNhcmUuY2xpbmljYWwudjEu'
-    'UmFpc2VBbGVydFJlc3BvbnNlEm8KDlJlc3BvbmRUb0FsZXJ0Ei0uaGVhbHRoY2FyZS5jbGluaW'
-    'NhbC52MS5SZXNwb25kVG9BbGVydFJlcXVlc3QaLi5oZWFsdGhjYXJlLmNsaW5pY2FsLnYxLlJl'
-    'c3BvbmRUb0FsZXJ0UmVzcG9uc2USYwoKTGlzdEFsZXJ0cxIpLmhlYWx0aGNhcmUuY2xpbmljYW'
-    'wudjEuTGlzdEFsZXJ0c1JlcXVlc3QaKi5oZWFsdGhjYXJlLmNsaW5pY2FsLnYxLkxpc3RBbGVy'
-    'dHNSZXNwb25zZRJvCg5SZXF1ZXN0Q29uc3VsdBItLmhlYWx0aGNhcmUuY2xpbmljYWwudjEuUm'
-    'VxdWVzdENvbnN1bHRSZXF1ZXN0Gi4uaGVhbHRoY2FyZS5jbGluaWNhbC52MS5SZXF1ZXN0Q29u'
-    'c3VsdFJlc3BvbnNlEnUKEFJlc3BvbmRUb0NvbnN1bHQSLy5oZWFsdGhjYXJlLmNsaW5pY2FsLn'
-    'YxLlJlc3BvbmRUb0NvbnN1bHRSZXF1ZXN0GjAuaGVhbHRoY2FyZS5jbGluaWNhbC52MS5SZXNw'
-    'b25kVG9Db25zdWx0UmVzcG9uc2USaQoMTGlzdENvbnN1bHRzEisuaGVhbHRoY2FyZS5jbGluaW'
-    'NhbC52MS5MaXN0Q29uc3VsdHNSZXF1ZXN0GiwuaGVhbHRoY2FyZS5jbGluaWNhbC52MS5MaXN0'
-    'Q29uc3VsdHNSZXNwb25zZRJyCg9FbnJvbEluUmVnaXN0cnkSLi5oZWFsdGhjYXJlLmNsaW5pY2'
-    'FsLnYxLkVucm9sSW5SZWdpc3RyeVJlcXVlc3QaLy5oZWFsdGhjYXJlLmNsaW5pY2FsLnYxLkVu'
-    'cm9sSW5SZWdpc3RyeVJlc3BvbnNlEmkKDEV4aXRSZWdpc3RyeRIrLmhlYWx0aGNhcmUuY2xpbm'
-    'ljYWwudjEuRXhpdFJlZ2lzdHJ5UmVxdWVzdBosLmhlYWx0aGNhcmUuY2xpbmljYWwudjEuRXhp'
-    'dFJlZ2lzdHJ5UmVzcG9uc2USigEKF0xpc3RSZWdpc3RyeU1lbWJlcnNoaXBzEjYuaGVhbHRoY2'
-    'FyZS5jbGluaWNhbC52MS5MaXN0UmVnaXN0cnlNZW1iZXJzaGlwc1JlcXVlc3QaNy5oZWFsdGhj'
-    'YXJlLmNsaW5pY2FsLnYxLkxpc3RSZWdpc3RyeU1lbWJlcnNoaXBzUmVzcG9uc2U=');
+    'VydmF0aW9uUmVzcG9uc2USfgoTSW5nZXN0RGV2aWNlUmVhZGluZxIyLmhlYWx0aGNhcmUuY2xp'
+    'bmljYWwudjEuSW5nZXN0RGV2aWNlUmVhZGluZ1JlcXVlc3QaMy5oZWFsdGhjYXJlLmNsaW5pY2'
+    'FsLnYxLkluZ2VzdERldmljZVJlYWRpbmdSZXNwb25zZRJsCg1EZWNpZGVSZWFkaW5nEiwuaGVh'
+    'bHRoY2FyZS5jbGluaWNhbC52MS5EZWNpZGVSZWFkaW5nUmVxdWVzdBotLmhlYWx0aGNhcmUuY2'
+    'xpbmljYWwudjEuRGVjaWRlUmVhZGluZ1Jlc3BvbnNlEooBChdMaXN0UHJvdmlzaW9uYWxSZWFk'
+    'aW5ncxI2LmhlYWx0aGNhcmUuY2xpbmljYWwudjEuTGlzdFByb3Zpc2lvbmFsUmVhZGluZ3NSZX'
+    'F1ZXN0GjcuaGVhbHRoY2FyZS5jbGluaWNhbC52MS5MaXN0UHJvdmlzaW9uYWxSZWFkaW5nc1Jl'
+    'c3BvbnNlEnUKEExpc3RPYnNlcnZhdGlvbnMSLy5oZWFsdGhjYXJlLmNsaW5pY2FsLnYxLkxpc3'
+    'RPYnNlcnZhdGlvbnNSZXF1ZXN0GjAuaGVhbHRoY2FyZS5jbGluaWNhbC52MS5MaXN0T2JzZXJ2'
+    'YXRpb25zUmVzcG9uc2USfgoTTGlzdENyaXRpY2FsUmVzdWx0cxIyLmhlYWx0aGNhcmUuY2xpbm'
+    'ljYWwudjEuTGlzdENyaXRpY2FsUmVzdWx0c1JlcXVlc3QaMy5oZWFsdGhjYXJlLmNsaW5pY2Fs'
+    'LnYxLkxpc3RDcml0aWNhbFJlc3VsdHNSZXNwb25zZRKQAQoZQWNrbm93bGVkZ2VDcml0aWNhbF'
+    'Jlc3VsdBI4LmhlYWx0aGNhcmUuY2xpbmljYWwudjEuQWNrbm93bGVkZ2VDcml0aWNhbFJlc3Vs'
+    'dFJlcXVlc3QaOS5oZWFsdGhjYXJlLmNsaW5pY2FsLnYxLkFja25vd2xlZGdlQ3JpdGljYWxSZX'
+    'N1bHRSZXNwb25zZRJyCg9SZWNvcmRQcm9jZWR1cmUSLi5oZWFsdGhjYXJlLmNsaW5pY2FsLnYx'
+    'LlJlY29yZFByb2NlZHVyZVJlcXVlc3QaLy5oZWFsdGhjYXJlLmNsaW5pY2FsLnYxLlJlY29yZF'
+    'Byb2NlZHVyZVJlc3BvbnNlEm8KDkxpc3RQcm9jZWR1cmVzEi0uaGVhbHRoY2FyZS5jbGluaWNh'
+    'bC52MS5MaXN0UHJvY2VkdXJlc1JlcXVlc3QaLi5oZWFsdGhjYXJlLmNsaW5pY2FsLnYxLkxpc3'
+    'RQcm9jZWR1cmVzUmVzcG9uc2USbwoOQ3JlYXRlQ2FyZVBsYW4SLS5oZWFsdGhjYXJlLmNsaW5p'
+    'Y2FsLnYxLkNyZWF0ZUNhcmVQbGFuUmVxdWVzdBouLmhlYWx0aGNhcmUuY2xpbmljYWwudjEuQ3'
+    'JlYXRlQ2FyZVBsYW5SZXNwb25zZRJvCg5VcGRhdGVDYXJlUGxhbhItLmhlYWx0aGNhcmUuY2xp'
+    'bmljYWwudjEuVXBkYXRlQ2FyZVBsYW5SZXF1ZXN0Gi4uaGVhbHRoY2FyZS5jbGluaWNhbC52MS'
+    '5VcGRhdGVDYXJlUGxhblJlc3BvbnNlEmwKDUxpc3RDYXJlUGxhbnMSLC5oZWFsdGhjYXJlLmNs'
+    'aW5pY2FsLnYxLkxpc3RDYXJlUGxhbnNSZXF1ZXN0Gi0uaGVhbHRoY2FyZS5jbGluaWNhbC52MS'
+    '5MaXN0Q2FyZVBsYW5zUmVzcG9uc2USYAoJR2V0QmFubmVyEiguaGVhbHRoY2FyZS5jbGluaWNh'
+    'bC52MS5HZXRCYW5uZXJSZXF1ZXN0GikuaGVhbHRoY2FyZS5jbGluaWNhbC52MS5HZXRCYW5uZX'
+    'JSZXNwb25zZRJsCg1SZWNvcmRDb25zZW50EiwuaGVhbHRoY2FyZS5jbGluaWNhbC52MS5SZWNv'
+    'cmRDb25zZW50UmVxdWVzdBotLmhlYWx0aGNhcmUuY2xpbmljYWwudjEuUmVjb3JkQ29uc2VudF'
+    'Jlc3BvbnNlEnIKD1dpdGhkcmF3Q29uc2VudBIuLmhlYWx0aGNhcmUuY2xpbmljYWwudjEuV2l0'
+    'aGRyYXdDb25zZW50UmVxdWVzdBovLmhlYWx0aGNhcmUuY2xpbmljYWwudjEuV2l0aGRyYXdDb2'
+    '5zZW50UmVzcG9uc2USaQoMTGlzdENvbnNlbnRzEisuaGVhbHRoY2FyZS5jbGluaWNhbC52MS5M'
+    'aXN0Q29uc2VudHNSZXF1ZXN0GiwuaGVhbHRoY2FyZS5jbGluaWNhbC52MS5MaXN0Q29uc2VudH'
+    'NSZXNwb25zZRJjCgpBdHRhY2hGaWxlEikuaGVhbHRoY2FyZS5jbGluaWNhbC52MS5BdHRhY2hG'
+    'aWxlUmVxdWVzdBoqLmhlYWx0aGNhcmUuY2xpbmljYWwudjEuQXR0YWNoRmlsZVJlc3BvbnNlEn'
+    'IKD0xpc3RBdHRhY2htZW50cxIuLmhlYWx0aGNhcmUuY2xpbmljYWwudjEuTGlzdEF0dGFjaG1l'
+    'bnRzUmVxdWVzdBovLmhlYWx0aGNhcmUuY2xpbmljYWwudjEuTGlzdEF0dGFjaG1lbnRzUmVzcG'
+    '9uc2USbAoNR2V0UHJvdmVuYW5jZRIsLmhlYWx0aGNhcmUuY2xpbmljYWwudjEuR2V0UHJvdmVu'
+    'YW5jZVJlcXVlc3QaLS5oZWFsdGhjYXJlLmNsaW5pY2FsLnYxLkdldFByb3ZlbmFuY2VSZXNwb2'
+    '5zZRJ1ChBTdG9yZUNhbGN1bGF0aW9uEi8uaGVhbHRoY2FyZS5jbGluaWNhbC52MS5TdG9yZUNh'
+    'bGN1bGF0aW9uUmVxdWVzdBowLmhlYWx0aGNhcmUuY2xpbmljYWwudjEuU3RvcmVDYWxjdWxhdG'
+    'lvblJlc3BvbnNlEnUKEExpc3RDYWxjdWxhdGlvbnMSLy5oZWFsdGhjYXJlLmNsaW5pY2FsLnYx'
+    'Lkxpc3RDYWxjdWxhdGlvbnNSZXF1ZXN0GjAuaGVhbHRoY2FyZS5jbGluaWNhbC52MS5MaXN0Q2'
+    'FsY3VsYXRpb25zUmVzcG9uc2USYwoKUmFpc2VBbGVydBIpLmhlYWx0aGNhcmUuY2xpbmljYWwu'
+    'djEuUmFpc2VBbGVydFJlcXVlc3QaKi5oZWFsdGhjYXJlLmNsaW5pY2FsLnYxLlJhaXNlQWxlcn'
+    'RSZXNwb25zZRJvCg5SZXNwb25kVG9BbGVydBItLmhlYWx0aGNhcmUuY2xpbmljYWwudjEuUmVz'
+    'cG9uZFRvQWxlcnRSZXF1ZXN0Gi4uaGVhbHRoY2FyZS5jbGluaWNhbC52MS5SZXNwb25kVG9BbG'
+    'VydFJlc3BvbnNlEmMKCkxpc3RBbGVydHMSKS5oZWFsdGhjYXJlLmNsaW5pY2FsLnYxLkxpc3RB'
+    'bGVydHNSZXF1ZXN0GiouaGVhbHRoY2FyZS5jbGluaWNhbC52MS5MaXN0QWxlcnRzUmVzcG9uc2'
+    'USbwoOUmVxdWVzdENvbnN1bHQSLS5oZWFsdGhjYXJlLmNsaW5pY2FsLnYxLlJlcXVlc3RDb25z'
+    'dWx0UmVxdWVzdBouLmhlYWx0aGNhcmUuY2xpbmljYWwudjEuUmVxdWVzdENvbnN1bHRSZXNwb2'
+    '5zZRJ1ChBSZXNwb25kVG9Db25zdWx0Ei8uaGVhbHRoY2FyZS5jbGluaWNhbC52MS5SZXNwb25k'
+    'VG9Db25zdWx0UmVxdWVzdBowLmhlYWx0aGNhcmUuY2xpbmljYWwudjEuUmVzcG9uZFRvQ29uc3'
+    'VsdFJlc3BvbnNlEmkKDExpc3RDb25zdWx0cxIrLmhlYWx0aGNhcmUuY2xpbmljYWwudjEuTGlz'
+    'dENvbnN1bHRzUmVxdWVzdBosLmhlYWx0aGNhcmUuY2xpbmljYWwudjEuTGlzdENvbnN1bHRzUm'
+    'VzcG9uc2UScgoPRW5yb2xJblJlZ2lzdHJ5Ei4uaGVhbHRoY2FyZS5jbGluaWNhbC52MS5FbnJv'
+    'bEluUmVnaXN0cnlSZXF1ZXN0Gi8uaGVhbHRoY2FyZS5jbGluaWNhbC52MS5FbnJvbEluUmVnaX'
+    'N0cnlSZXNwb25zZRJpCgxFeGl0UmVnaXN0cnkSKy5oZWFsdGhjYXJlLmNsaW5pY2FsLnYxLkV4'
+    'aXRSZWdpc3RyeVJlcXVlc3QaLC5oZWFsdGhjYXJlLmNsaW5pY2FsLnYxLkV4aXRSZWdpc3RyeV'
+    'Jlc3BvbnNlEooBChdMaXN0UmVnaXN0cnlNZW1iZXJzaGlwcxI2LmhlYWx0aGNhcmUuY2xpbmlj'
+    'YWwudjEuTGlzdFJlZ2lzdHJ5TWVtYmVyc2hpcHNSZXF1ZXN0GjcuaGVhbHRoY2FyZS5jbGluaW'
+    'NhbC52MS5MaXN0UmVnaXN0cnlNZW1iZXJzaGlwc1Jlc3BvbnNl');

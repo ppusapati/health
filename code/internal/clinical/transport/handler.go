@@ -865,3 +865,60 @@ func (h *Handler) ListRegistryMemberships(
 		Memberships: membershipsToProto(memberships),
 	}), nil
 }
+
+// IngestDeviceReading records a value from a bedside monitor (SRS-ICU-003).
+func (h *Handler) IngestDeviceReading(
+	ctx context.Context,
+	req *connect.Request[clinicalv1.IngestDeviceReadingRequest],
+) (*connect.Response[clinicalv1.IngestDeviceReadingResponse], error) {
+	msg := req.Msg
+
+	observation, err := h.svc.IngestDeviceReading(ctx, application.IngestDeviceReadingInput{
+		PatientID: msg.GetPatientId(), EncounterID: msg.GetEncounterId(),
+		Code:   codingFromProto(msg.GetCode()),
+		Value:  domainQuantity(msg.GetValue()),
+		Device: deviceSourceFromProto(msg.GetDevice()),
+	})
+	if err != nil {
+		return nil, fail(ctx, err)
+	}
+	return connect.NewResponse(&clinicalv1.IngestDeviceReadingResponse{
+		Observation: observationToProto(observation),
+	}), nil
+}
+
+// DecideReading records a clinician accepting or rejecting a device reading
+// (SRS-ICU-003).
+func (h *Handler) DecideReading(
+	ctx context.Context,
+	req *connect.Request[clinicalv1.DecideReadingRequest],
+) (*connect.Response[clinicalv1.DecideReadingResponse], error) {
+	msg := req.Msg
+
+	observation, err := h.svc.DecideReading(ctx, application.DecideReadingInput{
+		ObservationID: msg.GetObservationId(),
+		Accept:        msg.GetAccept(),
+		Reason:        msg.GetReason(),
+	})
+	if err != nil {
+		return nil, fail(ctx, err)
+	}
+	return connect.NewResponse(&clinicalv1.DecideReadingResponse{
+		Observation: observationToProto(observation),
+	}), nil
+}
+
+// ListProvisionalReadings returns the device values nobody has decided about.
+func (h *Handler) ListProvisionalReadings(
+	ctx context.Context,
+	req *connect.Request[clinicalv1.ListProvisionalReadingsRequest],
+) (*connect.Response[clinicalv1.ListProvisionalReadingsResponse], error) {
+	observations, err := h.svc.ProvisionalReadings(ctx,
+		req.Msg.GetPatientId(), req.Msg.GetPageSize())
+	if err != nil {
+		return nil, fail(ctx, err)
+	}
+	return connect.NewResponse(&clinicalv1.ListProvisionalReadingsResponse{
+		Observations: observationsToProto(observations),
+	}), nil
+}

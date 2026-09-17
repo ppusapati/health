@@ -815,5 +815,80 @@ class ConsultStatus extends $pb.ProtobufEnum {
   const ConsultStatus._(super.value, super.name);
 }
 
+/// Where an observation came from (SRS-ICU-003).
+class ObservationSource extends $pb.ProtobufEnum {
+  static const ObservationSource OBSERVATION_SOURCE_UNSPECIFIED =
+      ObservationSource._(
+          0, _omitEnumNames ? '' : 'OBSERVATION_SOURCE_UNSPECIFIED');
+
+  /// Typed by a person who was looking at the patient. Validated by
+  /// construction: the human was the instrument.
+  static const ObservationSource OBSERVATION_SOURCE_MANUAL =
+      ObservationSource._(1, _omitEnumNames ? '' : 'OBSERVATION_SOURCE_MANUAL');
+
+  /// Off a monitor or analyser at the bedside. Starts unvalidated.
+  static const ObservationSource OBSERVATION_SOURCE_DEVICE =
+      ObservationSource._(2, _omitEnumNames ? '' : 'OBSERVATION_SOURCE_DEVICE');
+
+  /// From another system authoritative for it — a laboratory, another hospital
+  /// (SRS-CLN-010). Validated where it arrived, not here.
+  static const ObservationSource OBSERVATION_SOURCE_IMPORTED =
+      ObservationSource._(
+          3, _omitEnumNames ? '' : 'OBSERVATION_SOURCE_IMPORTED');
+
+  static const $core.List<ObservationSource> values = <ObservationSource>[
+    OBSERVATION_SOURCE_UNSPECIFIED,
+    OBSERVATION_SOURCE_MANUAL,
+    OBSERVATION_SOURCE_DEVICE,
+    OBSERVATION_SOURCE_IMPORTED,
+  ];
+
+  static final $core.List<ObservationSource?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 3);
+  static ObservationSource? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const ObservationSource._(super.value, super.name);
+}
+
+/// Whether a human has accepted a reading into the chart (SRS-ICU-003).
+class ValidationState extends $pb.ProtobufEnum {
+  static const ValidationState VALIDATION_STATE_UNSPECIFIED = ValidationState._(
+      0, _omitEnumNames ? '' : 'VALIDATION_STATE_UNSPECIFIED');
+
+  /// The source is already authoritative and nobody has to confirm it.
+  static const ValidationState VALIDATION_STATE_NOT_REQUIRED =
+      ValidationState._(
+          1, _omitEnumNames ? '' : 'VALIDATION_STATE_NOT_REQUIRED');
+
+  /// A device reading nobody has looked at. Shown on the chart and excluded
+  /// from anything computed (SRS-ICU-009).
+  static const ValidationState VALIDATION_STATE_PENDING =
+      ValidationState._(2, _omitEnumNames ? '' : 'VALIDATION_STATE_PENDING');
+  static const ValidationState VALIDATION_STATE_CONFIRMED =
+      ValidationState._(3, _omitEnumNames ? '' : 'VALIDATION_STATE_CONFIRMED');
+
+  /// Marked an artefact — the probe was off, the line was being flushed. Kept
+  /// rather than deleted, because a run of rejections is how a failing probe is
+  /// found.
+  static const ValidationState VALIDATION_STATE_REJECTED =
+      ValidationState._(4, _omitEnumNames ? '' : 'VALIDATION_STATE_REJECTED');
+
+  static const $core.List<ValidationState> values = <ValidationState>[
+    VALIDATION_STATE_UNSPECIFIED,
+    VALIDATION_STATE_NOT_REQUIRED,
+    VALIDATION_STATE_PENDING,
+    VALIDATION_STATE_CONFIRMED,
+    VALIDATION_STATE_REJECTED,
+  ];
+
+  static final $core.List<ValidationState?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 4);
+  static ValidationState? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const ValidationState._(super.value, super.name);
+}
+
 const $core.bool _omitEnumNames =
     $core.bool.fromEnvironment('protobuf.omit_enum_names');
