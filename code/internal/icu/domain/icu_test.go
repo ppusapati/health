@@ -970,7 +970,10 @@ func TestVentilatorSettingsAreReadAtAnInstant(t *testing.T) {
 	}
 }
 
-// SRS-ICU-017. Ventilator days are counted the same way as device days.
+// SRS-ICU-011 and SRS-ICU-017. Organ support is a run with a start and a stop
+// rather than a flag, because the question the unit is asked is "how many
+// ventilator days" and a boolean answers "is this patient ventilated now",
+// which nobody was asking. Days are counted the same way as device days.
 func TestSupportDaysCountCalendarDays(t *testing.T) {
 	run, err := domain.StartSupport("sup-1", "tenant-1", domain.NewSupportInput{
 		EpisodeID: "ep-1", Kind: domain.SupportVentilation, Modality: "invasive",

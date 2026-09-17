@@ -21,6 +21,7 @@ import (
 	"github.com/ppusapati/health/code/gen/go/healthcare/emergency/v1/emergencyv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/empi/v1/empiv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/encounter/v1/encounterv1connect"
+	"github.com/ppusapati/health/code/gen/go/healthcare/icu/v1/icuv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/identity_access/v1/identityaccessv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/medication/v1/medicationv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/nursing/v1/nursingv1connect"
@@ -47,6 +48,10 @@ import (
 	encounterpostgres "github.com/ppusapati/health/code/internal/encounter/adapters/postgres"
 	encounterapp "github.com/ppusapati/health/code/internal/encounter/application"
 	encountertransport "github.com/ppusapati/health/code/internal/encounter/transport"
+	icuescalate "github.com/ppusapati/health/code/internal/icu/adapters/escalate"
+	icupostgres "github.com/ppusapati/health/code/internal/icu/adapters/postgres"
+	icuapp "github.com/ppusapati/health/code/internal/icu/application"
+	icutransport "github.com/ppusapati/health/code/internal/icu/transport"
 	identitytransport "github.com/ppusapati/health/code/internal/identity_access/transport"
 	medicationorders "github.com/ppusapati/health/code/internal/medication/adapters/orders"
 	medicationpostgres "github.com/ppusapati/health/code/internal/medication/adapters/postgres"
@@ -181,6 +186,16 @@ type Deps struct {
 	// the code and absent in effect.
 	MedicationOrders nursingports.MedicationOrders
 
+	// Icu is what a deployment has decided about its critical-care units:
+	// which severity scores it calculates, which care bundles it runs, what
+	// the dashboard summarises, and how long a device feed may be silent
+	// before it is marked stale (SRS-ICU-009, SRS-ICU-010, SRS-ICU-012).
+	//
+	// The zero value calculates no score and runs no bundle, which is a
+	// configuration rather than a defect: a score nobody has agreed the
+	// definition of is one nobody should be acting on the result of.
+	Icu icuapp.Config
+
 	// Emergency is what a deployment has decided about its emergency
 	// department: which triage scale it has approved, what must be measured at
 	// triage, and what each disposition requires (SRS-ER-002, SRS-ER-013).
@@ -200,6 +215,7 @@ type Server struct {
 	Encounters   *encounterapp.Service
 	Clinical     *clinicalapp.Service
 	Emergency    *emergencyapp.Service
+	Icu          *icuapp.Service
 	Nursing      *nursingapp.Service
 	Orders       *ordersapp.Service
 	Medication   *medicationapp.Service
@@ -438,6 +454,30 @@ func New(deps Deps) *Server {
 		Config:      deps.Emergency,
 	})
 
+	icuRepo := icupostgres.New(txManager)
+	icuService := icuapp.NewService(icuapp.Deps{
+		UnitOfWork: txManager,
+		Episodes:   icupostgres.EpisodeRepo{Repository: icuRepo},
+		Flowsheet:  icupostgres.FlowsheetRepo{Repository: icuRepo},
+		Support:    icupostgres.SupportRepo{Repository: icuRepo},
+		Care:       icupostgres.CareRepo{Repository: icuRepo},
+		// Whether the Wave-1 encounter still accepts content is the encounter
+		// context's fact (SRS-ENC-005), reached through a port. A unit keeping
+		// its own copy is one that charts an infusion into a discharged
+		// episode.
+		Encounters: icupostgres.NewEncounters(
+			encounterpostgres.EncounterRepo{Repository: encounterRepo}),
+		// SRS-ICU-013's advisories escalate through the platform mechanism.
+		// Operational conditions only: a bedside alarm is a safety function of
+		// a regulated device and is not reachable from here.
+		Escalations: icuescalate.New(escalationStore),
+		Events:      platformStore,
+		Audits:      store.AuditAppenderFunc(platformStore.AppendAudit),
+		IDs:         uuidGenerator{},
+		Clock:       systemClock{},
+		Config:      deps.Icu,
+	})
+
 	medicationRepo := medicationpostgres.New(txManager)
 	medicationTerminology := medicationpostgres.NewTerminology(medicationRepo)
 	medicationService := medicationapp.NewService(medicationapp.Deps{
@@ -590,6 +630,8 @@ func New(deps Deps) *Server {
 		orderstransport.NewHandler(ordersService), interceptors))
 	mux.Handle(emergencyv1connect.NewEmergencyServiceHandler(
 		emergencytransport.NewHandler(emergencyService), interceptors))
+	mux.Handle(icuv1connect.NewIcuServiceHandler(
+		icutransport.NewHandler(icuService, time.Now), interceptors))
 	billingRepo := billingpostgres.New(txManager)
 	billingService := billingapp.NewService(billingapp.Deps{
 		UnitOfWork: txManager,
@@ -647,6 +689,7 @@ func New(deps Deps) *Server {
 		Encounters:      encounterService,
 		Clinical:        clinicalService,
 		Emergency:       emergencyService,
+		Icu:             icuService,
 		Nursing:         nursingService,
 		Orders:          ordersService,
 		Medication:      medicationService,

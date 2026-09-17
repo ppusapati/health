@@ -335,6 +335,23 @@ var rolePermissions = map[Role][]string{
 		// Deliberately no er.triage.assign: triage is a nursing assessment
 		// against a published scale, and a department where anybody may
 		// restate an acuity has no scale.
+
+		// Critical care (SRS-ICU). An intensivist admits, charts, runs organ
+		// support, calculates the scores and decides when the patient can go.
+		"icu.episode.read",
+		"icu.episode.write",
+		"icu.episode.discharge",
+		// Agreeing a ceiling of treatment is SRS-ICU-015's "restricted
+		// authorization" (SRS-ICU-015). Held by the medical team, and the
+		// record names the senior clinician who authorised it separately from
+		// whoever typed it.
+		"icu.ceiling.set",
+		"icu.ceiling.read",
+		// Deliberately no icu.reading.validate: deciding whether a monitor's
+		// reading is real is a bedside judgement made by the person who can
+		// see the patient and the probe, and a doctor confirming a saturation
+		// from the doctors' office is confirming a number rather than a
+		// patient.
 	},
 
 	// A pharmacist checks what was prescribed and decides what is dispensed
@@ -473,6 +490,22 @@ var rolePermissions = map[Role][]string{
 		// Deliberately no er.visit.dispose: whether a patient is admitted,
 		// discharged or transferred is a medical decision, and a nurse who
 		// held it could discharge a patient nobody had seen.
+
+		// Critical care (SRS-ICU). The bedside nurse charts the flowsheet,
+		// titrates the infusions, records the lines and runs the bundles.
+		"icu.episode.read",
+		"icu.episode.write",
+		// Validating a device reading into the chart (SRS-ICU-003) is the
+		// nurse's, and deliberately only the nurse's: deciding whether a
+		// saturation of 60% is the patient or the probe needs somebody who can
+		// see both.
+		"icu.reading.validate",
+		// A nurse has to know the patient is not for CPR. Reading a ceiling is
+		// separate from agreeing one, and deliberately wider.
+		"icu.ceiling.read",
+		// Deliberately no icu.episode.discharge and no icu.ceiling.set: when a
+		// patient leaves critical care and how far treatment goes are both
+		// medical decisions.
 	},
 
 	// A downstream service moves orders through their lifecycle and does
@@ -503,6 +536,13 @@ var rolePermissions = map[Role][]string{
 		// holds the nurse role too.
 		"er.visit.read",
 		"er.queue.override",
+
+		// The critical-care dashboard and its numbers (SRS-ICU-012,
+		// SRS-ICU-017). Reading the ceiling comes with it: the person deciding
+		// which bed the next admission goes into has to know which patients
+		// are for escalation.
+		"icu.episode.read",
+		"icu.ceiling.read",
 	},
 }
 

@@ -1,0 +1,1074 @@
+// Critical care: the episode, the flowsheet, organ support, scores, bundles,
+// the ceiling of treatment and the unit dashboard.
+//
+// Owning context : icu  (Master Engineering Registry)
+// Owning service : IcuService
+// Trace          : SRS-ICU-001 … SRS-ICU-017
+//
+// Four shapes in this contract are deliberate.
+//
+// An Observation carries the value twice: normalised, and as it arrived, with
+// `normalised` false where the unit was not one this system converts. A
+// conversion is a transformation, and a client that cannot show what the
+// device actually sent cannot be audited against it. A number in the wrong
+// unit that looks right is worse than one that is visibly unconverted.
+//
+// A Score carries its formula version and every input it used, each naming the
+// observation it read. SRS-ICU-009 requires the score to be reproducible from
+// them, so a total on its own would be a claim nobody can check — and
+// `missing` is what makes an incomplete score readable as incomplete rather
+// than as a low one.
+//
+// An Alarm here is a worklist entry. There is no field that would change what
+// a bedside device does: no limit, no suppression, no silence. SRS-ICU-013 is
+// explicit that this software's alarms are advisory and cannot suppress
+// device-native safety behaviour, and the contract is where that has to be
+// visible to everyone who builds against it.
+//
+// A DashboardRow's ceiling of treatment is either present or marked
+// `ceiling_restricted`. An absent one would read as "no ceiling agreed", and
+// the difference between that and "you may not see it" is what gets a patient
+// resuscitated against their wishes.
+syntax = "proto3";
+
+package healthcare.icu.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ppusapati/health/code/gen/go/healthcare/icu/v1;icuv1";
+
+// Where the patient came from (SRS-ICU-001).
+//
+// A quality measure in its own right: an unplanned ward admission is a
+// deterioration somebody may have missed, and a post-operative bed is a plan.
+enum AdmissionSource {
+  ADMISSION_SOURCE_UNSPECIFIED = 0;
+  ADMISSION_SOURCE_EMERGENCY = 1;
+  ADMISSION_SOURCE_WARD = 2;
+  ADMISSION_SOURCE_THEATRE = 3;
+  // From another critical-care unit. Names the episode it continues.
+  ADMISSION_SOURCE_OTHER_ICU = 4;
+  ADMISSION_SOURCE_EXTERNAL = 5;
+  ADMISSION_SOURCE_DIRECT = 6;
+}
+
+enum EpisodeStatus {
+  EPISODE_STATUS_UNSPECIFIED = 0;
+  EPISODE_STATUS_OPEN = 1;
+  // Somebody has said this patient no longer needs critical care. The interval
+  // this opens is the unit's discharge delay.
+  EPISODE_STATUS_READY_FOR_TRANSFER = 2;
+  EPISODE_STATUS_CLOSED = 3;
+}
+
+enum EpisodeOutcome {
+  EPISODE_OUTCOME_UNSPECIFIED = 0;
+  EPISODE_OUTCOME_WARD = 1;
+  EPISODE_OUTCOME_OTHER_ICU = 2;
+  EPISODE_OUTCOME_THEATRE = 3;
+  EPISODE_OUTCOME_EXTERNAL_TRANSFER = 4;
+  EPISODE_OUTCOME_DISCHARGE = 5;
+  EPISODE_OUTCOME_DEATH = 6;
+}
+
+// Where a flowsheet value came from (SRS-ICU-003).
+enum ObservationSource {
+  OBSERVATION_SOURCE_UNSPECIFIED = 0;
+  OBSERVATION_SOURCE_MANUAL = 1;
+  OBSERVATION_SOURCE_DEVICE = 2;
+  OBSERVATION_SOURCE_CALCULATED = 3;
+  OBSERVATION_SOURCE_UNKNOWN = 4;
+}
+
+// How far a value has got towards being chartable (SRS-ICU-003).
+enum ValidationState {
+  VALIDATION_STATE_UNSPECIFIED = 0;
+  // A value a person entered. They validated it by typing it.
+  VALIDATION_STATE_NOT_REQUIRED = 1;
+  VALIDATION_STATE_PENDING = 2;
+  VALIDATION_STATE_CONFIRMED = 3;
+  VALIDATION_STATE_REJECTED = 4;
+}
+
+// A form of organ support (SRS-ICU-011).
+enum SupportKind {
+  SUPPORT_KIND_UNSPECIFIED = 0;
+  SUPPORT_KIND_VENTILATION = 1;
+  SUPPORT_KIND_VASOPRESSOR = 2;
+  SUPPORT_KIND_RENAL_REPLACEMENT = 3;
+  SUPPORT_KIND_ECMO = 4;
+  SUPPORT_KIND_OTHER = 5;
+}
+
+// A checklist the unit runs (SRS-ICU-010).
+enum BundleKind {
+  BUNDLE_KIND_UNSPECIFIED = 0;
+  BUNDLE_KIND_SEPSIS = 1;
+  BUNDLE_KIND_VTE = 2;
+  BUNDLE_KIND_DELIRIUM = 3;
+  BUNDLE_KIND_PRESSURE_INJURY = 4;
+  BUNDLE_KIND_SEDATION = 5;
+  BUNDLE_KIND_VENTILATOR = 6;
+  BUNDLE_KIND_LOCAL = 7;
+}
+
+// What happened to one bundle element.
+enum BundleItemState {
+  BUNDLE_ITEM_STATE_UNSPECIFIED = 0;
+  BUNDLE_ITEM_STATE_DONE = 1;
+  // Deliberately not done, with a reason. A patient on therapeutic
+  // anticoagulation does not get VTE prophylaxis, and recording that as a
+  // failure teaches the unit to stop recording.
+  BUNDLE_ITEM_STATE_EXCEPTION = 2;
+  BUNDLE_ITEM_STATE_NOT_DONE = 3;
+}
+
+// How far treatment goes (SRS-ICU-015).
+enum CareIntent {
+  CARE_INTENT_UNSPECIFIED = 0;
+  CARE_INTENT_FULL_ESCALATION = 1;
+  CARE_INTENT_LIMITED = 2;
+  CARE_INTENT_COMFORT = 3;
+}
+
+enum GoalStatus {
+  GOAL_STATUS_UNSPECIFIED = 0;
+  GOAL_STATUS_OPEN = 1;
+  GOAL_STATUS_MET = 2;
+  GOAL_STATUS_NOT_MET = 3;
+  GOAL_STATUS_CANCELLED = 4;
+}
+
+enum AlarmSeverity {
+  ALARM_SEVERITY_UNSPECIFIED = 0;
+  ALARM_SEVERITY_INFORMATION = 1;
+  ALARM_SEVERITY_WARNING = 2;
+  ALARM_SEVERITY_URGENT = 3;
+}
+
+message IcuEpisode {
+  string episode_id = 1;
+  // The Wave-1 encounter this is the critical-care detail of.
+  string encounter_id = 2;
+  string patient_id = 3;
+  string facility_id = 4;
+  string unit_id = 5;
+  string bed_id = 6;
+
+  AdmissionSource source = 7;
+  // The episode this one continues, where a patient moved between units.
+  string transferred_from = 8;
+
+  string responsible_team = 9;
+  string responsible_clinician = 10;
+
+  EpisodeStatus status = 11;
+  google.protobuf.Timestamp admitted_at = 12;
+  google.protobuf.Timestamp ready_at = 13;
+  google.protobuf.Timestamp discharged_at = 14;
+  EpisodeOutcome outcome = 15;
+  string outcome_note = 16;
+
+  int64 version = 17;
+}
+
+// The machine a value came from (SRS-ICU-003).
+message DeviceSource {
+  // The hospital's asset identifier, so a run of bad readings traces to the
+  // monitor rather than to the bed.
+  string device_id = 1;
+  string model = 2;
+  // Which parameter on the device — a monitor sends a dozen.
+  string channel_id = 3;
+  // The device's own clock. Absent where the feed has sent nothing, which is
+  // how a stale feed is told from a current one.
+  google.protobuf.Timestamp measured_at = 4;
+  // What the device said about its own reading, verbatim. Never interpreted:
+  // every vendor's quality vocabulary is its own.
+  string quality = 5;
+}
+
+message Observation {
+  string observation_id = 1;
+  string episode_id = 2;
+
+  string code_system = 3;
+  string code = 4;
+  string display = 5;
+  // The unit family the value is measured in — temperature, pressure, volume.
+  string dimension = 6;
+
+  // Normalised.
+  double value = 7;
+  string unit = 8;
+  // As it arrived.
+  double raw_value = 9;
+  string raw_unit = 10;
+  bool normalised = 11;
+
+  ObservationSource source = 12;
+  ValidationState validation = 13;
+  DeviceSource device = 14;
+
+  google.protobuf.Timestamp observed_at = 15;
+  google.protobuf.Timestamp recorded_at = 16;
+  string recorded_by = 17;
+
+  string validated_by = 18;
+  google.protobuf.Timestamp validated_at = 19;
+  string validation_note = 20;
+}
+
+// A period's fluid balance (SRS-ICU-007).
+//
+// Recomputed from the live entries every time. Nothing stores a running total,
+// so a correction cannot leave one that no set of entries adds up to.
+message Balance {
+  google.protobuf.Timestamp from = 1;
+  google.protobuf.Timestamp to = 2;
+  double intake_ml = 3;
+  double output_ml = 4;
+  double net_ml = 5;
+  // How many live entries the totals came from, so a zero from no entries is
+  // distinguishable from a genuine zero balance.
+  int32 entries = 6;
+  int32 corrections = 7;
+}
+
+message BalanceEntry {
+  string entry_id = 1;
+  string episode_id = 2;
+  // "intake" or "output".
+  string direction = 3;
+  string route = 4;
+  double volume_ml = 5;
+  google.protobuf.Timestamp occurred_at = 6;
+  google.protobuf.Timestamp recorded_at = 7;
+  string recorded_by = 8;
+  // Set where this entry has been corrected by a later one.
+  string superseded_by = 9;
+  string corrects = 10;
+  string correction_reason = 11;
+}
+
+message Support {
+  string support_id = 1;
+  string episode_id = 2;
+  SupportKind kind = 3;
+  // Names a local modality where kind is OTHER.
+  string label = 4;
+  // The specific form — CVVHDF, VV-ECMO, noradrenaline.
+  string modality = 5;
+  google.protobuf.Timestamp started_at = 6;
+  string started_by = 7;
+  google.protobuf.Timestamp stopped_at = 8;
+  string stopped_by = 9;
+  string stop_note = 10;
+}
+
+message VentSetting {
+  string setting_id = 1;
+  string episode_id = 2;
+  string support_id = 3;
+  // The vendor's own mode string. Every manufacturer names modes differently,
+  // and a normalised enumeration would lose the mode the machine is in.
+  string mode = 4;
+  // Set parameters and measured ones side by side: the difference between a
+  // set tidal volume and a delivered one is the clinical finding.
+  map<string, double> parameters = 5;
+  map<string, double> measured = 6;
+  map<string, string> units = 7;
+  string device_id = 8;
+  google.protobuf.Timestamp effective_at = 9;
+  google.protobuf.Timestamp recorded_at = 10;
+  string recorded_by = 11;
+  string change_reason = 12;
+}
+
+message Infusion {
+  string infusion_id = 1;
+  string episode_id = 2;
+  // The Wave-1 prescription is the authority; this is what was running.
+  string prescription_id = 3;
+  string drug_code = 4;
+  string drug_display = 5;
+  // What is in the bag. A rate in mL/h means nothing without it.
+  double concentration_amount = 6;
+  string concentration_unit = 7;
+  double concentration_volume = 8;
+  string dose_unit = 9;
+  // The weight the dose was calculated from, frozen at the time.
+  double weight_kg = 10;
+  google.protobuf.Timestamp started_at = 11;
+  string started_by = 12;
+  google.protobuf.Timestamp stopped_at = 13;
+  string stopped_by = 14;
+  repeated Titration titrations = 15;
+}
+
+message Titration {
+  string titration_id = 1;
+  double rate = 2;
+  string rate_unit = 3;
+  // The clinical dose the rate works out to, stored rather than recomputed.
+  double dose = 4;
+  google.protobuf.Timestamp effective_at = 5;
+  google.protobuf.Timestamp recorded_at = 6;
+  // One of these is always set: a rate change attributed to nobody is one no
+  // review can ask about.
+  string recorded_by = 7;
+  string device_id = 8;
+  string reason = 9;
+}
+
+message InvasiveDevice {
+  string device_id = 1;
+  string episode_id = 2;
+  // The deployment's own vocabulary; infection surveillance names categories
+  // differently everywhere.
+  string kind = 3;
+  string site = 4;
+  int32 lumens = 5;
+  google.protobuf.Timestamp inserted_at = 6;
+  string inserted_by = 7;
+  google.protobuf.Timestamp removed_at = 8;
+  string removed_by = 9;
+  string removal_reason = 10;
+  int64 review_every_seconds = 11;
+  google.protobuf.Timestamp last_reviewed_at = 12;
+  string last_reviewed_by = 13;
+  // Derived per response, never stored: a device whose review interval was
+  // changed yesterday is overdue against the new one.
+  bool review_overdue = 14;
+}
+
+message ScoreInput {
+  string code = 1;
+  // The exact chart entry, not just the value: the same number recorded twice
+  // is two observations, and a review asks which one.
+  string observation_id = 2;
+  double value = 3;
+  string unit = 4;
+  google.protobuf.Timestamp observed_at = 5;
+  // What this input contributed, so the arithmetic reads without re-running
+  // the formula.
+  int32 points = 6;
+}
+
+message Score {
+  string score_id = 1;
+  string episode_id = 2;
+  string name = 3;
+  string formula_version = 4;
+  int32 total = 5;
+  repeated ScoreInput inputs = 6;
+  // Components no validated input was available for. A score with one is
+  // incomplete, not lower: an absent platelet count scored as normal is how a
+  // coagulopathy scores zero.
+  repeated string missing = 7;
+  bool complete = 8;
+  google.protobuf.Timestamp calculated_at = 9;
+  string calculated_by = 10;
+}
+
+message BundleResult {
+  string code = 1;
+  BundleItemState state = 2;
+  // Required for an exception. An exception with no reason is a failure
+  // wearing a better name.
+  string reason = 3;
+}
+
+message BundlePerformance {
+  string performance_id = 1;
+  string episode_id = 2;
+  BundleKind kind = 3;
+  string label = 4;
+  string version = 5;
+  repeated BundleResult results = 6;
+  google.protobuf.Timestamp performed_at = 7;
+  string performed_by = 8;
+  Compliance compliance = 9;
+}
+
+message Compliance {
+  int32 required = 1;
+  int32 done = 2;
+  // Counted apart from both sides: "we did not do it" and "we decided not to,
+  // and here is why" are different facts, and a unit improves on only one.
+  int32 excepted = 3;
+  int32 missed = 4;
+  // All-or-nothing, as every published bundle measure is: four-fifths of a
+  // sepsis bundle is not 80% of the benefit.
+  bool compliant = 5;
+}
+
+message Assessment {
+  string assessment_id = 1;
+  string episode_id = 2;
+  // pressure_injury, skin, positioning, restraint, sedation, delirium.
+  string kind = 3;
+  string scale = 4;
+  optional int32 score = 5;
+  map<string, string> findings = 6;
+  string note = 7;
+  google.protobuf.Timestamp performed_at = 8;
+  string performed_by = 9;
+  // Generated on write, so the unit's worklist and its audit agree about when
+  // the reassessment was due.
+  google.protobuf.Timestamp next_due_at = 10;
+  bool overdue = 11;
+}
+
+message Round {
+  string round_id = 1;
+  string episode_id = 2;
+  // Who was on the round, by role. A multidisciplinary round with no
+  // pharmacist is not a multidisciplinary round.
+  repeated string attendance = 3;
+  string summary = 4;
+  google.protobuf.Timestamp performed_at = 5;
+  string performed_by = 6;
+}
+
+message Goal {
+  string goal_id = 1;
+  string episode_id = 2;
+  string round_id = 3;
+  string domain = 4;
+  string text = 5;
+  // A role rather than a person, because the person changes at handover and
+  // the responsibility does not.
+  string owner_role = 6;
+  string owner_id = 7;
+  GoalStatus status = 8;
+  google.protobuf.Timestamp target_at = 9;
+  google.protobuf.Timestamp resolved_at = 10;
+  string resolved_by = 11;
+  string outcome = 12;
+  google.protobuf.Timestamp created_at = 13;
+  string created_by = 14;
+}
+
+message GoalsOfCare {
+  string goals_of_care_id = 1;
+  string episode_id = 2;
+  CareIntent intent = 3;
+  repeated string limitations = 4;
+  // Carried separately because it is the first question every arriving team
+  // asks, and burying it in a list is how it is missed.
+  string cpr_status = 5;
+  string discussed_with = 6;
+  string rationale = 7;
+  string authorised_by = 8;
+  string authorised_role = 9;
+  google.protobuf.Timestamp recorded_at = 10;
+  string recorded_by = 11;
+  // Set on a ceiling that has been replaced. The history is the point: a
+  // document a coroner reads cannot have had its history overwritten.
+  string superseded_by = 12;
+  google.protobuf.Timestamp superseded_at = 13;
+  google.protobuf.Timestamp review_by = 14;
+  bool current = 15;
+  bool review_overdue = 16;
+}
+
+// An advisory worklist entry (SRS-ICU-013).
+//
+// Note what is absent: nothing here changes what a bedside device does. This
+// software may notice things and tell people; the monitor's own alarms are a
+// safety function of a regulated device and are not reachable from here.
+message Alarm {
+  string alarm_id = 1;
+  string episode_id = 2;
+  // device_review_overdue, assessment_overdue, feed_stale.
+  string kind = 3;
+  AlarmSeverity severity = 4;
+  string summary = 5;
+  google.protobuf.Timestamp raised_at = 6;
+}
+
+// One number on the dashboard, with the chart entry it came from.
+message DashboardValue {
+  string code = 1;
+  string display = 2;
+  double value = 3;
+  string unit = 4;
+  // What a clinician opens to see the reading itself.
+  string observation_id = 5;
+  ObservationSource source = 6;
+  ValidationState validation = 7;
+  string device_id = 8;
+  google.protobuf.Timestamp observed_at = 9;
+  // From a feed that has gone quiet. The value is shown and marked, rather
+  // than hidden: a blood pressure from an hour ago is information, and
+  // pretending it is current is not.
+  bool stale = 10;
+}
+
+message DashboardRow {
+  string episode_id = 1;
+  string patient_id = 2;
+  string bed_id = 3;
+  string unit_id = 4;
+  string display = 5;
+
+  repeated DashboardValue vitals = 6;
+  repeated SupportKind support = 7;
+  int32 devices = 8;
+  int32 overdue_devices = 9;
+  int32 due_assessments = 10;
+  int32 open_goals = 11;
+  Balance balance = 12;
+  Score latest_score = 13;
+
+  // Present for a viewer who may read it.
+  CareIntent care_intent = 14;
+  string cpr_status = 15;
+  // True where this viewer may not read the ceiling. Distinct from an absent
+  // one, which means no ceiling has been agreed — and the difference is what
+  // gets a patient resuscitated against their wishes.
+  bool ceiling_restricted = 16;
+
+  int32 stale_feeds = 17;
+  google.protobuf.Timestamp admitted_at = 18;
+  bool ready_for_transfer = 19;
+}
+
+// SRS-ICU-017: reconciles to episode and device timestamps, derived every time
+// rather than kept as counters.
+message UnitMetrics {
+  string unit_id = 1;
+  google.protobuf.Timestamp from = 2;
+  google.protobuf.Timestamp to = 3;
+  int32 admissions = 4;
+  int32 discharges = 5;
+  int32 deaths = 6;
+  int32 bed_days = 7;
+  int32 ventilator_days = 8;
+  map<string, int32> device_days = 9;
+  double mean_length_of_stay_hours = 10;
+  int32 closed_episodes = 11;
+  double mean_discharge_delay_hours = 12;
+  int32 delayed_discharges = 13;
+}
+
+message AdmitRequest {
+  string encounter_id = 1;
+  string patient_id = 2;
+  string facility_id = 3;
+  string unit_id = 4;
+  string bed_id = 5;
+  AdmissionSource source = 6;
+  // Required when source is OTHER_ICU.
+  string transferred_from = 7;
+  string responsible_team = 8;
+  string responsible_clinician = 9;
+  google.protobuf.Timestamp admitted_at = 10;
+}
+
+message AdmitResponse {
+  IcuEpisode episode = 1;
+}
+
+message GetIcuEpisodeRequest {
+  string episode_id = 1;
+}
+
+message GetIcuEpisodeResponse {
+  IcuEpisode episode = 1;
+  repeated Support support = 2;
+  repeated InvasiveDevice devices = 3;
+  repeated Infusion infusions = 4;
+  repeated Goal open_goals = 5;
+  // Present only for a caller who may read it.
+  GoalsOfCare ceiling = 6;
+  bool ceiling_restricted = 7;
+}
+
+message MoveBedRequest {
+  string episode_id = 1;
+  string bed_id = 2;
+}
+
+message MoveBedResponse {
+  IcuEpisode episode = 1;
+}
+
+message DeclareReadyRequest {
+  string episode_id = 1;
+}
+
+message DeclareReadyResponse {
+  IcuEpisode episode = 1;
+}
+
+message DischargeRequest {
+  string episode_id = 1;
+  EpisodeOutcome outcome = 2;
+  string note = 3;
+  // The caller's assertion about the handover (SRS-ICU-016). Passed rather
+  // than inferred: the drug chart and the task list belong to other contexts,
+  // and a unit deciding for itself would be a second authority on them.
+  bool medications_reconciled = 4;
+  bool devices_listed = 5;
+  bool tasks_handed_over = 6;
+  bool summary_written = 7;
+}
+
+message DischargeResponse {
+  IcuEpisode episode = 1;
+}
+
+message ChartValueRequest {
+  string episode_id = 1;
+  string code_system = 2;
+  string code = 3;
+  string display = 4;
+  string dimension = 5;
+  double value = 6;
+  string unit = 7;
+  ObservationSource source = 8;
+  DeviceSource device = 9;
+  google.protobuf.Timestamp observed_at = 10;
+}
+
+message ChartValueResponse {
+  Observation observation = 1;
+}
+
+message DecideReadingRequest {
+  string observation_id = 1;
+  bool accept = 2;
+  // Required to reject. A rejection with no reason is an artefact nobody can
+  // learn from.
+  string note = 3;
+}
+
+message DecideReadingResponse {
+  Observation observation = 1;
+}
+
+message ListFlowsheetRequest {
+  string episode_id = 1;
+  google.protobuf.Timestamp since = 2;
+  int32 page_size = 3;
+}
+
+message ListFlowsheetResponse {
+  repeated Observation observations = 1;
+}
+
+message ListPendingReadingsRequest {
+  string episode_id = 1;
+  int32 page_size = 2;
+}
+
+message ListPendingReadingsResponse {
+  repeated Observation observations = 1;
+}
+
+message RecordBalanceRequest {
+  string episode_id = 1;
+  string direction = 2;
+  string route = 3;
+  double volume = 4;
+  string unit = 5;
+  google.protobuf.Timestamp occurred_at = 6;
+  // Makes this entry a correction of another. The reason is required.
+  string corrects = 7;
+  string correction_reason = 8;
+}
+
+message RecordBalanceResponse {
+  BalanceEntry entry = 1;
+}
+
+message GetBalanceRequest {
+  string episode_id = 1;
+  google.protobuf.Timestamp from = 2;
+  google.protobuf.Timestamp to = 3;
+}
+
+message GetBalanceResponse {
+  Balance total = 1;
+  repeated Balance hourly = 2;
+}
+
+message StartSupportRequest {
+  string episode_id = 1;
+  SupportKind kind = 2;
+  string label = 3;
+  string modality = 4;
+  google.protobuf.Timestamp started_at = 5;
+}
+
+message StartSupportResponse {
+  Support support = 1;
+}
+
+message StopSupportRequest {
+  string support_id = 1;
+  string note = 2;
+  google.protobuf.Timestamp stopped_at = 3;
+}
+
+message StopSupportResponse {}
+
+message ListSupportRequest {
+  string episode_id = 1;
+}
+
+message ListSupportResponse {
+  repeated Support support = 1;
+}
+
+message RecordVentSettingRequest {
+  string episode_id = 1;
+  string support_id = 2;
+  string mode = 3;
+  map<string, double> parameters = 4;
+  map<string, double> measured = 5;
+  map<string, string> units = 6;
+  string device_id = 7;
+  google.protobuf.Timestamp effective_at = 8;
+  string change_reason = 9;
+}
+
+message RecordVentSettingResponse {
+  VentSetting setting = 1;
+}
+
+message GetVentTimelineRequest {
+  string episode_id = 1;
+}
+
+message GetVentTimelineResponse {
+  repeated VentSetting settings = 1;
+}
+
+message StartInfusionRequest {
+  string episode_id = 1;
+  string prescription_id = 2;
+  string drug_code = 3;
+  string drug_display = 4;
+  double concentration_amount = 5;
+  string concentration_unit = 6;
+  double concentration_volume = 7;
+  string dose_unit = 8;
+  double weight_kg = 9;
+  google.protobuf.Timestamp started_at = 10;
+}
+
+message StartInfusionResponse {
+  Infusion infusion = 1;
+}
+
+message TitrateRequest {
+  string infusion_id = 1;
+  double rate = 2;
+  string rate_unit = 3;
+  double dose = 4;
+  google.protobuf.Timestamp effective_at = 5;
+  // Set where a pump reported the change itself.
+  string device_id = 6;
+  string reason = 7;
+}
+
+message TitrateResponse {
+  Titration titration = 1;
+}
+
+message StopInfusionRequest {
+  string infusion_id = 1;
+}
+
+message StopInfusionResponse {}
+
+message ListInfusionsRequest {
+  string episode_id = 1;
+}
+
+message ListInfusionsResponse {
+  repeated Infusion infusions = 1;
+}
+
+message InsertDeviceRequest {
+  string episode_id = 1;
+  string kind = 2;
+  string site = 3;
+  int32 lumens = 4;
+  google.protobuf.Timestamp inserted_at = 5;
+  // Zero takes the deployment's default, which is daily.
+  int64 review_every_seconds = 6;
+}
+
+message InsertDeviceResponse {
+  InvasiveDevice device = 1;
+}
+
+message RemoveDeviceRequest {
+  string device_id = 1;
+  string reason = 2;
+  google.protobuf.Timestamp removed_at = 3;
+}
+
+message RemoveDeviceResponse {}
+
+message ReviewDeviceRequest {
+  string device_id = 1;
+}
+
+message ReviewDeviceResponse {}
+
+message ListDevicesRequest {
+  string episode_id = 1;
+}
+
+message ListDevicesResponse {
+  repeated InvasiveDevice devices = 1;
+}
+
+message CalculateScoreRequest {
+  string episode_id = 1;
+  // A formula this deployment has configured. One it has not agreed the
+  // definition of is one nobody should act on the result of.
+  string formula_name = 2;
+}
+
+message CalculateScoreResponse {
+  Score score = 1;
+}
+
+message ListScoresRequest {
+  string episode_id = 1;
+  int32 page_size = 2;
+}
+
+message ListScoresResponse {
+  repeated Score scores = 1;
+}
+
+// SRS-ICU-009's verification clause, made callable.
+message ReproduceScoreRequest {
+  string episode_id = 1;
+  string score_id = 2;
+}
+
+message ReproduceScoreResponse {
+  int32 stored_total = 1;
+  int32 reproduced_total = 2;
+  // False where the two disagree, which means the inputs or the chart changed
+  // after the score was calculated. Reported rather than corrected: the
+  // disagreement is worth more than either number.
+  bool reproduced = 3;
+}
+
+message PerformBundleRequest {
+  string episode_id = 1;
+  BundleKind kind = 2;
+  repeated BundleResult results = 3;
+}
+
+message PerformBundleResponse {
+  BundlePerformance performance = 1;
+}
+
+message ListBundlesRequest {
+  string episode_id = 1;
+  int32 page_size = 2;
+}
+
+message ListBundlesResponse {
+  repeated BundlePerformance performances = 1;
+}
+
+message RecordAssessmentRequest {
+  string episode_id = 1;
+  string kind = 2;
+  string scale = 3;
+  optional int32 score = 4;
+  map<string, string> findings = 5;
+  string note = 6;
+  google.protobuf.Timestamp performed_at = 7;
+  // Zero takes the interval configured for the kind.
+  int64 every_seconds = 8;
+}
+
+message RecordAssessmentResponse {
+  Assessment assessment = 1;
+}
+
+message ListDueAssessmentsRequest {
+  string episode_id = 1;
+}
+
+message ListDueAssessmentsResponse {
+  repeated Assessment assessments = 1;
+}
+
+message GoalRequest {
+  string domain = 1;
+  string text = 2;
+  string owner_role = 3;
+  string owner_id = 4;
+  google.protobuf.Timestamp target_at = 5;
+}
+
+message RecordRoundRequest {
+  string episode_id = 1;
+  repeated string attendance = 2;
+  string summary = 3;
+  // The goals are the round: a round recorded without them is a note saying a
+  // meeting happened.
+  repeated GoalRequest goals = 4;
+}
+
+message RecordRoundResponse {
+  Round round = 1;
+  repeated Goal goals = 2;
+}
+
+message ResolveGoalRequest {
+  string episode_id = 1;
+  string goal_id = 2;
+  GoalStatus status = 3;
+  // Required unless the goal was met.
+  string outcome = 4;
+}
+
+message ResolveGoalResponse {}
+
+message ListOpenGoalsRequest {
+  string episode_id = 1;
+}
+
+message ListOpenGoalsResponse {
+  repeated Goal goals = 1;
+}
+
+message SetCeilingRequest {
+  string episode_id = 1;
+  CareIntent intent = 2;
+  repeated string limitations = 3;
+  string cpr_status = 4;
+  string discussed_with = 5;
+  // Required unless the intent is full escalation.
+  string rationale = 6;
+  // The senior clinician who owns the decision, which may not be the caller: a
+  // registrar writing up a consultant's decision is the ordinary case.
+  string authorised_by = 7;
+  string authorised_role = 8;
+  google.protobuf.Timestamp review_by = 9;
+}
+
+message SetCeilingResponse {
+  GoalsOfCare ceiling = 1;
+}
+
+message GetCeilingRequest {
+  string episode_id = 1;
+}
+
+message GetCeilingResponse {
+  GoalsOfCare current = 1;
+  // Superseded ceilings included. The history is the point.
+  repeated GoalsOfCare history = 2;
+}
+
+message GetDashboardRequest {
+  string unit_id = 1;
+  int32 page_size = 2;
+  // How far back the running fluid balance looks. Zero takes one shift.
+  int64 balance_window_seconds = 3;
+}
+
+message GetDashboardResponse {
+  repeated DashboardRow rows = 1;
+}
+
+message ListAdvisoriesRequest {
+  string episode_id = 1;
+}
+
+message ListAdvisoriesResponse {
+  repeated Alarm alarms = 1;
+}
+
+message EscalateAdvisoryRequest {
+  string episode_id = 1;
+  string kind = 2;
+  string summary = 3;
+}
+
+message EscalateAdvisoryResponse {
+  // Empty where the unit has configured no escalation chain: the escalation is
+  // recorded and nobody is paged through this software, which is a real
+  // arrangement rather than a defect.
+  string notice_id = 1;
+}
+
+message GetUnitMetricsRequest {
+  string unit_id = 1;
+  google.protobuf.Timestamp from = 2;
+  google.protobuf.Timestamp to = 3;
+}
+
+message GetUnitMetricsResponse {
+  UnitMetrics metrics = 1;
+}
+
+service IcuService {
+  // The episode (SRS-ICU-001, SRS-ICU-016).
+  rpc Admit(AdmitRequest) returns (AdmitResponse);
+  rpc GetIcuEpisode(GetIcuEpisodeRequest) returns (GetIcuEpisodeResponse);
+  rpc MoveBed(MoveBedRequest) returns (MoveBedResponse);
+  rpc DeclareReady(DeclareReadyRequest) returns (DeclareReadyResponse);
+  rpc Discharge(DischargeRequest) returns (DischargeResponse);
+
+  // The flowsheet and the balance (SRS-ICU-002, SRS-ICU-003, SRS-ICU-007).
+  rpc ChartValue(ChartValueRequest) returns (ChartValueResponse);
+  rpc DecideReading(DecideReadingRequest) returns (DecideReadingResponse);
+  rpc ListFlowsheet(ListFlowsheetRequest) returns (ListFlowsheetResponse);
+  rpc ListPendingReadings(ListPendingReadingsRequest) returns (ListPendingReadingsResponse);
+  rpc RecordBalance(RecordBalanceRequest) returns (RecordBalanceResponse);
+  rpc GetBalance(GetBalanceRequest) returns (GetBalanceResponse);
+
+  // Organ support (SRS-ICU-004, SRS-ICU-005, SRS-ICU-006, SRS-ICU-011).
+  rpc StartSupport(StartSupportRequest) returns (StartSupportResponse);
+  rpc StopSupport(StopSupportRequest) returns (StopSupportResponse);
+  rpc ListSupport(ListSupportRequest) returns (ListSupportResponse);
+  rpc RecordVentSetting(RecordVentSettingRequest) returns (RecordVentSettingResponse);
+  rpc GetVentTimeline(GetVentTimelineRequest) returns (GetVentTimelineResponse);
+  rpc StartInfusion(StartInfusionRequest) returns (StartInfusionResponse);
+  rpc Titrate(TitrateRequest) returns (TitrateResponse);
+  rpc StopInfusion(StopInfusionRequest) returns (StopInfusionResponse);
+  rpc ListInfusions(ListInfusionsRequest) returns (ListInfusionsResponse);
+  rpc InsertDevice(InsertDeviceRequest) returns (InsertDeviceResponse);
+  rpc RemoveDevice(RemoveDeviceRequest) returns (RemoveDeviceResponse);
+  rpc ReviewDevice(ReviewDeviceRequest) returns (ReviewDeviceResponse);
+  rpc ListDevices(ListDevicesRequest) returns (ListDevicesResponse);
+
+  // Scores, bundles, assessments, rounds (SRS-ICU-008 … 010, SRS-ICU-014).
+  rpc CalculateScore(CalculateScoreRequest) returns (CalculateScoreResponse);
+  rpc ListScores(ListScoresRequest) returns (ListScoresResponse);
+  rpc ReproduceScore(ReproduceScoreRequest) returns (ReproduceScoreResponse);
+  rpc PerformBundle(PerformBundleRequest) returns (PerformBundleResponse);
+  rpc ListBundles(ListBundlesRequest) returns (ListBundlesResponse);
+  rpc RecordAssessment(RecordAssessmentRequest) returns (RecordAssessmentResponse);
+  rpc ListDueAssessments(ListDueAssessmentsRequest) returns (ListDueAssessmentsResponse);
+  rpc RecordRound(RecordRoundRequest) returns (RecordRoundResponse);
+  rpc ResolveGoal(ResolveGoalRequest) returns (ResolveGoalResponse);
+  rpc ListOpenGoals(ListOpenGoalsRequest) returns (ListOpenGoalsResponse);
+
+  // The ceiling of treatment (SRS-ICU-015).
+  rpc SetCeiling(SetCeilingRequest) returns (SetCeilingResponse);
+  rpc GetCeiling(GetCeilingRequest) returns (GetCeilingResponse);
+
+  // The dashboard, the advisory worklist and the unit's numbers
+  // (SRS-ICU-012, SRS-ICU-013, SRS-ICU-017).
+  rpc GetDashboard(GetDashboardRequest) returns (GetDashboardResponse);
+  rpc ListAdvisories(ListAdvisoriesRequest) returns (ListAdvisoriesResponse);
+  rpc EscalateAdvisory(EscalateAdvisoryRequest) returns (EscalateAdvisoryResponse);
+  rpc GetUnitMetrics(GetUnitMetricsRequest) returns (GetUnitMetricsResponse);
+}

@@ -15,8 +15,8 @@ test names.
 family rather than in prose, because a status document whose honest summary is
 "barely started" is one whose per-row claims have to be read carefully.
 
-One family is now built: SRS-ER, the Emergency Department, and its rows are
-below. `make traceability` reads a row naming a requirement as a claim about
+Two families are now built: SRS-ER, the Emergency Department, and SRS-ICU,
+critical care. Their rows are below. `make traceability` reads a row naming a requirement as a claim about
 it unless the row says the work is not built, so the unbuilt ER requirements
 are named here too — a status document that had to leave them out to pass its
 own gate would be hiding exactly what a reader greps for.
@@ -50,9 +50,12 @@ across a context boundary to use.
 | SRS-OPSNFR-003 | Critical clinical acknowledgement workflows persist notifications until acknowledged/escalated/closed; restart does not lose pending escalation | **Implemented** — `internal/platform/escalation` |
 | SRS-OPSAPI-007 | Durable workflows for escalations and other long-running processes; survives restart and resumes idempotently | **Implemented** for escalation. Recalls, CAPA and transfers arrive with the families that own them |
 | SRS-FAC-012 | Emergency contact/escalation matrix by facility/system; a critical incident can resolve active recipients | **Implemented** — the matrix, with roles resolved against the roster at the moment of escalation |
-| SRS-ICU-002 | High-frequency flowsheet values are time-stamped, unit-normalized and source-attributed | **Partial** — source attribution and the device's own clock are in place; the flowsheet itself belongs to the ICU family |
-| SRS-ICU-003 | Ingest bedside monitor values with device identity and quality/source metadata; raw values distinguishable from manually validated chart values | **Implemented** — `internal/clinical/domain/device.go`, with the RPC surface |
-| SRS-ICU-009 | Scores calculated only from explicit validated inputs | **Partial** — the gate exists (`ValidatedInputs`); no score is implemented yet |
+
+The three SRS-ICU rows this table carried are now in the family section below,
+where the flowsheet, the scores and the provenance model they anticipated
+actually live. What the clinical context still holds is the provenance model
+for observations charted outside critical care, which is where SRS-ICU-003's
+device seam was first built and still applies.
 
 ### What the escalation mechanism replaced
 
@@ -85,7 +88,7 @@ clinician, and `ValidatedInputs()` is a function rather than a convention.
 | Family | Requirements | State |
 |---|---|---|
 | SRS-ER Emergency Department | 18 | **12 implemented, 2 partial, 4 not built** — see below |
-| SRS-ICU Critical Care | 18 | **Foundations only** — device ingestion and the validated-input gate |
+| SRS-ICU Critical Care | 18 | **17 implemented, 1 not built** — see below |
 | SRS-OT Perioperative | 17 | **Not started** |
 | SRS-ANE Anesthesia and PACU | 11 | **Not started** |
 | SRS-BLD Blood Bank and Transfusion | 17 | **Not started** |
@@ -156,6 +159,57 @@ may restate an acuity has no scale. A registration clerk books the arrival and
 does neither. The charge nurse moves a patient in the queue, which overrules a
 triage nurse's assessment and is therefore its own permission. Seeing a
 medico-legal case's detail is a fifth.
+
+## SRS-ICU — Critical care
+
+`internal/icu`, the `IcuService` contract, and end-to-end tests in
+`internal/app` that run against a real database through the assembled stack.
+
+Four decisions are worth naming.
+
+A score stores its formula, its version and every input it used, and each
+input names the observation it came from. `ReproduceScore` recomputes the
+total from them, which is SRS-ICU-009's "score can be reproduced from recorded
+inputs" made callable. A stored number with no inputs is a claim nobody can
+check a year later, when the formula has been revised and the chart corrected.
+
+The same requirement's "only from explicit validated inputs" cuts both ways. A
+component with no confirmed value makes the score *incomplete*, not lower. An
+absent platelet count scored as normal is how a coagulopathy scores zero.
+
+SRS-ICU-013 is written as a prohibition, and it shapes the code rather than a
+comment. There is no `Suppress`, no alarm limit this system sets, and the
+method that closes a worklist entry is `Acknowledge` rather than `Silence`.
+The advisory list is derived rather than stored, so taking a line out clears
+its own overdue-review entry, and escalating one is a separate call a human
+makes — because deciding when a human is needed is the judgement the
+requirement leaves with the person.
+
+A unit is normalised or the value is stored as it arrived and visibly marked
+un-normalised, with what the device actually sent kept beside the converted
+number. A temperature silently read as Celsius when the monitor sent
+Fahrenheit is a fever that is not there.
+
+| Requirement | What it asks for | State |
+|---|---|---|
+| SRS-ICU-001 | ICU admission and transfer context linked to the inpatient encounter, bed and team | **Implemented** — the admission source is required, because an unplanned ward admission is a deterioration somebody may have missed and a post-operative bed is a plan |
+| SRS-ICU-002 | High-frequency flowsheet, time-stamped, unit-normalised and source-attributed | **Implemented** — a unit the dimension does not define is stored unconverted and marked, never guessed |
+| SRS-ICU-003 | Bedside monitor values with device identity and quality metadata, raw distinguishable from validated | **Implemented** — a device reading starts pending and is invisible to every score until a named nurse confirms it |
+| SRS-ICU-004 | Ventilator mode, settings, measured parameters and changes, queryable as a timeline | **Implemented** — set and measured side by side, because the difference between them is the clinical finding |
+| SRS-ICU-005 | Continuous infusions with concentration, rate, dose units and titration | **Implemented** — a rate change names the nurse who made it or the pump that reported it; neither is optional |
+| SRS-ICU-006 | Lines, tubes and drains with insertion and removal, device days and overdue review | **Implemented** — a device never reviewed is measured from insertion, which is the case the clause exists for |
+| SRS-ICU-007 | Hourly and shift intake-output with automatic totals; late corrections versioned | **Implemented** — totals recompute from the live entries, so no running total can disagree with the rows |
+| SRS-ICU-008 | Daily goals and multidisciplinary rounds, with owner and status | **Implemented** — a goal names who is to achieve it, and one that was not met says why |
+| SRS-ICU-009 | Scores from explicit validated inputs only, storing formula and version, reproducible | **Implemented** — `ReproduceScore` is the verification clause made callable |
+| SRS-ICU-010 | Sepsis, VTE, delirium, pressure injury, sedation and ventilator bundles, compliance reportable, exceptions captured | **Implemented** — all-or-nothing compliance, and a reasoned exception is not a failure |
+| SRS-ICU-011 | Organ support: ventilation, vasopressor, RRT, ECMO, longitudinally visible | **Implemented** — a run with a start and a stop, because "how many ventilator days" is the question actually asked |
+| SRS-ICU-012 | Dashboard with support, meds, labs, trends, devices and tasks; traceable to source, stale feeds marked | **Implemented** — every number names the chart entry it came from, and a quiet feed is shown and marked rather than hidden |
+| SRS-ICU-013 | Handle alarms without replacing bedside safety alarms; advisory only, cannot suppress device-native behaviour | **Implemented** — as a prohibition in the type system, not a convention |
+| SRS-ICU-014 | Pressure injury, skin, positioning and restraint assessments with generated reassessment timers | **Implemented** — the restraint interval is the short one, because an interval a unit drifts past is how a restraint becomes indefinite |
+| SRS-ICU-015 | Goals-of-care and escalation limitation with restricted authorization, visible and audited | **Implemented** — exactly one ceiling in force, enforced by the database; every read audited; restricted rather than blank for a viewer who may not see it |
+| SRS-ICU-016 | Transfer-out readiness and structured handoff before completion | **Implemented** — every outstanding item at once, and a death is not gated on paperwork |
+| SRS-ICU-017 | Device days, occupancy, length of stay and quality metrics reconciling to timestamps | **Implemented** — derived every time rather than kept as counters, because a counter can disagree with the rows it came from |
+| SRS-ICU-018 | Tele-ICU monitoring worklist for configured facilities | **Not built** — SHOULD, and the only non-MUST in the family |
 
 ## What Wave 2 depends on
 
