@@ -60,6 +60,29 @@ func (t TenantScope) TenantID() string { return t.tenantID }
 // IsZero reports whether the scope is the unusable zero value.
 func (t TenantScope) IsZero() bool { return t.tenantID == "" }
 
+// SystemScope is tenant scope for background work that has no user behind it.
+//
+// This is the only way to obtain a TenantScope without a Session, and it is a
+// deliberate hole in the invariant above rather than an oversight. Some work
+// genuinely has no caller: a timer sweeping escalations that are due, an outbox
+// publisher draining events. Neither can present credentials, and neither is
+// acting for a user — they are acting for the tenant whose row they found.
+//
+// The alternatives were worse. A background sweeper that took a plain tenant
+// string would need its own set of repository methods, which is the same hole
+// with more surface; a sweeper that ran only inside a request would not be a
+// sweeper. What makes this safe is not that it is hard to call but that it is
+// easy to find: one ugly name, greppable, and FIT-03's companion rule in
+// tools/fitness fails when a package outside the background runners calls it.
+//
+// The rule to hold when reading a call site: this grants tenant scope, never
+// permission. Everything downstream still authorizes, and a use case reached
+// through here has no session — which is why it must be a mechanism, not a
+// clinical decision.
+func SystemScope(tenantID string) TenantScope {
+	return TenantScope{tenantID: tenantID}
+}
+
 // Session is the resolved authorization context for one request.
 type Session struct {
 	SubjectID        string

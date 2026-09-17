@@ -1930,6 +1930,60 @@ type PlatformEdgeNode struct {
 	Version               int64
 }
 
+type PlatformEscalationDelivery struct {
+	DeliveryID  uuid.UUID
+	NoticeID    uuid.UUID
+	Level       int32
+	UserID      string
+	Role        string
+	FacilityID  string
+	Channel     string
+	Error       string
+	DeliveredAt pgtype.Timestamptz
+}
+
+type PlatformEscalationMatrix struct {
+	MatrixID   uuid.UUID
+	TenantID   uuid.UUID
+	FacilityID string
+	Kind       string
+	CreatedAt  pgtype.Timestamptz
+	UpdatedAt  pgtype.Timestamptz
+}
+
+type PlatformEscalationNotice struct {
+	NoticeID        uuid.UUID
+	TenantID        uuid.UUID
+	SubjectKind     string
+	SubjectID       string
+	PatientID       string
+	FacilityID      string
+	Summary         string
+	State           string
+	Level           int32
+	RaisedAt        pgtype.Timestamptz
+	LastEscalatedAt pgtype.Timestamptz
+	AcknowledgedBy  string
+	AcknowledgedAt  pgtype.Timestamptz
+	ClosedReason    string
+	UpdatedAt       pgtype.Timestamptz
+}
+
+type PlatformEscalationRung struct {
+	MatrixID uuid.UUID
+	Level    int32
+	Note     string
+}
+
+type PlatformEscalationRungRecipient struct {
+	MatrixID   uuid.UUID
+	Level      int32
+	Ordinal    int32
+	UserID     string
+	Role       string
+	FacilityID string
+}
+
 type PlatformRulesDecisionLog struct {
 	DecisionID     uuid.UUID
 	TenantID       uuid.UUID

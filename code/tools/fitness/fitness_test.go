@@ -22,6 +22,7 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -140,18 +141,19 @@ func TestFIT01_DomainPackagesArePure(t *testing.T) {
 // would make these tests useless noise.
 var sqlSchemaRef = regexp.MustCompile(
 	`(?i)\b(?:from|join|into|update|delete\s+from|table)\s+` +
-		`(organization|identity_access|platform_data|platform_workflow|platform_rules|platform_edge|security_platform)\.[a-z_]+`)
+		`(organization|identity_access|platform_data|platform_workflow|platform_rules|platform_edge|platform_escalation|security_platform)\.[a-z_]+`)
 
 // schemaOwners maps a schema to the one package path allowed to reach it.
 var schemaOwners = map[string]string{
-	"organization":      "internal/organization/adapters/postgres",
-	"identity_access":   "internal/identity_access/adapters/postgres",
-	"platform_data":     "internal/platform/store",
-	"platform_workflow": "internal/platform/workflow",
-	"platform_rules":    "internal/platform/rules",
-	"platform_edge":     "internal/edge/cloudstore",
-	"security_platform": "internal/security/adapters/postgres",
-	"platform_blob":     "internal/platform/blobstore",
+	"organization":        "internal/organization/adapters/postgres",
+	"identity_access":     "internal/identity_access/adapters/postgres",
+	"platform_data":       "internal/platform/store",
+	"platform_workflow":   "internal/platform/workflow",
+	"platform_rules":      "internal/platform/rules",
+	"platform_edge":       "internal/edge/cloudstore",
+	"security_platform":   "internal/security/adapters/postgres",
+	"platform_blob":       "internal/platform/blobstore",
+	"platform_escalation": "internal/platform/escalation",
 }
 
 // TestSQLSchemaRefDetectorWorks guards the guard.
@@ -171,6 +173,7 @@ func TestSQLSchemaRefDetectorWorks(t *testing.T) {
 		`INSERT INTO platform_rules.rule_set (x) VALUES (1)`,
 		`UPDATE platform_edge.node SET status = 'revoked'`,
 		`SELECT 1 FROM security_platform.security_event`,
+		`SELECT * FROM platform_escalation.notice WHERE state = 'pending'`,
 	}
 	for _, sample := range shouldMatch {
 		if !sqlSchemaRef.MatchString(sample) {
@@ -248,6 +251,7 @@ func TestFIT02_GeneratedQueriesImportedOnlyByAdapters(t *testing.T) {
 		"internal/edge/cloudstore",
 		"internal/security/adapters/postgres",
 		"internal/platform/blobstore",
+		"internal/platform/escalation",
 	}
 
 	var importers int
@@ -345,6 +349,74 @@ func TestFIT03_RepositoryPortsRequireTenantScope(t *testing.T) {
 			!strings.Contains(text, "authctx.TenantScope") {
 			t.Errorf("FIT-03: %s declares a tenant-owned repository without TenantScope", f.rel)
 		}
+	}
+}
+
+// FIT-03 companion: authctx.SystemScope is the one way to obtain tenant scope
+// without a session, and only background runners may call it.
+//
+// TenantScope has no exported constructor so that a repository cannot be
+// reached without verified tenant scope -- FIT-03 above is that rule. Work with
+// no caller needs a way through it anyway: a timer sweeping due escalations
+// cannot present credentials, and an outbox publisher is not acting for a user.
+// SystemScope is that way through, and what makes it safe is that it is easy to
+// find rather than hard to call.
+//
+// So this pins the callers. A clinical, transport or application package
+// calling SystemScope would be taking tenant scope without going through the
+// authorization its request path exists to perform, and the diff that did it
+// would look entirely ordinary.
+func TestFIT03_SystemScopeIsForBackgroundRunnersOnly(t *testing.T) {
+	// Directories whose work genuinely has no caller. Each entry is a claim
+	// that the package runs on a timer or a queue rather than in a request.
+	allowed := map[string]string{
+		"internal/platform/authctx":    "declares it",
+		"internal/platform/escalation": "the escalation sweeper (SRS-OPSNFR-003)",
+	}
+
+	var callers []string
+	for _, f := range loadGoFiles(t) {
+		if strings.HasSuffix(f.rel, "_test.go") {
+			continue
+		}
+		source, err := os.ReadFile(f.path)
+		if err != nil {
+			t.Fatalf("read %s: %v", f.rel, err)
+		}
+		if !strings.Contains(string(source), "SystemScope(") {
+			continue
+		}
+
+		dir := path.Dir(filepath.ToSlash(f.rel))
+		if _, ok := allowed[dir]; !ok {
+			callers = append(callers, f.rel)
+		}
+	}
+
+	for _, caller := range callers {
+		t.Errorf("FIT-03: %s calls authctx.SystemScope; only background runners may, "+
+			"and a new one is a decision to record in tools/fitness rather than "+
+			"take in passing", caller)
+	}
+
+	// Guard the guard. A rule whose allowlist has quietly swallowed the only
+	// real caller passes forever while checking nothing.
+	found := false
+	for _, f := range loadGoFiles(t) {
+		if strings.HasPrefix(filepath.ToSlash(f.rel), "internal/platform/escalation/") &&
+			!strings.HasSuffix(f.rel, "_test.go") {
+			source, err := os.ReadFile(f.path)
+			if err != nil {
+				t.Fatalf("read %s: %v", f.rel, err)
+			}
+			if strings.Contains(string(source), "authctx.SystemScope(") {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Error("FIT-03: no background runner calls authctx.SystemScope; either the " +
+			"escalation sweeper stopped using it or this rule is checking nothing")
 	}
 }
 
