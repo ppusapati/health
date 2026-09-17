@@ -49,7 +49,13 @@ func raised(t *testing.T) escalation.Notice {
 	return notice
 }
 
-// --------------------------------------------------------------- the matrix
+// ------------------------------------------- the matrix (SRS-FAC-012)
+//
+// "Maintain emergency contact/escalation matrix by facility/system", verified
+// by "critical incident can resolve active escalation recipients". Resolution
+// is the half that matters: a rung stores a duty role and the driver resolves
+// it against the roster at the moment of escalation, because the answer at
+// three in the morning is not the answer at noon.
 
 func TestAMatrixMustStartAtTheResponsiblePerson(t *testing.T) {
 	// A chain that starts at level one begins by telling somebody else's boss,

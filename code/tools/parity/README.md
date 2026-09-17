@@ -53,11 +53,21 @@ and the Dart runner translates, so a case reads the same for both sides.
 ## The traceability check
 
 `make traceability` is the other half of the same audit, and lives here because
-it answers the same kind of question. `wave-1-status.md` does not claim
-"implemented" — it claims "has a working, tested implementation", and the
-difference is the whole point of the document. The check asserts the weaker
-half mechanically: every requirement id the doc claims appears in at least one
-test file.
+it answers the same kind of question. The status documents do not claim
+"implemented" — they claim "has a working, tested implementation", and the
+difference is the whole point of them. The check asserts the weaker half
+mechanically: every requirement id a doc claims appears in at least one test
+file.
+
+It reads every status document, not the newest one. That sounds obvious and
+was not: for the first three Wave-2 commits the gate read only
+`wave-1-status.md`, so the Wave-2 foundations being written that week were
+outside it — a gate covering the finished wave and not the one in progress is
+a gate pointed at the past. Pointing it at `wave-2-status.md` too found three
+requirements on its first run (SRS-FAC-012, SRS-ICU-002, SRS-OPSAPI-007) that
+were claimed, genuinely implemented, and exercised by tests that never named
+them. Which is the failure mode exactly: the tests were real, and nothing
+connected them to the claim.
 
 It checks a second thing since Wave 2 opened: that every requirement id named
 anywhere in `docs/engineering/` is one the programme actually defines.

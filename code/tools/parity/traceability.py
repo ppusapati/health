@@ -18,7 +18,24 @@ import sys
 root = pathlib.Path(__file__).resolve().parents[2]
 # POSIX ERE, not Python's: grep -E has no non-capturing group, and (?: there is
 # matched literally, which silently finds nothing.
-PATTERN = r"SRS-(EMPI|SCH|ENC|CLN|NUR|ORD|MED|BIL)-[0-9]{3}"
+PATTERN = (
+    r"SRS-("
+    # Wave 1.
+    r"EMPI|SCH|ENC|CLN|NUR|ORD|MED|BIL"
+    # Wave 2: the twelve clinical and operational families, the support
+    # services, and the cross-cutting Phase-2 sets.
+    r"|ER|ICU|OT|ANE|BLD|CSSD|MAT|BME|QMS|IPC|MRD"
+    r"|AMB|DIET|FAC|HKP|LND|MORT"
+    r"|OPSAPI|OPSNFR|OPSSEC|OPSWEB"
+    r")-[0-9]{3}"
+)
+
+# Each status document and what it claims. A gate that reads the finished wave
+# and not the one being written is a gate pointed at the past.
+STATUS_DOCS = [
+    "docs/engineering/wave-1-status.md",
+    "docs/engineering/wave-2-status.md",
+]
 
 
 def matching(pattern: str, args: list[str]) -> set[str]:
@@ -33,14 +50,14 @@ def ids(args: list[str]) -> set[str]:
     return matching(PATTERN, args)
 
 
-claimed = ids(["docs/engineering/wave-1-status.md"])
+claimed = ids(STATUS_DOCS)
 tested = ids([
     "--include=*_test.go", "--include=*_test.dart", "--include=*.test.ts", ".",
 ])
 
 missing = sorted(claimed - tested)
 for requirement in missing:
-    print(f"UNTESTED  {requirement}: claimed in wave-1-status.md, named by no test")
+    print(f"UNTESTED  {requirement}: claimed in a status doc, named by no test")
 
 # Every id a status document claims must be one the programme actually defines.
 #

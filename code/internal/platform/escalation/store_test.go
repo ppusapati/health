@@ -268,6 +268,12 @@ func TestRaisingTheSameSubjectTwiceProducesOneNotice(t *testing.T) {
 // TestRestartDoesNotLosePendingEscalation is SRS-OPSNFR-003's acceptance
 // criterion, executed rather than asserted about.
 //
+// It is also SRS-OPSAPI-007's: "workflow survives process restart and resumes
+// idempotently". Survival is what this test shows directly; the idempotence is
+// next door in TestRaisingTheSameSubjectTwiceProducesOneNotice, because a
+// resume that re-raised what it found would start a second chain to the same
+// consultant on every restart.
+//
 // The first driver raises and delivers level zero, then is discarded entirely —
 // no shutdown, no handover, nothing flushed. A second driver built from nothing
 // but the database picks the notice up and escalates it, which is the whole

@@ -103,6 +103,13 @@ func devAt(hour, minute int) time.Time {
 	return time.Date(2026, time.September, 17, hour, minute, 0, 0, time.UTC)
 }
 
+// TestDeviceProvenanceSurvivesStorage covers SRS-ICU-002's "source-attributed"
+// and SRS-ICU-003's distinguishability, through a round trip.
+//
+// SRS-ICU-002 asks for flowsheet values to be "time-stamped, unit-normalized
+// and source-attributed". The unit travels with the value because the domain
+// refuses a quantity without one; the attribution and both timestamps are what
+// this asserts survives the database.
 func TestDeviceProvenanceSurvivesStorage(t *testing.T) {
 	f := newDeviceFixture(t)
 	stored := f.reading(t, domain.SourceDevice, "searching")
