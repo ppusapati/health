@@ -141,7 +141,7 @@ func TestFIT01_DomainPackagesArePure(t *testing.T) {
 // would make these tests useless noise.
 var sqlSchemaRef = regexp.MustCompile(
 	`(?i)\b(?:from|join|into|update|delete\s+from|table)\s+` +
-		`(organization|identity_access|platform_data|platform_workflow|platform_rules|platform_edge|platform_escalation|security_platform)\.[a-z_]+`)
+		`(organization|identity_access|platform_data|platform_workflow|platform_rules|platform_edge|platform_escalation|emergency|security_platform)\.[a-z_]+`)
 
 // schemaOwners maps a schema to the one package path allowed to reach it.
 var schemaOwners = map[string]string{
@@ -152,6 +152,7 @@ var schemaOwners = map[string]string{
 	"platform_rules":      "internal/platform/rules",
 	"platform_edge":       "internal/edge/cloudstore",
 	"security_platform":   "internal/security/adapters/postgres",
+	"emergency":           "internal/emergency/adapters/postgres",
 	"platform_blob":       "internal/platform/blobstore",
 	"platform_escalation": "internal/platform/escalation",
 }
@@ -174,6 +175,7 @@ func TestSQLSchemaRefDetectorWorks(t *testing.T) {
 		`UPDATE platform_edge.node SET status = 'revoked'`,
 		`SELECT 1 FROM security_platform.security_event`,
 		`SELECT * FROM platform_escalation.notice WHERE state = 'pending'`,
+		`SELECT * FROM emergency.visit WHERE status <> 'disposed'`,
 	}
 	for _, sample := range shouldMatch {
 		if !sqlSchemaRef.MatchString(sample) {
@@ -245,6 +247,7 @@ func TestFIT02_GeneratedQueriesImportedOnlyByAdapters(t *testing.T) {
 		"internal/orders/adapters/postgres",
 		"internal/medication/adapters/postgres",
 		"internal/billing/adapters/postgres",
+		"internal/emergency/adapters/postgres",
 		"internal/platform/store",
 		"internal/platform/workflow",
 		"internal/platform/rules",

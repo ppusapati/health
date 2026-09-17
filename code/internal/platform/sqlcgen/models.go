@@ -563,6 +563,103 @@ type ClinicalTemplate struct {
 	CreatedAt  pgtype.Timestamptz
 }
 
+type EmergencyEvent struct {
+	EventID             uuid.UUID
+	TenantID            uuid.UUID
+	VisitID             uuid.UUID
+	Kind                string
+	Detail              string
+	OccurredAt          pgtype.Timestamptz
+	RecordedAt          pgtype.Timestamptz
+	Sequence            int32
+	ActorID             string
+	Late                bool
+	PathwayID           pgtype.UUID
+	ProtocolID          string
+	NeedsReconciliation bool
+	ReconciledOrderID   string
+}
+
+type EmergencyPathway struct {
+	PathwayID          uuid.UUID
+	TenantID           uuid.UUID
+	VisitID            uuid.UUID
+	Kind               string
+	Label              string
+	ActivatedAt        pgtype.Timestamptz
+	ActivatedBy        string
+	NotifiedTeam       string
+	EscalationNoticeID pgtype.UUID
+	StoodDownAt        pgtype.Timestamptz
+	StoodDownReason    string
+}
+
+type EmergencyPathwayTarget struct {
+	PathwayID     uuid.UUID
+	Code          string
+	Label         string
+	WithinSeconds int64
+}
+
+type EmergencyPriorityOverride struct {
+	OverrideID   uuid.UUID
+	TenantID     uuid.UUID
+	VisitID      uuid.UUID
+	AcuityRank   int32
+	Reason       string
+	OverriddenBy string
+	OverriddenAt pgtype.Timestamptz
+}
+
+type EmergencyTriage struct {
+	TriageID         uuid.UUID
+	TenantID         uuid.UUID
+	VisitID          uuid.UUID
+	ScaleName        string
+	ScaleVersion     string
+	AcuityCode       string
+	AcuityRank       int32
+	RespiratoryRate  *int32
+	HeartRate        *int32
+	SystolicBp       *int32
+	OxygenSaturation *int32
+	Temperature      *float64
+	PainScore        *int32
+	Consciousness    string
+	RedFlags         []string
+	MissingFields    []string
+	Note             string
+	AssessedBy       string
+	AssessedAt       pgtype.Timestamptz
+}
+
+type EmergencyVisit struct {
+	VisitID              uuid.UUID
+	TenantID             uuid.UUID
+	EncounterID          uuid.UUID
+	PatientID            pgtype.UUID
+	FacilityID           string
+	ArrivalMode          string
+	ChiefComplaint       string
+	ArrivedAt            pgtype.Timestamptz
+	Unidentified         bool
+	TemporaryName        string
+	MedicoLegal          bool
+	MedicoLegalRef       string
+	Status               string
+	Location             string
+	Disposition          string
+	DisposedAt           pgtype.Timestamptz
+	DispositionNote      string
+	ReceivingService     string
+	ObservationStartedAt pgtype.Timestamptz
+	ObservationEndsAt    pgtype.Timestamptz
+	CreatedBy            string
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	Version              int64
+}
+
 type EmpiCommunicationPreference struct {
 	PreferenceID   uuid.UUID
 	TenantID       uuid.UUID
