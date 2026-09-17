@@ -329,7 +329,10 @@ SELECT observation_id, tenant_id, patient_id, encounter_id, code_system,
        value_code_system, value_code, value_code_display, reference_low,
        reference_high, reference_text, interpretation, interpretation_source,
        status, effective_at, issued_at, performer_id, device_id, source_system,
-       note, amends_id, recorded_by, recorded_at, version
+       note, amends_id, recorded_by, recorded_at, version,
+       source, validation, device_channel, device_quality,
+       device_observed_at, device_received_at, validated_by, validated_at,
+       validation_note
 FROM clinical.observation
 WHERE tenant_id = $1 AND observation_id = $2
 `
@@ -373,6 +376,15 @@ func (q *Queries) GetObservation(ctx context.Context, arg GetObservationParams) 
 		&i.RecordedBy,
 		&i.RecordedAt,
 		&i.Version,
+		&i.Source,
+		&i.Validation,
+		&i.DeviceChannel,
+		&i.DeviceQuality,
+		&i.DeviceObservedAt,
+		&i.DeviceReceivedAt,
+		&i.ValidatedBy,
+		&i.ValidatedAt,
+		&i.ValidationNote,
 	)
 	return i, err
 }
@@ -963,7 +975,9 @@ INSERT INTO clinical.observation (
     value_code_system, value_code, value_code_display, reference_low,
     reference_high, reference_text, interpretation, interpretation_source,
     status, effective_at, issued_at, performer_id, device_id, source_system,
-    note, amends_id, recorded_by, recorded_at, version
+    note, amends_id, recorded_by, recorded_at, version,
+    source, validation, device_channel, device_quality,
+    device_observed_at, device_received_at
 ) VALUES (
     $1, $2, $3, $4::uuid,
     $5, $6, $7, $8,
@@ -974,7 +988,10 @@ INSERT INTO clinical.observation (
     $18, $19, $20, $21,
     $22::timestamptz, $23, $24,
     $25, $26, $27::uuid, $28,
-    $29, 1
+    $29, 1,
+    $30, $31, $32, $33,
+    $34::timestamptz,
+    $35::timestamptz
 )
 `
 
@@ -1008,6 +1025,12 @@ type InsertObservationParams struct {
 	AmendsID             pgtype.UUID
 	RecordedBy           string
 	RecordedAt           pgtype.Timestamptz
+	Source               string
+	Validation           string
+	DeviceChannel        string
+	DeviceQuality        string
+	DeviceObservedAt     pgtype.Timestamptz
+	DeviceReceivedAt     pgtype.Timestamptz
 }
 
 func (q *Queries) InsertObservation(ctx context.Context, arg InsertObservationParams) error {
@@ -1041,6 +1064,12 @@ func (q *Queries) InsertObservation(ctx context.Context, arg InsertObservationPa
 		arg.AmendsID,
 		arg.RecordedBy,
 		arg.RecordedAt,
+		arg.Source,
+		arg.Validation,
+		arg.DeviceChannel,
+		arg.DeviceQuality,
+		arg.DeviceObservedAt,
+		arg.DeviceReceivedAt,
 	)
 	return err
 }
@@ -1861,7 +1890,10 @@ SELECT observation_id, tenant_id, patient_id, encounter_id, code_system,
        value_code_system, value_code, value_code_display, reference_low,
        reference_high, reference_text, interpretation, interpretation_source,
        status, effective_at, issued_at, performer_id, device_id, source_system,
-       note, amends_id, recorded_by, recorded_at, version
+       note, amends_id, recorded_by, recorded_at, version,
+       source, validation, device_channel, device_quality,
+       device_observed_at, device_received_at, validated_by, validated_at,
+       validation_note
 FROM clinical.observation
 WHERE tenant_id = $1
   AND patient_id = $2
@@ -1929,6 +1961,89 @@ func (q *Queries) ListObservations(ctx context.Context, arg ListObservationsPara
 			&i.RecordedBy,
 			&i.RecordedAt,
 			&i.Version,
+			&i.Source,
+			&i.Validation,
+			&i.DeviceChannel,
+			&i.DeviceQuality,
+			&i.DeviceObservedAt,
+			&i.DeviceReceivedAt,
+			&i.ValidatedBy,
+			&i.ValidatedAt,
+			&i.ValidationNote,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPendingValidation = `-- name: ListPendingValidation :many
+SELECT observation_id, tenant_id, patient_id, encounter_id, code_system, code_version, code, code_display, value_quantity, value_unit, value_text, value_code_system, value_code, value_code_display, reference_low, reference_high, reference_text, interpretation, interpretation_source, status, effective_at, issued_at, performer_id, device_id, source_system, note, amends_id, recorded_by, recorded_at, version, source, validation, device_channel, device_quality, device_observed_at, device_received_at, validated_by, validated_at, validation_note FROM clinical.observation
+WHERE tenant_id = $1 AND patient_id = $2 AND validation = 'pending'
+ORDER BY effective_at DESC
+LIMIT $3
+`
+
+type ListPendingValidationParams struct {
+	TenantID  uuid.UUID
+	PatientID uuid.UUID
+	Limit     int32
+}
+
+// What the ICU dashboard shows as provisional (SRS-ICU-003, SRS-ICU-012).
+func (q *Queries) ListPendingValidation(ctx context.Context, arg ListPendingValidationParams) ([]ClinicalObservation, error) {
+	rows, err := q.db.Query(ctx, listPendingValidation, arg.TenantID, arg.PatientID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ClinicalObservation{}
+	for rows.Next() {
+		var i ClinicalObservation
+		if err := rows.Scan(
+			&i.ObservationID,
+			&i.TenantID,
+			&i.PatientID,
+			&i.EncounterID,
+			&i.CodeSystem,
+			&i.CodeVersion,
+			&i.Code,
+			&i.CodeDisplay,
+			&i.ValueQuantity,
+			&i.ValueUnit,
+			&i.ValueText,
+			&i.ValueCodeSystem,
+			&i.ValueCode,
+			&i.ValueCodeDisplay,
+			&i.ReferenceLow,
+			&i.ReferenceHigh,
+			&i.ReferenceText,
+			&i.Interpretation,
+			&i.InterpretationSource,
+			&i.Status,
+			&i.EffectiveAt,
+			&i.IssuedAt,
+			&i.PerformerID,
+			&i.DeviceID,
+			&i.SourceSystem,
+			&i.Note,
+			&i.AmendsID,
+			&i.RecordedBy,
+			&i.RecordedAt,
+			&i.Version,
+			&i.Source,
+			&i.Validation,
+			&i.DeviceChannel,
+			&i.DeviceQuality,
+			&i.DeviceObservedAt,
+			&i.DeviceReceivedAt,
+			&i.ValidatedBy,
+			&i.ValidatedAt,
+			&i.ValidationNote,
 		); err != nil {
 			return nil, err
 		}
@@ -2439,7 +2554,10 @@ SELECT o.observation_id, o.tenant_id, o.patient_id, o.encounter_id, o.code_syste
        o.reference_low, o.reference_high, o.reference_text, o.interpretation,
        o.interpretation_source, o.status, o.effective_at, o.issued_at,
        o.performer_id, o.device_id, o.source_system, o.note, o.amends_id,
-       o.recorded_by, o.recorded_at, o.version
+       o.recorded_by, o.recorded_at, o.version,
+       o.source, o.validation, o.device_channel, o.device_quality,
+       o.device_observed_at, o.device_received_at, o.validated_by,
+       o.validated_at, o.validation_note
 FROM clinical.observation o
 WHERE o.tenant_id = $1
   AND o.interpretation IN ('critical_high', 'critical_low')
@@ -2498,6 +2616,15 @@ func (q *Queries) ListUnacknowledgedCriticalResults(ctx context.Context, arg Lis
 			&i.RecordedBy,
 			&i.RecordedAt,
 			&i.Version,
+			&i.Source,
+			&i.Validation,
+			&i.DeviceChannel,
+			&i.DeviceQuality,
+			&i.DeviceObservedAt,
+			&i.DeviceReceivedAt,
+			&i.ValidatedBy,
+			&i.ValidatedAt,
+			&i.ValidationNote,
 		); err != nil {
 			return nil, err
 		}
@@ -2657,6 +2784,46 @@ func (q *Queries) SetDocumentStatus(ctx context.Context, arg SetDocumentStatusPa
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const setObservationValidation = `-- name: SetObservationValidation :exec
+UPDATE clinical.observation
+SET validation = $1,
+    validated_by = $2,
+    validated_at = $3,
+    validation_note = $4,
+    version = version + 1
+WHERE tenant_id = $5
+  AND observation_id = $6
+  AND validation = 'pending'
+`
+
+type SetObservationValidationParams struct {
+	Validation     string
+	ValidatedBy    string
+	ValidatedAt    pgtype.Timestamptz
+	ValidationNote string
+	TenantID       uuid.UUID
+	ObservationID  uuid.UUID
+}
+
+// Records a clinician accepting a device reading into the chart, or rejecting
+// it as an artefact (SRS-ICU-003).
+//
+// The predicate is the control. `validation = 'pending'` means a reading
+// already decided cannot be decided again by a second request that raced the
+// first, and a value that was never device-derived cannot be walked into the
+// chart by this path at all.
+func (q *Queries) SetObservationValidation(ctx context.Context, arg SetObservationValidationParams) error {
+	_, err := q.db.Exec(ctx, setObservationValidation,
+		arg.Validation,
+		arg.ValidatedBy,
+		arg.ValidatedAt,
+		arg.ValidationNote,
+		arg.TenantID,
+		arg.ObservationID,
+	)
+	return err
 }
 
 const setProblemStatus = `-- name: SetProblemStatus :execrows

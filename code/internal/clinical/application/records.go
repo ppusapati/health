@@ -1043,3 +1043,178 @@ func (s *Service) GetBanner(ctx context.Context, patientID, encounterContext str
 	}
 	return out, nil
 }
+
+// Device-sourced readings (SRS-ICU-003, SRS-ICU-009).
+
+// IngestDeviceReadingInput is one value off a bedside monitor.
+//
+// Deliberately narrower than RecordObservationInput. A monitor does not supply
+// an interpretation, does not amend earlier readings, and does not attach
+// provenance from another hospital — and a path that accepted those fields
+// from a device feed would be a way to write them without a person.
+type IngestDeviceReadingInput struct {
+	Context     domain.PatientContext
+	PatientID   string
+	EncounterID string
+	Code        domain.Coding
+	Value       domain.Quantity
+	// Device identity and quality metadata. The device id and its own
+	// timestamp are required; a reading that cannot be traced to a probe is
+	// one nobody can use to find the probe that caused a run of nonsense.
+	Device domain.DeviceSource
+}
+
+// IngestDeviceReading records a value from a bedside monitor (SRS-ICU-003).
+//
+// The reading lands on the chart immediately and is marked provisional. It is
+// not interpreted, it does not escalate, and it does not reach a score until a
+// named clinician confirms it: a saturation probe off a finger reads 60%, and
+// the whole point of this path is that the number is visible without being
+// believed.
+func (s *Service) IngestDeviceReading(ctx context.Context, in IngestDeviceReadingInput) (
+	domain.Observation, error) {
+
+	session, scope, err := s.authorize(ctx, PermClinicalWrite, "observation",
+		in.PatientID, true)
+	if err != nil {
+		return domain.Observation{}, err
+	}
+
+	now := s.clock.Now()
+	effective := in.Device.ObservedAt
+	if in.Device.ReceivedAt.IsZero() {
+		in.Device.ReceivedAt = now
+	}
+
+	var out domain.Observation
+	err = s.uow.WithinTx(ctx, func(ctx context.Context) error {
+		if err := checkContext(in.Context, in.PatientID, in.EncounterID,
+			"recording this reading", now); err != nil {
+			return err
+		}
+		if err := s.requireWritableEncounter(ctx, scope, in.EncounterID,
+			in.PatientID); err != nil {
+			return err
+		}
+
+		observation, err := domain.NewObservation(s.ids.NewID(), scope.TenantID(),
+			domain.NewObservationInput{
+				PatientID: in.PatientID, EncounterID: in.EncounterID,
+				Code: in.Code, Value: in.Value,
+				// Never inferred here, and a device does not supply one
+				// (SRS-CLN-011). A monitor that alarms is telling the bedside,
+				// not the record.
+				Interpretation: domain.InterpretationUnknown,
+				Status:         domain.ObservationFinal,
+				EffectiveAt:    effective,
+				DeviceID:       in.Device.DeviceID,
+				Source:         domain.SourceDevice,
+				Device:         in.Device,
+			}, session.SubjectID, now)
+		if err != nil {
+			return clinicalError(err)
+		}
+		if err := s.records.InsertObservation(ctx, scope, observation); err != nil {
+			return err
+		}
+
+		out = observation
+		return s.appendAudit(ctx, session, audit.Record{
+			TenantID: session.TenantID, Action: PermClinicalWrite,
+			ResourceType: "observation", ResourceID: observation.ID,
+			Outcome: audit.OutcomeSuccess, Reason: "device reading ingested",
+		}, now)
+	})
+	if err != nil {
+		return domain.Observation{}, err
+	}
+	return out, nil
+}
+
+// DecideReadingInput is a clinician accepting or rejecting a device reading.
+type DecideReadingInput struct {
+	ObservationID string
+	// Accept is true to confirm the reading into the chart, false to mark it
+	// an artefact.
+	Accept bool
+	// Reason is required on a rejection. A column of the word "artefact" with
+	// no reasons is not how a failing probe gets found.
+	Reason string
+}
+
+// DecideReading records a clinician's decision about a device reading
+// (SRS-ICU-003).
+//
+// The only path by which a device value becomes a chart value, and it needs
+// the clinical write permission rather than a device or interface credential:
+// an interface that could confirm its own readings would make the distinction
+// this whole mechanism exists for meaningless.
+func (s *Service) DecideReading(ctx context.Context, in DecideReadingInput) (
+	domain.Observation, error) {
+
+	now := s.clock.Now()
+
+	var out domain.Observation
+	err := s.uow.WithinTx(ctx, func(ctx context.Context) error {
+		// The patient is read from the observation rather than taken from the
+		// caller, so a clinician cannot confirm one patient's reading while
+		// authorized for another's.
+		// Authorized twice: once to read the reading at all, and again
+		// against the patient it turns out to belong to. A clinician
+		// authorized for one patient must not be able to confirm another's
+		// reading by knowing its identifier.
+		session, scope, err := s.authorize(ctx, PermClinicalWrite, "observation",
+			"", false)
+		if err != nil {
+			return err
+		}
+		observation, err := s.records.GetObservation(ctx, scope, in.ObservationID)
+		if err != nil {
+			return err
+		}
+		if _, _, err := s.authorize(ctx, PermClinicalWrite, "observation",
+			observation.PatientID, true); err != nil {
+			return err
+		}
+
+		if in.Accept {
+			err = observation.Confirm(session.SubjectID, now)
+		} else {
+			err = observation.Reject(session.SubjectID, in.Reason, now)
+		}
+		if err != nil {
+			return clinicalError(err)
+		}
+
+		if err := s.records.SetValidation(ctx, scope, observation); err != nil {
+			return err
+		}
+
+		out = observation
+		reason := "device reading confirmed into the chart"
+		if !in.Accept {
+			reason = "device reading rejected as an artefact"
+		}
+		return s.appendAudit(ctx, session, audit.Record{
+			TenantID: session.TenantID, Action: PermClinicalWrite,
+			ResourceType: "observation", ResourceID: observation.ID,
+			Outcome: audit.OutcomeSuccess, Reason: reason,
+		}, now)
+	})
+	if err != nil {
+		return domain.Observation{}, err
+	}
+	return out, nil
+}
+
+// ProvisionalReadings lists the device values nobody has decided about
+// (SRS-ICU-003, SRS-ICU-012).
+func (s *Service) ProvisionalReadings(ctx context.Context, patientID string,
+	pageSize int32) (domain.ObservationList, error) {
+
+	_, scope, err := s.authorize(ctx, PermClinicalRead, "observation", patientID, false)
+	if err != nil {
+		return nil, err
+	}
+	return s.records.PendingValidation(ctx, scope, patientID, clampPageSize(pageSize))
+}

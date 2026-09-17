@@ -203,7 +203,9 @@ INSERT INTO clinical.observation (
     value_code_system, value_code, value_code_display, reference_low,
     reference_high, reference_text, interpretation, interpretation_source,
     status, effective_at, issued_at, performer_id, device_id, source_system,
-    note, amends_id, recorded_by, recorded_at, version
+    note, amends_id, recorded_by, recorded_at, version,
+    source, validation, device_channel, device_quality,
+    device_observed_at, device_received_at
 ) VALUES (
     @observation_id, @tenant_id, @patient_id, sqlc.narg('encounter_id')::uuid,
     @code_system, @code_version, @code, @code_display,
@@ -214,8 +216,36 @@ INSERT INTO clinical.observation (
     @interpretation, @interpretation_source, @status, @effective_at,
     sqlc.narg('issued_at')::timestamptz, @performer_id, @device_id,
     @source_system, @note, sqlc.narg('amends_id')::uuid, @recorded_by,
-    @recorded_at, 1
+    @recorded_at, 1,
+    @source, @validation, @device_channel, @device_quality,
+    sqlc.narg('device_observed_at')::timestamptz,
+    sqlc.narg('device_received_at')::timestamptz
 );
+
+-- name: SetObservationValidation :exec
+-- Records a clinician accepting a device reading into the chart, or rejecting
+-- it as an artefact (SRS-ICU-003).
+--
+-- The predicate is the control. `validation = 'pending'` means a reading
+-- already decided cannot be decided again by a second request that raced the
+-- first, and a value that was never device-derived cannot be walked into the
+-- chart by this path at all.
+UPDATE clinical.observation
+SET validation = @validation,
+    validated_by = @validated_by,
+    validated_at = @validated_at,
+    validation_note = @validation_note,
+    version = version + 1
+WHERE tenant_id = @tenant_id
+  AND observation_id = @observation_id
+  AND validation = 'pending';
+
+-- name: ListPendingValidation :many
+-- What the ICU dashboard shows as provisional (SRS-ICU-003, SRS-ICU-012).
+SELECT * FROM clinical.observation
+WHERE tenant_id = $1 AND patient_id = $2 AND validation = 'pending'
+ORDER BY effective_at DESC
+LIMIT $3;
 
 -- name: GetObservation :one
 SELECT observation_id, tenant_id, patient_id, encounter_id, code_system,
@@ -223,7 +253,10 @@ SELECT observation_id, tenant_id, patient_id, encounter_id, code_system,
        value_code_system, value_code, value_code_display, reference_low,
        reference_high, reference_text, interpretation, interpretation_source,
        status, effective_at, issued_at, performer_id, device_id, source_system,
-       note, amends_id, recorded_by, recorded_at, version
+       note, amends_id, recorded_by, recorded_at, version,
+       source, validation, device_channel, device_quality,
+       device_observed_at, device_received_at, validated_by, validated_at,
+       validation_note
 FROM clinical.observation
 WHERE tenant_id = @tenant_id AND observation_id = @observation_id;
 
@@ -235,7 +268,10 @@ SELECT observation_id, tenant_id, patient_id, encounter_id, code_system,
        value_code_system, value_code, value_code_display, reference_low,
        reference_high, reference_text, interpretation, interpretation_source,
        status, effective_at, issued_at, performer_id, device_id, source_system,
-       note, amends_id, recorded_by, recorded_at, version
+       note, amends_id, recorded_by, recorded_at, version,
+       source, validation, device_channel, device_quality,
+       device_observed_at, device_received_at, validated_by, validated_at,
+       validation_note
 FROM clinical.observation
 WHERE tenant_id = @tenant_id
   AND patient_id = @patient_id
@@ -254,7 +290,10 @@ SELECT o.observation_id, o.tenant_id, o.patient_id, o.encounter_id, o.code_syste
        o.reference_low, o.reference_high, o.reference_text, o.interpretation,
        o.interpretation_source, o.status, o.effective_at, o.issued_at,
        o.performer_id, o.device_id, o.source_system, o.note, o.amends_id,
-       o.recorded_by, o.recorded_at, o.version
+       o.recorded_by, o.recorded_at, o.version,
+       o.source, o.validation, o.device_channel, o.device_quality,
+       o.device_observed_at, o.device_received_at, o.validated_by,
+       o.validated_at, o.validation_note
 FROM clinical.observation o
 WHERE o.tenant_id = @tenant_id
   AND o.interpretation IN ('critical_high', 'critical_low')

@@ -146,6 +146,24 @@ type Observation struct {
 	SourceSystem string
 	Note         string
 
+	// Source and Validation together are SRS-ICU-003's "raw and device-derived
+	// values are distinguishable from manually validated chart values". See
+	// device.go: a device reading starts pending and only a named clinician
+	// moves it, and SRS-ICU-009's scores read Validated() rather than the raw
+	// list.
+	Source     SourceKind
+	Validation Validation
+	// Device is the identity and quality metadata a device reading carries.
+	// Zero for anything else.
+	Device DeviceSource
+	// ValidatedBy and ValidatedAt record the clinician who accepted or rejected
+	// a device reading.
+	ValidatedBy string
+	ValidatedAt time.Time
+	// ValidationNote is why a reading was rejected. A run of rejections with
+	// reasons is how a failing probe gets found.
+	ValidationNote string
+
 	// AmendsID chains a corrected result to the one it replaces.
 	AmendsID string
 
@@ -207,6 +225,27 @@ func NewObservation(id, tenantID string, in NewObservationInput, recordedBy stri
 			ErrInvalidDocument)
 	}
 
+	// SRS-ICU-003. The source decides the starting validation state, and
+	// nothing else may set it: a caller that could pass "confirmed" in with
+	// the reading would be able to walk a device value straight into a score.
+	source := in.Source
+	if source == "" {
+		// An observation whose caller said nothing about its source is a
+		// person typing at a keyboard — every Wave-1 path, and every path
+		// written before this field existed. Device ingestion says so
+		// explicitly.
+		source = SourceManual
+	}
+	if !KnownSourceKind(string(source)) {
+		return Observation{}, fmt.Errorf("%w: unknown observation source %q",
+			ErrInvalidDocument, source)
+	}
+	if source == SourceDevice {
+		if err := in.Device.Validate(); err != nil {
+			return Observation{}, err
+		}
+	}
+
 	return Observation{
 		ID: id, TenantID: tenantID, PatientID: in.PatientID,
 		EncounterID: in.EncounterID, Code: in.Code, Value: in.Value,
@@ -217,6 +256,7 @@ func NewObservation(id, tenantID string, in NewObservationInput, recordedBy stri
 		Status: in.Status, EffectiveAt: effective.UTC(), IssuedAt: in.IssuedAt.UTC(),
 		PerformerID: in.PerformerID, DeviceID: in.DeviceID,
 		SourceSystem: in.SourceSystem, Note: strings.TrimSpace(in.Note),
+		Source: source, Validation: DefaultValidationFor(source), Device: in.Device,
 		RecordedBy: recordedBy, RecordedAt: now.UTC(), Version: 1,
 	}, nil
 }
@@ -241,6 +281,13 @@ type NewObservationInput struct {
 	DeviceID             string
 	SourceSystem         string
 	Note                 string
+	// Source says where the reading came from (SRS-ICU-003). Empty means a
+	// person typed it, which is what every path written before device
+	// ingestion existed was doing.
+	Source SourceKind
+	// Device is the identity and quality metadata, required when Source is
+	// SourceDevice.
+	Device DeviceSource
 }
 
 // External reports a result that came from somewhere else (SRS-CLN-010).

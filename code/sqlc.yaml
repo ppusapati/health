@@ -30,6 +30,7 @@ sql:
       - db/migrations/0025_billing.up.sql
       - db/migrations/0026_platform_blob.up.sql
       - db/migrations/0027_platform_escalation.up.sql
+      - db/migrations/0028_clinical_device_source.up.sql
     gen:
       go:
         package: sqlcgen

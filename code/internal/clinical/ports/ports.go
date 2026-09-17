@@ -104,6 +104,16 @@ type RecordRepository interface {
 	// (SRS-CLN-012).
 	UnacknowledgedCritical(ctx context.Context, scope authctx.TenantScope,
 		limit int32) (domain.ObservationList, error)
+	// SetValidation records a clinician accepting a device reading into the
+	// chart or rejecting it as an artefact (SRS-ICU-003). It must refuse a
+	// reading that is not pending, so a second request racing the first cannot
+	// re-decide one already decided.
+	SetValidation(ctx context.Context, scope authctx.TenantScope,
+		o domain.Observation) error
+	// PendingValidation lists the device readings nobody has looked at yet.
+	PendingValidation(ctx context.Context, scope authctx.TenantScope,
+		patientID string, limit int32) (domain.ObservationList, error)
+
 	InsertAcknowledgement(ctx context.Context, scope authctx.TenantScope,
 		a domain.CriticalAcknowledgement) error
 	Acknowledgement(ctx context.Context, scope authctx.TenantScope,

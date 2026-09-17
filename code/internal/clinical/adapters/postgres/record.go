@@ -355,6 +355,13 @@ func (r RecordRepo) InsertObservation(ctx context.Context, scope authctx.TenantS
 		PerformerID: o.PerformerID, DeviceID: o.DeviceID,
 		SourceSystem: o.SourceSystem, Note: o.Note, AmendsID: amends,
 		RecordedBy: o.RecordedBy, RecordedAt: timestamptz(o.RecordedAt),
+		// SRS-ICU-003. The validation state is written from the domain's
+		// decision rather than from anything a caller supplied — see
+		// DefaultValidationFor.
+		Source: string(o.Source), Validation: string(o.Validation),
+		DeviceChannel: o.Device.Channel, DeviceQuality: o.Device.Quality,
+		DeviceObservedAt: timestamptz(o.Device.ObservedAt),
+		DeviceReceivedAt: timestamptz(o.Device.ReceivedAt),
 	})
 }
 
@@ -530,6 +537,25 @@ func observationFromRow(row sqlcgen.ClinicalObservation) domain.Observation {
 		AmendsID:   uuidOrEmpty(row.AmendsID),
 		RecordedBy: row.RecordedBy, RecordedAt: timeOrZero(row.RecordedAt),
 		Version: row.Version,
+		// SRS-ICU-003. A stored source or validation this build cannot read
+		// becomes the unvalidated pair rather than the trusting one: a reading
+		// nobody can classify must not reach a score.
+		Source:     domain.SourceKind(row.Source),
+		Validation: domain.Validation(row.Validation),
+		Device: domain.DeviceSource{
+			DeviceID: row.DeviceID, Channel: row.DeviceChannel,
+			Quality:    row.DeviceQuality,
+			ObservedAt: timeOrZero(row.DeviceObservedAt),
+			ReceivedAt: timeOrZero(row.DeviceReceivedAt),
+		},
+		ValidatedBy: row.ValidatedBy, ValidatedAt: timeOrZero(row.ValidatedAt),
+		ValidationNote: row.ValidationNote,
+	}
+	if !domain.KnownSourceKind(row.Source) {
+		o.Source = domain.SourceUnknown
+	}
+	if !domain.KnownValidation(row.Validation) {
+		o.Validation = domain.ValidationPending
 	}
 	if row.ValueQuantity != nil {
 		o.Value.Value = *row.ValueQuantity
@@ -868,4 +894,62 @@ func orEmptyActivities(in []domain.Activity) []domain.Activity {
 		return []domain.Activity{}
 	}
 	return in
+}
+
+// SetValidation records a clinician's decision about a device reading
+// (SRS-ICU-003).
+//
+// Guarded on the row still being pending, in SQL rather than only in the
+// domain: two clinicians deciding at once is an ordinary race on a busy unit,
+// and the predicate is what makes the first decision the one that stands.
+func (r RecordRepo) SetValidation(ctx context.Context, scope authctx.TenantScope,
+	o domain.Observation) error {
+
+	tenantID, err := scopeTenantID(scope)
+	if err != nil {
+		return err
+	}
+	id, err := uuid.Parse(o.ID)
+	if err != nil {
+		return notFound()
+	}
+
+	return r.queries(ctx).SetObservationValidation(ctx,
+		sqlcgen.SetObservationValidationParams{
+			TenantID: tenantID, ObservationID: id,
+			Validation:     string(o.Validation),
+			ValidatedBy:    o.ValidatedBy,
+			ValidatedAt:    timestamptz(o.ValidatedAt),
+			ValidationNote: o.ValidationNote,
+		})
+}
+
+// PendingValidation lists the device readings nobody has looked at yet.
+func (r RecordRepo) PendingValidation(ctx context.Context, scope authctx.TenantScope,
+	patientID string, limit int32) (domain.ObservationList, error) {
+
+	tenantID, err := scopeTenantID(scope)
+	if err != nil {
+		return nil, err
+	}
+	patient, err := uuid.Parse(patientID)
+	if err != nil {
+		return nil, notFound()
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+
+	rows, err := r.queries(ctx).ListPendingValidation(ctx,
+		sqlcgen.ListPendingValidationParams{
+			TenantID: tenantID, PatientID: patient, Limit: limit,
+		})
+	if err != nil {
+		return nil, err
+	}
+	out := make(domain.ObservationList, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, observationFromRow(row))
+	}
+	return out, nil
 }

@@ -440,6 +440,15 @@ type ClinicalObservation struct {
 	RecordedBy           string
 	RecordedAt           pgtype.Timestamptz
 	Version              int64
+	Source               string
+	Validation           string
+	DeviceChannel        string
+	DeviceQuality        string
+	DeviceObservedAt     pgtype.Timestamptz
+	DeviceReceivedAt     pgtype.Timestamptz
+	ValidatedBy          string
+	ValidatedAt          pgtype.Timestamptz
+	ValidationNote       string
 }
 
 type ClinicalProblem struct {
