@@ -157,9 +157,19 @@ drill stays open for the same reason as P0-12.
 These appear as qualifiers on individual requirement rows below. They are
 recorded here so that "Implemented, but" is not mistaken for "not done".
 
+**One of these rows used to name a requirement family that does not exist.**
+It read "SRS-NTF (notification delivery, later wave)", and there is no SRS-NTF
+in any of the eight Master SRS phases or in the Development Backlog. The id was
+invented here, and because it looked like every other id in the document it was
+read back as though the programme had planned the work. It had — under
+different names, in different waves, and one of them nearer than the row
+implied. Corrected below. The general lesson is worth more than the fix: a
+deferral that names its owner is checkable, and one that names an invented
+owner is a note that reads as a plan.
+
 | Deferred to | Affects | What is here instead |
 |---|---|---|
-| SRS-NTF (notification delivery, later wave) | SRS-EMPI-013, SRS-SCH-012, SRS-CLN-012, SRS-NUR-011 | Each context records that a message is owed, to whom, and what came back. Nothing sends. |
+| Outbound patient communication — SRS-PAT-ENG (Wave 5), with templates in SRS-TPL (Wave 7) | SRS-EMPI-013, SRS-SCH-012, SRS-CLN-012, SRS-NUR-011 | Each context records that a message is owed, to whom, and what came back. Nothing sends. **In-hospital escalation is nearer than this row used to say**: SRS-OPSNFR-003 and SRS-OPSAPI-007 are Wave-2 requirements, and the four rows here become producers into that. |
 | A licensed drug database | SRS-MED-002 | A tenant-configured terminology mapping table behind a port. A deployment that licenses one replaces a single adapter. |
 | A speech-recognition vendor | SRS-CLN-016 | Dictated content is marked, and a transcriber's signature does not finalise the note. The recogniser is a seam. |
 | A laboratory speaking HL7 | SRS-ORD-006 | Dispatch goes through the outbox and no performing context reads the orders schema. A different `Dispatcher` is one implementation. |
@@ -358,7 +368,7 @@ by tests. The EMPI family — all eighteen requirements — is closed.
 | SRS-EMPI-010 | Patient photo with consent/configuration; never the sole identity proof | **Implemented** |
 | SRS-EMPI-011 | Link ABHA and other external identifiers through an adapter, not as primary keys; link/unlink history and source retained | **Implemented** |
 | SRS-EMPI-012 | Demographic conflict from external sources routed to reconciliation, never a silent overwrite | **Implemented** |
-| SRS-EMPI-013 | Communication and privacy preferences distinct from clinical consent | **Implemented** in Sprint 1C; notification-service consumption arrives with SRS-NTF |
+| SRS-EMPI-013 | Communication and privacy preferences distinct from clinical consent | **Implemented** in Sprint 1C; the sending side arrives with SRS-PAT-ENG (Wave 5) |
 | SRS-EMPI-014 | Sensitive demographic fields with configured field-level access; masked and audited | **Implemented** |
 | SRS-EMPI-015 | Temporary/unknown patient registration for emergency use, reconciled later | **Implemented** |
 | SRS-EMPI-016 | Prevent duplicate MRN assignment under concurrent registration | **Implemented** |
@@ -636,7 +646,7 @@ pushes it off-record.
 | SRS-SCH-009 | Wait-time estimate from service rate, queue and provider status | **Implemented** |
 | SRS-SCH-010 | Walk-in appointment/queue with reason and prioritisation | **Implemented** |
 | SRS-SCH-011 | Medically justified queue reprioritisation, audited and visible | **Implemented** |
-| SRS-SCH-012 | Configurable booking/reminder/reschedule/cancellation notifications | **Implemented** — scheduling records that a message is owed and what came back; sending belongs to SRS-NTF |
+| SRS-SCH-012 | Configurable booking/reminder/reschedule/cancellation notifications | **Implemented** — scheduling records that a message is owed and what came back; sending to a patient belongs to SRS-PAT-ENG (Wave 5) |
 | SRS-SCH-013 | Recurring appointments and therapy series | **Implemented** |
 | SRS-SCH-014 | Prevent booking an inactive provider/resource/facility, with a domain-specific error | **Implemented** |
 | SRS-SCH-015 | Teleconsult vs in-person rules driving location/link and eligibility | **Implemented** |
@@ -801,8 +811,9 @@ pushes it off-record.
   reason, and need `sch.appointment.correct` — which a clerk working the queue
   does not hold.
 - **Scheduling records notifications; it does not send them.** Channels,
-  templates, retries, opt-outs and quiet hours belong to a notification service
-  (SRS-NTF); a booking screen waiting on an SMS gateway is a booking screen that
+  templates, retries, opt-outs and quiet hours belong to outbound patient
+  communication — SRS-PAT-ENG in Wave 5, with SRS-TPL's template studio in
+  Wave 7. A booking screen waiting on an SMS gateway is a booking screen that
   times out. What this context does is decide a message is owed, ask the patient
   index whether the patient agreed to hear about it, and record what came back —
   which is SRS-SCH-012's acceptance criterion, and the thing that distinguishes

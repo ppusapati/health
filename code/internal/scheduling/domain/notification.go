@@ -15,10 +15,17 @@ import (
 // told from one who was. Both conversations happen weekly, and only the record
 // distinguishes them.
 //
-// What this context does NOT do is send anything. Channels, templates,
-// retries, opt-outs and quiet hours belong to a notification service (SRS-NTF);
-// scheduling decides that something notifiable happened, checks the patient
-// agreed to hear about it, and records what came back.
+// What this context does NOT do is send anything. Channels, templates, retries,
+// opt-outs and quiet hours belong to outbound patient communication --
+// SRS-PAT-ENG in Wave 5, with SRS-TPL's templates in Wave 7. Scheduling decides
+// that something notifiable happened, checks the patient agreed to hear about
+// it, and records what came back.
+//
+// This is deliberately not the same thing as an escalation inside the hospital.
+// A reminder that fails is a patient who turns up on the wrong day; a critical
+// result nobody acknowledged is a patient nobody treated, and SRS-OPSNFR-003
+// requires that one to persist until it is acknowledged, escalated or closed.
+// That lives in internal/platform/escalation.
 
 // NotificationKind is what a message is about.
 type NotificationKind string

@@ -59,9 +59,21 @@ difference is the whole point of the document. The check asserts the weaker
 half mechanically: every requirement id the doc claims appears in at least one
 test file.
 
-It cannot check that the test asserts the right thing; nothing can, short of
-reading it. It does catch what the audit found twice — a requirement
-implemented, marked Implemented, and exercised by nothing at all:
+It checks a second thing since Wave 2 opened: that every requirement id named
+anywhere in `docs/engineering/` is one the programme actually defines.
+`wave-1-status.md` deferred four requirements to "SRS-NTF (notification
+delivery, later wave)", and there is no SRS-NTF — in any of the eight Master
+SRS phases, or in the Development Backlog. The id was invented while writing
+the document and then read back, by a later reader and by the model that wrote
+it, as though the programme had planned the work. An invented id is worse than
+an absent one: it looks like every real id around it, so it survives review,
+and the work it names is owned by nobody. `tools/requirements/extract.py`
+builds the index of real ids from the programme `.docx` files; `make
+traceability` fails on any id that is not in it, and on an index gone stale.
+
+Neither half can check that a test asserts the right thing; nothing can, short
+of reading it. The first half does catch what the audit found twice — a
+requirement implemented, marked Implemented, and exercised by nothing at all:
 
 | Requirement | What was missing |
 |---|---|

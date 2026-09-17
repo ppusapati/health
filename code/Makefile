@@ -240,7 +240,8 @@ parity: ## Web/mobile behavioural parity for the rules both clients implement
 	python3 tools/parity/compare.py
 
 .PHONY: traceability
-traceability: ## Every requirement the status doc claims is named by a test
+traceability: ## Every requirement the status doc claims is real and named by a test
+	python3 tools/requirements/extract.py --check
 	python3 tools/parity/traceability.py
 
 .PHONY: ci
