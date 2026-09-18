@@ -91,7 +91,7 @@ clinician, and `ValidatedInputs()` is a function rather than a convention.
 | SRS-ICU Critical Care | 18 | **17 implemented, 1 not built** — see below |
 | SRS-OT Perioperative | 17 | **15 implemented, 2 partial** — see below |
 | SRS-ANE Anesthesia and PACU | 11 | **11 implemented** — see below |
-| SRS-BLD Blood Bank and Transfusion | 17 | **Not started** |
+| SRS-BLD Blood Bank and Transfusion | 17 | **15 implemented, 2 partial** — see below |
 | SRS-CSSD Sterile Services | 12 | **Not started** |
 | SRS-MAT Materials and Inventory | 16 | **Not started** |
 | SRS-BIO Biomedical Engineering | 11 | **Not started** — Phase 2 §9. Note the prefix collision below |
@@ -346,6 +346,103 @@ paper after a downtime writes a backdated record by construction.
 | SRS-ANE-009 | Post-operative pain orders with monitoring and escalation | **Implemented** — the plan names the prescriptions rather than being one: the drug chart is SRS-MED's, and a second place to prescribe from is how a patient gets two doses |
 | SRS-ANE-010 | Anaesthesia summary generated from signed source data | **Implemented** — derived on read, never submitted, and it names what it could not be built from rather than quietly omitting it |
 | SRS-ANE-011 | Downtime paper record import, clearly marked and audit-linked | **Implemented** — its own permission, because an imported record is backdated by construction; the note, the transcriber and the transcription time are all required by the database |
+
+## SRS-BLD — Blood bank and transfusion medicine
+
+Reachable over the wire: `internal/bloodbank`, the `BloodBankService` contract,
+and end-to-end tests in `internal/app` that run against a real database through
+the assembled stack.
+
+Five shapes are worth naming, because each is a decision that could reasonably
+have gone the other way.
+
+**The ABO compatibility tables run in both directions, and the component class
+decides which applies.** Red cells go from O outward; plasma goes the other
+way, because it carries the antibodies rather than the antigens. Whole blood is
+held to both, so O whole blood is refused to an A patient although O red cells
+are not. Getting this wrong in one direction only is the kind of defect that
+reads as correct in every example anybody writes down, so the tests assert all
+sixteen ABO pairs per class rather than three cases: a table checked by example
+is a table with thirteen untested entries, each of which is a patient. The
+assertion was verified to fail against a single wrong entry before being
+trusted.
+
+**An unknown group is incompatible with everything, in both directions.** "We
+have not grouped this patient" must never read as a match. The wire enums have
+explicit unspecified members that map to it, a component always carries a real
+group because an ungrouped unit cannot be given to anybody, and a patient
+carries theirs on a sample whose absence is what ungrouped means.
+
+**A unit starts quarantined, by database default.** SRS-BLD-004 says an
+unreleased component cannot be allocated, and a default of available would make
+a row inserted by any path that forgot to say otherwise issuable. Release is
+its own permission, held by the manager rather than the scientist, for the
+reason every laboratory separates them: the person who ran the assay should not
+also be the person who declares the donation clear. A reactive result arriving
+late pulls every component already made from that donation back off the shelf.
+
+**A bedside mismatch's critical exception survives the refusal that produced
+it.** This was a defect found by the end-to-end test rather than by design: the
+escalation was raised inside the transaction that the refusal then rolled back,
+so a wrong-patient check blocked the transfusion and told nobody. The notice
+and its audit row now run in their own transaction, before the one that fails.
+The check itself runs twice — once to escalate, once inside the transaction
+that decides whether blood goes into a patient — so a client cannot substitute
+a different unit in between.
+
+**An emergency uncrossmatched release skips the crossmatch and nothing else.**
+It needs its own permission, a named senior authoriser and a reason; it does
+not reach a quarantined unit, because untested blood is not safer than no
+blood; and it stays on an outstanding list until the retrospective crossmatch
+is recorded. An ordinary issue cannot be marked reconciled, which would make
+that list wrong in the direction that looks safe.
+
+The role catalogue gains three: `blood_bank_scientist` (the bench),
+`blood_bank_manager` (release and emergency release), and
+`haemovigilance_officer` (investigations and look-backs). The separations are
+the point. A clinician requests blood and never crossmatches it. A nurse runs
+the bedside check and never issues. A scientist runs the bench and neither
+releases nor authorises. Only the haemovigilance officer can run a look-back,
+because a look-back reaches every patient who received blood from one donation.
+
+| Requirement | What it asks for | State |
+|---|---|---|
+| SRS-BLD-001 | Register donor or receive external unit data with unique donor/unit identity | **Implemented** — unique within the tenant; a unit names its donor or the supplier it came from, and neither is optional |
+| SRS-BLD-002 | Donor screening, deferral and consent per site policy | **Implemented** — accepting an unconsented donor is unrecordable; a temporary deferral must say when it ends and lapses on its own date; a permanent one is not lifted at a screening desk |
+| SRS-BLD-003 | Collection and component preparation with parent-child traceability | **Implemented** — every component names the collection it was made from, and the collection names the screening that permitted it |
+| SRS-BLD-004 | Mandatory testing results and quarantine/release state | **Implemented** — quarantined by database default; an unconfigured test panel releases nothing; release is the manager's; a late reactive result quarantines the whole donation |
+| SRS-BLD-005 | Component inventory by ABO/Rh, type, location, expiry, status and special attributes | **Implemented** — status and expiry are checked together everywhere, because they fail independently |
+| SRS-BLD-006 | Blood request with indication, urgency, quantity and special requirements | **Implemented** — a request with no indication is refused, because the utilisation review exists to find transfusions that should not have happened |
+| SRS-BLD-007 | Patient group/sample verification and compatibility testing | **Implemented** — a sample expires; a patient with none is told to send a tube rather than that no blood is available; a search returns every candidate with its verdict |
+| SRS-BLD-008 | Reserve/crossmatch with expiry of reservation | **Implemented** — one live hold per unit, held by a partial unique index; holds lapse, and a sweep returns the blood to the shelf |
+| SRS-BLD-009 | Issue only after final identity/compatibility checks | **Implemented** — the check is compared against the record rather than trusted, and who made it is on the issue row |
+| SRS-BLD-010 | Bedside positive patient/unit verification; mismatch blocks and raises a critical exception | **Implemented** — two people required, every failure reported at once, and the escalation survives the refusal |
+| SRS-BLD-011 | Transfusion start/end, observations and interruption; longitudinally visible | **Implemented** — one transfusion per unit, held by a unique index; the protocol sets a transfusion has not had are named rather than blocking |
+| SRS-BLD-012 | Suspected reaction triggering a blood bank investigation | **Implemented** — a reaction names the component, so the siblings from the same donation are found and quarantined immediately rather than after the investigation |
+| SRS-BLD-013 | Return/reissue/discard with reason and eligibility checks | **Partial** — discard with a coded reason is built, and a transfused unit cannot be unwound. The temperature and time-window checks on a *return* are not: this deployment has no cold-chain telemetry, and a check that assumed compliance would be worse than none |
+| SRS-BLD-014 | Full vein-to-vein traceability where data exists | **Implemented** — the chain runs in both directions and names its gaps, so "never transfused" is distinguishable from "we lost the record" |
+| SRS-BLD-015 | Haemovigilance and component utilisation reports | **Implemented** — derived from the issue, transfusion and reaction records every time; a running transfusion is not counted as one that happened |
+| SRS-BLD-016 | Emergency uncrossmatched release with senior authorisation, flagged and later reconciled | **Implemented** — its own permission, and an outstanding list that is what "later reconciled" is read against |
+| SRS-BLD-017 | Low-stock and expiry alerts by component type, configurable and acknowledged | **Partial** — thresholds are configurable per component and group, and both alert kinds are derived. Acknowledgement is not built: alerts are computed on read rather than raised as durable notices, so there is nothing to acknowledge yet |
+
+### The SRS-NUR-014 duplication
+
+SRS-NUR-014 built a transfusion record in Wave 1 — `nursing.transfusion` and
+`nursing.transfusion_observation` — before this context existed. It records the
+same clinical event from the ward's side: a unit number, a bedside check,
+observations, a reaction.
+
+Two records of one transfusion will disagree, which is the defect most of this
+codebase's constraints exist to prevent. `bloodbank.episode` is the one that
+should survive, because it is the only one linked to the issue, the component
+and the collection, and therefore the only one a look-back can run along: asked
+"who else received blood from this donation", the nursing table cannot answer.
+
+Resolving it means changing a Wave-1 contract and migrating the rows, which is
+not SRS-BLD's to do unasked. Until then a deployment entitled to the bloodbank
+module records transfusions here and the nursing table is the ward chart's view
+of the same event. This is a known defect with a named resolution, not a
+design.
 
 ## What Wave 2 depends on
 

@@ -81,6 +81,36 @@ const (
 	// to somebody who was not in the theatre.
 	RoleAnaesthetist Role = "anaesthetist"
 
+	// RoleBloodBankScientist runs the blood bank: donors, testing, inventory,
+	// compatibility and issue (SRS-BLD).
+	//
+	// A role of its own because the blood bank is a laboratory, not a ward.
+	// It groups patients, crossmatches and decides what leaves the fridge, and
+	// it does none of the things a clinician does: it does not request blood,
+	// and it does not transfuse.
+	RoleBloodBankScientist Role = "blood_bank_scientist"
+
+	// RoleBloodBankManager holds the two blood bank decisions a hospital is
+	// most answerable for: releasing a donation from quarantine, and
+	// authorising an uncrossmatched emergency release (SRS-BLD-004,
+	// SRS-BLD-016).
+	//
+	// Separate from the scientist for the reason every laboratory separates
+	// them: release is the step that makes an untested unit givable, and the
+	// person who ran the assay should not also be the person who declares it
+	// clear. The manager holds the scientist's permissions too — a manager
+	// works the bench — so this is an addition rather than a different job.
+	RoleBloodBankManager Role = "blood_bank_manager"
+
+	// RoleHaemovigilanceOfficer investigates transfusion reactions and runs
+	// look-backs (SRS-BLD-012, SRS-BLD-014, SRS-BLD-015).
+	//
+	// A role of its own because of what a look-back reaches: every patient who
+	// received blood from one donation, across admissions and departments.
+	// That is a different kind of access from reading the chart in front of
+	// you, and it belongs to somebody whose job is to use it.
+	RoleHaemovigilanceOfficer Role = "haemovigilance_officer"
+
 	// RolePharmacist verifies prescriptions and dispenses (SRS-MED-006,
 	// SRS-MED-011, Wave-1 actor "Pharmacist").
 	//
@@ -418,6 +448,16 @@ var rolePermissions = map[Role][]string{
 		// Deliberately nothing that writes: assessing, planning and charting
 		// an anaesthetic are the anaesthetist's, and a surgeon who could
 		// record the assessment could declare their own patient fit.
+
+		// The blood bank (SRS-BLD). A clinician asks for blood, reads what is
+		// happening to their patient, and reports a reaction.
+		"bld.record.read",
+		"bld.request.place",
+		"bld.reaction.write",
+		// Deliberately no bld.crossmatch.write, no bld.issue.write and no
+		// bld.component.release: deciding what leaves the fridge is the
+		// laboratory's, and a clinician who could crossmatch their own
+		// patient's blood would be both the request and the check on it.
 	},
 
 	// A pharmacist checks what was prescribed and decides what is dispensed
@@ -594,6 +634,15 @@ var rolePermissions = map[Role][]string{
 		// point of having a bar. And deliberately no ane.record.import: a
 		// record transcribed from paper is backdated by construction, and it
 		// is signed by the person who gave the anaesthetic.
+
+		// Transfusion (SRS-BLD-010, SRS-BLD-011, SRS-BLD-012). The bedside
+		// check, the transfusion, its observations, and reporting a reaction.
+		"bld.record.read",
+		"bld.transfusion.write",
+		"bld.reaction.write",
+		// Deliberately no bld.issue.write: a nurse collects a unit from the
+		// bank, and the person who releases it is on the other side of the
+		// counter. That counter is the second check.
 	},
 
 	// An anaesthetist assesses, plans, gives and records the anaesthetic, and
@@ -639,6 +688,75 @@ var rolePermissions = map[Role][]string{
 		"ord.order.read",
 		"enc.encounter.read",
 		"empi.patient.read",
+	},
+
+	// A blood bank scientist groups patients, crossmatches, and decides what
+	// leaves the fridge (SRS-BLD).
+	RoleBloodBankScientist: {
+		"bld.record.read",
+		"bld.donor.write",
+		"bld.donor.defer",
+		"bld.testing.write",
+		"bld.inventory.write",
+		"bld.crossmatch.write",
+		"bld.issue.write",
+		"bld.reaction.write",
+		// Reading the patient the crossmatch is for.
+		"empi.patient.read",
+		"enc.encounter.read",
+		// Deliberately no bld.component.release: the person who ran the assay
+		// should not also be the person who declares the donation clear.
+		// Deliberately no bld.issue.emergency: an uncrossmatched release is
+		// authorised by somebody senior, and "somebody senior" is not
+		// whoever is on the bench at 3am.
+		// Deliberately no bld.request.place: the bank does not ask itself for
+		// blood, and a laboratory that could raise the request it then fills
+		// has no clinical check on it at all.
+		// And deliberately no bld.trace.read: a look-back reaches every
+		// patient who received blood from a donation, which is the
+		// haemovigilance officer's access rather than the bench's.
+	},
+
+	// A blood bank manager works the bench and holds the two decisions a
+	// hospital is most answerable for (SRS-BLD-004, SRS-BLD-016).
+	RoleBloodBankManager: {
+		"bld.record.read",
+		"bld.donor.write",
+		"bld.donor.defer",
+		"bld.testing.write",
+		"bld.inventory.write",
+		"bld.crossmatch.write",
+		"bld.issue.write",
+		"bld.reaction.write",
+		// Reading the patient the crossmatch is for.
+		"empi.patient.read",
+		"enc.encounter.read",
+		// The release that makes a donation givable, and the uncrossmatched
+		// release that skips the crossmatch. Both are decisions a review is
+		// traced back to, and both are why this role exists.
+		"bld.component.release",
+		"bld.issue.emergency",
+		"bld.stock.configure",
+		// A manager sees the reaction worklist but does not conclude the
+		// investigations: that is the haemovigilance officer's, and the bank
+		// investigating its own issue is not an investigation.
+	},
+
+	// A haemovigilance officer investigates reactions and runs look-backs
+	// (SRS-BLD-012, SRS-BLD-014, SRS-BLD-015).
+	RoleHaemovigilanceOfficer: {
+		"bld.record.read",
+		"bld.reaction.write",
+		// The access that defines the role: from a donation to every patient
+		// who received it, across admissions and departments. Its own
+		// permission, and audited with the count, because a look-back and a
+		// fishing expedition look identical in the query log.
+		"bld.trace.read",
+		"empi.patient.read",
+		"enc.encounter.read",
+		// Deliberately nothing that touches inventory or issue: an
+		// investigator who could quarantine and release the units they are
+		// investigating is investigating their own decisions.
 	},
 
 	// A downstream service moves orders through their lifecycle and does

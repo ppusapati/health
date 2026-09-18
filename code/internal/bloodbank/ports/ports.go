@@ -237,14 +237,33 @@ type AuditAppender interface {
 	Append(ctx context.Context, r audit.Record) error
 }
 
+// Notice is something somebody has to be told about now.
+type Notice struct {
+	// Kind matches the escalation matrix's kind, so a hospital configures who
+	// is paged without this context knowing.
+	Kind string
+	// Subject is the thing in this context: a unit number.
+	Subject string
+	// PatientID and FacilityID let a recipient see who and where it concerns
+	// without reaching into the blood bank.
+	PatientID  string
+	FacilityID string
+	Summary    string
+}
+
 // Escalator raises a durable, acknowledged notice.
 //
 // Used for the one thing in this context that cannot wait for somebody to
 // refresh a screen: a bedside identity mismatch, which SRS-BLD-010 calls a
 // critical exception.
+//
+// It does not take recipients. Who is paged is the tenant's configured
+// escalation matrix, resolved at delivery: a caller that named recipients
+// would be a second place to configure the chain, and the two would disagree
+// the first time somebody changed a rota.
 type Escalator interface {
-	Raise(ctx context.Context, scope authctx.TenantScope, kind, subject,
-		summary string, recipients []string, at time.Time) (string, error)
+	Raise(ctx context.Context, scope authctx.TenantScope, n Notice,
+		at time.Time) (string, error)
 }
 
 // UnitOfWork runs a use case in one transaction.

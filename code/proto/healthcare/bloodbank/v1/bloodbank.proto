@@ -1,0 +1,1079 @@
+// Blood bank and transfusion medicine: donors, screening, collection, testing,
+// inventory, requests, compatibility, reservation, issue, the bedside check,
+// the transfusion, reactions, traceability, stock and utilisation.
+//
+// Owning context : bloodbank  (Master Engineering Registry)
+// Owning service : BloodBankService
+// Trace          : SRS-BLD-001 … SRS-BLD-017
+//
+// Five shapes in this contract are deliberate.
+//
+// ABO and Rh are separate enums with explicit unspecified members, and
+// unspecified is never a match. "We have not grouped this patient" and "group
+// O" are different states, and a contract that let them collapse would issue
+// the wrong blood. A component always carries a real group; a patient carries
+// theirs on a sample, whose absence is what "ungrouped" means.
+//
+// A compatibility search returns every candidate with its verdict rather than
+// a pre-filtered list. A scientist looking at a near-miss — right group, wrong
+// special requirement — needs to see it and why, because the alternative is a
+// screen that says "no units available" beside a full fridge.
+//
+// An issue carries either a reservation or an emergency authorisation. That is
+// SRS-BLD-009 and SRS-BLD-016 in one message: a unit leaves because it was
+// crossmatched for somebody, or because a named senior clinician said so and
+// gave a reason. There is no third field.
+//
+// The bedside check is its own RPC as well as being run inside StartTransfusion.
+// A client can show the result before the nurse commits, and a failed check is
+// recorded as a critical exception whether or not anybody then proceeds —
+// which is what SRS-BLD-010's "generates critical exception" asks for. The
+// check inside the start is the one that counts: it runs from rows read in the
+// same transaction, so nothing can change between verifying and starting.
+//
+// Nothing here stores a utilisation figure. SRS-BLD-015 says reports derive
+// from recorded issues, transfusions and reactions, and a counter kept
+// alongside them drifts the first time anything is corrected.
+syntax = "proto3";
+
+package healthcare.bloodbank.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ppusapati/health/code/gen/go/healthcare/bloodbank/v1;bloodbankv1";
+
+// The ABO blood group (SRS-BLD-007).
+enum Abo {
+  // Not determined. Never compatible with anything, in either direction.
+  ABO_UNSPECIFIED = 0;
+  ABO_A = 1;
+  ABO_B = 2;
+  ABO_AB = 3;
+  ABO_O = 4;
+}
+
+// The Rh(D) antigen status.
+enum RhD {
+  RH_D_UNSPECIFIED = 0;
+  RH_D_POSITIVE = 1;
+  RH_D_NEGATIVE = 2;
+}
+
+// A complete ABO and Rh(D) type.
+message BloodGroup {
+  Abo abo = 1;
+  RhD rh_d = 2;
+  // Rendered the way a label reads it — "O-", "AB+" — so a client need not
+  // reimplement the formatting for a bedside screen.
+  string display = 3;
+}
+
+// What the unit is, which decides which compatibility table applies
+// (SRS-BLD-005).
+enum ComponentClass {
+  COMPONENT_CLASS_UNSPECIFIED = 0;
+  COMPONENT_CLASS_RED_CELLS = 1;
+  COMPONENT_CLASS_PLASMA = 2;
+  COMPONENT_CLASS_PLATELETS = 3;
+  COMPONENT_CLASS_CRYOPRECIPITATE = 4;
+  COMPONENT_CLASS_WHOLE_BLOOD = 5;
+}
+
+// Where a unit is in its life (SRS-BLD-004, SRS-BLD-005).
+enum UnitStatus {
+  UNIT_STATUS_UNSPECIFIED = 0;
+  // The state every unit starts in. Testing has not completed, so the unit
+  // exists and cannot be given to anybody.
+  UNIT_STATUS_QUARANTINED = 1;
+  UNIT_STATUS_AVAILABLE = 2;
+  UNIT_STATUS_RESERVED = 3;
+  UNIT_STATUS_ISSUED = 4;
+  UNIT_STATUS_TRANSFUSED = 5;
+  UNIT_STATUS_DISCARDED = 6;
+  // Returned outside its temperature or time window. Distinct from discarded,
+  // because it is still on the shelf until somebody disposes of it and must
+  // never be allocated in the meantime.
+  UNIT_STATUS_UNSUITABLE = 7;
+}
+
+// Why a unit left inventory (SRS-BLD-013).
+//
+// Coded, because SRS-BLD-015's report has to distinguish blood that was wasted
+// from blood that was used: a hospital discarding for want of a fridge and one
+// discarding after a positive test need different fixes.
+enum DiscardReason {
+  DISCARD_REASON_UNSPECIFIED = 0;
+  DISCARD_REASON_EXPIRED = 1;
+  DISCARD_REASON_TEST_FAILED = 2;
+  DISCARD_REASON_TEMPERATURE_BREACH = 3;
+  DISCARD_REASON_OUT_OF_TIME = 4;
+  DISCARD_REASON_DAMAGED = 5;
+  DISCARD_REASON_RECALLED = 6;
+  DISCARD_REASON_REACTION_INVESTIGATION = 7;
+}
+
+// How long a donor may not give (SRS-BLD-002).
+enum DeferralKind {
+  DEFERRAL_KIND_UNSPECIFIED = 0;
+  // Ends on a date: a recent tattoo, a low haemoglobin, a trip somewhere with
+  // malaria.
+  DEFERRAL_KIND_TEMPORARY = 1;
+  // Does not. A donor deferred permanently who later donates is the failure
+  // this record exists to prevent.
+  DEFERRAL_KIND_PERMANENT = 2;
+}
+
+// How soon the blood is needed (SRS-BLD-006).
+enum RequestUrgency {
+  REQUEST_URGENCY_UNSPECIFIED = 0;
+  REQUEST_URGENCY_ROUTINE = 1;
+  REQUEST_URGENCY_URGENT = 2;
+  REQUEST_URGENCY_EMERGENCY = 3;
+}
+
+enum RequestStatus {
+  REQUEST_STATUS_UNSPECIFIED = 0;
+  REQUEST_STATUS_OPEN = 1;
+  REQUEST_STATUS_FULFILLED = 2;
+  REQUEST_STATUS_CANCELLED = 3;
+}
+
+// Why a unit may not be reserved for a patient (SRS-BLD-007, SRS-BLD-008).
+enum MatchRefusal {
+  MATCH_REFUSAL_UNSPECIFIED = 0;
+  MATCH_REFUSAL_UNIT_NOT_ALLOCATABLE = 1;
+  MATCH_REFUSAL_UNIT_EXPIRED = 2;
+  // The patient has no valid grouping sample. Reported separately from
+  // incompatibility, because the fix is another tube rather than other blood.
+  MATCH_REFUSAL_NO_VALID_SAMPLE = 3;
+  MATCH_REFUSAL_GROUP_INCOMPATIBLE = 4;
+  MATCH_REFUSAL_WRONG_COMPONENT_TYPE = 5;
+  MATCH_REFUSAL_MISSING_SPECIAL_REQUIREMENT = 6;
+  MATCH_REFUSAL_CROSSMATCH_REACTIVE = 7;
+}
+
+// Why a bedside check failed (SRS-BLD-010).
+enum BedsideRefusal {
+  BEDSIDE_REFUSAL_UNSPECIFIED = 0;
+  BEDSIDE_REFUSAL_WRONG_UNIT = 1;
+  BEDSIDE_REFUSAL_WRONG_PATIENT = 2;
+  BEDSIDE_REFUSAL_GROUP_MISMATCH = 3;
+  // One person checking alone is the commonest root cause in every published
+  // wrong-blood incident.
+  BEDSIDE_REFUSAL_SOLO_CHECK = 4;
+  BEDSIDE_REFUSAL_UNIT_EXPIRED = 5;
+  BEDSIDE_REFUSAL_NOT_ISSUED = 6;
+}
+
+enum EpisodeStatus {
+  EPISODE_STATUS_UNSPECIFIED = 0;
+  EPISODE_STATUS_RUNNING = 1;
+  EPISODE_STATUS_INTERRUPTED = 2;
+  EPISODE_STATUS_COMPLETED = 3;
+  // Abandoned part-way. Distinct from completed, because the volume given and
+  // the unit's fate differ.
+  EPISODE_STATUS_STOPPED = 4;
+}
+
+enum ReactionSeverity {
+  REACTION_SEVERITY_UNSPECIFIED = 0;
+  REACTION_SEVERITY_MILD = 1;
+  REACTION_SEVERITY_MODERATE = 2;
+  REACTION_SEVERITY_SEVERE = 3;
+  // Counted separately by every haemovigilance scheme. A system with no code
+  // for it records a death as severe.
+  REACTION_SEVERITY_FATAL = 4;
+}
+
+enum InvestigationState {
+  INVESTIGATION_STATE_UNSPECIFIED = 0;
+  INVESTIGATION_STATE_OPEN = 1;
+  INVESTIGATION_STATE_CONCLUDED = 2;
+}
+
+// Somebody who gives blood (SRS-BLD-001, SRS-BLD-002).
+message Donor {
+  string donor_id = 1;
+  string donor_number = 2;
+  // Set for a donor who is also a patient here: the autologous and
+  // directed-donation cases.
+  string patient_id = 3;
+  string display_name = 4;
+  string contact_phone = 5;
+  // May be unspecified until the first donation is tested, which is an
+  // ordinary state for a donor and never one for a component.
+  BloodGroup group = 6;
+
+  DeferralKind deferral = 7;
+  string deferral_code = 8;
+  string deferral_note = 9;
+  google.protobuf.Timestamp deferred_at = 10;
+  string deferred_by = 11;
+  // Absent on a permanent deferral, which is what makes the two
+  // distinguishable without reading the kind.
+  google.protobuf.Timestamp deferred_until = 12;
+  // Derived at the moment of rendering: a temporary deferral lapses on its own
+  // date rather than waiting for a job, because a donor still deferred because
+  // nobody ran one is a donor turned away for no reason.
+  bool currently_deferred = 13;
+
+  google.protobuf.Timestamp registered_at = 14;
+  string registered_by = 15;
+  int64 version = 16;
+}
+
+// One donor screening episode (SRS-BLD-002).
+message Screening {
+  string screening_id = 1;
+  string donor_id = 2;
+  // The questionnaire as answered and the bedside measurements, kept as given
+  // rather than reduced to a verdict: the verdict is what somebody decided,
+  // and these are what the donor said and what was measured.
+  map<string, string> answers = 3;
+  map<string, double> measurements = 4;
+  bool consented = 5;
+  string consent_note = 6;
+  bool accepted = 7;
+  DeferralKind deferral = 8;
+  string deferral_code = 9;
+  google.protobuf.Timestamp screened_at = 10;
+  string screened_by = 11;
+}
+
+// One donation (SRS-BLD-003).
+message Collection {
+  string collection_id = 1;
+  string donor_id = 2;
+  // The screening that permitted it. "A deferred donor cannot proceed" is only
+  // enforceable if the collection names the decision that let it happen.
+  string screening_id = 3;
+  // Every component made from it inherits this as its parent.
+  string donation_number = 4;
+  string kind = 5;
+  int32 volume_ml = 6;
+  BloodGroup group = 7;
+  google.protobuf.Timestamp collected_at = 8;
+  string collected_by = 9;
+  bool adverse_event = 10;
+  string adverse_note = 11;
+}
+
+// One mandatory test on a collection (SRS-BLD-004).
+message TestResult {
+  string test_id = 1;
+  // On the donation, not the component: the tests run once and every component
+  // made from it inherits the outcome.
+  string collection_id = 2;
+  string code = 3;
+  string display = 4;
+  // Named for what the assay says. A screening test is reactive and a
+  // confirmatory one is positive; conflating them discards good blood.
+  bool reactive = 5;
+  string value = 6;
+  string method = 7;
+  google.protobuf.Timestamp tested_at = 8;
+  string tested_by = 9;
+}
+
+// Whether a collection's components may leave quarantine (SRS-BLD-004).
+message ReleaseDecision {
+  bool releasable = 1;
+  // Mandatory tests with no result, named so a scientist knows which assay to
+  // run rather than that "testing is incomplete".
+  repeated string missing = 2;
+  repeated string reactive = 3;
+}
+
+// One transfusable unit (SRS-BLD-003, SRS-BLD-005).
+message Component {
+  string component_id = 1;
+  // The identifier on the label, which the bedside check reads aloud.
+  string unit_number = 2;
+  string collection_id = 3;
+  string donor_id = 4;
+  // The external supplier, for a unit received rather than collected here.
+  string source = 5;
+
+  ComponentClass component_class = 6;
+  BloodGroup group = 7;
+  UnitStatus status = 8;
+  DiscardReason discard_reason = 9;
+
+  int32 volume_ml = 10;
+  // Irradiated, leucodepleted, CMV-negative, washed. Matched rather than
+  // interpreted, so a deployment adds one without a code change.
+  repeated string attributes = 11;
+  string location = 12;
+
+  google.protobuf.Timestamp collected_at = 13;
+  google.protobuf.Timestamp expires_at = 14;
+  // Derived, so a client cannot offer an expired unit by checking only the
+  // status: the two fail independently.
+  bool issuable = 15;
+
+  google.protobuf.Timestamp created_at = 16;
+  string created_by = 17;
+  int64 version = 18;
+}
+
+// A clinician's request for blood (SRS-BLD-006).
+message Request {
+  string request_id = 1;
+  string patient_id = 2;
+  string encounter_id = 3;
+  string facility_id = 4;
+  ComponentClass component_class = 5;
+  int32 quantity = 6;
+  // Required. SRS-BLD-015's utilisation report is read to find transfusions
+  // that should not have happened, and a report with no indications cannot.
+  string indication = 7;
+  RequestUrgency urgency = 8;
+  // A unit that does not carry these is not a match for this patient however
+  // well the groups agree.
+  repeated string requirements = 9;
+  google.protobuf.Timestamp required_by = 10;
+  RequestStatus status = 11;
+  string requested_by = 12;
+  google.protobuf.Timestamp requested_at = 13;
+  int64 version = 14;
+}
+
+// A patient's grouping sample (SRS-BLD-007).
+message PatientSample {
+  string sample_id = 1;
+  string patient_id = 2;
+  // The identifier on the tube. Without it a sample cannot be matched back to
+  // the draw, and "we bled the wrong patient" is unanswerable.
+  string sample_number = 3;
+  BloodGroup group = 4;
+  bool antibody_screen_positive = 5;
+  string antibody_note = 6;
+  bool second_check = 7;
+  google.protobuf.Timestamp collected_at = 8;
+  string collected_by = 9;
+  // A sample older than the window cannot support a crossmatch: the patient
+  // may have been transfused since and formed new antibodies.
+  google.protobuf.Timestamp expires_at = 10;
+  google.protobuf.Timestamp tested_at = 11;
+  string tested_by = 12;
+}
+
+// Whether a unit may be reserved for a patient.
+message MatchDecision {
+  bool allowed = 1;
+  // Every reason, not the first: a scientist told one at a time pulls a second
+  // unit from the fridge to be told the next.
+  repeated MatchRefusal refusals = 2;
+  repeated string explanations = 3;
+}
+
+// One unit offered against a request, with its verdict.
+message Candidate {
+  Component component = 1;
+  MatchDecision decision = 2;
+}
+
+enum ReservationStatus {
+  RESERVATION_STATUS_UNSPECIFIED = 0;
+  RESERVATION_STATUS_HELD = 1;
+  RESERVATION_STATUS_ISSUED = 2;
+  RESERVATION_STATUS_RELEASED = 3;
+  RESERVATION_STATUS_EXPIRED = 4;
+}
+
+// A unit held for a patient (SRS-BLD-008).
+message Reservation {
+  string reservation_id = 1;
+  string component_id = 2;
+  string request_id = 3;
+  string patient_id = 4;
+  string sample_id = 5;
+  // A serological crossmatch actually performed, as distinct from an
+  // electronic issue. False on an emergency release, which is the point.
+  bool crossmatched = 6;
+  string crossmatch_note = 7;
+  ReservationStatus status = 8;
+  // Reservations expire, because blood held for a patient who did not need it
+  // is blood the next patient could not have.
+  google.protobuf.Timestamp expires_at = 9;
+  google.protobuf.Timestamp reserved_at = 10;
+  string reserved_by = 11;
+  string released_reason = 12;
+}
+
+// A unit leaving the blood bank (SRS-BLD-009, SRS-BLD-016).
+message Issue {
+  string issue_id = 1;
+  string component_id = 2;
+  string reservation_id = 3;
+  string patient_id = 4;
+  string request_id = 5;
+  // A unit that left with no destination is one nobody can fetch back.
+  string destination = 6;
+
+  bool emergency = 7;
+  string emergency_authoriser = 8;
+  string emergency_reason = 9;
+  // An unreconciled emergency release is what a haemovigilance report exists
+  // to surface.
+  bool reconciled = 10;
+  google.protobuf.Timestamp reconciled_at = 11;
+  string reconciled_by = 12;
+  string reconcile_note = 13;
+
+  google.protobuf.Timestamp issued_at = 14;
+  string issued_by = 15;
+  string issued_to = 16;
+  // Who made the final identity check at the counter. A check nobody can name
+  // afterwards is one that cannot be reviewed.
+  string checked_by = 17;
+}
+
+// One set of observations during a transfusion (SRS-BLD-011).
+message Observation {
+  string observation_id = 1;
+  string episode_id = 2;
+  // Where in the transfusion the set was taken — baseline, 15_minutes,
+  // periodic, completion. Coded, because the audit that matters is whether the
+  // fifteen-minute set exists.
+  string timing = 3;
+  map<string, double> values = 4;
+  string note = 5;
+  google.protobuf.Timestamp observed_at = 6;
+  string observed_by = 7;
+}
+
+// One transfusion at the bedside (SRS-BLD-011).
+message Episode {
+  string episode_id = 1;
+  string component_id = 2;
+  string issue_id = 3;
+  string patient_id = 4;
+  string encounter_id = 5;
+  EpisodeStatus status = 6;
+  google.protobuf.Timestamp started_at = 7;
+  string started_by = 8;
+  google.protobuf.Timestamp ended_at = 9;
+  // What the patient actually received, which is not the unit's volume when a
+  // transfusion was stopped part-way.
+  int32 volume_given_ml = 10;
+  string stop_reason = 11;
+  repeated Observation observations = 12;
+}
+
+// A suspected transfusion reaction (SRS-BLD-012).
+message Reaction {
+  string reaction_id = 1;
+  string episode_id = 2;
+  // Required. The investigation's first job is to find the other components
+  // made from the same donation, and a reaction recorded against a patient
+  // alone cannot.
+  string component_id = 3;
+  string patient_id = 4;
+  ReactionSeverity severity = 5;
+  // What was seen, listed rather than classified: the classification is the
+  // investigation's conclusion and this is the report that starts it.
+  repeated string features = 6;
+  string note = 7;
+  google.protobuf.Timestamp reported_at = 8;
+  string reported_by = 9;
+  InvestigationState state = 10;
+  string classification = 11;
+  string conclusion = 12;
+  google.protobuf.Timestamp concluded_at = 13;
+  string concluded_by = 14;
+  bool unit_returned = 15;
+}
+
+// One step of the vein-to-vein chain (SRS-BLD-014).
+message ChainLink {
+  string stage = 1;
+  string id = 2;
+  string label = 3;
+  google.protobuf.Timestamp at = 4;
+  string by = 5;
+}
+
+// A unit's traceable history (SRS-BLD-014).
+message Chain {
+  string component_id = 1;
+  string unit_number = 2;
+  repeated ChainLink links = 3;
+  // Stages with no record, so a reader can tell "this unit was never
+  // transfused" from "we have lost the transfusion record".
+  repeated string gaps = 4;
+}
+
+// A patient reached by a look-back (SRS-BLD-014).
+//
+// Identifiers and times, no clinical detail: this list goes to a
+// haemovigilance officer and sometimes to a regulator.
+message Recipient {
+  string patient_id = 1;
+  string episode_id = 2;
+  string component_id = 3;
+  string unit_number = 4;
+  google.protobuf.Timestamp at = 5;
+}
+
+// The count of units in one bucket (SRS-BLD-005, SRS-BLD-017).
+message StockLevel {
+  ComponentClass component_class = 1;
+  BloodGroup group = 2;
+  // What could be issued now. A count including quarantined units would read
+  // as comfortable stock nobody can give.
+  int32 available = 3;
+  int32 expiring_soon = 4;
+  // Shown beside it, because a bank short because everything is reserved has a
+  // different problem from one short because nothing has been tested.
+  int32 quarantined = 5;
+  int32 reserved = 6;
+}
+
+enum StockAlertKind {
+  STOCK_ALERT_KIND_UNSPECIFIED = 0;
+  STOCK_ALERT_KIND_LOW_STOCK = 1;
+  STOCK_ALERT_KIND_EXPIRING = 2;
+}
+
+// One thing somebody has to do (SRS-BLD-017).
+message StockAlert {
+  StockAlertKind kind = 1;
+  ComponentClass component_class = 2;
+  BloodGroup group = 3;
+  int32 available = 4;
+  int32 minimum = 5;
+  int32 count = 6;
+  // In words, because an alert a reader has to go and look the numbers up for
+  // is an alert that gets dismissed.
+  string message = 7;
+}
+
+// A configured minimum (SRS-BLD-017).
+message StockThreshold {
+  ComponentClass component_class = 1;
+  BloodGroup group = 2;
+  int32 minimum = 3;
+}
+
+// The component utilisation report (SRS-BLD-015).
+//
+// Derived from the issue, transfusion and reaction records every time.
+message Utilisation {
+  int32 issued = 1;
+  int32 transfused = 2;
+  // Issued and not transfused, which is the number a blood bank manages down:
+  // every returned unit spent time out of the fridge.
+  int32 returned = 3;
+  int32 discarded = 4;
+  int32 reactions = 5;
+  int32 emergency_releases = 6;
+  int32 unreconciled_releases = 7;
+  int32 reservations = 8;
+  // The C:T ratio, the number this report exists for: reserving three units
+  // for every one given ties up a bank's stock. Zero transfusions gives zero
+  // rather than an infinity, and reservations is carried so a reader can see
+  // why.
+  double crossmatch_to_transfusion = 9;
+  map<string, int32> by_indication = 10;
+}
+
+message RegisterDonorRequest {
+  string donor_number = 1;
+  string patient_id = 2;
+  string display_name = 3;
+  string contact_phone = 4;
+  BloodGroup group = 5;
+}
+
+message RegisterDonorResponse {
+  Donor donor = 1;
+}
+
+message GetDonorRequest {
+  string donor_id = 1;
+}
+
+message GetDonorResponse {
+  Donor donor = 1;
+}
+
+message DeferDonorRequest {
+  string donor_id = 1;
+  DeferralKind kind = 2;
+  string code = 3;
+  string note = 4;
+  // Required for a temporary deferral: one with no end is a permanent one
+  // nobody meant to make, and the donor is lost.
+  google.protobuf.Timestamp until = 5;
+}
+
+message DeferDonorResponse {
+  Donor donor = 1;
+}
+
+message ReinstateDonorRequest {
+  string donor_id = 1;
+  string reason = 2;
+}
+
+message ReinstateDonorResponse {
+  Donor donor = 1;
+}
+
+message ListDeferredDonorsRequest {
+  int32 page_size = 1;
+}
+
+message ListDeferredDonorsResponse {
+  repeated Donor donors = 1;
+}
+
+message ScreenDonorRequest {
+  string donor_id = 1;
+  map<string, string> answers = 2;
+  map<string, double> measurements = 3;
+  bool consented = 4;
+  string consent_note = 5;
+  bool accepted = 6;
+  DeferralKind deferral = 7;
+  string deferral_code = 8;
+}
+
+message ScreenDonorResponse {
+  Screening screening = 1;
+}
+
+message CollectRequest {
+  string donor_id = 1;
+  string screening_id = 2;
+  string donation_number = 3;
+  string kind = 4;
+  int32 volume_ml = 5;
+  BloodGroup group = 6;
+  bool adverse_event = 7;
+  string adverse_note = 8;
+}
+
+message CollectResponse {
+  Collection collection = 1;
+}
+
+message RecordTestRequest {
+  string collection_id = 1;
+  string code = 2;
+  string display = 3;
+  bool reactive = 4;
+  string value = 5;
+  string method = 6;
+}
+
+message RecordTestResponse {
+  TestResult result = 1;
+}
+
+message GetReleaseDecisionRequest {
+  string collection_id = 1;
+}
+
+message GetReleaseDecisionResponse {
+  ReleaseDecision decision = 1;
+}
+
+message ReleaseComponentsRequest {
+  string collection_id = 1;
+}
+
+message ReleaseComponentsResponse {
+  repeated Component components = 1;
+}
+
+message AddComponentRequest {
+  string unit_number = 1;
+  string collection_id = 2;
+  string donor_id = 3;
+  string source = 4;
+  ComponentClass component_class = 5;
+  BloodGroup group = 6;
+  int32 volume_ml = 7;
+  repeated string attributes = 8;
+  string location = 9;
+  google.protobuf.Timestamp collected_at = 10;
+  google.protobuf.Timestamp expires_at = 11;
+  // Marks a unit whose mandatory testing is already complete — the ordinary
+  // case for a unit bought in from a regional centre, and never the case for
+  // one collected here. Setting it needs the release permission.
+  bool released = 12;
+}
+
+message AddComponentResponse {
+  Component component = 1;
+}
+
+message GetComponentRequest {
+  // Either. A bedside scan has the number on the label, not the row id.
+  string component_id = 1;
+  string unit_number = 2;
+}
+
+message GetComponentResponse {
+  Component component = 1;
+}
+
+message DiscardComponentRequest {
+  string component_id = 1;
+  DiscardReason reason = 2;
+}
+
+message DiscardComponentResponse {
+  Component component = 1;
+}
+
+message PlaceRequestRequest {
+  string patient_id = 1;
+  string encounter_id = 2;
+  string facility_id = 3;
+  ComponentClass component_class = 4;
+  int32 quantity = 5;
+  string indication = 6;
+  RequestUrgency urgency = 7;
+  repeated string requirements = 8;
+  google.protobuf.Timestamp required_by = 9;
+}
+
+message PlaceRequestResponse {
+  Request request = 1;
+}
+
+message GetWorklistRequest {
+  string facility_id = 1;
+  int32 page_size = 2;
+}
+
+message GetWorklistResponse {
+  // Emergency before urgent before routine, then soonest needed. A request
+  // with no required-by time sorts last rather than hiding.
+  repeated Request requests = 1;
+}
+
+message ListPatientRequestsRequest {
+  string patient_id = 1;
+  int32 page_size = 2;
+}
+
+message ListPatientRequestsResponse {
+  repeated Request requests = 1;
+}
+
+message GroupPatientRequest {
+  string patient_id = 1;
+  string sample_number = 2;
+  BloodGroup group = 3;
+  bool antibody_screen_positive = 4;
+  string antibody_note = 5;
+  bool second_check = 6;
+  google.protobuf.Timestamp collected_at = 7;
+  string collected_by = 8;
+}
+
+message GroupPatientResponse {
+  PatientSample sample = 1;
+}
+
+message FindCompatibleRequest {
+  string request_id = 1;
+  int32 page_size = 2;
+}
+
+message FindCompatibleResponse {
+  // Every candidate with its verdict, not a pre-filtered list.
+  repeated Candidate candidates = 1;
+}
+
+message ReserveRequest {
+  string request_id = 1;
+  string component_id = 2;
+  // A serological crossmatch actually performed, as distinct from an
+  // electronic issue.
+  bool crossmatched = 3;
+  string note = 4;
+}
+
+message ReserveResponse {
+  Reservation reservation = 1;
+}
+
+message ReleaseReservationRequest {
+  string reservation_id = 1;
+  string reason = 2;
+}
+
+message ReleaseReservationResponse {}
+
+message SweepLapsedReservationsRequest {
+  int32 page_size = 1;
+}
+
+message SweepLapsedReservationsResponse {
+  int32 swept = 1;
+}
+
+message IssueUnitRequest {
+  string component_id = 1;
+  string reservation_id = 2;
+  string destination = 3;
+  string issued_to = 4;
+  // Read at the counter from the unit and the request, and compared against
+  // the record rather than trusted.
+  string check_unit_number = 5;
+  string check_patient_id = 6;
+
+  // An uncrossmatched release (SRS-BLD-016). Needs its own permission, a named
+  // senior authoriser and a reason, and it does not reach a quarantined unit.
+  bool emergency = 7;
+  string emergency_authoriser = 8;
+  string emergency_reason = 9;
+}
+
+message IssueUnitResponse {
+  Issue issue = 1;
+}
+
+message ReconcileReleaseRequest {
+  string issue_id = 1;
+  string note = 2;
+}
+
+message ReconcileReleaseResponse {}
+
+message ListOutstandingReleasesRequest {
+  int32 page_size = 1;
+}
+
+message ListOutstandingReleasesResponse {
+  repeated Issue issues = 1;
+}
+
+// The check made at the patient's side (SRS-BLD-010).
+//
+// Its own message, carried by both RPCs below, because the two take exactly
+// the same input: verifying and starting differ in what they do with the
+// result, never in what is checked. Two field lists would drift.
+message BedsideCheck {
+  // As read aloud from the unit and the wristband.
+  string unit_number = 1;
+  string patient_id = 2;
+  // As read from the two labels, which is a different check from the one the
+  // database can make: it catches a label that does not match the record.
+  BloodGroup patient_group = 3;
+  BloodGroup unit_group = 4;
+  // The second person. The caller is the first.
+  string checked_with = 5;
+
+  string encounter_id = 6;
+  map<string, double> baseline = 7;
+}
+
+message VerifyBedsideRequest {
+  BedsideCheck check = 1;
+}
+
+message VerifyBedsideResponse {
+  bool passed = 1;
+  repeated BedsideRefusal refusals = 2;
+  repeated string explanations = 3;
+}
+
+message StartTransfusionRequest {
+  BedsideCheck check = 1;
+}
+
+message StartTransfusionResponse {
+  Episode episode = 1;
+}
+
+message ObserveRequest {
+  string episode_id = 1;
+  string timing = 2;
+  map<string, double> values = 3;
+  string note = 4;
+}
+
+message ObserveResponse {
+  Observation observation = 1;
+}
+
+message EndTransfusionRequest {
+  string episode_id = 1;
+  int32 volume_given_ml = 2;
+  // A reason means it was abandoned; its absence means it ran to the end.
+  string stop_reason = 3;
+}
+
+message EndTransfusionResponse {
+  Episode episode = 1;
+}
+
+message GetEpisodeRequest {
+  string episode_id = 1;
+}
+
+message GetEpisodeResponse {
+  Episode episode = 1;
+  // The protocol sets this transfusion has not had. Named rather than
+  // blocking: a nurse who has not taken the fifteen-minute set is a nurse who
+  // is fifteen minutes in.
+  repeated string missing_observations = 2;
+}
+
+message ListPatientTransfusionsRequest {
+  string patient_id = 1;
+  int32 page_size = 2;
+}
+
+message ListPatientTransfusionsResponse {
+  repeated Episode episodes = 1;
+}
+
+message ReportReactionRequest {
+  string episode_id = 1;
+  string component_id = 2;
+  string patient_id = 3;
+  ReactionSeverity severity = 4;
+  repeated string features = 5;
+  string note = 6;
+}
+
+message ReportReactionResponse {
+  Reaction reaction = 1;
+}
+
+message ConcludeInvestigationRequest {
+  string reaction_id = 1;
+  string classification = 2;
+  string conclusion = 3;
+  bool unit_returned = 4;
+}
+
+message ConcludeInvestigationResponse {
+  Reaction reaction = 1;
+}
+
+message ListOpenInvestigationsRequest {
+  int32 page_size = 1;
+}
+
+message ListOpenInvestigationsResponse {
+  repeated Reaction reactions = 1;
+}
+
+message TraceUnitRequest {
+  string component_id = 1;
+}
+
+message TraceUnitResponse {
+  Chain chain = 1;
+}
+
+message LookBackRequest {
+  string donor_id = 1;
+  int32 page_size = 2;
+}
+
+message LookBackResponse {
+  repeated Recipient recipients = 1;
+}
+
+message SetThresholdRequest {
+  string facility_id = 1;
+  StockThreshold threshold = 2;
+}
+
+message SetThresholdResponse {}
+
+message GetStockRequest {
+  string facility_id = 1;
+}
+
+message GetStockResponse {
+  repeated StockLevel levels = 1;
+  repeated StockAlert alerts = 2;
+}
+
+message GetUtilisationRequest {
+  google.protobuf.Timestamp period_start = 1;
+  google.protobuf.Timestamp period_end = 2;
+}
+
+message GetUtilisationResponse {
+  Utilisation utilisation = 1;
+}
+
+// Blood bank and transfusion medicine (SRS-BLD-001 … 017).
+service BloodBankService {
+  // SRS-BLD-001, SRS-BLD-002.
+  rpc RegisterDonor(RegisterDonorRequest) returns (RegisterDonorResponse);
+  rpc GetDonor(GetDonorRequest) returns (GetDonorResponse);
+  rpc DeferDonor(DeferDonorRequest) returns (DeferDonorResponse);
+  // Lifts a temporary deferral only. Reversing a permanent one is a medical
+  // decision about somebody told they could never give again.
+  rpc ReinstateDonor(ReinstateDonorRequest) returns (ReinstateDonorResponse);
+  rpc ListDeferredDonors(ListDeferredDonorsRequest) returns (ListDeferredDonorsResponse);
+  rpc ScreenDonor(ScreenDonorRequest) returns (ScreenDonorResponse);
+
+  // SRS-BLD-003.
+  rpc Collect(CollectRequest) returns (CollectResponse);
+
+  // SRS-BLD-004. A reactive result quarantines every component already made
+  // from the collection.
+  rpc RecordTest(RecordTestRequest) returns (RecordTestResponse);
+  rpc GetReleaseDecision(GetReleaseDecisionRequest) returns (GetReleaseDecisionResponse);
+  rpc ReleaseComponents(ReleaseComponentsRequest) returns (ReleaseComponentsResponse);
+
+  // SRS-BLD-005, SRS-BLD-013.
+  rpc AddComponent(AddComponentRequest) returns (AddComponentResponse);
+  rpc GetComponent(GetComponentRequest) returns (GetComponentResponse);
+  rpc DiscardComponent(DiscardComponentRequest) returns (DiscardComponentResponse);
+
+  // SRS-BLD-006.
+  rpc PlaceRequest(PlaceRequestRequest) returns (PlaceRequestResponse);
+  rpc GetWorklist(GetWorklistRequest) returns (GetWorklistResponse);
+  rpc ListPatientRequests(ListPatientRequestsRequest) returns (ListPatientRequestsResponse);
+
+  // SRS-BLD-007, SRS-BLD-008.
+  rpc GroupPatient(GroupPatientRequest) returns (GroupPatientResponse);
+  rpc FindCompatible(FindCompatibleRequest) returns (FindCompatibleResponse);
+  rpc Reserve(ReserveRequest) returns (ReserveResponse);
+  rpc ReleaseReservation(ReleaseReservationRequest) returns (ReleaseReservationResponse);
+  rpc SweepLapsedReservations(SweepLapsedReservationsRequest) returns (SweepLapsedReservationsResponse);
+
+  // SRS-BLD-009, SRS-BLD-016.
+  rpc IssueUnit(IssueUnitRequest) returns (IssueUnitResponse);
+  rpc ReconcileRelease(ReconcileReleaseRequest) returns (ReconcileReleaseResponse);
+  rpc ListOutstandingReleases(ListOutstandingReleasesRequest) returns (ListOutstandingReleasesResponse);
+
+  // SRS-BLD-010, SRS-BLD-011. VerifyBedside shows the result before the nurse
+  // commits and records a failure as a critical exception either way;
+  // StartTransfusion re-runs the check from rows read in its own transaction,
+  // so nothing can change in between.
+  rpc VerifyBedside(VerifyBedsideRequest) returns (VerifyBedsideResponse);
+  rpc StartTransfusion(StartTransfusionRequest) returns (StartTransfusionResponse);
+  rpc Observe(ObserveRequest) returns (ObserveResponse);
+  rpc EndTransfusion(EndTransfusionRequest) returns (EndTransfusionResponse);
+  rpc GetEpisode(GetEpisodeRequest) returns (GetEpisodeResponse);
+  rpc ListPatientTransfusions(ListPatientTransfusionsRequest) returns (ListPatientTransfusionsResponse);
+
+  // SRS-BLD-012.
+  rpc ReportReaction(ReportReactionRequest) returns (ReportReactionResponse);
+  rpc ConcludeInvestigation(ConcludeInvestigationRequest) returns (ConcludeInvestigationResponse);
+  rpc ListOpenInvestigations(ListOpenInvestigationsRequest) returns (ListOpenInvestigationsResponse);
+
+  // SRS-BLD-014.
+  rpc TraceUnit(TraceUnitRequest) returns (TraceUnitResponse);
+  rpc LookBack(LookBackRequest) returns (LookBackResponse);
+
+  // SRS-BLD-015, SRS-BLD-017.
+  rpc SetThreshold(SetThresholdRequest) returns (SetThresholdResponse);
+  rpc GetStock(GetStockRequest) returns (GetStockResponse);
+  rpc GetUtilisation(GetUtilisationRequest) returns (GetUtilisationResponse);
+}

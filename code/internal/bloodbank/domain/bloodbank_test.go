@@ -206,7 +206,9 @@ func TestAnExpiredUnitIsNotAllocatableHoweverAvailable(t *testing.T) {
 	}
 }
 
-// A component with no parent collection cannot be traced back to a donor.
+// SRS-BLD-003. A component with no parent collection cannot be traced back to
+// a donor, and parent-child traceability is the whole of what that requirement
+// asks for.
 func TestAComponentRefusesToExistWithoutItsProvenance(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -1014,12 +1016,10 @@ func TestUtilisationDerivesFromTheRecords(t *testing.T) {
 		// disagree with itself an hour later.
 		{ID: "e-3", ComponentID: "u-2", Status: domain.EpisodeRunning},
 	}
-	reservations := []domain.Reservation{{ID: "r-1"}, {ID: "r-2"},
-		{ID: "r-3"}, {ID: "r-4"}}
 	indications := map[string]string{"u-1": "anaemia", "u-3": "haemorrhage"}
 
 	report := domain.SummariseUtilisation(issues, episodes, nil,
-		reservations, indications, 2)
+		4, indications, 2)
 
 	if report.Issued != 4 {
 		t.Errorf("issued = %d, want 4", report.Issued)
@@ -1050,8 +1050,7 @@ func TestUtilisationDerivesFromTheRecords(t *testing.T) {
 // No transfusions gives a zero ratio rather than an infinity, and the
 // reservation count is carried so a reader can see why.
 func TestTheCrossmatchRatioIsZeroRatherThanInfiniteWithNoTransfusions(t *testing.T) {
-	report := domain.SummariseUtilisation(nil, nil, nil,
-		[]domain.Reservation{{ID: "r-1"}, {ID: "r-2"}}, nil, 0)
+	report := domain.SummariseUtilisation(nil, nil, nil, 2, nil, 0)
 	if report.CrossmatchToTransfusion != 0 {
 		t.Errorf("C:T = %v, want 0", report.CrossmatchToTransfusion)
 	}

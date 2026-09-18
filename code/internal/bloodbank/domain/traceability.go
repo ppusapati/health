@@ -322,13 +322,18 @@ type Utilisation struct {
 }
 
 // SummariseUtilisation derives the report (SRS-BLD-015).
+//
+// Reservations is a count rather than the rows, because it is the only input
+// the report uses purely as a number: the C:T ratio needs how many units were
+// crossmatched, not which. Passing the rows would mean loading every
+// reservation in the period to call len() on them.
 func SummariseUtilisation(issues []Issue, episodes []Episode,
-	reactions []Reaction, reservations []Reservation,
+	reactions []Reaction, reservations int,
 	indications map[string]string, discarded int) Utilisation {
 
 	out := Utilisation{
 		Discarded: discarded, Reactions: len(reactions),
-		Reservations: len(reservations),
+		Reservations: reservations,
 		ByIndication: map[string]int{},
 	}
 

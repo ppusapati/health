@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/ppusapati/health/code/gen/go/healthcare/anaesthesia/v1/anaesthesiav1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/billing/v1/billingv1connect"
+	"github.com/ppusapati/health/code/gen/go/healthcare/bloodbank/v1/bloodbankv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/clinical/v1/clinicalv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/emergency/v1/emergencyv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/empi/v1/empiv1connect"
@@ -37,6 +38,10 @@ import (
 	billingpostgres "github.com/ppusapati/health/code/internal/billing/adapters/postgres"
 	billingapp "github.com/ppusapati/health/code/internal/billing/application"
 	billingtransport "github.com/ppusapati/health/code/internal/billing/transport"
+	bloodbankescalate "github.com/ppusapati/health/code/internal/bloodbank/adapters/escalate"
+	bloodbankpostgres "github.com/ppusapati/health/code/internal/bloodbank/adapters/postgres"
+	bloodbankapp "github.com/ppusapati/health/code/internal/bloodbank/application"
+	bloodbanktransport "github.com/ppusapati/health/code/internal/bloodbank/transport"
 	"github.com/ppusapati/health/code/internal/clinical/adapters/attachmentstore"
 	clinicalpostgres "github.com/ppusapati/health/code/internal/clinical/adapters/postgres"
 	clinicalapp "github.com/ppusapati/health/code/internal/clinical/application"
@@ -236,6 +241,18 @@ type Deps struct {
 	// verbose summary is better than one that quietly dropped the drugs.
 	Anaesthesia anaesthesiaapp.Config
 
+	// BloodBank is what a deployment has decided about its blood bank: the
+	// mandatory test panel, how long a grouping sample and a reservation
+	// last, and how far ahead an expiry alert looks (SRS-BLD-004,
+	// SRS-BLD-007, SRS-BLD-008, SRS-BLD-017).
+	//
+	// The zero value releases nothing, because MandatoryTests is empty and an
+	// unconfigured panel is a deployment that has not decided what it tests
+	// for. That is the one default here that refuses rather than guesses: a
+	// blood bank that released every unit because nobody configured it is the
+	// outcome SRS-BLD-004 exists to prevent.
+	BloodBank bloodbankapp.Config
+
 	// Emergency is what a deployment has decided about its emergency
 	// department: which triage scale it has approved, what must be measured at
 	// triage, and what each disposition requires (SRS-ER-002, SRS-ER-013).
@@ -258,6 +275,7 @@ type Server struct {
 	Icu          *icuapp.Service
 	Theatre      *theatreapp.Service
 	Anaesthesia  *anaesthesiaapp.Service
+	BloodBank    *bloodbankapp.Service
 	Nursing      *nursingapp.Service
 	Orders       *ordersapp.Service
 	Medication   *medicationapp.Service
@@ -556,6 +574,28 @@ func New(deps Deps) *Server {
 		Config: deps.Anaesthesia,
 	})
 
+	bloodbankRepo := bloodbankpostgres.New(txManager)
+	bloodbankService := bloodbankapp.NewService(bloodbankapp.Deps{
+		UnitOfWork:  txManager,
+		Donors:      bloodbankpostgres.DonorRepo{Repository: bloodbankRepo},
+		Inventory:   bloodbankpostgres.InventoryRepo{Repository: bloodbankRepo},
+		Crossmatch:  bloodbankpostgres.CrossmatchRepo{Repository: bloodbankRepo},
+		Transfusion: bloodbankpostgres.TransfusionRepo{Repository: bloodbankRepo},
+		// Who a patient is belongs to SRS-EMPI, reached through a port. A
+		// blood bank with its own copy crossmatches against the wrong person.
+		Patients: bloodbankpostgres.NewPatients(
+			empipostgres.PatientRepo{Repository: empiRepo}),
+		Events: platformStore,
+		Audits: store.AuditAppenderFunc(platformStore.AppendAudit),
+		// SRS-BLD-010's critical exception. Durable and acknowledged, because
+		// a bedside mismatch has to reach the blood bank before the next unit
+		// goes out.
+		Escalations: bloodbankescalate.New(escalationStore),
+		IDs:         uuidGenerator{},
+		Clock:       systemClock{},
+		Config:      deps.BloodBank,
+	})
+
 	medicationRepo := medicationpostgres.New(txManager)
 	medicationTerminology := medicationpostgres.NewTerminology(medicationRepo)
 	medicationService := medicationapp.NewService(medicationapp.Deps{
@@ -714,6 +754,8 @@ func New(deps Deps) *Server {
 		theatretransport.NewHandler(theatreService, time.Now), interceptors))
 	mux.Handle(anaesthesiav1connect.NewAnaesthesiaServiceHandler(
 		anaesthesiatransport.NewHandler(anaesthesiaService, time.Now), interceptors))
+	mux.Handle(bloodbankv1connect.NewBloodBankServiceHandler(
+		bloodbanktransport.NewHandler(bloodbankService, time.Now), interceptors))
 	billingRepo := billingpostgres.New(txManager)
 	billingService := billingapp.NewService(billingapp.Deps{
 		UnitOfWork: txManager,
@@ -774,6 +816,7 @@ func New(deps Deps) *Server {
 		Icu:             icuService,
 		Theatre:         theatreService,
 		Anaesthesia:     anaesthesiaService,
+		BloodBank:       bloodbankService,
 		Nursing:         nursingService,
 		Orders:          ordersService,
 		Medication:      medicationService,
