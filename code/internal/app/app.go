@@ -29,6 +29,7 @@ import (
 	"github.com/ppusapati/health/code/gen/go/healthcare/organization/v1/organizationv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/platform_api/v1/platformapiv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/scheduling/v1/schedulingv1connect"
+	"github.com/ppusapati/health/code/gen/go/healthcare/theatre/v1/theatrev1connect"
 	billingpostgres "github.com/ppusapati/health/code/internal/billing/adapters/postgres"
 	billingapp "github.com/ppusapati/health/code/internal/billing/application"
 	billingtransport "github.com/ppusapati/health/code/internal/billing/transport"
@@ -79,6 +80,9 @@ import (
 	schedulingapp "github.com/ppusapati/health/code/internal/scheduling/application"
 	schedulingports "github.com/ppusapati/health/code/internal/scheduling/ports"
 	schedulingtransport "github.com/ppusapati/health/code/internal/scheduling/transport"
+	theatrepostgres "github.com/ppusapati/health/code/internal/theatre/adapters/postgres"
+	theatreapp "github.com/ppusapati/health/code/internal/theatre/application"
+	theatretransport "github.com/ppusapati/health/code/internal/theatre/transport"
 )
 
 // uuidGenerator mints opaque v4 identifiers. Business meaning is never encoded
@@ -196,6 +200,28 @@ type Deps struct {
 	// definition of is one nobody should be acting on the result of.
 	Icu icuapp.Config
 
+	// Theatre is what a deployment has decided about its operating theatres:
+	// the pre-operative checklist, the surgical safety checklist, and how late
+	// a case may start and still count as on time (SRS-OT-006, SRS-OT-007,
+	// SRS-OT-015).
+	//
+	// The zero value takes the WHO safety checklist and a pre-operative list
+	// whose consent and site-marking items cannot be waived by anybody. That
+	// is a default rather than an empty one on purpose: a readiness gate
+	// defaulting to nothing would pass every case.
+	Theatre theatreapp.Config
+
+	// LateralProcedures are the procedure codes that have sides
+	// (SRS-OT-002). A code on this list cannot be scheduled without a
+	// laterality, which is the first of the controls against wrong-site
+	// surgery.
+	//
+	// Configured rather than looked up, because whether a procedure has sides
+	// is a fact about the code system and this deployment has no terminology
+	// service. Empty makes laterality optional everywhere, and the
+	// unwaivable site-marking gate on the checklist still stands.
+	LateralProcedures []string
+
 	// Emergency is what a deployment has decided about its emergency
 	// department: which triage scale it has approved, what must be measured at
 	// triage, and what each disposition requires (SRS-ER-002, SRS-ER-013).
@@ -216,6 +242,7 @@ type Server struct {
 	Clinical     *clinicalapp.Service
 	Emergency    *emergencyapp.Service
 	Icu          *icuapp.Service
+	Theatre      *theatreapp.Service
 	Nursing      *nursingapp.Service
 	Orders       *ordersapp.Service
 	Medication   *medicationapp.Service
@@ -478,6 +505,25 @@ func New(deps Deps) *Server {
 		Config:      deps.Icu,
 	})
 
+	theatreRepo := theatrepostgres.New(txManager)
+	theatreService := theatreapp.NewService(theatreapp.Deps{
+		UnitOfWork: txManager,
+		Schedule:   theatrepostgres.ScheduleRepo{Repository: theatreRepo},
+		Cases:      theatrepostgres.CaseRepo{Repository: theatreRepo},
+		// Whether the Wave-1 encounter still accepts content is the encounter
+		// context's fact (SRS-ENC-005), reached through a port.
+		Encounters: theatrepostgres.NewEncounters(
+			encounterpostgres.EncounterRepo{Repository: encounterRepo}),
+		// Whether a procedure has sides belongs to the code system
+		// (SRS-OT-002), not to the theatre.
+		Procedures: theatrepostgres.NewLateralProcedures(deps.LateralProcedures),
+		Events:     platformStore,
+		Audits:     store.AuditAppenderFunc(platformStore.AppendAudit),
+		IDs:        uuidGenerator{},
+		Clock:      systemClock{},
+		Config:     deps.Theatre,
+	})
+
 	medicationRepo := medicationpostgres.New(txManager)
 	medicationTerminology := medicationpostgres.NewTerminology(medicationRepo)
 	medicationService := medicationapp.NewService(medicationapp.Deps{
@@ -632,6 +678,8 @@ func New(deps Deps) *Server {
 		emergencytransport.NewHandler(emergencyService), interceptors))
 	mux.Handle(icuv1connect.NewIcuServiceHandler(
 		icutransport.NewHandler(icuService, time.Now), interceptors))
+	mux.Handle(theatrev1connect.NewTheatreServiceHandler(
+		theatretransport.NewHandler(theatreService, time.Now), interceptors))
 	billingRepo := billingpostgres.New(txManager)
 	billingService := billingapp.NewService(billingapp.Deps{
 		UnitOfWork: txManager,
@@ -690,6 +738,7 @@ func New(deps Deps) *Server {
 		Clinical:        clinicalService,
 		Emergency:       emergencyService,
 		Icu:             icuService,
+		Theatre:         theatreService,
 		Nursing:         nursingService,
 		Orders:          ordersService,
 		Medication:      medicationService,

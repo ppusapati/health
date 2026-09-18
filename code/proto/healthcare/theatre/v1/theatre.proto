@@ -1,0 +1,966 @@
+// The operating theatre: rooms and lists, the surgery request, scheduling,
+// the checklists, patient movement, the command board, the operative note and
+// traceability.
+//
+// Owning context : theatre  (Master Engineering Registry)
+// Owning service : TheatreService
+// Trace          : SRS-OT-001 … SRS-OT-017
+//
+// Four shapes in this contract are deliberate.
+//
+// Laterality is a field of its own, never a word in the procedure name.
+// Wrong-site surgery is the never-event the checklists exist to prevent, and
+// "left" buried in a sentence is not something a client or a server can check.
+//
+// A booking attempt returns every conflict, and marks each one overridable or
+// not. A scheduler told one clash at a time rebooks once per clash while a
+// list is being built; and a hard clash — another case in the room, the
+// surgeon operating elsewhere — is refused whatever the caller asks, because
+// overriding it does not make a second theatre appear.
+//
+// Nothing carries a stored duration. Turnover, operating time and on-time
+// starts are computed per response from the milestones, because SRS-OT-015
+// says metrics reconcile to recorded timestamps — and an interval whose
+// milestones have not both happened is absent rather than zero.
+//
+// A cancellation carries a coded cause. SRS-OT-005 asks analytics to
+// distinguish patient, clinical, resource and administrative causes, and the
+// fixes for "no bed" and "patient did not attend" are different departments'
+// work.
+syntax = "proto3";
+
+package healthcare.theatre.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ppusapati/health/code/gen/go/healthcare/theatre/v1;theatrev1";
+
+// How soon the case has to happen (SRS-OT-003).
+enum Urgency {
+  URGENCY_UNSPECIFIED = 0;
+  URGENCY_ELECTIVE = 1;
+  URGENCY_URGENT = 2;
+  URGENCY_EMERGENCY = 3;
+}
+
+// Which side (SRS-OT-002).
+enum Laterality {
+  // The refusal state: a procedure that has sides and has not said which.
+  LATERALITY_UNSPECIFIED = 0;
+  LATERALITY_NOT_APPLICABLE = 1;
+  LATERALITY_LEFT = 2;
+  LATERALITY_RIGHT = 3;
+  LATERALITY_BILATERAL = 4;
+}
+
+enum CaseStatus {
+  CASE_STATUS_UNSPECIFIED = 0;
+  // A request that is not yet complete enough to schedule.
+  CASE_STATUS_REQUESTED = 1;
+  CASE_STATUS_SCHEDULABLE = 2;
+  CASE_STATUS_SCHEDULED = 3;
+  // Past the pre-operative checklist.
+  CASE_STATUS_READY = 4;
+  CASE_STATUS_IN_THEATRE = 5;
+  CASE_STATUS_COMPLETED = 6;
+  CASE_STATUS_POSTPONED = 7;
+  CASE_STATUS_CANCELLED = 8;
+}
+
+// Why a case came off the list (SRS-OT-005).
+enum CaseCause {
+  CASE_CAUSE_UNSPECIFIED = 0;
+  // Did not attend, not fasted, unwell, declined.
+  CASE_CAUSE_PATIENT = 1;
+  // Condition changed, needs further investigation, no longer indicated.
+  CASE_CAUSE_CLINICAL = 2;
+  // No bed, no equipment, no staff, the list overran.
+  CASE_CAUSE_RESOURCE = 3;
+  // Booked in error, consent not obtained, notes missing.
+  CASE_CAUSE_ADMINISTRATIVE = 4;
+}
+
+enum BlockKind {
+  BLOCK_KIND_UNSPECIFIED = 0;
+  BLOCK_KIND_LIST = 1;
+  // Planned closure. Distinct from an unallocated gap, because a room that is
+  // closed is not one somebody can be persuaded to open.
+  BLOCK_KIND_DOWNTIME = 2;
+  BLOCK_KIND_EMERGENCY = 3;
+}
+
+// What happened to one pre-operative item (SRS-OT-006).
+enum PreopState {
+  PREOP_STATE_UNSPECIFIED = 0;
+  PREOP_STATE_MET = 1;
+  PREOP_STATE_UNMET = 2;
+  PREOP_STATE_WAIVED = 3;
+  // This case does not need it — no implants for an appendicectomy. Distinct
+  // from met: "we did not need blood" and "the blood is here" are different
+  // facts.
+  PREOP_STATE_NOT_APPLICABLE = 4;
+}
+
+// One of the three moments of the surgical safety checklist (SRS-OT-007).
+enum SafetyPhase {
+  SAFETY_PHASE_UNSPECIFIED = 0;
+  // Before induction, with the patient awake.
+  SAFETY_PHASE_SIGN_IN = 1;
+  // Before incision, with the whole team stopped.
+  SAFETY_PHASE_TIME_OUT = 2;
+  // Before the patient leaves the room.
+  SAFETY_PHASE_SIGN_OUT = 3;
+}
+
+// One point in a case's passage through theatre (SRS-OT-008).
+enum Milestone {
+  MILESTONE_UNSPECIFIED = 0;
+  MILESTONE_PRE_OP = 1;
+  MILESTONE_THEATRE_IN = 2;
+  MILESTONE_ANAESTHESIA_START = 3;
+  MILESTONE_INCISION = 4;
+  MILESTONE_CLOSURE = 5;
+  MILESTONE_THEATRE_OUT = 6;
+  MILESTONE_PACU_IN = 7;
+  MILESTONE_PACU_OUT = 8;
+}
+
+// A coded delay cause (SRS-OT-014).
+//
+// Coded because the requirement asks for analytics without free-text-only
+// classification: the fixes for a late surgeon and a missing set of
+// instruments are different departments' work.
+enum DelayReason {
+  DELAY_REASON_UNSPECIFIED = 0;
+  DELAY_REASON_PATIENT = 1;
+  DELAY_REASON_SURGEON = 2;
+  DELAY_REASON_ANAESTHESIA = 3;
+  DELAY_REASON_NURSING = 4;
+  DELAY_REASON_EQUIPMENT = 5;
+  DELAY_REASON_INSTRUMENTS = 6;
+  DELAY_REASON_CLEANING = 7;
+  DELAY_REASON_BED = 8;
+  DELAY_REASON_PORTERS = 9;
+  DELAY_REASON_PREVIOUS_CASE = 10;
+  DELAY_REASON_EMERGENCY_INSERTION = 11;
+  DELAY_REASON_OTHER = 12;
+}
+
+enum NoteStatus {
+  NOTE_STATUS_UNSPECIFIED = 0;
+  NOTE_STATUS_DRAFT = 1;
+  NOTE_STATUS_SIGNED = 2;
+  NOTE_STATUS_AMENDED = 3;
+  NOTE_STATUS_SUPERSEDED = 4;
+}
+
+enum UsageKind {
+  USAGE_KIND_UNSPECIFIED = 0;
+  USAGE_KIND_CONSUMABLE = 1;
+  // Stays in the patient. Carries a serial or a lot, because a recall is
+  // traced patient by patient.
+  USAGE_KIND_IMPLANT = 2;
+}
+
+// What a theatre is doing (SRS-OT-013).
+enum RoomStage {
+  ROOM_STAGE_UNSPECIFIED = 0;
+  ROOM_STAGE_EMPTY = 1;
+  ROOM_STAGE_NEXT_CASE_READY = 2;
+  ROOM_STAGE_IN_USE = 3;
+  // Between cases: the patient has left and the next has not arrived. The
+  // interval a theatre manager watches.
+  ROOM_STAGE_TURNOVER = 4;
+  ROOM_STAGE_CLOSED = 5;
+}
+
+message Room {
+  string room_id = 1;
+  string facility_id = 2;
+  string code = 3;
+  string name = 4;
+  // Empty means any: a hospital with one theatre should not have to enumerate
+  // every specialty it does.
+  repeated string specialties = 5;
+  repeated string equipment = 6;
+  bool active = 7;
+}
+
+message Block {
+  string block_id = 1;
+  string room_id = 2;
+  BlockKind kind = 3;
+  string owner_id = 4;
+  string specialty = 5;
+  google.protobuf.Timestamp starts_at = 6;
+  google.protobuf.Timestamp ends_at = 7;
+  string note = 8;
+}
+
+message SurgicalCase {
+  string case_id = 1;
+  // The Wave-1 encounter this is the perioperative detail of.
+  string encounter_id = 2;
+  string patient_id = 3;
+  string facility_id = 4;
+
+  string procedure_code = 5;
+  string procedure_display = 6;
+  string diagnosis_code = 7;
+  string diagnosis_display = 8;
+
+  Laterality laterality = 9;
+  // The anatomical site in words, beside the laterality. Both: "left" is
+  // checkable and "medial third of the clavicle" is what the surgeon marks.
+  string site = 10;
+
+  Urgency urgency = 11;
+  int64 expected_duration_seconds = 12;
+
+  string surgeon_id = 13;
+  repeated string team = 14;
+  repeated string requirements = 15;
+  string anaesthesia_type = 16;
+  string special_notes = 17;
+
+  CaseStatus status = 18;
+  string room_id = 19;
+  google.protobuf.Timestamp scheduled_start = 20;
+  google.protobuf.Timestamp scheduled_end = 21;
+
+  CaseCause cause = 22;
+  string cause_reason = 23;
+  string cause_note = 24;
+  google.protobuf.Timestamp closed_at = 25;
+
+  string requested_by = 26;
+  google.protobuf.Timestamp requested_at = 27;
+  int64 version = 28;
+}
+
+// One reason a case cannot go in a slot (SRS-OT-004).
+message ScheduleConflict {
+  // room, surgeon or slot.
+  string kind = 1;
+  string detail = 2;
+  // False for a hard constraint. Overriding "another case is in this room"
+  // does not make a second theatre appear, so it is refused whatever the
+  // caller asks.
+  bool overridable = 3;
+}
+
+message PreopEntry {
+  string code = 1;
+  PreopState state = 2;
+  string note = 3;
+  string waived_by = 4;
+  // The role that entitled somebody to waive it. Checked against the item:
+  // consent and site marking cannot be waived by anybody at all.
+  string waived_role = 5;
+  string recorded_by = 6;
+  google.protobuf.Timestamp recorded_at = 7;
+}
+
+// A mandatory pre-operative item still unmet and unwaived (SRS-OT-006).
+message Blocker {
+  string code = 1;
+  string label = 2;
+  // Empty where nobody may waive it.
+  string waivable_by = 3;
+}
+
+message SafetyAnswer {
+  string code = 1;
+  bool confirmed = 2;
+  // Required when not confirmed. SRS-OT-007's "missing item requires explicit
+  // exception" is what stops a checklist being completed by leaving things
+  // blank.
+  string exception = 3;
+}
+
+message SafetyCheck {
+  string check_id = 1;
+  string case_id = 2;
+  SafetyPhase phase = 3;
+  // At least two. A time-out is the team stopping together; one person reading
+  // a list to themselves is the failure the requirement exists to prevent.
+  repeated string participants = 4;
+  repeated SafetyAnswer answers = 5;
+  google.protobuf.Timestamp performed_at = 6;
+  string performed_by = 7;
+}
+
+message MilestoneRecord {
+  string milestone_id = 1;
+  string case_id = 2;
+  Milestone milestone = 3;
+  // When the patient moved, and when somebody typed it. Separate, because a
+  // list written up at the end of the day is a reconstruction.
+  google.protobuf.Timestamp occurred_at = 4;
+  google.protobuf.Timestamp recorded_at = 5;
+  string recorded_by = 6;
+  string note = 7;
+}
+
+// Derived per response, never stored (SRS-OT-015).
+//
+// Every field is optional: an interval whose milestones have not both happened
+// is absent, because a zero anaesthesia time would make a list look efficient
+// while the patient was still in the anaesthetic room.
+message CaseIntervals {
+  optional int64 anaesthesia_to_incision_seconds = 1;
+  optional int64 incision_to_closure_seconds = 2;
+  optional int64 theatre_occupancy_seconds = 3;
+  optional int64 pacu_stay_seconds = 4;
+  // Negative where the case started early: a list that consistently starts
+  // early is as much a planning fact as one that starts late.
+  optional int64 start_delay_seconds = 5;
+}
+
+message Delay {
+  string delay_id = 1;
+  string case_id = 2;
+  DelayReason reason = 3;
+  // The department answerable. A theatre's delay report is read by the
+  // departments it names.
+  string dependency = 4;
+  int32 minutes = 5;
+  string note = 6;
+  google.protobuf.Timestamp recorded_at = 7;
+  string recorded_by = 8;
+}
+
+message OperativeNote {
+  string note_id = 1;
+  string case_id = 2;
+  // Versioned rather than edited once signed. An operative note is read in a
+  // complaint, a claim and a coroner's court.
+  int32 version = 3;
+  string supersedes = 4;
+
+  string procedure_performed = 5;
+  string findings = 6;
+  // Structured rather than buried in the narrative: each list is read by a
+  // different department.
+  repeated string specimen_ids = 7;
+  repeated string implant_ids = 8;
+  repeated string complications = 9;
+  // A number rather than a phrase: "minimal" means different things to
+  // different surgeons, and the transfusion service needs a figure.
+  int32 estimated_blood_loss_ml = 10;
+  string post_operative_orders = 11;
+  string narrative = 12;
+
+  NoteStatus status = 13;
+  string amendment_reason = 14;
+  string authored_by = 15;
+  google.protobuf.Timestamp authored_at = 16;
+  string signed_by = 17;
+  google.protobuf.Timestamp signed_at = 18;
+}
+
+message Usage {
+  string usage_id = 1;
+  string case_id = 2;
+  UsageKind kind = 3;
+  string item_code = 4;
+  string item_name = 5;
+  string lot_number = 6;
+  string serial_number = 7;
+  int32 quantity = 8;
+  google.protobuf.Timestamp expiry_date = 9;
+  // "Inventory decrement and patient charge are traceable to scan", which a
+  // typed item is not.
+  bool scanned = 10;
+  string scan_data = 11;
+  google.protobuf.Timestamp recorded_at = 12;
+  string recorded_by = 13;
+  // Derived per response: an item used past its expiry date is a governance
+  // event, recorded rather than refused.
+  bool expired = 14;
+}
+
+message Specimen {
+  string specimen_id = 1;
+  string case_id = 2;
+  string patient_id = 3;
+  string label = 4;
+  // The site is half of every histology report, and the half that cannot be
+  // reconstructed afterwards.
+  string site = 5;
+  Laterality laterality = 6;
+  string container = 7;
+  string fixative = 8;
+  // The diagnostic order raised for it. Empty means the chain has not started,
+  // which is what the outstanding list looks for.
+  string order_id = 9;
+  google.protobuf.Timestamp taken_at = 10;
+  string taken_by = 11;
+}
+
+message TrayUse {
+  string tray_use_id = 1;
+  string case_id = 2;
+  string tray_id = 3;
+  string tray_name = 4;
+  // The sterilisation cycle the tray came out of. Without it there is no chain
+  // for an infection investigation to run back along.
+  string cycle_id = 5;
+  bool indicator_passed = 6;
+  string indicator_note = 7;
+  google.protobuf.Timestamp opened_at = 8;
+  string opened_by = 9;
+}
+
+// A patient reached by a recall or an infection investigation.
+//
+// Deliberately thin: identifiers and what links them, no clinical detail.
+// Both lists are read by people outside the care team.
+message Recipient {
+  string patient_id = 1;
+  string encounter_id = 2;
+  string case_id = 3;
+  // The serial, lot or tray that links them.
+  string reference = 4;
+  google.protobuf.Timestamp at = 5;
+}
+
+message CardItem {
+  string item_code = 1;
+  string item_name = 2;
+  int32 quantity = 3;
+}
+
+// A surgeon's usual requirements (SRS-OT-016).
+//
+// Seeds a case and never constrains what is actually used: a system that
+// refused an instrument because it was not on the card would have theatre
+// staff editing cards mid-case.
+message PreferenceCard {
+  string card_id = 1;
+  string surgeon_id = 2;
+  string procedure_code = 3;
+  string name = 4;
+  repeated string equipment = 5;
+  repeated CardItem consumables = 6;
+  repeated string trays = 7;
+  string notes = 8;
+  int32 version = 9;
+  google.protobuf.Timestamp updated_at = 10;
+  string updated_by = 11;
+}
+
+message BoardRow {
+  string room_id = 1;
+  string room_code = 2;
+  RoomStage stage = 3;
+
+  string current_case_id = 4;
+  string current_procedure = 5;
+  string current_surgeon = 6;
+  // The stage the case has reached, which is what "status derives from
+  // milestones" means.
+  Milestone current_milestone = 7;
+  int64 elapsed_seconds = 8;
+  bool over_running = 9;
+
+  string next_case_id = 10;
+  string next_procedure = 11;
+  google.protobuf.Timestamp next_start = 12;
+  // The one thing a theatre manager most wants to know and most often cannot
+  // see.
+  bool next_ready = 13;
+  repeated string next_blockers = 14;
+
+  int64 turnover_so_far_seconds = 15;
+  int32 delay_minutes = 16;
+}
+
+message CauseCount {
+  CaseCause cause = 1;
+  int32 count = 2;
+}
+
+message DelayCount {
+  DelayReason reason = 1;
+  int32 minutes = 2;
+}
+
+// SRS-OT-015: derived from the recorded timestamps every time, never stored.
+message Utilisation {
+  string room_id = 1;
+  google.protobuf.Timestamp from = 2;
+  google.protobuf.Timestamp to = 3;
+
+  // Three numbers, because the ratio anybody quotes depends on which pair they
+  // divided.
+  int32 scheduled_minutes = 4;
+  int32 operating_minutes = 5;
+  int32 block_minutes = 6;
+
+  int32 cases = 7;
+  int32 completed = 8;
+  int32 cancelled = 9;
+  int32 postponed = 10;
+  repeated CauseCount cancellations_by_cause = 11;
+
+  int32 on_time_starts = 12;
+  int32 first_cases = 13;
+  // The number a theatre is actually judged on.
+  int32 on_time_first_cases = 14;
+
+  int32 turnover_count = 15;
+  int32 turnover_minutes = 16;
+  int32 delay_minutes = 17;
+  repeated DelayCount delays_by_reason = 18;
+}
+
+message SaveRoomRequest {
+  string room_id = 1;
+  string facility_id = 2;
+  string code = 3;
+  string name = 4;
+  repeated string specialties = 5;
+  repeated string equipment = 6;
+  bool active = 7;
+}
+
+message SaveRoomResponse {
+  Room room = 1;
+}
+
+message ListRoomsRequest {
+  string facility_id = 1;
+}
+
+message ListRoomsResponse {
+  repeated Room rooms = 1;
+}
+
+message SaveBlockRequest {
+  string room_id = 1;
+  BlockKind kind = 2;
+  string owner_id = 3;
+  string specialty = 4;
+  google.protobuf.Timestamp starts_at = 5;
+  google.protobuf.Timestamp ends_at = 6;
+  // Required for downtime: a closed theatre is one somebody will ask about.
+  string note = 7;
+}
+
+message SaveBlockResponse {
+  Block block = 1;
+}
+
+message RequestSurgeryRequest {
+  string encounter_id = 1;
+  string patient_id = 2;
+  string facility_id = 3;
+  string procedure_code = 4;
+  string procedure_display = 5;
+  string diagnosis_code = 6;
+  string diagnosis_display = 7;
+  Laterality laterality = 8;
+  string site = 9;
+  Urgency urgency = 10;
+  int64 expected_duration_seconds = 11;
+  string surgeon_id = 12;
+  repeated string team = 13;
+  repeated string requirements = 14;
+  string anaesthesia_type = 15;
+  string special_notes = 16;
+  // Applies the surgeon's preference card where one exists (SRS-OT-016).
+  bool seed_from_card = 17;
+}
+
+message RequestSurgeryResponse {
+  SurgicalCase surgical_case = 1;
+  // What keeps the request out of the schedulable state. Returned rather than
+  // refused: a surgeon who cannot put a patient on a list at all is a surgeon
+  // keeping a paper list.
+  repeated string outstanding = 2;
+}
+
+message CompleteRequestRequest {
+  string case_id = 1;
+  string diagnosis_code = 2;
+  string diagnosis_display = 3;
+  Laterality laterality = 4;
+  string site = 5;
+  int64 expected_duration_seconds = 6;
+  string surgeon_id = 7;
+  repeated string team = 8;
+  repeated string requirements = 9;
+}
+
+message CompleteRequestResponse {
+  SurgicalCase surgical_case = 1;
+  repeated string outstanding = 2;
+}
+
+message GetSurgicalCaseRequest {
+  string case_id = 1;
+}
+
+message GetSurgicalCaseResponse {
+  SurgicalCase surgical_case = 1;
+  repeated PreopEntry preop = 2;
+  repeated Blocker blockers = 3;
+  repeated SafetyCheck safety_checks = 4;
+  repeated MilestoneRecord milestones = 5;
+  CaseIntervals intervals = 6;
+  repeated Delay delays = 7;
+  repeated OperativeNote notes = 8;
+  repeated Usage usage = 9;
+  repeated Specimen specimens = 10;
+  repeated TrayUse trays = 11;
+}
+
+message ReprioritiseRequest {
+  string case_id = 1;
+  Urgency urgency = 2;
+  // Required in both directions. Moving a case up is the decision somebody
+  // asks about afterwards; moving one down is the decision the patient asks
+  // about.
+  string reason = 3;
+}
+
+message ReprioritiseResponse {
+  SurgicalCase surgical_case = 1;
+}
+
+message CheckSlotRequest {
+  string case_id = 1;
+  string room_id = 2;
+  google.protobuf.Timestamp start = 3;
+  google.protobuf.Timestamp end = 4;
+}
+
+message CheckSlotResponse {
+  repeated ScheduleConflict conflicts = 1;
+}
+
+message ScheduleCaseRequest {
+  string case_id = 1;
+  string room_id = 2;
+  google.protobuf.Timestamp start = 3;
+  google.protobuf.Timestamp end = 4;
+  // Books despite a soft conflict. Needs its own permission, and a reason: a
+  // list that overran is traced back to this decision.
+  bool override = 5;
+  string override_reason = 6;
+}
+
+message ScheduleCaseResponse {
+  SurgicalCase surgical_case = 1;
+  // Returned whether or not the booking went ahead, so a scheduler who
+  // overrode a conflict still sees what they overrode.
+  repeated ScheduleConflict conflicts = 2;
+  bool booked = 3;
+}
+
+message CloseCaseRequest {
+  string case_id = 1;
+  // Postpone rebooks later; otherwise the case is cancelled outright.
+  bool postpone = 2;
+  CaseCause cause = 3;
+  string reason = 4;
+  string note = 5;
+}
+
+message CloseCaseResponse {
+  SurgicalCase surgical_case = 1;
+}
+
+message ListWaitingRequest {
+  string facility_id = 1;
+  int32 page_size = 2;
+}
+
+message ListWaitingResponse {
+  // Urgency first, then how long they have waited.
+  repeated SurgicalCase cases = 1;
+}
+
+message RecordPreopRequest {
+  string case_id = 1;
+  string code = 2;
+  PreopState state = 3;
+  string note = 4;
+  // The role claimed for a waiver.
+  string waived_role = 5;
+}
+
+message RecordPreopResponse {
+  repeated Blocker blockers = 1;
+}
+
+message ListBlockersRequest {
+  string case_id = 1;
+}
+
+message ListBlockersResponse {
+  repeated Blocker blockers = 1;
+}
+
+message PerformSafetyCheckRequest {
+  string case_id = 1;
+  SafetyPhase phase = 2;
+  repeated string participants = 3;
+  repeated SafetyAnswer answers = 4;
+}
+
+message PerformSafetyCheckResponse {
+  SafetyCheck check = 1;
+}
+
+message RecordMilestoneRequest {
+  string case_id = 1;
+  Milestone milestone = 2;
+  google.protobuf.Timestamp occurred_at = 3;
+  string note = 4;
+}
+
+message RecordMilestoneResponse {
+  MilestoneRecord milestone = 1;
+}
+
+message GetTimelineRequest {
+  string case_id = 1;
+}
+
+message GetTimelineResponse {
+  repeated MilestoneRecord milestones = 1;
+  CaseIntervals intervals = 2;
+  // Milestones timed in an order the patient could not have moved in.
+  // Reported rather than refused: refusing leaves the real time unrecorded,
+  // and ignoring it puts a negative operating time into the reporting.
+  repeated string out_of_sequence = 3;
+}
+
+message RecordDelayRequest {
+  string case_id = 1;
+  DelayReason reason = 2;
+  string dependency = 3;
+  int32 minutes = 4;
+  string note = 5;
+}
+
+message RecordDelayResponse {
+  Delay delay = 1;
+}
+
+message WriteOperativeNoteRequest {
+  string case_id = 1;
+  string procedure_performed = 2;
+  string findings = 3;
+  repeated string specimen_ids = 4;
+  repeated string implant_ids = 5;
+  repeated string complications = 6;
+  int32 estimated_blood_loss_ml = 7;
+  string post_operative_orders = 8;
+  string narrative = 9;
+}
+
+message WriteOperativeNoteResponse {
+  OperativeNote note = 1;
+}
+
+message SignOperativeNoteRequest {
+  string case_id = 1;
+  string note_id = 2;
+}
+
+message SignOperativeNoteResponse {}
+
+message AmendOperativeNoteRequest {
+  string case_id = 1;
+  string note_id = 2;
+  // Required. An unexplained amendment is the entry a claim asks about.
+  string reason = 3;
+  string procedure_performed = 4;
+  string findings = 5;
+  repeated string specimen_ids = 6;
+  repeated string implant_ids = 7;
+  repeated string complications = 8;
+  int32 estimated_blood_loss_ml = 9;
+  string post_operative_orders = 10;
+  string narrative = 11;
+}
+
+message AmendOperativeNoteResponse {
+  OperativeNote note = 1;
+}
+
+message RecordUsageRequest {
+  string case_id = 1;
+  UsageKind kind = 2;
+  string item_code = 3;
+  string item_name = 4;
+  string lot_number = 5;
+  string serial_number = 6;
+  int32 quantity = 7;
+  google.protobuf.Timestamp expiry_date = 8;
+  bool scanned = 9;
+  string scan_data = 10;
+}
+
+message RecordUsageResponse {
+  Usage usage = 1;
+}
+
+message RecallImplantRequest {
+  string item_code = 1;
+  // Narrows to one lot. Empty reaches every patient who received the item.
+  string lot_number = 2;
+}
+
+message RecallImplantResponse {
+  repeated Recipient recipients = 1;
+}
+
+message TakeSpecimenRequest {
+  string case_id = 1;
+  string label = 2;
+  // Defaults to the case's site. The patient and the laterality always come
+  // from the case, so a left-sided case cannot produce a right-sided specimen.
+  string site = 3;
+  string container = 4;
+  string fixative = 5;
+  google.protobuf.Timestamp taken_at = 6;
+}
+
+message TakeSpecimenResponse {
+  Specimen specimen = 1;
+}
+
+message AccessionSpecimenRequest {
+  string specimen_id = 1;
+  string order_id = 2;
+}
+
+message AccessionSpecimenResponse {}
+
+message ListOutstandingSpecimensRequest {
+  string facility_id = 1;
+  int32 page_size = 2;
+}
+
+message ListOutstandingSpecimensResponse {
+  repeated Specimen specimens = 1;
+}
+
+message OpenTrayRequest {
+  string case_id = 1;
+  string tray_id = 2;
+  string tray_name = 3;
+  string cycle_id = 4;
+  bool indicator_passed = 5;
+  // Required when the indicator failed: a failed indicator recorded without
+  // saying what was done is worse than not recording it.
+  string indicator_note = 6;
+}
+
+message OpenTrayResponse {
+  TrayUse tray_use = 1;
+}
+
+message TraceCycleRequest {
+  string cycle_id = 1;
+}
+
+message TraceCycleResponse {
+  repeated Recipient recipients = 1;
+}
+
+message SavePreferenceCardRequest {
+  string surgeon_id = 1;
+  string procedure_code = 2;
+  string name = 3;
+  repeated string equipment = 4;
+  repeated CardItem consumables = 5;
+  repeated string trays = 6;
+  string notes = 7;
+}
+
+message SavePreferenceCardResponse {
+  PreferenceCard card = 1;
+}
+
+message GetPreferenceCardRequest {
+  string surgeon_id = 1;
+  string procedure_code = 2;
+}
+
+message GetPreferenceCardResponse {
+  PreferenceCard card = 1;
+  // False where the surgeon has no card for this procedure, which is the
+  // ordinary case and not an error.
+  bool found = 2;
+}
+
+message GetBoardRequest {
+  string facility_id = 1;
+}
+
+message GetBoardResponse {
+  repeated BoardRow rows = 1;
+}
+
+message GetUtilisationRequest {
+  string room_id = 1;
+  google.protobuf.Timestamp from = 2;
+  google.protobuf.Timestamp to = 3;
+}
+
+message GetUtilisationResponse {
+  Utilisation utilisation = 1;
+}
+
+service TheatreService {
+  // Rooms and lists (SRS-OT-001).
+  rpc SaveRoom(SaveRoomRequest) returns (SaveRoomResponse);
+  rpc ListRooms(ListRoomsRequest) returns (ListRoomsResponse);
+  rpc SaveBlock(SaveBlockRequest) returns (SaveBlockResponse);
+
+  // The request, priority and scheduling (SRS-OT-002 … 005, SRS-OT-017).
+  rpc RequestSurgery(RequestSurgeryRequest) returns (RequestSurgeryResponse);
+  rpc CompleteRequest(CompleteRequestRequest) returns (CompleteRequestResponse);
+  rpc GetSurgicalCase(GetSurgicalCaseRequest) returns (GetSurgicalCaseResponse);
+  rpc Reprioritise(ReprioritiseRequest) returns (ReprioritiseResponse);
+  rpc CheckSlot(CheckSlotRequest) returns (CheckSlotResponse);
+  rpc ScheduleCase(ScheduleCaseRequest) returns (ScheduleCaseResponse);
+  rpc CloseCase(CloseCaseRequest) returns (CloseCaseResponse);
+  rpc ListWaiting(ListWaitingRequest) returns (ListWaitingResponse);
+
+  // The checklists (SRS-OT-006, SRS-OT-007).
+  rpc RecordPreop(RecordPreopRequest) returns (RecordPreopResponse);
+  rpc ListBlockers(ListBlockersRequest) returns (ListBlockersResponse);
+  rpc PerformSafetyCheck(PerformSafetyCheckRequest) returns (PerformSafetyCheckResponse);
+
+  // Movement and delays (SRS-OT-008, SRS-OT-014).
+  rpc RecordMilestone(RecordMilestoneRequest) returns (RecordMilestoneResponse);
+  rpc GetTimeline(GetTimelineRequest) returns (GetTimelineResponse);
+  rpc RecordDelay(RecordDelayRequest) returns (RecordDelayResponse);
+
+  // The operative note (SRS-OT-009).
+  rpc WriteOperativeNote(WriteOperativeNoteRequest) returns (WriteOperativeNoteResponse);
+  rpc SignOperativeNote(SignOperativeNoteRequest) returns (SignOperativeNoteResponse);
+  rpc AmendOperativeNote(AmendOperativeNoteRequest) returns (AmendOperativeNoteResponse);
+
+  // Consumables, implants, specimens and trays (SRS-OT-010 … 012).
+  rpc RecordUsage(RecordUsageRequest) returns (RecordUsageResponse);
+  rpc RecallImplant(RecallImplantRequest) returns (RecallImplantResponse);
+  rpc TakeSpecimen(TakeSpecimenRequest) returns (TakeSpecimenResponse);
+  rpc AccessionSpecimen(AccessionSpecimenRequest) returns (AccessionSpecimenResponse);
+  rpc ListOutstandingSpecimens(ListOutstandingSpecimensRequest)
+      returns (ListOutstandingSpecimensResponse);
+  rpc OpenTray(OpenTrayRequest) returns (OpenTrayResponse);
+  rpc TraceCycle(TraceCycleRequest) returns (TraceCycleResponse);
+
+  // Preference cards, the board and the numbers (SRS-OT-013, 015, 016).
+  rpc SavePreferenceCard(SavePreferenceCardRequest) returns (SavePreferenceCardResponse);
+  rpc GetPreferenceCard(GetPreferenceCardRequest) returns (GetPreferenceCardResponse);
+  rpc GetBoard(GetBoardRequest) returns (GetBoardResponse);
+  rpc GetUtilisation(GetUtilisationRequest) returns (GetUtilisationResponse);
+}

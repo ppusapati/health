@@ -15,8 +15,8 @@ test names.
 family rather than in prose, because a status document whose honest summary is
 "barely started" is one whose per-row claims have to be read carefully.
 
-Two families are now built: SRS-ER, the Emergency Department, and SRS-ICU,
-critical care. Their rows are below. `make traceability` reads a row naming a requirement as a claim about
+Three families are now built: SRS-ER, the Emergency Department, SRS-ICU,
+critical care, and SRS-OT, the operating theatre. Their rows are below. `make traceability` reads a row naming a requirement as a claim about
 it unless the row says the work is not built, so the unbuilt ER requirements
 are named here too — a status document that had to leave them out to pass its
 own gate would be hiding exactly what a reader greps for.
@@ -89,7 +89,7 @@ clinician, and `ValidatedInputs()` is a function rather than a convention.
 |---|---|---|
 | SRS-ER Emergency Department | 18 | **12 implemented, 2 partial, 4 not built** — see below |
 | SRS-ICU Critical Care | 18 | **17 implemented, 1 not built** — see below |
-| SRS-OT Perioperative | 17 | **Not started** |
+| SRS-OT Perioperative | 17 | **15 implemented, 2 partial** — see below |
 | SRS-ANE Anesthesia and PACU | 11 | **Not started** |
 | SRS-BLD Blood Bank and Transfusion | 17 | **Not started** |
 | SRS-CSSD Sterile Services | 12 | **Not started** |
@@ -210,6 +210,65 @@ Fahrenheit is a fever that is not there.
 | SRS-ICU-016 | Transfer-out readiness and structured handoff before completion | **Implemented** — every outstanding item at once, and a death is not gated on paperwork |
 | SRS-ICU-017 | Device days, occupancy, length of stay and quality metrics reconciling to timestamps | **Implemented** — derived every time rather than kept as counters, because a counter can disagree with the rows it came from |
 | SRS-ICU-018 | Tele-ICU monitoring worklist for configured facilities | **Not built** — SHOULD, and the only non-MUST in the family |
+
+## SRS-OT — The operating theatre
+
+`internal/theatre`, the `TheatreService` contract, and end-to-end tests in
+`internal/app` that run against a real database through the assembled stack.
+
+Five decisions are worth naming.
+
+Laterality is a field, not a word in the procedure name. A procedure the
+deployment has listed as lateral cannot reach the schedulable state without
+one. Wrong-site surgery is the never-event the checklists exist to prevent,
+and "left" buried in a sentence is not something a system can check. The
+site-marking item on the pre-operative checklist cannot be waived by anybody,
+and neither can consent — a system where every gate has an override has no
+gates.
+
+A slot check returns every clash at once and marks each overridable or not.
+A missing piece of equipment can be wheeled in; another case in the room, or a
+surgeon already operating, cannot, so those are refused whoever asks and
+whatever reason they give. Overriding a soft conflict needs its own permission
+and a mandatory reason, because a list that overran is traced back to that
+decision.
+
+A time-out needs at least two participants and an answer to every question,
+with an explicit exception for anything not confirmed. One person reading a
+list to themselves is the failure SRS-OT-007's "team confirmation" clause
+exists to prevent, and silence is not confirmation.
+
+Nothing stores a duration. Turnover, operating time, theatre occupancy and
+on-time starts are derived from the milestone rows every time, and an interval
+whose milestones have not both happened is absent rather than zero.
+
+Two queries run in the direction an investigation actually runs: a recall goes
+from an item and a lot to the patients who received it, and an infection
+investigation goes from a sterilisation cycle to the patients whose cases used
+it. Both need a permission of their own, held by HIM rather than by theatre
+staff, and every search is audited with the item and how many patients it
+reached — because a recall and a fishing expedition look identical in the
+query log.
+
+| Requirement | What it asks for | State |
+|---|---|---|
+| SRS-OT-001 | Rooms, block schedules, specialties, equipment constraints and planned downtime | **Implemented** — closing a theatre needs a reason, because a closed theatre is one somebody will ask about |
+| SRS-OT-002 | Surgery request with procedure, diagnosis, urgency, laterality, duration, team and requirements | **Implemented** — an incomplete request is recorded and kept out of the schedulable state, rather than refused: a surgeon who cannot book at all keeps a paper list |
+| SRS-OT-003 | Elective, urgent and emergency priority with controlled override | **Implemented** — the reason is required in both directions and carried into the audit entry |
+| SRS-OT-004 | Schedule against room, time, surgeon, anaesthesia and equipment capacity | **Implemented** — every conflict at once; hard ones are never overridable |
+| SRS-OT-005 | Waitlist, postponement and cancellation reasons, rescheduling | **Implemented** — coded causes, and a postponed case releases its slot and returns to the list |
+| SRS-OT-006 | Pre-op checklist; no move to ready with unwaived mandatory blockers | **Implemented** — consent and site marking are unwaivable; every other waiver names the entitled role and a reason; an unanswered item counts as unmet |
+| SRS-OT-007 | Sign-in, time-out and sign-out with team confirmation and timestamps | **Implemented** — at least two participants, held by a database constraint as well as the domain |
+| SRS-OT-008 | Patient movement from pre-op to PACU out, driving utilisation | **Implemented** — two clocks per milestone, and out-of-sequence entries reported rather than refused |
+| SRS-OT-009 | Operative note with findings, specimens, implants, blood loss and complications; signed, versioned, amendment-controlled | **Implemented** — signing is separate from writing, and an amendment is a new version with a mandatory reason |
+| SRS-OT-010 | Consumables and implants by barcode, lot and serial; inventory decrement and charge traceable to the scan | **Partial** — the scan, the lot, the serial and the traceability are in place, and the implant is announced on the event stream. The decrement belongs to SRS-MAT and the charge to SRS-BIL; neither family consumes the event yet |
+| SRS-OT-011 | Specimens linked to the diagnostic order and accession workflow | **Partial** — the specimen takes its patient and side from the case, is announced, and can be accessioned to an order. Raising that order is the diagnostics context's, which is Wave 3 |
+| SRS-OT-012 | Instrument tray and CSSD traceability to the case | **Implemented** from the theatre's side — a tray cannot be opened without its sterilisation cycle, and the cycle traces forward to every patient it reached. The cycle itself is SRS-CSSD, below |
+| SRS-OT-013 | Command board with room status, case stage, delays, turnover and next-case readiness | **Implemented** — the stage is derived from the milestones, so it cannot disagree with the room |
+| SRS-OT-014 | Case delays with coded reasons and the responsible dependency | **Implemented** |
+| SRS-OT-015 | Room, block and turnover utilisation, cancellation and on-time-start metrics | **Implemented** — derived from the timestamps every time; three occupancy numbers, because the ratio anybody quotes depends on which pair they divided |
+| SRS-OT-016 | Preference cards seeding case requirements without forcing usage | **Implemented** — additive, and nothing in the usage record refers to the card |
+| SRS-OT-017 | Emergency insertion without corrupting elective schedule history | **Implemented** — the displaced elective is postponed explicitly with a coded cause and keeps its history; nothing is silently overwritten |
 
 ## What Wave 2 depends on
 

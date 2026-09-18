@@ -164,6 +164,21 @@ var rolePermissions = map[Role][]string{
 		// when a theatre list is agreed. It never reaches annual leave: that
 		// block is not overridable at all, whoever asks.
 		"sch.schedule.override",
+
+		// The operating theatre's list (SRS-OT-001, SRS-OT-004). Rooms,
+		// blocks, preference cards and the booking itself.
+		"ot.case.read",
+		"ot.case.schedule",
+		"ot.case.cancel",
+		"ot.theatre.configure",
+		// Booking into a slot with a soft conflict — a room without a piece of
+		// equipment that can be wheeled in (SRS-OT-004). Its own permission
+		// and a mandatory reason, because a list that overran is traced back
+		// to this decision. It never reaches a hard conflict: another case in
+		// the room, or a surgeon already operating, is refused whoever asks.
+		"ot.schedule.override",
+		// Deliberately no ot.case.record and no ot.preop.waive: a scheduler
+		// builds the list and does not record what happened in the room.
 	},
 	RoleFacilityViewer: {
 		"organization.facility.read",
@@ -218,6 +233,13 @@ var rolePermissions = map[Role][]string{
 	// deciding whether two records are one person needs the unmasked detail
 	// that a clerk is deliberately denied.
 	RoleHIMOfficer: {
+		// Running a recall or an infection investigation (SRS-OT-010,
+		// SRS-OT-012). Its own permission because it reaches every patient who
+		// received an item rather than one chart, and it sits with HIM for the
+		// same reason merge does: the people whose job is to reason across
+		// records rather than to treat one patient. Every search is audited
+		// with the item and how many patients it reached.
+		"ot.trace.read",
 		"empi.patient.read",
 		"empi.patient.read_restricted",
 		"empi.patient.update",
@@ -352,6 +374,27 @@ var rolePermissions = map[Role][]string{
 		// see the patient and the probe, and a doctor confirming a saturation
 		// from the doctors' office is confirming a number rather than a
 		// patient.
+
+		// The operating theatre (SRS-OT). A surgeon raises the request,
+		// changes its priority, records what was done and signs it.
+		"ot.case.read",
+		"ot.case.request",
+		"ot.case.reprioritise",
+		"ot.case.cancel",
+		"ot.case.record",
+		// Signing the operative note asserts clinical responsibility for what
+		// was done (SRS-OT-009). A separate permission from writing it, so a
+		// scribe typing a dictated note cannot finalise it — the same split
+		// SRS-CLN-009 makes for a clinical document.
+		"ot.note.sign",
+		// Waiving a pre-operative blocker (SRS-OT-006). The domain still
+		// checks the role against the item, so this grants the ability to
+		// waive the surgeon's items and nothing else; consent and site marking
+		// are unwaivable by anybody.
+		"ot.preop.waive",
+		// Deliberately no ot.case.schedule: building a list is the
+		// scheduler's job, and a surgeon who could book their own cases is a
+		// surgeon whose list nobody else can plan around.
 	},
 
 	// A pharmacist checks what was prescribed and decides what is dispensed
@@ -506,6 +549,18 @@ var rolePermissions = map[Role][]string{
 		// Deliberately no icu.episode.discharge and no icu.ceiling.set: when a
 		// patient leaves critical care and how far treatment goes are both
 		// medical decisions.
+
+		// The operating theatre (SRS-OT). The scrub and circulating nurses run
+		// the checklists, time the patient's movement, scan the consumables
+		// and implants, label the specimens and open the sets.
+		"ot.case.read",
+		"ot.case.record",
+		// Deliberately no ot.note.sign: the operative note is the surgeon's
+		// assertion about what they did.
+		//
+		// And deliberately no ot.preop.waive: a nurse who found a blocker
+		// escalates it to the surgeon or the anaesthetist, which is what the
+		// per-item role check exists to make happen.
 	},
 
 	// A downstream service moves orders through their lifecycle and does
@@ -543,6 +598,9 @@ var rolePermissions = map[Role][]string{
 		// are for escalation.
 		"icu.episode.read",
 		"icu.ceiling.read",
+
+		// The theatre command board and its numbers (SRS-OT-013, SRS-OT-015).
+		"ot.case.read",
 	},
 }
 
