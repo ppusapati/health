@@ -34,6 +34,7 @@ sql:
       - db/migrations/0029_emergency.up.sql
       - db/migrations/0030_icu.up.sql
       - db/migrations/0031_theatre.up.sql
+      - db/migrations/0032_anaesthesia.up.sql
     gen:
       go:
         package: sqlcgen

@@ -192,7 +192,11 @@ CREATE TABLE theatre.safety_check (
     phase text NOT NULL CHECK (phase IN ('sign_in', 'time_out', 'sign_out')),
     -- A time-out is the team stopping together. One person reading a list to
     -- themselves is the failure the "team confirmation" clause prevents.
-    participants text[] NOT NULL CHECK (array_length(participants, 1) >= 2),
+    -- COALESCE because array_length of an empty array is NULL, and a CHECK
+    -- that evaluates to NULL passes: without it a time-out naming one person
+    -- is refused and one naming nobody is accepted.
+    participants text[] NOT NULL
+                     CHECK (COALESCE(array_length(participants, 1), 0) >= 2),
 
     performed_at timestamptz NOT NULL,
     performed_by text        NOT NULL CHECK (performed_by <> '')

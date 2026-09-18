@@ -334,6 +334,25 @@ func TestTheDatabaseRefusesASoloTimeOut(t *testing.T) {
 	}
 }
 
+// And a time-out naming nobody at all, which is the case the obvious spelling
+// of the constraint lets through: array_length of an empty array is NULL, and
+// a CHECK that evaluates to NULL passes.
+func TestTheDatabaseRefusesATimeOutWithNobodyPresent(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	c := f.surgeryCase(t)
+
+	_, err := f.pool.Exec(ctx, `
+		INSERT INTO theatre.safety_check (
+		    check_id, tenant_id, case_id, phase, participants,
+		    performed_at, performed_by
+		) VALUES ($1, $2, $3, 'time_out', '{}', $4, 'nurse-1')`,
+		uuid.NewString(), f.tenantID, c.ID, at)
+	if err == nil {
+		t.Fatal("a time-out with no participants was accepted by the database")
+	}
+}
+
 // SRS-OT-008 and SRS-OT-015. The board and the utilisation report read many
 // cases at once, and both clocks on each milestone have to survive.
 func TestMilestonesAreReadForManyCasesAtOnce(t *testing.T) {

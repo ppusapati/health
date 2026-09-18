@@ -9,6 +9,198 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AnaesthesiaAirwayEvent struct {
+	AirwayID      uuid.UUID
+	TenantID      uuid.UUID
+	RecordID      uuid.UUID
+	Device        string
+	Attempt       int32
+	Grade         string
+	Successful    bool
+	Difficulty    string
+	Complications []string
+	Adjuncts      []string
+	OccurredAt    pgtype.Timestamptz
+	RecordedBy    string
+}
+
+type AnaesthesiaAssessment struct {
+	AssessmentID             uuid.UUID
+	TenantID                 uuid.UUID
+	CaseID                   uuid.UUID
+	EncounterID              pgtype.UUID
+	PatientID                uuid.UUID
+	Version                  int32
+	Supersedes               pgtype.UUID
+	History                  string
+	AirwayMallampati         string
+	AirwayMouthMm            int32
+	AirwayThyromentalMm      int32
+	AirwayNeck               string
+	AirwayDentition          string
+	AirwayNotes              string
+	AirwayPredictedDifficult bool
+	AsaGrade                 string
+	Investigations           []string
+	Risks                    []string
+	Plan                     string
+	Consent                  string
+	ConsentNote              string
+	FitToProceed             bool
+	Conditions               []string
+	AssessedBy               string
+	AssessedAt               pgtype.Timestamptz
+	SupersededBy             pgtype.UUID
+	SupersededAt             pgtype.Timestamptz
+}
+
+type AnaesthesiaDischarge struct {
+	DischargeID    uuid.UUID
+	TenantID       uuid.UUID
+	RecordID       uuid.UUID
+	Destination    string
+	Overridden     bool
+	OverrideReason string
+	ScoreID        pgtype.UUID
+	DischargedAt   pgtype.Timestamptz
+	DischargedBy   string
+}
+
+type AnaesthesiaDrug struct {
+	DrugID              uuid.UUID
+	TenantID            uuid.UUID
+	RecordID            uuid.UUID
+	DrugCode            string
+	DrugDisplay         string
+	Route               string
+	Dose                float64
+	DoseUnit            string
+	ConcentrationAmount float64
+	ConcentrationUnit   string
+	ConcentrationVolume float64
+	RateMlPerHour       float64
+	Infusion            bool
+	StoppedAt           pgtype.Timestamptz
+	Source              string
+	DeviceID            string
+	DeviceConnected     bool
+	DeviceMeasuredAt    pgtype.Timestamptz
+	GivenAt             pgtype.Timestamptz
+	RecordedAt          pgtype.Timestamptz
+	RecordedBy          string
+	Note                string
+}
+
+type AnaesthesiaFluid struct {
+	FluidID    uuid.UUID
+	TenantID   uuid.UUID
+	RecordID   uuid.UUID
+	Direction  string
+	Kind       string
+	Label      string
+	VolumeMl   float64
+	ProductID  string
+	OccurredAt pgtype.Timestamptz
+	RecordedAt pgtype.Timestamptz
+	RecordedBy string
+}
+
+type AnaesthesiaHandover struct {
+	HandoverID      uuid.UUID
+	TenantID        uuid.UUID
+	RecordID        uuid.UUID
+	FromClinician   string
+	ToClinician     string
+	Summary         string
+	Concerns        []string
+	Instructions    []string
+	AnalgesiaGiven  []string
+	AntiemeticGiven []string
+	HandedOverAt    pgtype.Timestamptz
+}
+
+type AnaesthesiaPainOrder struct {
+	OrderID         uuid.UUID
+	TenantID        uuid.UUID
+	RecordID        uuid.UUID
+	PatientID       uuid.UUID
+	EncounterID     pgtype.UUID
+	Modality        string
+	PrescriptionIds []string
+	TargetScore     string
+	Monitoring      []string
+	Escalation      string
+	ReviewBy        pgtype.Timestamptz
+	OrderedBy       string
+	OrderedAt       pgtype.Timestamptz
+	StoppedAt       pgtype.Timestamptz
+	StoppedBy       string
+}
+
+type AnaesthesiaPlan struct {
+	PlanID           uuid.UUID
+	TenantID         uuid.UUID
+	CaseID           uuid.UUID
+	Technique        string
+	Agents           []string
+	Airway           string
+	Monitoring       []string
+	SpecialEquipment []string
+	PostOperative    string
+	Notes            string
+	PlannedBy        string
+	PlannedAt        pgtype.Timestamptz
+}
+
+type AnaesthesiaRecord struct {
+	RecordID    uuid.UUID
+	TenantID    uuid.UUID
+	CaseID      uuid.UUID
+	EncounterID pgtype.UUID
+	PatientID   uuid.UUID
+	Technique   string
+	Status      string
+	StartedAt   pgtype.Timestamptz
+	StartedBy   string
+	EndedAt     pgtype.Timestamptz
+	Origin      string
+	ImportNote  string
+	ImportedAt  pgtype.Timestamptz
+	ImportedBy  string
+}
+
+type AnaesthesiaRecoveryAssessment struct {
+	AssessmentID       uuid.UUID
+	TenantID           uuid.UUID
+	RecordID           uuid.UUID
+	ScaleName          string
+	ScaleVersion       string
+	Scores             []byte
+	Total              int32
+	DischargeThreshold int32
+	Missing            []string
+	AssessedAt         pgtype.Timestamptz
+	AssessedBy         string
+}
+
+type AnaesthesiaVital struct {
+	VitalID          uuid.UUID
+	TenantID         uuid.UUID
+	RecordID         uuid.UUID
+	Code             string
+	Display          string
+	Value            float64
+	Unit             string
+	Source           string
+	DeviceID         string
+	DeviceModel      string
+	DeviceConnected  bool
+	DeviceMeasuredAt pgtype.Timestamptz
+	ObservedAt       pgtype.Timestamptz
+	RecordedAt       pgtype.Timestamptz
+	RecordedBy       string
+}
+
 type BillingAccount struct {
 	AccountID   uuid.UUID
 	TenantID    uuid.UUID
