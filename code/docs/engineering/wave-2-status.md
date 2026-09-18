@@ -90,7 +90,7 @@ clinician, and `ValidatedInputs()` is a function rather than a convention.
 | SRS-ER Emergency Department | 18 | **12 implemented, 2 partial, 4 not built** — see below |
 | SRS-ICU Critical Care | 18 | **17 implemented, 1 not built** — see below |
 | SRS-OT Perioperative | 17 | **15 implemented, 2 partial** — see below |
-| SRS-ANE Anesthesia and PACU | 11 | **Not started** |
+| SRS-ANE Anesthesia and PACU | 11 | **11 implemented** — see below |
 | SRS-BLD Blood Bank and Transfusion | 17 | **Not started** |
 | SRS-CSSD Sterile Services | 12 | **Not started** |
 | SRS-MAT Materials and Inventory | 16 | **Not started** |
@@ -269,6 +269,64 @@ query log.
 | SRS-OT-015 | Room, block and turnover utilisation, cancellation and on-time-start metrics | **Implemented** — derived from the timestamps every time; three occupancy numbers, because the ratio anybody quotes depends on which pair they divided |
 | SRS-OT-016 | Preference cards seeding case requirements without forcing usage | **Implemented** — additive, and nothing in the usage record refers to the card |
 | SRS-OT-017 | Emergency insertion without corrupting elective schedule history | **Implemented** — the displaced elective is postponed explicitly with a coded cause and keeps its history; nothing is silently overwritten |
+
+## SRS-ANE — Anaesthesia and recovery
+
+Reachable over the wire: `internal/anaesthesia`, the `AnaesthesiaService`
+contract, and end-to-end tests in `internal/app` that run against a real
+database through the assembled stack.
+
+The anaesthetic record hangs off the theatre case rather than replacing it. The
+patient, the procedure and the operative note belong to SRS-OT; what is here is
+the anaesthetist's record of what they did, reached through a port so that this
+context never holds its own copy of which patient is on the table.
+
+Four shapes are worth naming, because each is a decision that could reasonably
+have gone the other way.
+
+**The ASA grade is a string.** The emergency modifier is part of the grade: "3"
+and "3E" are different patients. Storing an integer and a boolean would produce
+reports where they were the same, and the reports are what the grade is for.
+
+**An assessment is versioned, never edited.** A patient assessed in clinic and
+reassessed on the morning of surgery has two records, and the difference
+between them — a chest infection that appeared in the fortnight between — is
+frequently the point. The database holds "at most one current assessment per
+case" as a partial unique index, which forces supersede-then-insert and hence a
+deferrable forward reference from the retired row to its replacement.
+
+**Every intraoperative entry carries its source and, for a device, the
+connection state at the moment of the reading.** SRS-ANE-005 asks for
+integrated data to be marked by device and connection status. The reason to
+mark it is that somebody downstream must be able to exclude it: a 41 systolic
+from a detached cuff would otherwise start a resuscitation nobody needs. The
+wire message carries a derived `trustworthy` flag so a client cannot forget the
+rule.
+
+**A patient nobody handed over cannot leave recovery, whoever asks.** The
+override exists for a patient who is clinically ready and scores below a bar,
+not for one nobody has taken responsibility for — so `not_handed_over` is the
+one refusal the override does not reach. Discharging below the bar is its own
+permission, held by the anaesthetist and not by the recovery nurse.
+
+The role catalogue gains `anaesthetist` for the same reason. Two of its
+permissions do not belong to every clinician: discharging below the score is
+the decision a complaint is traced back to, and transcribing a record from
+paper after a downtime writes a backdated record by construction.
+
+| Requirement | What it asks for | State |
+|---|---|---|
+| SRS-ANE-001 | Pre-anaesthesia assessment with history, airway, ASA, investigations, risks, consent, linked to the planned procedure | **Implemented** — versioned rather than edited; refused, not cancelled, if an "unfit" conclusion names nothing that would change it |
+| SRS-ANE-002 | Anaesthesia plan visible to the theatre readiness checklist | **Implemented** — a projection rather than the record: the checklist is read by the whole team and does not need the history |
+| SRS-ANE-003 | Intraoperative record: vitals, drugs, fluids, events, timings | **Implemented** — one record per case, held by the database as well as the service |
+| SRS-ANE-004 | Drug administration with dose, unit, route, time, and unit validation | **Implemented** — a dose in a unit family the formulary does not dose in is refused unless it is explicitly acknowledged, and the acknowledgement is audited |
+| SRS-ANE-005 | Device-integrated data marked by device and connection status | **Implemented** — the connection state is on the row and a derived `trustworthy` flag is on the wire |
+| SRS-ANE-006 | Airway management with attempts, devices, grades, difficulty and complications | **Implemented** — attempts count from one and are unique per record; the difficult-airway history is readable by patient across admissions, and publishes an event so systems outside this one learn of it |
+| SRS-ANE-007 | Fluid balance with blood loss, transfusion and urine output | **Implemented** — a transfusion cannot be recorded without the blood bank's unit identifier, which is half of every transfusion audit |
+| SRS-ANE-008 | PACU handover, recovery scoring and discharge criteria | **Implemented** — the scale and its threshold are configured and travel with each score; an unscored component is recorded as missing rather than as zero; every refusal is returned, not the first |
+| SRS-ANE-009 | Post-operative pain orders with monitoring and escalation | **Implemented** — the plan names the prescriptions rather than being one: the drug chart is SRS-MED's, and a second place to prescribe from is how a patient gets two doses |
+| SRS-ANE-010 | Anaesthesia summary generated from signed source data | **Implemented** — derived on read, never submitted, and it names what it could not be built from rather than quietly omitting it |
+| SRS-ANE-011 | Downtime paper record import, clearly marked and audit-linked | **Implemented** — its own permission, because an imported record is backdated by construction; the note, the transcriber and the transcription time are all required by the database |
 
 ## What Wave 2 depends on
 

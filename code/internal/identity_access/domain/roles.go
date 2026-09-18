@@ -69,6 +69,18 @@ const (
 	// (SRS-NUR-016, SRS-NUR-017, Wave-1 actor "Nurse Manager").
 	RoleNurseManager Role = "nurse_manager"
 
+	// RoleAnaesthetist assesses, plans, gives and records an anaesthetic, and
+	// decides when a patient may leave recovery (SRS-ANE).
+	//
+	// A role of its own rather than a variant of clinician, and the reason is
+	// the two controls only it holds. Discharging a patient from recovery
+	// below the agreed score is the decision a complaint is traced back to;
+	// transcribing a record from paper after a downtime writes a backdated
+	// record by construction. Folding either into the clinician role would
+	// give both to every junior doctor in the hospital, and neither belongs
+	// to somebody who was not in the theatre.
+	RoleAnaesthetist Role = "anaesthetist"
+
 	// RolePharmacist verifies prescriptions and dispenses (SRS-MED-006,
 	// SRS-MED-011, Wave-1 actor "Pharmacist").
 	//
@@ -395,6 +407,17 @@ var rolePermissions = map[Role][]string{
 		// Deliberately no ot.case.schedule: building a list is the
 		// scheduler's job, and a surgeon who could book their own cases is a
 		// surgeon whose list nobody else can plan around.
+
+		// Anaesthesia (SRS-ANE). A surgeon reads the assessment, the plan and
+		// the summary of an anaesthetic given to their patient.
+		"ane.record.read",
+		// And the airway history, which is the one fact worth reaching across
+		// admissions for: a difficult airway discovered twice is a difficult
+		// airway that was recorded and not read.
+		"ane.history.read",
+		// Deliberately nothing that writes: assessing, planning and charting
+		// an anaesthetic are the anaesthetist's, and a surgeon who could
+		// record the assessment could declare their own patient fit.
 	},
 
 	// A pharmacist checks what was prescribed and decides what is dispensed
@@ -561,6 +584,61 @@ var rolePermissions = map[Role][]string{
 		// And deliberately no ot.preop.waive: a nurse who found a blocker
 		// escalates it to the surgeon or the anaesthetist, which is what the
 		// per-item role check exists to make happen.
+
+		// Recovery (SRS-ANE-008). The recovery nurse scores the patient and
+		// discharges one who meets the agreed bar.
+		"ane.record.read",
+		"ane.recovery.write",
+		// Deliberately no ane.recovery.override: a patient below the score
+		// leaves recovery on an anaesthetist's decision, which is the whole
+		// point of having a bar. And deliberately no ane.record.import: a
+		// record transcribed from paper is backdated by construction, and it
+		// is signed by the person who gave the anaesthetic.
+	},
+
+	// An anaesthetist assesses, plans, gives and records the anaesthetic, and
+	// decides when the patient may leave recovery (SRS-ANE).
+	RoleAnaesthetist: {
+		"ane.record.read",
+		"ane.assessment.write",
+		"ane.plan.write",
+		"ane.record.chart",
+		"ane.recovery.write",
+		// Discharging a patient who does not meet the bar. The domain still
+		// requires a reason, and refuses it outright for a patient nobody has
+		// handed over: the override exists for one who is clinically ready and
+		// scores below a threshold, not for one nobody has taken
+		// responsibility for.
+		"ane.recovery.override",
+		"ane.pain.write",
+		// Transcribing a record made on paper during a downtime
+		// (SRS-ANE-011). Backdated by construction, which is why it is a
+		// permission of its own rather than part of charting.
+		"ane.record.import",
+		"ane.history.read",
+
+		// The theatre case the anaesthetic hangs off (SRS-OT). An
+		// anaesthetist reads the list, records against the case — the
+		// anaesthetic entries on the checklists are theirs — and may
+		// postpone one.
+		"ot.case.read",
+		"ot.case.record",
+		"ot.case.cancel",
+		// Waiving a pre-operative blocker. The domain checks the role against
+		// the item, so this waives the anaesthetist's items and nothing else;
+		// consent and site marking are unwaivable by anybody.
+		"ot.preop.waive",
+		// Deliberately no ot.note.sign: the operative note is the surgeon's
+		// assertion about what they did, and the anaesthetic record is a
+		// separate document with a separate author.
+
+		// Reading the chart of the patient they are about to anaesthetise:
+		// the allergies, the problems, the observations and the drug chart.
+		"cln.record.read",
+		"med.prescription.read",
+		"ord.order.read",
+		"enc.encounter.read",
+		"empi.patient.read",
 	},
 
 	// A downstream service moves orders through their lifecycle and does

@@ -1,0 +1,852 @@
+// Anaesthesia and recovery: the pre-anaesthesia assessment, the plan, the
+// intraoperative record, the airway, fluids, the handover to recovery, PACU
+// scoring and discharge, the pain plan and the summary.
+//
+// Owning context : anaesthesia  (Master Engineering Registry)
+// Owning service : AnaesthesiaService
+// Trace          : SRS-ANE-001 … SRS-ANE-011
+//
+// Five shapes in this contract are deliberate.
+//
+// The ASA grade is a string, not an integer plus a boolean. The emergency
+// modifier is part of the grade: "3" and "3E" are different patients, and a
+// contract that split them would produce reports where they were the same.
+//
+// Every intraoperative value carries its source and, for a device, the
+// connection state at the moment of the reading. SRS-ANE-005 asks for
+// integrated data to be marked by device and connection status, and the reason
+// to mark it is that somebody downstream has to be able to exclude a value
+// taken while the monitor was detached.
+//
+// A recovery assessment names the components it could not score rather than
+// scoring them zero. A partial assessment is not a low one: a zero would trap
+// a patient in recovery and a full mark would discharge one.
+//
+// A discharge evaluation returns every refusal, not the first. A nurse who
+// fixes one and is then told about the next has been made to discover the
+// requirements one at a time.
+//
+// A summary is derived, never submitted. SRS-ANE-010's clause is "generate
+// anaesthesia summary from signed source data", and a summary somebody typed
+// separately is a second account that disagrees with the record by the time
+// the ward reads it — and it is the version that travels.
+syntax = "proto3";
+
+package healthcare.anaesthesia.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ppusapati/health/code/gen/go/healthcare/anaesthesia/v1;anaesthesiav1";
+
+// How the anaesthetic is given (SRS-ANE-002).
+enum Technique {
+  TECHNIQUE_UNSPECIFIED = 0;
+  TECHNIQUE_GENERAL = 1;
+  TECHNIQUE_REGIONAL = 2;
+  TECHNIQUE_SPINAL = 3;
+  TECHNIQUE_EPIDURAL = 4;
+  TECHNIQUE_SEDATION = 5;
+  TECHNIQUE_LOCAL = 6;
+  TECHNIQUE_COMBINED = 7;
+}
+
+// Where anaesthetic consent has got to (SRS-ANE-001).
+enum ConsentStatus {
+  CONSENT_STATUS_UNSPECIFIED = 0;
+  CONSENT_STATUS_OBTAINED = 1;
+  // The ordinary state of a pre-assessment done in clinic a fortnight before.
+  CONSENT_STATUS_PENDING = 2;
+  CONSENT_STATUS_REFUSED = 3;
+  // An unconscious emergency, where treatment proceeds in the patient's best
+  // interests.
+  CONSENT_STATUS_NOT_REQUIRED = 4;
+}
+
+// Where an entry came from (SRS-ANE-005, SRS-ANE-011).
+enum EntrySource {
+  ENTRY_SOURCE_UNSPECIFIED = 0;
+  ENTRY_SOURCE_MANUAL = 1;
+  ENTRY_SOURCE_DEVICE = 2;
+  // Transcribed from paper after a downtime.
+  ENTRY_SOURCE_IMPORTED = 3;
+}
+
+enum RecordStatus {
+  RECORD_STATUS_UNSPECIFIED = 0;
+  RECORD_STATUS_OPEN = 1;
+  RECORD_STATUS_IN_RECOVERY = 2;
+  RECORD_STATUS_CLOSED = 3;
+}
+
+enum FluidDirection {
+  FLUID_DIRECTION_UNSPECIFIED = 0;
+  FLUID_DIRECTION_IN = 1;
+  FLUID_DIRECTION_OUT = 2;
+}
+
+// Why a patient may not leave recovery (SRS-ANE-008).
+enum DischargeRefusal {
+  DISCHARGE_REFUSAL_UNSPECIFIED = 0;
+  // Never overridable: the override exists for a patient who is clinically
+  // ready and scores below a bar, not for one nobody has handed over.
+  DISCHARGE_REFUSAL_NOT_HANDED_OVER = 1;
+  DISCHARGE_REFUSAL_NOT_ASSESSED = 2;
+  DISCHARGE_REFUSAL_INCOMPLETE_SCORE = 3;
+  DISCHARGE_REFUSAL_BELOW_THRESHOLD = 4;
+}
+
+// The predicted airway, kept as its parts rather than a score: units differ on
+// which scale they record, and the anaesthetist's judgement is not the sum of
+// the measurements (SRS-ANE-001).
+message AirwayAssessment {
+  string mallampati = 1;
+  int32 mouth_opening_mm = 2;
+  int32 thyromental_mm = 3;
+  string neck_movement = 4;
+  string dentition = 5;
+  string notes = 6;
+  // The one prediction the theatre most needs in advance, because the
+  // equipment for it lives somewhere else.
+  bool predicted_difficult = 7;
+}
+
+// A pre-anaesthesia assessment (SRS-ANE-001).
+message Assessment {
+  string assessment_id = 1;
+  string case_id = 2;
+  string encounter_id = 3;
+  string patient_id = 4;
+
+  // Versioned rather than edited: a patient assessed in clinic and reassessed
+  // on the morning of surgery has two, and the difference is the point.
+  int32 version = 5;
+  string supersedes = 6;
+  bool current = 7;
+
+  string history = 8;
+  AirwayAssessment airway = 9;
+  // A string because the emergency modifier is part of the grade.
+  string asa_grade = 10;
+  repeated string investigations = 11;
+  repeated string risks = 12;
+  string plan = 13;
+
+  ConsentStatus consent = 14;
+  string consent_note = 15;
+
+  // Separate from the grade: an ASA 4 patient can be fit for the operation
+  // they need and an ASA 2 patient can be unfit today.
+  bool fit_to_proceed = 16;
+  repeated string conditions = 17;
+
+  string assessed_by = 18;
+  google.protobuf.Timestamp assessed_at = 19;
+  google.protobuf.Timestamp superseded_at = 20;
+}
+
+// The anaesthetic plan (SRS-ANE-002).
+message Plan {
+  string plan_id = 1;
+  string case_id = 2;
+  Technique technique = 3;
+  repeated string agents = 4;
+  string airway = 5;
+  repeated string monitoring = 6;
+  // What has to be fetched, which is why the theatre reads the plan at all.
+  repeated string special_equipment = 7;
+  // Where the patient is planned to go. At planning, because a critical-care
+  // bed is booked before the operation rather than after it.
+  string post_operative = 8;
+  string notes = 9;
+  string planned_by = 10;
+  google.protobuf.Timestamp planned_at = 11;
+}
+
+// What the theatre's pre-operative checklist needs from anaesthesia
+// (SRS-ANE-002).
+//
+// A projection rather than the whole record: the checklist is read by the
+// whole theatre team and does not need the history.
+message Readiness {
+  bool assessed = 1;
+  bool fit = 2;
+  repeated string conditions = 3;
+  string asa_grade = 4;
+  bool difficult_airway = 5;
+  ConsentStatus consent = 6;
+  bool planned = 7;
+  Technique technique = 8;
+  repeated string special_equipment = 9;
+  string post_operative = 10;
+  // What is missing, so the checklist can show it rather than a bare "not
+  // ready".
+  repeated string outstanding = 11;
+}
+
+// The device an entry came from, and its state at the moment of the reading
+// (SRS-ANE-005).
+message DeviceLink {
+  string device_id = 1;
+  string model = 2;
+  // A value recorded while the monitor was disconnected is one nobody should
+  // trend.
+  bool connected = 3;
+  google.protobuf.Timestamp measured_at = 4;
+}
+
+// The intraoperative anaesthetic record (SRS-ANE-003).
+message Record {
+  string record_id = 1;
+  string case_id = 2;
+  string encounter_id = 3;
+  string patient_id = 4;
+  Technique technique = 5;
+  RecordStatus status = 6;
+  google.protobuf.Timestamp started_at = 7;
+  string started_by = 8;
+  // When the anaesthetic ended, which is not when the operation ended:
+  // emergence takes time and it is the anaesthetist's.
+  google.protobuf.Timestamp ended_at = 9;
+
+  // A record made here, or transcribed from paper after a downtime. A
+  // reconstructed record that did not say so would read as a contemporaneous
+  // one (SRS-ANE-011).
+  EntrySource origin = 10;
+  string import_note = 11;
+  google.protobuf.Timestamp imported_at = 12;
+  string imported_by = 13;
+}
+
+// One intraoperative value (SRS-ANE-003, SRS-ANE-005).
+message VitalEntry {
+  string vital_id = 1;
+  string record_id = 2;
+  string code = 3;
+  string display = 4;
+  double value = 5;
+  string unit = 6;
+  EntrySource source = 7;
+  DeviceLink device = 8;
+  google.protobuf.Timestamp observed_at = 9;
+  google.protobuf.Timestamp recorded_at = 10;
+  string recorded_by = 11;
+  // False for a device reading taken while the monitor was disconnected.
+  // Derived, so a client cannot forget to apply the rule.
+  bool trustworthy = 12;
+}
+
+// One drug or infusion (SRS-ANE-004).
+message DrugEntry {
+  string drug_id = 1;
+  string record_id = 2;
+  string drug_code = 3;
+  string drug_display = 4;
+  string route = 5;
+  double dose = 6;
+  // A system that stored "5" without knowing whether it was millilitres or
+  // milligrams has recorded nothing.
+  string dose_unit = 7;
+
+  // Both halves, because without them a rate cannot be turned into a dose.
+  double concentration_amount = 8;
+  string concentration_unit = 9;
+  double concentration_volume = 10;
+  double rate_ml_per_hour = 11;
+  bool infusion = 12;
+  google.protobuf.Timestamp stopped_at = 13;
+
+  EntrySource source = 14;
+  DeviceLink device = 15;
+  google.protobuf.Timestamp given_at = 16;
+  google.protobuf.Timestamp recorded_at = 17;
+  string recorded_by = 18;
+  string note = 19;
+}
+
+// One airway attempt (SRS-ANE-006).
+message AirwayEvent {
+  string airway_id = 1;
+  string record_id = 2;
+  string device = 3;
+  // Attempts count from one: a zeroth attempt would make the count of
+  // attempts, which is what the next anaesthetist reads, wrong.
+  int32 attempt = 4;
+  string grade = 5;
+  bool successful = 6;
+  string difficulty = 7;
+  repeated string complications = 8;
+  repeated string adjuncts = 9;
+  google.protobuf.Timestamp occurred_at = 10;
+  string recorded_by = 11;
+}
+
+// What the next anaesthetist reads (SRS-ANE-006).
+message DifficultAirway {
+  int32 attempts = 1;
+  bool difficult = 2;
+  repeated string reasons = 3;
+  string final_device = 4;
+  repeated string complications = 5;
+}
+
+// One fluid in or out (SRS-ANE-007).
+message FluidEntry {
+  string fluid_id = 1;
+  string record_id = 2;
+  FluidDirection direction = 3;
+  // A litre in and a litre of blood out are different clinical pictures.
+  string kind = 4;
+  string label = 5;
+  double volume_ml = 6;
+  // The blood bank's unit identifier, for a transfusion. Without it the
+  // transfusion cannot be reconciled against the issue record.
+  string product_id = 7;
+  google.protobuf.Timestamp occurred_at = 8;
+  google.protobuf.Timestamp recorded_at = 9;
+  string recorded_by = 10;
+}
+
+// The running fluid balance (SRS-ANE-007).
+message FluidBalance {
+  double in_ml = 1;
+  double out_ml = 2;
+  double net_ml = 3;
+  // Called out separately, because these are the three a handover asks about.
+  double blood_loss_ml = 4;
+  double transfused_ml = 5;
+  double urine_ml = 6;
+  int32 entries = 7;
+}
+
+// The anaesthetist's handover to recovery (SRS-ANE-008).
+message Handover {
+  string handover_id = 1;
+  string record_id = 2;
+  // Both people. A handover naming only the giver is a note left on a trolley.
+  string from_clinician = 3;
+  string to_clinician = 4;
+  string summary = 5;
+  repeated string concerns = 6;
+  repeated string instructions = 7;
+  // What was given in theatre, so recovery knows what is already on board
+  // before giving more.
+  repeated string analgesia_given = 8;
+  repeated string antiemetic_given = 9;
+  google.protobuf.Timestamp handed_over_at = 10;
+}
+
+// One element of a recovery score.
+message ScoreComponent {
+  string code = 1;
+  string label = 2;
+  int32 max = 3;
+}
+
+// The score this unit discharges from recovery on (SRS-ANE-008).
+//
+// Configured rather than fixed: Aldrete, modified Aldrete and PADSS are all in
+// use. The threshold travels with the scale, so a score recorded under one is
+// never read against another's bar.
+message RecoveryScale {
+  string name = 1;
+  string version = 2;
+  repeated ScoreComponent components = 3;
+  int32 discharge_at = 4;
+}
+
+// One scored assessment in PACU (SRS-ANE-008).
+message RecoveryAssessment {
+  string assessment_id = 1;
+  string record_id = 2;
+  string scale_name = 3;
+  string scale_version = 4;
+  // The component values as recorded, so the total can be read back rather
+  // than taken on trust.
+  map<string, int32> scores = 5;
+  int32 total = 6;
+  int32 discharge_threshold = 7;
+  // Components with no score. A partial assessment is not a low one.
+  repeated string missing = 8;
+  google.protobuf.Timestamp assessed_at = 9;
+  string assessed_by = 10;
+  bool complete = 11;
+  bool meets_threshold = 12;
+}
+
+// Whether a patient may leave recovery, and why not (SRS-ANE-008).
+message DischargeDecision {
+  bool allowed = 1;
+  // Every refusal, not the first.
+  repeated DischargeRefusal refusals = 2;
+  // In words, so a client need not carry the explanations.
+  repeated string explanations = 3;
+  // The assessment the decision was made against, where one exists.
+  RecoveryAssessment score = 4;
+}
+
+// A discharge from recovery (SRS-ANE-008).
+message Discharge {
+  string discharge_id = 1;
+  string record_id = 2;
+  string destination = 3;
+  // A discharge below the threshold, with the reason. The override is the
+  // whole of what a review reads.
+  bool overridden = 4;
+  string override_reason = 5;
+  string score_id = 6;
+  google.protobuf.Timestamp discharged_at = 7;
+  string discharged_by = 8;
+}
+
+// An acute pain instruction (SRS-ANE-009).
+message PainOrder {
+  string order_id = 1;
+  string record_id = 2;
+  string patient_id = 3;
+  string encounter_id = 4;
+  string modality = 5;
+  // The drug chart is SRS-MED's. A second place to prescribe from is how a
+  // patient gets two doses, so this names the prescriptions rather than being
+  // one.
+  repeated string prescription_ids = 6;
+  string target_score = 7;
+  // A plan with nothing to observe is one nursing cannot follow, and one with
+  // no escalation is one a ward nurse cannot act on at 3am.
+  repeated string monitoring = 8;
+  string escalation = 9;
+  google.protobuf.Timestamp review_by = 10;
+  string ordered_by = 11;
+  google.protobuf.Timestamp ordered_at = 12;
+  google.protobuf.Timestamp stopped_at = 13;
+  string stopped_by = 14;
+  bool review_overdue = 15;
+}
+
+// The anaesthetic summary (SRS-ANE-010).
+//
+// Derived, never submitted.
+message Summary {
+  string record_id = 1;
+  string case_id = 2;
+  string patient_id = 3;
+  Technique technique = 4;
+  string asa_grade = 5;
+  google.protobuf.Timestamp started_at = 6;
+  google.protobuf.Timestamp ended_at = 7;
+  DifficultAirway airway = 8;
+  repeated DrugEntry key_drugs = 9;
+  FluidBalance fluids = 10;
+  repeated string events = 11;
+  RecoveryAssessment recovery = 12;
+  string disposal = 13;
+  // A recovery discharge below the threshold, which is the one thing a
+  // summary reader must not have to dig for.
+  bool discharge_overridden = 14;
+  string override_reason = 15;
+  // What the summary could not be built from. A summary that quietly omitted
+  // the recovery score would read as a patient who was never scored.
+  repeated string incomplete = 16;
+}
+
+message RecordAssessmentRequest {
+  string case_id = 1;
+  string encounter_id = 2;
+  string patient_id = 3;
+  string history = 4;
+  AirwayAssessment airway = 5;
+  string asa_grade = 6;
+  repeated string investigations = 7;
+  repeated string risks = 8;
+  string plan = 9;
+  ConsentStatus consent = 10;
+  string consent_note = 11;
+  bool fit_to_proceed = 12;
+  repeated string conditions = 13;
+}
+
+message RecordAssessmentResponse {
+  Assessment assessment = 1;
+}
+
+message ListAssessmentsRequest {
+  string case_id = 1;
+}
+
+message ListAssessmentsResponse {
+  repeated Assessment assessments = 1;
+}
+
+message ListPatientAssessmentsRequest {
+  string patient_id = 1;
+  int32 page_size = 2;
+}
+
+message ListPatientAssessmentsResponse {
+  repeated Assessment assessments = 1;
+}
+
+message RecordPlanRequest {
+  string case_id = 1;
+  Technique technique = 2;
+  repeated string agents = 3;
+  string airway = 4;
+  repeated string monitoring = 5;
+  repeated string special_equipment = 6;
+  string post_operative = 7;
+  string notes = 8;
+}
+
+message RecordPlanResponse {
+  Plan plan = 1;
+}
+
+message GetPlanRequest {
+  string case_id = 1;
+}
+
+message GetPlanResponse {
+  Plan plan = 1;
+}
+
+message GetReadinessRequest {
+  string case_id = 1;
+}
+
+message GetReadinessResponse {
+  Readiness readiness = 1;
+}
+
+message OpenRecordRequest {
+  string case_id = 1;
+  string encounter_id = 2;
+  string patient_id = 3;
+  Technique technique = 4;
+  google.protobuf.Timestamp started_at = 5;
+  // Marks a downtime transcription. An imported record needs its own
+  // permission and says where it came from.
+  EntrySource origin = 6;
+  string import_note = 7;
+}
+
+message OpenRecordResponse {
+  Record record = 1;
+}
+
+message GetRecordRequest {
+  string record_id = 1;
+}
+
+message GetRecordResponse {
+  Record record = 1;
+}
+
+message GetRecordForCaseRequest {
+  string case_id = 1;
+}
+
+message GetRecordForCaseResponse {
+  Record record = 1;
+}
+
+message ChartVitalRequest {
+  string record_id = 1;
+  string code = 2;
+  string display = 3;
+  double value = 4;
+  string unit = 5;
+  EntrySource source = 6;
+  DeviceLink device = 7;
+  google.protobuf.Timestamp observed_at = 8;
+}
+
+message ChartVitalResponse {
+  VitalEntry entry = 1;
+}
+
+message ListVitalsRequest {
+  string record_id = 1;
+  // Empty returns every series, which is what the record view reads.
+  string code = 2;
+}
+
+message ListVitalsResponse {
+  repeated VitalEntry entries = 1;
+}
+
+message ChartDrugRequest {
+  string record_id = 1;
+  string drug_code = 2;
+  string drug_display = 3;
+  string route = 4;
+  double dose = 5;
+  string dose_unit = 6;
+  double concentration_amount = 7;
+  string concentration_unit = 8;
+  double concentration_volume = 9;
+  double rate_ml_per_hour = 10;
+  bool infusion = 11;
+  EntrySource source = 12;
+  DeviceLink device = 13;
+  google.protobuf.Timestamp given_at = 14;
+  string note = 15;
+  // The unit the formulary doses this drug in. A mismatch is refused unless
+  // the anaesthetist says explicitly that they meant it (SRS-ANE-004).
+  string expected_unit = 16;
+  bool acknowledged_mismatch = 17;
+}
+
+message ChartDrugResponse {
+  DrugEntry entry = 1;
+}
+
+message ListDrugsRequest {
+  string record_id = 1;
+}
+
+message ListDrugsResponse {
+  repeated DrugEntry entries = 1;
+}
+
+message StopInfusionRequest {
+  string drug_id = 1;
+  google.protobuf.Timestamp stopped_at = 2;
+}
+
+message StopInfusionResponse {}
+
+message RecordAirwayRequest {
+  string record_id = 1;
+  string device = 2;
+  int32 attempt = 3;
+  string grade = 4;
+  bool successful = 5;
+  string difficulty = 6;
+  repeated string complications = 7;
+  repeated string adjuncts = 8;
+  google.protobuf.Timestamp occurred_at = 9;
+}
+
+message RecordAirwayResponse {
+  AirwayEvent event = 1;
+}
+
+message GetAirwayRequest {
+  string record_id = 1;
+}
+
+message GetAirwayResponse {
+  DifficultAirway airway = 1;
+  repeated AirwayEvent events = 2;
+}
+
+message GetPatientAirwayRequest {
+  string patient_id = 1;
+  int32 page_size = 2;
+}
+
+message GetPatientAirwayResponse {
+  DifficultAirway airway = 1;
+}
+
+message ChartFluidRequest {
+  string record_id = 1;
+  FluidDirection direction = 2;
+  string kind = 3;
+  string label = 4;
+  double volume_ml = 5;
+  string product_id = 6;
+  google.protobuf.Timestamp occurred_at = 7;
+}
+
+message ChartFluidResponse {
+  FluidEntry entry = 1;
+}
+
+message GetBalanceRequest {
+  string record_id = 1;
+}
+
+message GetBalanceResponse {
+  FluidBalance balance = 1;
+  repeated FluidEntry entries = 2;
+}
+
+message EndAnaesthesiaRequest {
+  string record_id = 1;
+  google.protobuf.Timestamp ended_at = 2;
+}
+
+message EndAnaesthesiaResponse {
+  Record record = 1;
+}
+
+message HandOverRequest {
+  string record_id = 1;
+  string to_clinician = 2;
+  string summary = 3;
+  repeated string concerns = 4;
+  repeated string instructions = 5;
+  repeated string analgesia_given = 6;
+  repeated string antiemetic_given = 7;
+}
+
+message HandOverResponse {
+  Handover handover = 1;
+}
+
+message ListHandoversRequest {
+  string record_id = 1;
+}
+
+message ListHandoversResponse {
+  repeated Handover handovers = 1;
+}
+
+message GetRecoveryScaleRequest {}
+
+message GetRecoveryScaleResponse {
+  RecoveryScale scale = 1;
+}
+
+message AssessRecoveryRequest {
+  string record_id = 1;
+  // A component left out is recorded as missing rather than as zero.
+  map<string, int32> scores = 2;
+}
+
+message AssessRecoveryResponse {
+  RecoveryAssessment assessment = 1;
+}
+
+message ListRecoveryAssessmentsRequest {
+  string record_id = 1;
+}
+
+message ListRecoveryAssessmentsResponse {
+  repeated RecoveryAssessment assessments = 1;
+}
+
+message EvaluateDischargeRequest {
+  string record_id = 1;
+}
+
+message EvaluateDischargeResponse {
+  DischargeDecision decision = 1;
+}
+
+message DischargeFromRecoveryRequest {
+  string record_id = 1;
+  string destination = 2;
+  // Required to discharge a patient who does not meet the bar, and refused
+  // for one nobody has handed over.
+  string override_reason = 3;
+}
+
+message DischargeFromRecoveryResponse {
+  Discharge discharge = 1;
+}
+
+message OrderPainRequest {
+  string record_id = 1;
+  string modality = 2;
+  repeated string prescription_ids = 3;
+  string target_score = 4;
+  repeated string monitoring = 5;
+  string escalation = 6;
+  google.protobuf.Timestamp review_by = 7;
+}
+
+message OrderPainResponse {
+  PainOrder order = 1;
+}
+
+message ListPainOrdersRequest {
+  string record_id = 1;
+}
+
+message ListPainOrdersResponse {
+  repeated PainOrder orders = 1;
+}
+
+message GetPainRoundRequest {
+  int32 page_size = 1;
+}
+
+message GetPainRoundResponse {
+  // Soonest review first. A plan with no review time sorts last rather than
+  // being hidden: an unreviewed plan is the one the round exists to find.
+  repeated PainOrder orders = 1;
+}
+
+message StopPainRequest {
+  string order_id = 1;
+  google.protobuf.Timestamp stopped_at = 2;
+}
+
+message StopPainResponse {}
+
+message GetSummaryRequest {
+  string record_id = 1;
+}
+
+message GetSummaryResponse {
+  Summary summary = 1;
+}
+
+// Anaesthesia and recovery (SRS-ANE-001 … 011).
+service AnaesthesiaService {
+  // SRS-ANE-001. A second assessment for a case supersedes the first rather
+  // than replacing it.
+  rpc RecordAssessment(RecordAssessmentRequest) returns (RecordAssessmentResponse);
+  rpc ListAssessments(ListAssessmentsRequest) returns (ListAssessmentsResponse);
+  // Across admissions, which is a different kind of access from reading the
+  // case in front of you.
+  rpc ListPatientAssessments(ListPatientAssessmentsRequest) returns (ListPatientAssessmentsResponse);
+
+  // SRS-ANE-002.
+  rpc RecordPlan(RecordPlanRequest) returns (RecordPlanResponse);
+  rpc GetPlan(GetPlanRequest) returns (GetPlanResponse);
+  rpc GetReadiness(GetReadinessRequest) returns (GetReadinessResponse);
+
+  // SRS-ANE-003, SRS-ANE-011.
+  rpc OpenRecord(OpenRecordRequest) returns (OpenRecordResponse);
+  rpc GetRecord(GetRecordRequest) returns (GetRecordResponse);
+  rpc GetRecordForCase(GetRecordForCaseRequest) returns (GetRecordForCaseResponse);
+  rpc EndAnaesthesia(EndAnaesthesiaRequest) returns (EndAnaesthesiaResponse);
+
+  // SRS-ANE-003, SRS-ANE-005.
+  rpc ChartVital(ChartVitalRequest) returns (ChartVitalResponse);
+  rpc ListVitals(ListVitalsRequest) returns (ListVitalsResponse);
+
+  // SRS-ANE-004.
+  rpc ChartDrug(ChartDrugRequest) returns (ChartDrugResponse);
+  rpc ListDrugs(ListDrugsRequest) returns (ListDrugsResponse);
+  rpc StopInfusion(StopInfusionRequest) returns (StopInfusionResponse);
+
+  // SRS-ANE-006.
+  rpc RecordAirway(RecordAirwayRequest) returns (RecordAirwayResponse);
+  rpc GetAirway(GetAirwayRequest) returns (GetAirwayResponse);
+  rpc GetPatientAirway(GetPatientAirwayRequest) returns (GetPatientAirwayResponse);
+
+  // SRS-ANE-007.
+  rpc ChartFluid(ChartFluidRequest) returns (ChartFluidResponse);
+  rpc GetBalance(GetBalanceRequest) returns (GetBalanceResponse);
+
+  // SRS-ANE-008.
+  rpc HandOver(HandOverRequest) returns (HandOverResponse);
+  rpc ListHandovers(ListHandoversRequest) returns (ListHandoversResponse);
+  rpc GetRecoveryScale(GetRecoveryScaleRequest) returns (GetRecoveryScaleResponse);
+  rpc AssessRecovery(AssessRecoveryRequest) returns (AssessRecoveryResponse);
+  rpc ListRecoveryAssessments(ListRecoveryAssessmentsRequest) returns (ListRecoveryAssessmentsResponse);
+  rpc EvaluateDischarge(EvaluateDischargeRequest) returns (EvaluateDischargeResponse);
+  rpc DischargeFromRecovery(DischargeFromRecoveryRequest) returns (DischargeFromRecoveryResponse);
+
+  // SRS-ANE-009.
+  rpc OrderPain(OrderPainRequest) returns (OrderPainResponse);
+  rpc ListPainOrders(ListPainOrdersRequest) returns (ListPainOrdersResponse);
+  rpc GetPainRound(GetPainRoundRequest) returns (GetPainRoundResponse);
+  rpc StopPain(StopPainRequest) returns (StopPainResponse);
+
+  // SRS-ANE-010. Derived from the record, never submitted.
+  rpc GetSummary(GetSummaryRequest) returns (GetSummaryResponse);
+}

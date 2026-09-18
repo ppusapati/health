@@ -904,3 +904,121 @@ func TestGatewayRuleDetectorWorks(t *testing.T) {
 		t.Fatal("the gateway detector fires on a domain import")
 	}
 }
+
+// permissionLiteral matches a permission name in quotes: three or more
+// dot-separated lower-case segments, which is the shape every permission in
+// this codebase has.
+var permissionLiteral = regexp.MustCompile(
+	`"([a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*){2,})"`)
+
+// lineComment strips a trailing // comment, so a permission named in prose
+// ("deliberately no ot.case.schedule") is not mistaken for a grant.
+var lineComment = regexp.MustCompile(`//.*$`)
+
+// rolesCatalogue is the one file that grants permissions.
+const rolesCatalogue = "internal/identity_access/domain/roles.go"
+
+// FIT-09: every permission a role grants is one some service checks.
+//
+// The failure this catches is silent in both directions and invisible in
+// review. A role granting "cln.allergy.read" when the service checks
+// "cln.record.read" denies the holder nothing they notice until they need it,
+// and the catalogue reads as though the access were already there. Nothing
+// else in the build refers to a permission twice, so a misspelling is a string
+// that matches nothing and fails nowhere.
+//
+// The reverse direction is deliberately not asserted: a permission no role
+// holds yet is an ordinary state — a context built before anybody has decided
+// which job does it — and failing on it would force a premature grant.
+func TestFIT09_EveryGrantedPermissionIsCheckedSomewhere(t *testing.T) {
+	root := repoRoot(t)
+
+	catalogue, err := os.ReadFile(filepath.Join(root, rolesCatalogue))
+	if err != nil {
+		t.Fatalf("read %s: %v", rolesCatalogue, err)
+	}
+	granted := permissionsIn(string(catalogue))
+	if len(granted) == 0 {
+		t.Fatalf("no permissions found in %s; the detector is broken and this "+
+			"test would pass whatever the catalogue said", rolesCatalogue)
+	}
+
+	checked := map[string]bool{}
+	for _, f := range loadGoFiles(t) {
+		if f.rel == rolesCatalogue || strings.HasSuffix(f.rel, "_test.go") {
+			continue
+		}
+		source, err := os.ReadFile(f.path)
+		if err != nil {
+			t.Fatalf("read %s: %v", f.rel, err)
+		}
+		for name := range permissionsIn(string(source)) {
+			checked[name] = true
+		}
+	}
+
+	for name := range granted {
+		if grantedAheadOfItsSurface[name] {
+			continue
+		}
+		if !checked[name] {
+			t.Errorf("FIT-09: %s grants %q, which no service defines or checks",
+				rolesCatalogue, name)
+		}
+	}
+}
+
+// grantedAheadOfItsSurface are the permissions a role holds for a surface
+// that has not been built.
+//
+// Named here rather than dropped from the catalogue, and named individually
+// rather than by prefix, so the list can only grow by somebody writing an
+// entry and saying why.
+//
+// platform.audit.read: the auditor role is defined by SRS-IAM-014 and the
+// audit trail it names is written and stored, but nothing reads it back over
+// the API yet — there is no audit-query RPC. The permission is the access the
+// role will hold; until the surface exists it grants nothing, which is the
+// honest state and not a silent one.
+var grantedAheadOfItsSurface = map[string]bool{
+	"platform.audit.read": true,
+}
+
+// permissionsIn collects the permission names quoted in Go source, ignoring
+// line comments.
+func permissionsIn(source string) map[string]bool {
+	out := map[string]bool{}
+	for _, line := range strings.Split(source, "\n") {
+		for _, match := range permissionLiteral.FindAllStringSubmatch(
+			lineComment.ReplaceAllString(line, ""), -1) {
+			out[match[1]] = true
+		}
+	}
+	return out
+}
+
+// TestPermissionLiteralDetectorWorks guards the guard above, which passes when
+// it finds nothing.
+func TestPermissionLiteralDetectorWorks(t *testing.T) {
+	found := permissionsIn(`
+		"ane.recovery.override",
+		PermTheatreRead = "ot.case.read"
+		// Deliberately no ot.case.schedule: not this role's job.
+		// Nor "ot.preop.waive", which the prose quotes.
+		healthcare.anaesthesia.v1
+		notAPermission := "two.segments"
+	`)
+	for _, want := range []string{"ane.recovery.override", "ot.case.read"} {
+		if !found[want] {
+			t.Errorf("detector missed a grant: %q", want)
+		}
+	}
+	for _, unwanted := range []string{
+		"ot.case.schedule", "ot.preop.waive",
+		"healthcare.anaesthesia.v1", "two.segments",
+	} {
+		if found[unwanted] {
+			t.Errorf("detector fired on %q", unwanted)
+		}
+	}
+}

@@ -16,6 +16,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/ppusapati/health/code/gen/go/healthcare/anaesthesia/v1/anaesthesiav1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/billing/v1/billingv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/clinical/v1/clinicalv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/emergency/v1/emergencyv1connect"
@@ -30,6 +31,9 @@ import (
 	"github.com/ppusapati/health/code/gen/go/healthcare/platform_api/v1/platformapiv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/scheduling/v1/schedulingv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/theatre/v1/theatrev1connect"
+	anaesthesiapostgres "github.com/ppusapati/health/code/internal/anaesthesia/adapters/postgres"
+	anaesthesiaapp "github.com/ppusapati/health/code/internal/anaesthesia/application"
+	anaesthesiatransport "github.com/ppusapati/health/code/internal/anaesthesia/transport"
 	billingpostgres "github.com/ppusapati/health/code/internal/billing/adapters/postgres"
 	billingapp "github.com/ppusapati/health/code/internal/billing/application"
 	billingtransport "github.com/ppusapati/health/code/internal/billing/transport"
@@ -222,6 +226,16 @@ type Deps struct {
 	// unwaivable site-marking gate on the checklist still stands.
 	LateralProcedures []string
 
+	// Anaesthesia is what a deployment has decided about its anaesthetic
+	// service: the score it discharges from recovery on, and which drugs a
+	// summary calls out (SRS-ANE-008, SRS-ANE-010).
+	//
+	// The zero value takes the modified Aldrete score, which most units use,
+	// and carries every drug into the summary. Both are defaults rather than
+	// refusals: a unit that has agreed a different scale configures it, and a
+	// verbose summary is better than one that quietly dropped the drugs.
+	Anaesthesia anaesthesiaapp.Config
+
 	// Emergency is what a deployment has decided about its emergency
 	// department: which triage scale it has approved, what must be measured at
 	// triage, and what each disposition requires (SRS-ER-002, SRS-ER-013).
@@ -243,6 +257,7 @@ type Server struct {
 	Emergency    *emergencyapp.Service
 	Icu          *icuapp.Service
 	Theatre      *theatreapp.Service
+	Anaesthesia  *anaesthesiaapp.Service
 	Nursing      *nursingapp.Service
 	Orders       *ordersapp.Service
 	Medication   *medicationapp.Service
@@ -524,6 +539,23 @@ func New(deps Deps) *Server {
 		Config:     deps.Theatre,
 	})
 
+	anaesthesiaRepo := anaesthesiapostgres.New(txManager)
+	anaesthesiaService := anaesthesiaapp.NewService(anaesthesiaapp.Deps{
+		UnitOfWork:  txManager,
+		Assessments: anaesthesiapostgres.AssessmentRepo{Repository: anaesthesiaRepo},
+		Records:     anaesthesiapostgres.RecordRepo{Repository: anaesthesiaRepo},
+		Recovery:    anaesthesiapostgres.RecoveryRepo{Repository: anaesthesiaRepo},
+		// Which patient is on the table is the theatre's fact (SRS-OT-002),
+		// reached through a port. An anaesthesia context holding its own copy
+		// is one that charts a drug against the wrong person.
+		Cases:  anaesthesiapostgres.NewCases(theatrepostgres.ScheduleRepo{Repository: theatreRepo}),
+		Events: platformStore,
+		Audits: store.AuditAppenderFunc(platformStore.AppendAudit),
+		IDs:    uuidGenerator{},
+		Clock:  systemClock{},
+		Config: deps.Anaesthesia,
+	})
+
 	medicationRepo := medicationpostgres.New(txManager)
 	medicationTerminology := medicationpostgres.NewTerminology(medicationRepo)
 	medicationService := medicationapp.NewService(medicationapp.Deps{
@@ -680,6 +712,8 @@ func New(deps Deps) *Server {
 		icutransport.NewHandler(icuService, time.Now), interceptors))
 	mux.Handle(theatrev1connect.NewTheatreServiceHandler(
 		theatretransport.NewHandler(theatreService, time.Now), interceptors))
+	mux.Handle(anaesthesiav1connect.NewAnaesthesiaServiceHandler(
+		anaesthesiatransport.NewHandler(anaesthesiaService, time.Now), interceptors))
 	billingRepo := billingpostgres.New(txManager)
 	billingService := billingapp.NewService(billingapp.Deps{
 		UnitOfWork: txManager,
@@ -739,6 +773,7 @@ func New(deps Deps) *Server {
 		Emergency:       emergencyService,
 		Icu:             icuService,
 		Theatre:         theatreService,
+		Anaesthesia:     anaesthesiaService,
 		Nursing:         nursingService,
 		Orders:          ordersService,
 		Medication:      medicationService,
