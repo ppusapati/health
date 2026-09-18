@@ -25,7 +25,7 @@ PATTERN = (
     r"EMPI|SCH|ENC|CLN|NUR|ORD|MED|BIL"
     # Wave 2: the twelve clinical and operational families, the support
     # services, and the cross-cutting Phase-2 sets.
-    r"|ER|ICU|OT|ANE|BLD|CSSD|MAT|BME|QMS|IPC|MRD"
+    r"|ER|ICU|OT|ANE|BLD|CSSD|MAT|BIO|QMS|IPC|MRD"
     r"|AMB|DIET|FAC|HKP|LND|MORT"
     r"|OPSAPI|OPSNFR|OPSSEC|OPSWEB"
     r")-[0-9]{3}"
@@ -69,8 +69,22 @@ ABSENT_VERDICT = re.compile(
     re.IGNORECASE)
 
 
+# A claim is a table row. These documents state what is built in one place —
+# the coverage tables — and every id outside one is prose: a design note, a
+# dependency, or in one case a warning that a prefix in the SRS is ambiguous.
+#
+# Before this rule, naming a requirement in a sentence claimed it. That is the
+# wrong incentive in a document whose job is to be read: it made explaining a
+# requirement more expensive than leaving it unexplained, which is how status
+# documents become tables nobody can interpret. Checked when the rule was
+# added: every id then claimed appeared in a row, so nothing stopped being
+# checked by it.
+def is_row(line: str) -> bool:
+    return line.lstrip().startswith("|")
+
+
 def split_claims(docs: list[str]) -> tuple[set[str], set[str]]:
-    """Return (claimed, declared absent), per line of each status document."""
+    """Return (claimed, declared absent), per table row of each status document."""
     pattern = re.compile(PATTERN.replace("(", "(?:"))
     claimed_ids: set[str] = set()
     absent_ids: set[str] = set()
@@ -80,6 +94,8 @@ def split_claims(docs: list[str]) -> tuple[set[str], set[str]]:
         if not path.exists():
             continue
         for line in path.read_text().splitlines():
+            if not is_row(line):
+                continue
             found = set(pattern.findall(line))
             if not found:
                 continue

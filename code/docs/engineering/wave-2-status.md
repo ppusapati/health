@@ -2,7 +2,7 @@
 
 Wave 2 owns **239 requirements** across twelve clinical and operational
 families — SRS-ER, SRS-ICU, SRS-OT, SRS-ANE, SRS-BLD, SRS-CSSD, SRS-MAT,
-SRS-BME, SRS-QMS, SRS-IPC, SRS-MRD and the support services — plus the
+SRS-BIO, SRS-QMS, SRS-IPC, SRS-MRD and the support services — plus the
 cross-cutting SRS-OPSAPI, SRS-OPSNFR, SRS-OPSSEC and SRS-OPSWEB sets. The wave
 exit outcome is "production-capable acute/inpatient operations".
 
@@ -94,12 +94,31 @@ clinician, and `ValidatedInputs()` is a function rather than a convention.
 | SRS-BLD Blood Bank and Transfusion | 17 | **Not started** |
 | SRS-CSSD Sterile Services | 12 | **Not started** |
 | SRS-MAT Materials and Inventory | 16 | **Not started** |
-| SRS-BME Biomedical Engineering | 11 | **Not started** |
+| SRS-BIO Biomedical Engineering | 11 | **Not started** — Phase 2 §9. Note the prefix collision below |
 | SRS-QMS Quality / NABH | 15 | **Not started** |
 | SRS-IPC Infection Prevention | 10 | **Not started** |
 | SRS-MRD Medical Records / HIM | 10 | **Not started** |
 | SRS-AMB, SRS-DIET, SRS-FAC, SRS-HKP, SRS-LND, SRS-MORT support services | 52 | **Not started** — except SRS-FAC-012 above |
 | SRS-OPSAPI / OPSNFR / OPSSEC / OPSWEB | 32 | **Partial** — the three foundations above |
+
+### A note on SRS-BIO
+
+Earlier drafts of this document and of the traceability gate called the
+biomedical engineering family SRS-BME. That identifier appears nowhere in the
+SRS; it was invented here, which is the same defect the SRS-NTF fix closed in
+Wave 1. The family is SRS-BIO, Phase 2 §9, eleven requirements.
+
+The reason it is worth a paragraph rather than a silent rename is that SRS-BIO
+is genuinely ambiguous in the source. Phase 2 §9 uses it for Biomedical
+Engineering and Asset Maintenance (SRS-BIO-001 … 011); Phase 7 §6.4 uses the
+same prefix for Biobank and Research Specimen (SRS-BIO-001 … 012). They are
+different families with overlapping numbers, so an unqualified "SRS-BIO-003"
+does not identify a requirement.
+
+Wave 2 owns the Phase-2 family only. Every SRS-BIO reference in this repository
+means Phase 2 §9 unless it says otherwise, and the Phase-7 biobank family will
+need a qualified identifier before Wave 7 can claim it — inventing one now
+would repeat the mistake this note records.
 
 ## SRS-ER — Emergency Department
 

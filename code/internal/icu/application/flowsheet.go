@@ -133,7 +133,7 @@ func (s *Service) Decide(ctx context.Context, in DecideInput) (domain.Observatio
 		// Only the rejection is announced. A confirmed reading is the ordinary
 		// case and says nothing new; a rejected one says a device produced an
 		// artefact, which is the biomedical department's business
-		// (SRS-BME) and the only half of this worth a broker's attention.
+		// (SRS-BIO) and the only half of this worth a broker's attention.
 		if !in.Accept {
 			if err := s.appendEvent(ctx, session, EventReadingRejected,
 				"icu_observation", observation.ID, map[string]any{
