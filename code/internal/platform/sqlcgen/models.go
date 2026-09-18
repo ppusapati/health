@@ -2781,3 +2781,193 @@ type SecurityPlatformSubjectRequest struct {
 	UpdatedAt     pgtype.Timestamptz
 	Version       int64
 }
+
+type TheatreBlock struct {
+	BlockID   uuid.UUID
+	TenantID  uuid.UUID
+	RoomID    uuid.UUID
+	Kind      string
+	OwnerID   string
+	Specialty string
+	StartsAt  pgtype.Timestamptz
+	EndsAt    pgtype.Timestamptz
+	Note      string
+}
+
+type TheatreCase struct {
+	CaseID                  uuid.UUID
+	TenantID                uuid.UUID
+	EncounterID             uuid.UUID
+	PatientID               uuid.UUID
+	FacilityID              string
+	ProcedureCode           string
+	ProcedureDisplay        string
+	DiagnosisCode           string
+	DiagnosisDisplay        string
+	Laterality              string
+	Site                    string
+	Urgency                 string
+	ExpectedDurationSeconds int64
+	SurgeonID               string
+	Team                    []string
+	Requirements            []string
+	AnaesthesiaType         string
+	SpecialNotes            string
+	Status                  string
+	RoomID                  pgtype.UUID
+	ScheduledStart          pgtype.Timestamptz
+	ScheduledEnd            pgtype.Timestamptz
+	Outcome                 string
+	OutcomeReason           string
+	OutcomeNote             string
+	OutcomeAt               pgtype.Timestamptz
+	RequestedBy             string
+	RequestedAt             pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
+	Version                 int64
+}
+
+type TheatreDelay struct {
+	DelayID    uuid.UUID
+	TenantID   uuid.UUID
+	CaseID     uuid.UUID
+	Reason     string
+	Dependency string
+	Minutes    int32
+	Note       string
+	RecordedAt pgtype.Timestamptz
+	RecordedBy string
+}
+
+type TheatreMilestone struct {
+	MilestoneID uuid.UUID
+	TenantID    uuid.UUID
+	CaseID      uuid.UUID
+	Milestone   string
+	OccurredAt  pgtype.Timestamptz
+	RecordedAt  pgtype.Timestamptz
+	RecordedBy  string
+	Note        string
+}
+
+type TheatreOperativeNote struct {
+	NoteID               uuid.UUID
+	TenantID             uuid.UUID
+	CaseID               uuid.UUID
+	Version              int32
+	Supersedes           pgtype.UUID
+	ProcedurePerformed   string
+	Findings             string
+	SpecimenIds          []string
+	ImplantIds           []string
+	Complications        []string
+	EstimatedBloodLossMl int32
+	PostOperativeOrders  string
+	Narrative            string
+	Status               string
+	AmendmentReason      string
+	AuthoredBy           string
+	AuthoredAt           pgtype.Timestamptz
+	SignedBy             string
+	SignedAt             pgtype.Timestamptz
+}
+
+type TheatrePreferenceCard struct {
+	CardID        uuid.UUID
+	TenantID      uuid.UUID
+	SurgeonID     string
+	ProcedureCode string
+	Name          string
+	Equipment     []string
+	Consumables   []byte
+	Trays         []string
+	Notes         string
+	Version       int32
+	UpdatedAt     pgtype.Timestamptz
+	UpdatedBy     string
+}
+
+type TheatrePreopEntry struct {
+	CaseID     uuid.UUID
+	TenantID   uuid.UUID
+	Code       string
+	State      string
+	Note       string
+	WaivedBy   string
+	WaivedRole string
+	RecordedBy string
+	RecordedAt pgtype.Timestamptz
+}
+
+type TheatreRoom struct {
+	RoomID      uuid.UUID
+	TenantID    uuid.UUID
+	FacilityID  string
+	Code        string
+	Name        string
+	Specialties []string
+	Equipment   []string
+	Active      bool
+}
+
+type TheatreSafetyAnswer struct {
+	CheckID   uuid.UUID
+	Code      string
+	Confirmed bool
+	Exception string
+}
+
+type TheatreSafetyCheck struct {
+	CheckID      uuid.UUID
+	TenantID     uuid.UUID
+	CaseID       uuid.UUID
+	Phase        string
+	Participants []string
+	PerformedAt  pgtype.Timestamptz
+	PerformedBy  string
+}
+
+type TheatreSpecimen struct {
+	SpecimenID uuid.UUID
+	TenantID   uuid.UUID
+	CaseID     uuid.UUID
+	PatientID  uuid.UUID
+	Label      string
+	Site       string
+	Laterality string
+	Container  string
+	Fixative   string
+	OrderID    pgtype.UUID
+	TakenAt    pgtype.Timestamptz
+	TakenBy    string
+}
+
+type TheatreTrayUse struct {
+	TrayUseID       uuid.UUID
+	TenantID        uuid.UUID
+	CaseID          uuid.UUID
+	TrayID          string
+	TrayName        string
+	CycleID         string
+	IndicatorPassed bool
+	IndicatorNote   string
+	OpenedAt        pgtype.Timestamptz
+	OpenedBy        string
+}
+
+type TheatreUsage struct {
+	UsageID      uuid.UUID
+	TenantID     uuid.UUID
+	CaseID       uuid.UUID
+	Kind         string
+	ItemCode     string
+	ItemName     string
+	LotNumber    string
+	SerialNumber string
+	Quantity     int32
+	ExpiryDate   pgtype.Timestamptz
+	Scanned      bool
+	ScanData     string
+	RecordedAt   pgtype.Timestamptz
+	RecordedBy   string
+}

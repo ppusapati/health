@@ -141,7 +141,7 @@ func TestFIT01_DomainPackagesArePure(t *testing.T) {
 // would make these tests useless noise.
 var sqlSchemaRef = regexp.MustCompile(
 	`(?i)\b(?:from|join|into|update|delete\s+from|table)\s+` +
-		`(organization|identity_access|platform_data|platform_workflow|platform_rules|platform_edge|platform_escalation|emergency|icu|security_platform)\.[a-z_]+`)
+		`(organization|identity_access|platform_data|platform_workflow|platform_rules|platform_edge|platform_escalation|emergency|icu|theatre|security_platform)\.[a-z_]+`)
 
 // schemaOwners maps a schema to the one package path allowed to reach it.
 var schemaOwners = map[string]string{
@@ -154,6 +154,7 @@ var schemaOwners = map[string]string{
 	"security_platform":   "internal/security/adapters/postgres",
 	"emergency":           "internal/emergency/adapters/postgres",
 	"icu":                 "internal/icu/adapters/postgres",
+	"theatre":             "internal/theatre/adapters/postgres",
 	"platform_blob":       "internal/platform/blobstore",
 	"platform_escalation": "internal/platform/escalation",
 }
@@ -178,6 +179,7 @@ func TestSQLSchemaRefDetectorWorks(t *testing.T) {
 		`SELECT * FROM platform_escalation.notice WHERE state = 'pending'`,
 		`SELECT * FROM emergency.visit WHERE status <> 'disposed'`,
 		`SELECT * FROM icu.observation WHERE validation = 'pending'`,
+		`SELECT * FROM theatre.case WHERE status <> 'cancelled'`,
 	}
 	for _, sample := range shouldMatch {
 		if !sqlSchemaRef.MatchString(sample) {
@@ -251,6 +253,7 @@ func TestFIT02_GeneratedQueriesImportedOnlyByAdapters(t *testing.T) {
 		"internal/billing/adapters/postgres",
 		"internal/emergency/adapters/postgres",
 		"internal/icu/adapters/postgres",
+		"internal/theatre/adapters/postgres",
 		"internal/platform/store",
 		"internal/platform/workflow",
 		"internal/platform/rules",

@@ -33,6 +33,7 @@ sql:
       - db/migrations/0028_clinical_device_source.up.sql
       - db/migrations/0029_emergency.up.sql
       - db/migrations/0030_icu.up.sql
+      - db/migrations/0031_theatre.up.sql
     gen:
       go:
         package: sqlcgen
@@ -40,6 +41,11 @@ sql:
         sql_package: pgx/v5
         emit_pointers_for_null_types: true
         emit_empty_slices: true
+        # sqlc singularises table names to build Go type names, and its
+        # rule turns "specimen" into "Speciman". Left alone that misspelling
+        # would spread through every adapter that touches the table.
+        rename:
+          theatre_speciman: TheatreSpecimen
         overrides:
           - db_type: uuid
             go_type: github.com/google/uuid.UUID
