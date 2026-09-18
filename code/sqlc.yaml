@@ -36,6 +36,7 @@ sql:
       - db/migrations/0031_theatre.up.sql
       - db/migrations/0032_anaesthesia.up.sql
       - db/migrations/0033_bloodbank.up.sql
+      - db/migrations/0034_sterile.up.sql
     gen:
       go:
         package: sqlcgen

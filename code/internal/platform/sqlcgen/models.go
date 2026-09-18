@@ -3192,6 +3192,137 @@ type SecurityPlatformSubjectRequest struct {
 	Version       int64
 }
 
+type SterileCycle struct {
+	CycleID     uuid.UUID
+	TenantID    uuid.UUID
+	Machine     string
+	LoadNumber  string
+	Program     string
+	Parameters  []byte
+	Source      string
+	Result      string
+	Released    bool
+	ReleasedBy  string
+	ReleasedAt  pgtype.Timestamptz
+	ReleaseNote string
+	StartedAt   pgtype.Timestamptz
+	EndedAt     pgtype.Timestamptz
+	StartedBy   string
+	Version     int64
+}
+
+type SterileIndicator struct {
+	IndicatorID uuid.UUID
+	TenantID    uuid.UUID
+	CycleID     uuid.UUID
+	Kind        string
+	Lot         string
+	Passed      bool
+	Notes       string
+	ReadAt      pgtype.Timestamptz
+	ReadBy      string
+}
+
+type SterileInstrument struct {
+	InstrumentID uuid.UUID
+	TenantID     uuid.UUID
+	Code         string
+	Display      string
+	SerialNumber string
+	Status       string
+	Location     string
+	AcquiredOn   pgtype.Date
+	RetiredOn    pgtype.Timestamptz
+	Notes        string
+	CreatedAt    pgtype.Timestamptz
+	CreatedBy    string
+	Version      int64
+}
+
+type SterileIssue struct {
+	IssueID     uuid.UUID
+	TenantID    uuid.UUID
+	RunID       uuid.UUID
+	SetCode     string
+	CycleID     pgtype.UUID
+	Destination string
+	IssuedTo    string
+	State       string
+	UsedCaseID  pgtype.UUID
+	ReturnCount []byte
+	ReturnNote  string
+	IssuedAt    pgtype.Timestamptz
+	IssuedBy    string
+	ClosedAt    pgtype.Timestamptz
+	ClosedBy    string
+}
+
+type SterileRecall struct {
+	RecallID      uuid.UUID
+	TenantID      uuid.UUID
+	CycleID       uuid.UUID
+	Reason        string
+	PacksAffected int32
+	CasesAffected int32
+	RaisedAt      pgtype.Timestamptz
+	RaisedBy      string
+	ClosedAt      pgtype.Timestamptz
+	ClosedBy      string
+	ClosingNote   string
+}
+
+type SterileRun struct {
+	RunID           uuid.UUID
+	TenantID        uuid.UUID
+	SetID           uuid.UUID
+	SetVersion      int32
+	SetCode         string
+	SourceUnit      string
+	SourceCaseID    pgtype.UUID
+	Stage           string
+	ReceivedCount   []byte
+	PackedCount     []byte
+	Missing         []string
+	Replaced        []string
+	CycleID         pgtype.UUID
+	PackagingMethod string
+	IndicatorType   string
+	SterilisedAt    pgtype.Timestamptz
+	ExpiresAt       pgtype.Timestamptz
+	StartedAt       pgtype.Timestamptz
+	StartedBy       string
+	Version         int64
+}
+
+type SterileStageRecord struct {
+	StageRecordID    uuid.UUID
+	TenantID         uuid.UUID
+	RunID            uuid.UUID
+	Stage            string
+	Equipment        string
+	Notes            string
+	Skipped          bool
+	SkipAuthorisedBy string
+	SkipReason       string
+	PerformedAt      pgtype.Timestamptz
+	PerformedBy      string
+}
+
+type SterileTraySet struct {
+	SetID            uuid.UUID
+	TenantID         uuid.UUID
+	Code             string
+	Display          string
+	Kind             string
+	SetVersion       int32
+	Supersedes       pgtype.UUID
+	Items            []byte
+	ShelfLifeSeconds int64
+	CreatedAt        pgtype.Timestamptz
+	CreatedBy        string
+	SupersededAt     pgtype.Timestamptz
+}
+
 type TheatreBlock struct {
 	BlockID   uuid.UUID
 	TenantID  uuid.UUID
