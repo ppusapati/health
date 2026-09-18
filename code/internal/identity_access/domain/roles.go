@@ -134,6 +134,38 @@ const (
 	// different job.
 	RoleSterileSupervisor Role = "sterile_supervisor"
 
+	// RoleStorekeeper works the stores: receiving deliveries, issuing to
+	// departments, moving stock between stores and counting shelves
+	// (SRS-MAT-005, SRS-MAT-008, SRS-MAT-010, SRS-MAT-011).
+	//
+	// What it deliberately does not hold is the four decisions below. A
+	// storekeeper who could accept their own delivery out of quarantine,
+	// approve the adjustment from their own count, and block a lot would be
+	// the only check on the stores, and there would be none.
+	RoleStorekeeper Role = "storekeeper"
+
+	// RoleMaterialsManager runs the stores and holds the controls a hospital
+	// is answerable for: accepting stock out of quarantine, approving a
+	// count's adjustment, and blocking a lot (SRS-MAT-006, SRS-MAT-011,
+	// SRS-MAT-013).
+	//
+	// Separate from the storekeeper for the reason every stores function
+	// separates them: the person who counted the shelf should not be the
+	// person who signs off what the count changed. The manager holds the
+	// storekeeper's permissions too — a manager works the counter — so this
+	// is an addition rather than a different job.
+	RoleMaterialsManager Role = "materials_manager"
+
+	// RoleBuyer runs procurement: quotations, comparison, purchase orders and
+	// their amendments, and the three-way match (SRS-MAT-003, SRS-MAT-004,
+	// SRS-MAT-014).
+	//
+	// A role of its own because of the oldest separation in purchasing: the
+	// person who commits the hospital's money should not also be the person
+	// who receives the goods and confirms they arrived. A buyer never touches
+	// the ledger.
+	RoleBuyer Role = "buyer"
+
 	// RolePharmacist verifies prescriptions and dispenses (SRS-MED-006,
 	// SRS-MED-011, Wave-1 actor "Pharmacist").
 	//
@@ -545,6 +577,11 @@ var rolePermissions = map[Role][]string{
 	// Finance decides what things cost and signs off what exceeds a limit
 	// (SRS-BIL-001, SRS-BIL-002, SRS-BIL-007, SRS-BIL-009, SRS-BIL-015).
 	RoleFinanceAdmin: {
+		// The top of a materials approval route: anything over the threshold
+		// a hospital sets also needs finance (SRS-MAT-002). Reading the
+		// requisition is part of deciding it.
+		"mat.record.read",
+		"mat.requisition.approve",
 		"bil.account.read",
 		"bil.catalogue.configure",
 		"bil.discount.approve",
@@ -800,6 +837,84 @@ var rolePermissions = map[Role][]string{
 		// Deliberately no cssd.master.configure: what belongs in a tray is a
 		// decision the department makes once, not one a technician makes
 		// while packing.
+	},
+
+	// A storekeeper receives, issues, transfers and counts (SRS-MAT-005,
+	// SRS-MAT-008, SRS-MAT-010, SRS-MAT-011).
+	RoleStorekeeper: {
+		"mat.record.read",
+		"mat.requisition.raise",
+		// The storekeeper is the first step of a typical approval route. The
+		// permission says only that this caller may take a step in a chain;
+		// the route says which role is required where, and the domain refuses
+		// a requester approving their own request.
+		"mat.requisition.approve",
+		"mat.receipt.write",
+		"mat.stock.issue",
+		"mat.transfer.write",
+		"mat.count.record",
+		// Reading the patient a consumption is charged to.
+		"empi.patient.read",
+		// Deliberately no mat.inspection.decide: accepting stock out of
+		// quarantine is the step that makes an uninspected delivery usable,
+		// and the person who took the delivery in should not be the one who
+		// declares it fit.
+		// Deliberately no mat.count.approve: a storekeeper who could count
+		// their own store and sign off the difference can make any shortfall
+		// disappear, and the variance report becomes a record of nothing.
+		// Deliberately no mat.lot.block: blocking tells every ward to stop
+		// using what they have, and the recall list names the patients it
+		// reached.
+		// Deliberately no mat.purchase.write: the person who receives the
+		// goods does not also commit the money for them.
+		// Deliberately no mat.master.configure: what an item is and what it
+		// costs to reorder is decided once, not at the counter.
+	},
+
+	// A materials manager works the counter and holds the controls the
+	// hospital is answerable for (SRS-MAT-006, SRS-MAT-011, SRS-MAT-013).
+	RoleMaterialsManager: {
+		"mat.record.read",
+		"mat.requisition.raise",
+		"mat.requisition.approve",
+		"mat.receipt.write",
+		"mat.stock.issue",
+		"mat.transfer.write",
+		"mat.count.record",
+		"empi.patient.read",
+		// The item, supplier and stock-level masters, and the approval
+		// routes: the configuration every other decision here is measured
+		// against.
+		"mat.master.configure",
+		// The step that makes uninspected stock usable.
+		"mat.inspection.decide",
+		// The signature on an adjustment. The domain refuses it where the
+		// approver is the counter, so a manager who counted a store still
+		// cannot sign off their own variance.
+		"mat.count.approve",
+		// The block that stops a lot being issued anywhere, and the recall
+		// list that names who it reached.
+		"mat.lot.block",
+		// The utilisation and expiry figures a stores review reads.
+		"mat.analysis.read",
+		// Deliberately no mat.purchase.write and no mat.invoice.match: a
+		// stores function that could also raise the order and clear the
+		// invoice has no separation from procurement at all.
+	},
+
+	// A buyer runs procurement and clears the invoice (SRS-MAT-003,
+	// SRS-MAT-004, SRS-MAT-014).
+	RoleBuyer: {
+		"mat.record.read",
+		"mat.purchase.write",
+		"mat.invoice.match",
+		"mat.analysis.read",
+		// Deliberately nothing that touches the ledger: no receipt, no issue,
+		// no transfer, no count. The person who commits the hospital's money
+		// does not also confirm that the goods arrived.
+		// Deliberately no mat.requisition.approve: a buyer approving the
+		// request they are about to fill is the request and the check on it
+		// in one pair of hands.
 	},
 
 	// A sterile services supervisor works the bench and holds the three

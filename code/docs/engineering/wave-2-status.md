@@ -93,7 +93,7 @@ clinician, and `ValidatedInputs()` is a function rather than a convention.
 | SRS-ANE Anesthesia and PACU | 11 | **11 implemented** — see below |
 | SRS-BLD Blood Bank and Transfusion | 17 | **15 implemented, 2 partial** — see below |
 | SRS-CSSD Sterile Services | 12 | **12 implemented** — see below |
-| SRS-MAT Materials and Inventory | 16 | **Not started** |
+| SRS-MAT Materials and Inventory | 16 | **16 implemented** — see below |
 | SRS-BIO Biomedical Engineering | 11 | **Not started** — Phase 2 §9. Note the prefix collision below |
 | SRS-QMS Quality / NABH | 15 | **Not started** |
 | SRS-IPC Infection Prevention | 10 | **Not started** |
@@ -518,6 +518,105 @@ not SRS-BLD's to do unasked. Until then a deployment entitled to the bloodbank
 module records transfusions here and the nursing table is the ward chart's view
 of the same event. This is a known defect with a named resolution, not a
 design.
+
+## SRS-MAT — Materials, procurement and inventory
+
+Sixteen requirements, all implemented. Two jobs that share an item master —
+buying and holding — in one contract (`MaterialsService`) and one schema
+(`materials`), reached through `internal/materials`.
+
+**The stock ledger is double-entry, and there is no on-hand column anywhere.**
+Every movement takes a quantity out of one bucket and puts it into another,
+where a bucket is a location plus a status, and at most one side may be outside
+the hospital. Written that way, conservation is a property of the row rather
+than of the code that wrote it. `materials.balance` is a view that sums the
+ledger, and every balance read in the adapter and on the wire goes through it —
+so a store's balance and its ledger cannot disagree, because there is only one
+of them. SRS-MAT-007's acceptance is that on-hand is derivable from immutable
+movements, and a repository test computes the same figures twice, once in SQL
+and once in Go, and compares them.
+
+**In-transit is a status, not a flag.** A transfer is two movements through a
+third bucket, so SRS-MAT-010's "source/destination balances reconcile" holds at
+every moment rather than only at the end. The end-to-end test asserts the total
+inside the hospital mid-flight, and that two cartons short of a hundred stay
+visible in transit instead of vanishing from both stores.
+
+**Three things independently keep stock out of available-to-promise:** the
+wrong status (SRS-MAT-006 — unaccepted stock cannot become available), a
+blocked lot (SRS-MAT-013), and an expired one. Quarantined and blocked stock is
+still counted: it is on the shelf, and somebody has to go and get it.
+
+**Four separations are permissions rather than convention**, and each was
+verified by granting it away and watching the test fail. The storekeeper who
+took a delivery in cannot accept it out of quarantine. A storekeeper cannot
+approve any stocktake adjustment, and the domain and the database separately
+refuse an approval by the person who counted — two different controls, both
+tested, because a test covering only the second would pass with the permission
+granted to everybody. A storekeeper cannot block a lot, because blocking tells
+every ward to stop using what they have. And a buyer never touches the ledger:
+the person who commits the hospital's money does not also confirm the goods
+arrived.
+
+**An approval route needs more than a permission.** Everyone in a chain holds
+the same `mat.requisition.approve`, so the route names which role signs at
+which step and the caller must actually hold that role — otherwise finance
+signs as the medical director by typing it. That required `authctx.Session` to
+answer "do you hold this role", which it could not: it carried `Roles` and
+exposed only `HasPermission`. `HasRole` was added beside it.
+
+**Two conversions are where a by-eye check goes wrong, and both are asserted.**
+A quote per box of a hundred against a quote per piece differ by two orders of
+magnitude, so bid comparison normalises to landed cost per stock unit. An
+invoice priced per piece against an order priced per box hides a rupee-a-piece
+overcharge, so the three-way match applies the pack size. Both were verified by
+removing the conversion.
+
+**KPIs and alerts are derived on every read.** A stored KPI is by construction
+not reproducible from the ledger the requirement says it must come from, and a
+stored alert stays raised after the stock arrives — a storekeeper who has
+learned to ignore stale alerts ignores the real one too.
+
+| ID | Requirement | State |
+|---|---|---|
+| SRS-MAT-001 | Purchase requisition from manual request, min-max, planned procedure or replenishment; records source, need-by and cost centre | **Implemented** — the four sources are distinguished because they have different review; a request with no cost centre is refused, because it is one nobody's budget carries |
+| SRS-MAT-002 | Configurable approval routing by amount, category and facility; approval history immutable | **Implemented** — every matching rule contributes its roles in threshold order; the chain is walked in order and appended, never rewritten; a request matching no rule is refused as a configuration gap rather than approved; nobody approves their own |
+| SRS-MAT-003 | RFQ to approved suppliers and recorded responses; comparison on normalized commercial terms | **Implemented** — an unapproved supplier is neither quoted nor ordered from; the comparison normalises pack size, freight, tax and currency, carries lead time rather than scoring it, and names the bids it could not normalise |
+| SRS-MAT-004 | PO with item, UOM, tax, price, delivery and terms; version and amendments retained | **Implemented** — versioned, never edited; a chain root holds "at most one live revision", which a parent pointer cannot express past the second amendment; an amendment without a reason is refused |
+| SRS-MAT-005 | GRN against PO with quantity, batch/lot/serial/expiry and discrepancy; over/short follows tolerance | **Implemented** — over-receipt beyond tolerance is refused and short receipt is recorded, and the asymmetry is the rule: unordered stock accepted goes on an invoice, while refusing a short delivery leaves goods on the dock the system says never came |
+| SRS-MAT-006 | Quarantine and inspection for configured categories; unaccepted stock cannot become available | **Implemented** — received stock lands where the item's configuration says, so this is a property of where it went rather than a check somebody has to remember; accepting is its own permission the receiver does not hold |
+| SRS-MAT-007 | Stock ledger by location, bin, batch, serial and status; on-hand derivable from immutable movements | **Implemented** — double-entry and append-only, with no maintained total anywhere; the balance view is the only answer, and a database CHECK refuses a movement that changes no balance |
+| SRS-MAT-008 | Issue and return to department, patient or cost centre with authorized source; movement and charge linkage traceable | **Implemented** — an issue with no cost centre is refused, a consumption on an unknown patient is refused, and the charge seam carries the movement id. The charge itself is a port SRS-BIL has not been wired to — see below |
+| SRS-MAT-009 | FEFO for expiring consumables, configurable FIFO and serial policies; pick respects item policy | **Implemented** — a recommendation, not an instruction, with the lots it passed over and why; a perishable item cannot be set to earliest-received-first, because that throws away stock somebody could have used |
+| SRS-MAT-010 | Transfer between stores with in-transit state; source and destination balances reconcile | **Implemented** — in-transit is a status, so nothing is ever nowhere; a short arrival is recorded and the missing quantity stays in transit rather than vanishing from both stores |
+| SRS-MAT-011 | Cycle and physical count with controlled adjustment; variance requires approval and reason | **Implemented** — expected quantities frozen when the count opens, never recomputed at approval and never taken from the caller; every variance needs a reason; the counter cannot approve, held by the domain and by a database CHECK |
+| SRS-MAT-012 | Min-max, reorder and stockout alerts; suggested order reviewable before PO | **Implemented** — derived on read, never stored; a level nobody configured raises nothing; the suggestion is returned for review and raises no requisition of its own |
+| SRS-MAT-013 | Track recall and blocked lots and prevent issue; blocked lots excluded from ATP and recall list generated | **Implemented** — blocked stock leaves availability and stays counted; the recall names where the remaining stock is and every patient it reached; raising one is its own permission and a durable acknowledged notice |
+| SRS-MAT-014 | Three-way match PO-GRN-invoice; mismatch surfaced for resolution | **Implemented** — every line of all three documents appears, including the ones present in only one; the price check converts through the pack size; surfaced and never resolved, because the resolution is a human negotiation |
+| SRS-MAT-015 | Inventory turns, days on hand, expiry exposure and supplier fill rate; formulas reproducible from ledger/PO data | **Implemented** — derived every time, with each formula restated in the test rather than only asserted; a location holding a negative balance is reported as missing receipts rather than as a turn rate; a fill rate is capped per line, so an over-delivery does not make up for a short one |
+| SRS-MAT-016 | Consignment and patient-specific implants with ownership state; consumption triggers the charge/liability event | **Implemented** — the liability is raised in the same call that records the movement, so the two cannot come apart; one liability per movement, held by a unique index, so a retry cannot bill a supplier twice for one implant |
+
+### The consumption seam
+
+Three contexts consume stock and none of them decrements this ledger yet. The
+theatre records what it used (SRS-OT-010), the pharmacy dispenses
+(SRS-MED-011), and sterile services issues packs (SRS-CSSD-009). Each is a
+correct record of its own event; none is a stock movement.
+
+The ledger is the right place for all three, because it is the only one that
+can answer "what do we hold" and "which patients did this lot reach". Wiring
+them means changing three Wave-1 and Wave-2 contracts and backfilling their
+history, which is not SRS-MAT's to do unasked. Until then a deployment
+entitled to the materials module records stock movements here and the three
+contexts record their own clinical events, and the two are reconciled by
+counting.
+
+The charge half of SRS-MAT-008 is the same shape: `ports.Charges` exists and
+`app.go` wires nil into it, because what a patient is charged belongs to
+SRS-BIL and a hospital has one place that decides it. A consumption records the
+movement and the cost centre; it does not raise a bill.
+
+Both are known gaps with named resolutions, not designs.
 
 ## What Wave 2 depends on
 

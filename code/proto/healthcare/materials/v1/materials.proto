@@ -1,0 +1,1492 @@
+// Materials, procurement and inventory: the item, supplier and lot masters,
+// requisition and approval, quotation and comparison, the purchase order and
+// its amendments, goods receipt and inspection, the stock ledger, picking,
+// issue and return, transfers, counts, blocked lots and their recall, the
+// three-way match and the inventory KPIs.
+//
+// Owning context : materials  (Master Engineering Registry)
+// Owning service : MaterialsService
+// Trace          : SRS-MAT-001 … SRS-MAT-016
+//
+// Six shapes in this contract are deliberate.
+//
+// There is no on-hand field on an item. A balance is always a line in a
+// ledger-derived list, keyed by location and status, because SRS-MAT-007's
+// acceptance is that on-hand is derivable from immutable movements. A single
+// on-hand number on the wire would be a second answer to "what do we hold",
+// and it would eventually disagree with the first.
+//
+// A movement names a source bucket and a destination bucket, and a bucket is a
+// location plus a status. In-transit is one of those statuses rather than a
+// flag on a transfer, so stock that has left one store and not arrived at the
+// next is somewhere rather than nowhere.
+//
+// Money is minor units and a currency, never a float and never a bare number.
+// A rupee is a hundred paise, and two identical orders that total differently
+// because of binary fractions is a defect a hospital finds in an audit.
+//
+// A purchase order line carries both a purchase quantity and a pack size. This
+// is the conversion an invoice check gets wrong by eye: a quote per box of a
+// hundred against a quote per piece differ by two orders of magnitude.
+//
+// An approval step names both the role required and the person who decided.
+// "The head of department approved it" and "somebody holding their permission
+// approved it" are different claims, and only the second is checkable.
+//
+// A pick is a recommendation with what it left out. The person at the shelf
+// can see a crushed box; what the system owes them is the right order and an
+// honest account of why a full shelf produced a short pick.
+syntax = "proto3";
+
+package healthcare.materials.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ppusapati/health/code/gen/go/healthcare/materials/v1;materialsv1";
+
+// How finely one item is identified (SRS-MAT-005, SRS-MAT-007).
+enum Tracking {
+  TRACKING_UNSPECIFIED = 0;
+  // Counted. A recall on this item reaches all of it or none.
+  TRACKING_QUANTITY = 1;
+  // A manufacturing lot, which is what a supplier recall names and what an
+  // expiry belongs to.
+  TRACKING_BATCH = 2;
+  // One physical object. Required for an implant: a recall on one runs to a
+  // person.
+  TRACKING_SERIAL = 3;
+}
+
+// The order stock is recommended in (SRS-MAT-009).
+enum PickPolicy {
+  PICK_POLICY_UNSPECIFIED = 0;
+  // Earliest expiry first. The default for anything perishable, because the
+  // alternative throws away stock somebody could have used.
+  PICK_POLICY_FEFO = 1;
+  // Earliest received first, for items that do not expire but deteriorate.
+  PICK_POLICY_FIFO = 2;
+  // Chosen one at a time by a person, where the recommendation is advice.
+  PICK_POLICY_SERIAL = 3;
+}
+
+// Who owns stock on the hospital's shelf (SRS-MAT-016).
+enum Ownership {
+  OWNERSHIP_UNSPECIFIED = 0;
+  OWNERSHIP_HOSPITAL = 1;
+  // The supplier's, held here unpaid. It becomes the hospital's at
+  // consumption, which is when the contract says a charge and a liability
+  // arise.
+  OWNERSHIP_CONSIGNMENT = 2;
+}
+
+// What stock in a location may be used for (SRS-MAT-006, SRS-MAT-010).
+enum StockStatus {
+  STOCK_STATUS_UNSPECIFIED = 0;
+  // Received and not yet accepted. Counted, and never issuable.
+  STOCK_STATUS_QUARANTINE = 1;
+  STOCK_STATUS_AVAILABLE = 2;
+  // Left one store and not arrived at the next. A status rather than a flag,
+  // so nothing is ever nowhere.
+  STOCK_STATUS_IN_TRANSIT = 3;
+  // Failed inspection, awaiting return or disposal. Counted, never issuable.
+  STOCK_STATUS_REJECTED = 4;
+}
+
+// Why stock moved (SRS-MAT-007).
+enum MovementKind {
+  MOVEMENT_KIND_UNSPECIFIED = 0;
+  MOVEMENT_KIND_RECEIPT = 1;
+  MOVEMENT_KIND_ACCEPT = 2;
+  MOVEMENT_KIND_REJECT = 3;
+  MOVEMENT_KIND_ISSUE = 4;
+  MOVEMENT_KIND_RETURN = 5;
+  MOVEMENT_KIND_TRANSFER_OUT = 6;
+  MOVEMENT_KIND_TRANSFER_IN = 7;
+  // The only kind that creates or destroys stock without a physical event,
+  // which is why it needs an approval and a reason.
+  MOVEMENT_KIND_ADJUSTMENT = 8;
+  MOVEMENT_KIND_CONSUMPTION = 9;
+  MOVEMENT_KIND_DISPOSAL = 10;
+}
+
+// What raised a request (SRS-MAT-001).
+enum RequisitionSource {
+  REQUISITION_SOURCE_UNSPECIFIED = 0;
+  REQUISITION_SOURCE_MANUAL = 1;
+  REQUISITION_SOURCE_MIN_MAX = 2;
+  REQUISITION_SOURCE_PROCEDURE = 3;
+  REQUISITION_SOURCE_REPLENISHMENT = 4;
+}
+
+// Where a request has got to.
+enum RequisitionState {
+  REQUISITION_STATE_UNSPECIFIED = 0;
+  REQUISITION_STATE_DRAFT = 1;
+  REQUISITION_STATE_PENDING_APPROVAL = 2;
+  REQUISITION_STATE_APPROVED = 3;
+  REQUISITION_STATE_REJECTED = 4;
+  REQUISITION_STATE_ORDERED = 5;
+  REQUISITION_STATE_CANCELLED = 6;
+}
+
+// What an approver said (SRS-MAT-002).
+enum ApprovalDecision {
+  APPROVAL_DECISION_UNSPECIFIED = 0;
+  APPROVAL_DECISION_APPROVED = 1;
+  APPROVAL_DECISION_REJECTED = 2;
+}
+
+// Where a purchase order has got to (SRS-MAT-004).
+enum PurchaseOrderState {
+  PURCHASE_ORDER_STATE_UNSPECIFIED = 0;
+  PURCHASE_ORDER_STATE_DRAFT = 1;
+  PURCHASE_ORDER_STATE_ISSUED = 2;
+  PURCHASE_ORDER_STATE_PARTLY_RECEIVED = 3;
+  PURCHASE_ORDER_STATE_RECEIVED = 4;
+  PURCHASE_ORDER_STATE_CLOSED = 5;
+  PURCHASE_ORDER_STATE_CANCELLED = 6;
+}
+
+// Where a transfer has got to (SRS-MAT-010).
+enum TransferState {
+  TRANSFER_STATE_UNSPECIFIED = 0;
+  TRANSFER_STATE_IN_TRANSIT = 1;
+  TRANSFER_STATE_RECEIVED = 2;
+  TRANSFER_STATE_CANCELLED = 3;
+}
+
+// Where a stocktake has got to (SRS-MAT-011).
+enum CountState {
+  COUNT_STATE_UNSPECIFIED = 0;
+  COUNT_STATE_OPEN = 1;
+  COUNT_STATE_COUNTED = 2;
+  COUNT_STATE_APPROVED = 3;
+  COUNT_STATE_REJECTED = 4;
+}
+
+// What needs attention (SRS-MAT-012).
+enum AlertKind {
+  ALERT_KIND_UNSPECIFIED = 0;
+  ALERT_KIND_STOCKOUT = 1;
+  ALERT_KIND_BELOW_MINIMUM = 2;
+  ALERT_KIND_EXPIRING_SOON = 3;
+  ALERT_KIND_EXPIRED = 4;
+}
+
+// What a three-way match found (SRS-MAT-014).
+enum MatchStatus {
+  MATCH_STATUS_UNSPECIFIED = 0;
+  MATCH_STATUS_MATCHED = 1;
+  MATCH_STATUS_QUANTITY_MISMATCH = 2;
+  MATCH_STATUS_PRICE_MISMATCH = 3;
+  // An invoice line with no receipt, or a receipt with no invoice. The
+  // commonest fraud and the commonest typo.
+  MATCH_STATUS_MISSING_DOCUMENT = 4;
+}
+
+// An amount in minor units, with its currency.
+//
+// Never a float: a rupee is a hundred paise, and two identical orders that
+// total differently because of binary fractions is a defect found in an audit.
+// The currency travels with the amount because a hospital buys from more than
+// one country.
+message Money {
+  int64 minor = 1;
+  string currency = 2;
+}
+
+// Where a quantity sits: a location and a status.
+//
+// An empty location is outside the hospital — the supplier a receipt came
+// from, the patient a consumable went into.
+message Bucket {
+  string location_id = 1;
+  StockStatus status = 2;
+}
+
+// One line of the materials master (SRS-MAT-001).
+message Item {
+  string item_id = 1;
+  string code = 2;
+  string display = 3;
+  string category = 4;
+  // The unit stock is held and issued in, one unit throughout. Purchasing in
+  // boxes is expressed as a pack size on the order line.
+  string uom = 5;
+  Tracking tracking = 6;
+  PickPolicy policy = 7;
+  bool perishable = 8;
+  // Holds a receipt in quarantine until somebody accepts it (SRS-MAT-006).
+  bool inspect_on_receipt = 9;
+  bool consignable = 10;
+  bool active = 11;
+  google.protobuf.Timestamp created_at = 12;
+  string created_by = 13;
+  int64 version = 14;
+}
+
+// Somebody the hospital buys from (SRS-MAT-003).
+message Supplier {
+  string supplier_id = 1;
+  string code = 2;
+  string display = 3;
+  // Gates who may be quoted and who may be ordered from.
+  bool approved = 4;
+  string contact_email = 5;
+  string contact_phone = 6;
+  int32 payment_terms_days = 7;
+  string currency = 8;
+  google.protobuf.Timestamp created_at = 9;
+  string created_by = 10;
+  int64 version = 11;
+}
+
+// One identified quantity of an item (SRS-MAT-005, SRS-MAT-013).
+message Lot {
+  string lot_id = 1;
+  string item_id = 2;
+  // The manufacturer's batch or the serial. Empty only for an item counted in
+  // bulk, where the lot carries ownership and the received date and no
+  // identity.
+  string code = 3;
+  google.protobuf.Timestamp expiry = 4;
+  google.protobuf.Timestamp received_at = 5;
+  Ownership ownership = 6;
+  string supplier_id = 7;
+  // Stops the lot being issued at all. Blocked stock still exists and is still
+  // counted; it is simply not available to anybody.
+  bool blocked = 8;
+  string blocked_reason = 9;
+  google.protobuf.Timestamp blocked_at = 10;
+  string blocked_by = 11;
+  int64 version = 12;
+  // Derived: blocked and expired fail independently, and a client checking
+  // only one would offer stock that looks usable and is not.
+  bool issuable = 13;
+}
+
+// One immutable transfer of quantity between buckets (SRS-MAT-007).
+message Movement {
+  string movement_id = 1;
+  string item_id = 2;
+  string lot_id = 3;
+  Bucket from = 4;
+  Bucket to = 5;
+  // Always positive. The direction is the buckets' job.
+  int32 quantity = 6;
+  MovementKind kind = 7;
+  // The document this movement belongs to: the receipt, the issue, the
+  // transfer, the count.
+  string reference = 8;
+  string reason = 9;
+  string cost_centre = 10;
+  string patient_id = 11;
+  string encounter_id = 12;
+  google.protobuf.Timestamp occurred_at = 13;
+  string recorded_by = 14;
+}
+
+// What one lot holds in one bucket (SRS-MAT-007).
+//
+// Derived by summing the ledger. There is no on-hand field anywhere in this
+// contract, because a second answer to "what do we hold" would eventually
+// disagree with the first.
+message Balance {
+  string item_id = 1;
+  string lot_id = 2;
+  Bucket bucket = 3;
+  int32 quantity = 4;
+}
+
+// One item's min-max policy at one location (SRS-MAT-012).
+message StockLevel {
+  string item_id = 1;
+  string location_id = 2;
+  // The level a reorder is suggested at. Zero means the item is not
+  // replenished automatically here, which is a decision rather than a gap.
+  int32 minimum = 3;
+  int32 maximum = 4;
+  int32 reorder_quantity = 5;
+}
+
+// One item wanted (SRS-MAT-001).
+message RequisitionLine {
+  string item_id = 1;
+  string item_code = 2;
+  int32 quantity = 3;
+  string uom = 4;
+  // What the approval route is costed on before any quote exists.
+  Money estimated_unit_price = 5;
+  string notes = 6;
+}
+
+// One immutable entry in an approval chain (SRS-MAT-002).
+message ApprovalStep {
+  string approval_step_id = 1;
+  // The position in the route, from one. Contiguous: a gap means a step was
+  // lost.
+  int32 level = 2;
+  // The role required and the person who decided. Both, because they are
+  // different claims.
+  string role = 3;
+  ApprovalDecision decision = 4;
+  string decider = 5;
+  string note = 6;
+  google.protobuf.Timestamp decided_at = 7;
+}
+
+// A request to buy (SRS-MAT-001).
+message Requisition {
+  string requisition_id = 1;
+  string number = 2;
+  string facility_id = 3;
+  RequisitionSource source = 4;
+  google.protobuf.Timestamp need_by = 5;
+  string cost_centre = 6;
+  string source_reference = 7;
+  repeated RequisitionLine lines = 8;
+  RequisitionState state = 9;
+  // Appended, never rewritten.
+  repeated ApprovalStep approvals = 10;
+  string justification = 11;
+  google.protobuf.Timestamp raised_at = 12;
+  string raised_by = 13;
+  int64 version = 14;
+}
+
+// A rule routing a requisition (SRS-MAT-002).
+message ApprovalRule {
+  string approval_rule_id = 1;
+  // The threshold this rule applies from, in minor units. Zero applies from
+  // nothing.
+  int64 minimum_value = 2;
+  string currency = 3;
+  // Empty matches any.
+  string category = 4;
+  string facility_id = 5;
+  // The approvals required, in order. A rule with none is refused: it would
+  // approve everything it matched.
+  repeated string roles = 6;
+}
+
+// One item priced in a quote (SRS-MAT-003).
+message BidLine {
+  string item_id = 1;
+  Money unit_price = 2;
+  int32 quantity = 3;
+  // How many stock units one purchase unit holds. A quote per box of a
+  // hundred and a quote per piece are the same quote until somebody forgets.
+  int32 pack_size = 4;
+}
+
+// One supplier's response to a quotation round (SRS-MAT-003).
+message Bid {
+  string bid_id = 1;
+  string rfq_id = 2;
+  string supplier_id = 3;
+  repeated BidLine lines = 4;
+  int32 lead_time_days = 5;
+  int32 warranty_months = 6;
+  int32 payment_terms_days = 7;
+  int64 freight_minor = 8;
+  int64 tax_minor = 9;
+  string currency = 10;
+  string notes = 11;
+  google.protobuf.Timestamp received_at = 12;
+  string recorded_by = 13;
+}
+
+// A request for quotation (SRS-MAT-003).
+message Rfq {
+  string rfq_id = 1;
+  string number = 2;
+  string requisition_id = 3;
+  // Who was asked. Recorded because "we went to three suppliers" is the claim
+  // a procurement audit checks.
+  repeated string supplier_ids = 4;
+  repeated RequisitionLine lines = 5;
+  google.protobuf.Timestamp closes_at = 6;
+  google.protobuf.Timestamp issued_at = 7;
+  string issued_by = 8;
+  int64 version = 9;
+}
+
+// One bid reduced to comparable terms (SRS-MAT-003).
+message Comparison {
+  string bid_id = 1;
+  string supplier_id = 2;
+  // The whole cost of the quoted quantities: price, freight and tax. The
+  // number two quotes are actually compared on.
+  int64 landed_minor = 3;
+  string currency = 4;
+  // Landed cost per stock unit, which is what makes a quote per box
+  // comparable with a quote per piece.
+  int64 unit_minor = 5;
+  // Carried rather than scored: how a hospital weighs three weeks against
+  // three per cent is its decision.
+  int32 lead_time_days = 6;
+  int32 payment_terms_days = 7;
+  int32 warranty_months = 8;
+  // Why a bid could not be normalised, so a buyer sees the reason rather than
+  // a row that quietly sorted last.
+  repeated string incomparable = 9;
+}
+
+// One item ordered (SRS-MAT-004).
+message PurchaseOrderLine {
+  string item_id = 1;
+  string item_code = 2;
+  // In purchase units; pack_size converts to stock units. Both, because a
+  // receipt is counted in stock units and an invoice is priced in purchase
+  // units.
+  int32 quantity = 3;
+  int32 pack_size = 4;
+  string uom = 5;
+  Money unit_price = 6;
+  int64 tax_minor = 7;
+  int64 discount_minor = 8;
+  // Per line: a hospital orders sutures and a capital item on one order and
+  // expects them weeks apart.
+  google.protobuf.Timestamp deliver_by = 9;
+  string notes = 10;
+}
+
+// An order placed with a supplier (SRS-MAT-004).
+//
+// Versioned rather than edited: a supplier delivers against the version they
+// were sent.
+message PurchaseOrder {
+  string purchase_order_id = 1;
+  string number = 2;
+  string facility_id = 3;
+  string supplier_id = 4;
+  string requisition_id = 5;
+  string bid_id = 6;
+  int32 revision = 7;
+  // The first revision's id, the same down the whole chain. What "every
+  // revision of this order" is read by, and what at-most-one-live is held on.
+  string chain_id = 8;
+  // The immediate predecessor, so the chain also reads backwards one step.
+  string supersedes = 9;
+  string amendment_reason = 10;
+  repeated PurchaseOrderLine lines = 11;
+  PurchaseOrderState state = 12;
+  string currency = 13;
+  int32 payment_terms_days = 14;
+  string delivery_terms = 15;
+  // What a receipt may differ by (SRS-MAT-005). On the order rather than
+  // global, because a supplier who ships in cases differs from one who ships
+  // pieces.
+  int32 tolerance_over_percent = 16;
+  int32 tolerance_short_percent = 17;
+  google.protobuf.Timestamp issued_at = 18;
+  string issued_by = 19;
+  google.protobuf.Timestamp created_at = 20;
+  string created_by = 21;
+  int64 version = 22;
+  // Derived, so a client need not total the lines itself and get the tax and
+  // the discount the wrong way round.
+  Money total = 23;
+}
+
+// One item received (SRS-MAT-005).
+message ReceiptLine {
+  string item_id = 1;
+  string item_code = 2;
+  // What actually arrived, never assumed from the order: the order says what
+  // was asked for.
+  string lot_code = 3;
+  google.protobuf.Timestamp expiry = 4;
+  int32 quantity_ordered = 5;
+  int32 quantity_received = 6;
+  Ownership ownership = 7;
+  string supplier_id = 8;
+  string notes = 9;
+  // Derived: received less ordered, so the difference reads on the row.
+  int32 discrepancy = 10;
+}
+
+// A goods receipt note (SRS-MAT-005).
+message Receipt {
+  string receipt_id = 1;
+  string number = 2;
+  string purchase_order_id = 3;
+  // The revision received against. A receipt that did not say would be
+  // unresolvable the moment an order was amended.
+  int32 po_revision = 4;
+  string supplier_id = 5;
+  string location_id = 6;
+  // The supplier's own references, which a three-way match joins on.
+  string delivery_note = 7;
+  string invoice_ref = 8;
+  repeated ReceiptLine lines = 9;
+  google.protobuf.Timestamp received_at = 10;
+  string received_by = 11;
+  int64 version = 12;
+}
+
+// One lot a pick recommendation suggests taking from (SRS-MAT-009).
+message PickLine {
+  string lot_id = 1;
+  string lot_code = 2;
+  Bucket bucket = 3;
+  int32 quantity = 4;
+  google.protobuf.Timestamp expiry = 5;
+}
+
+// A pick recommendation with what it could not satisfy (SRS-MAT-009).
+message Pick {
+  string item_id = 1;
+  repeated PickLine lines = 2;
+  // What the location could not supply. Returned rather than refused: a
+  // storekeeper facing a shortfall needs to know how much to chase.
+  int32 short = 3;
+  // Lots passed over and why, so a storekeeper looking at a full shelf and a
+  // short pick can see the reason.
+  repeated string skipped = 4;
+}
+
+// What consuming a supplier's stock owes them (SRS-MAT-016).
+message LiabilityEvent {
+  string liability_event_id = 1;
+  string lot_id = 2;
+  string item_id = 3;
+  string supplier_id = 4;
+  int32 quantity = 5;
+  // Why a consignment implant differs from a consignment box of gloves: the
+  // supplier invoices against the case.
+  string patient_id = 6;
+  string encounter_id = 7;
+  string movement_id = 8;
+  google.protobuf.Timestamp occurred_at = 9;
+  string recorded_by = 10;
+}
+
+// One item moved between stores (SRS-MAT-010).
+message TransferLine {
+  string item_id = 1;
+  string lot_id = 2;
+  int32 quantity = 3;
+  // What the destination actually counted in. Short arrival is recorded, not
+  // refused; the missing quantity stays in transit rather than vanishing.
+  int32 quantity_received = 4;
+}
+
+// Stock moving between stores (SRS-MAT-010).
+message Transfer {
+  string transfer_id = 1;
+  string number = 2;
+  string from_location = 3;
+  string to_location = 4;
+  repeated TransferLine lines = 5;
+  TransferState state = 6;
+  string reason = 7;
+  google.protobuf.Timestamp dispatched_at = 8;
+  string dispatched_by = 9;
+  google.protobuf.Timestamp received_at = 10;
+  string received_by = 11;
+  int64 version = 12;
+}
+
+// One item counted (SRS-MAT-011).
+message CountLine {
+  string item_id = 1;
+  string lot_id = 2;
+  // What the ledger said when the count was opened, frozen. Recomputing at
+  // approval would compare the shelf against a balance that has moved since.
+  int32 expected = 3;
+  int32 counted = 4;
+  string reason = 5;
+  // Derived: counted less expected.
+  int32 variance = 6;
+}
+
+// A cycle or physical count (SRS-MAT-011).
+message Count {
+  string count_id = 1;
+  string number = 2;
+  string location_id = 3;
+  bool cycle = 4;
+  repeated CountLine lines = 5;
+  CountState state = 6;
+  // Required before any adjustment is posted, and never the counter.
+  string approved_by = 7;
+  google.protobuf.Timestamp approved_at = 8;
+  string approval_note = 9;
+  google.protobuf.Timestamp opened_at = 10;
+  string opened_by = 11;
+  google.protobuf.Timestamp counted_at = 12;
+  string counted_by = 13;
+  int64 version = 14;
+}
+
+// One thing a storekeeper should look at (SRS-MAT-012).
+message Alert {
+  AlertKind kind = 1;
+  string item_id = 2;
+  string location_id = 3;
+  string lot_id = 4;
+  int32 available = 5;
+  int32 minimum = 6;
+  // What a top-up would order. Reviewable before it becomes a requisition: a
+  // system that raised the order itself would buy what its own arithmetic
+  // decided.
+  int32 suggested_order = 7;
+  google.protobuf.Timestamp expiry = 8;
+  string detail = 9;
+}
+
+// One item a replenishment would order (SRS-MAT-012).
+message SuggestedLine {
+  string item_id = 1;
+  string item_code = 2;
+  int32 available = 3;
+  int32 minimum = 4;
+  int32 quantity = 5;
+  bool stockout = 6;
+}
+
+// One line of a supplier's invoice (SRS-MAT-014).
+message InvoiceLine {
+  string item_id = 1;
+  // In stock units, so the three documents are compared in one unit.
+  int32 quantity = 2;
+  Money unit_price = 3;
+  int64 tax_minor = 4;
+}
+
+// A supplier's bill (SRS-MAT-014).
+message Invoice {
+  string invoice_id = 1;
+  string number = 2;
+  string supplier_id = 3;
+  string purchase_order_id = 4;
+  repeated InvoiceLine lines = 5;
+  string currency = 6;
+  google.protobuf.Timestamp received_at = 7;
+  string recorded_by = 8;
+}
+
+// One item's verdict across the three documents (SRS-MAT-014).
+message MatchLine {
+  string item_id = 1;
+  MatchStatus status = 2;
+  int32 ordered = 3;
+  int32 received = 4;
+  int32 invoiced = 5;
+  // Per stock unit, which is the conversion an invoice check gets wrong by
+  // eye.
+  int64 ordered_unit_minor = 6;
+  int64 invoiced_unit_minor = 7;
+  string detail = 8;
+}
+
+// The whole comparison (SRS-MAT-014).
+message MatchResult {
+  string purchase_order_id = 1;
+  string invoice_id = 2;
+  // Every line of all three documents, including the ones present in only
+  // one.
+  repeated MatchLine lines = 3;
+  // True only when every line matched: one wrong line stops the payment.
+  bool matched = 4;
+}
+
+// Where a blocked lot has got to and who it reached (SRS-MAT-013).
+message RecallList {
+  string lot_id = 1;
+  string lot_code = 2;
+  string item_id = 3;
+  string reason = 4;
+  // Where the remaining stock is, so somebody can go and get it.
+  repeated Balance holdings = 5;
+  // The movements that used it, carrying the patient where there was one.
+  repeated Movement consumptions = 6;
+  // The people it reached, deduplicated: one case using four of a lot is one
+  // patient to contact.
+  repeated string patients = 7;
+}
+
+// The inventory KPIs (SRS-MAT-015).
+//
+// Derived from the ledger at the moment they are asked for. A stored KPI is by
+// construction not reproducible from the data it must come from.
+message Metrics {
+  string item_id = 1;
+  string location_id = 2;
+  google.protobuf.Timestamp period_start = 3;
+  google.protobuf.Timestamp period_end = 4;
+  int32 consumed_units = 5;
+  int32 opening_on_hand = 6;
+  int32 closing_on_hand = 7;
+  int32 average_on_hand = 8;
+  // Consumption annualised over average on-hand.
+  double turns_per_year = 9;
+  // Closing stock divided by the daily consumption rate.
+  double days_on_hand = 10;
+  // Stock on hand that expires within the horizon: what will be thrown away
+  // unless it is used.
+  int32 expiry_exposure_units = 11;
+  // What a figure could not be built from, so a reader can tell a real zero
+  // from a gap.
+  repeated string incomplete = 12;
+}
+
+// How much of what was ordered actually arrived (SRS-MAT-015).
+message SupplierFillRate {
+  string supplier_id = 1;
+  google.protobuf.Timestamp period_start = 2;
+  google.protobuf.Timestamp period_end = 3;
+  int32 ordered_units = 4;
+  int32 received_units = 5;
+  // Capped at one per line: an over-delivery does not make up for a short one.
+  double fill_rate = 6;
+  int32 on_time_lines = 7;
+  int32 late_lines = 8;
+  repeated string incomplete = 9;
+}
+
+message AddItemRequest {
+  string code = 1;
+  string display = 2;
+  string category = 3;
+  string uom = 4;
+  Tracking tracking = 5;
+  PickPolicy policy = 6;
+  bool perishable = 7;
+  bool inspect_on_receipt = 8;
+  bool consignable = 9;
+}
+
+message AddItemResponse {
+  Item item = 1;
+}
+
+message ReconfigureItemRequest {
+  string item_id = 1;
+  string display = 2;
+  string category = 3;
+  PickPolicy policy = 4;
+  bool inspect_on_receipt = 5;
+  bool consignable = 6;
+  bool active = 7;
+}
+
+message ReconfigureItemResponse {
+  // Tracking and unit of measure are deliberately absent: both are the basis
+  // of every movement already in the ledger, and changing either would
+  // silently restate history.
+  Item item = 1;
+}
+
+message GetItemRequest {
+  string item_id = 1;
+}
+
+message GetItemResponse {
+  Item item = 1;
+}
+
+message ListItemsRequest {
+  string category = 1;
+  bool active_only = 2;
+  int32 page_size = 3;
+}
+
+message ListItemsResponse {
+  repeated Item items = 1;
+}
+
+message AddSupplierRequest {
+  string code = 1;
+  string display = 2;
+  string contact_email = 3;
+  string contact_phone = 4;
+  int32 payment_terms_days = 5;
+  string currency = 6;
+  bool approved = 7;
+}
+
+message AddSupplierResponse {
+  Supplier supplier = 1;
+}
+
+message SetSupplierApprovalRequest {
+  string supplier_id = 1;
+  bool approved = 2;
+  // Required when withdrawing approval: it stops every future order to this
+  // supplier, and somebody will ask why.
+  string reason = 3;
+}
+
+message SetSupplierApprovalResponse {
+  Supplier supplier = 1;
+}
+
+message ListSuppliersRequest {
+  bool approved_only = 1;
+  int32 page_size = 2;
+}
+
+message ListSuppliersResponse {
+  repeated Supplier suppliers = 1;
+}
+
+message SetStockLevelRequest {
+  StockLevel level = 1;
+}
+
+message SetStockLevelResponse {}
+
+message ListStockLevelsRequest {
+  string location_id = 1;
+  int32 page_size = 2;
+}
+
+message ListStockLevelsResponse {
+  repeated StockLevel levels = 1;
+}
+
+message AddApprovalRuleRequest {
+  int64 minimum_value = 1;
+  string currency = 2;
+  string category = 3;
+  string facility_id = 4;
+  repeated string roles = 5;
+}
+
+message AddApprovalRuleResponse {
+  ApprovalRule rule = 1;
+}
+
+message ListApprovalRulesRequest {}
+
+message ListApprovalRulesResponse {
+  repeated ApprovalRule rules = 1;
+}
+
+message RemoveApprovalRuleRequest {
+  string approval_rule_id = 1;
+}
+
+message RemoveApprovalRuleResponse {}
+
+message RaiseRequisitionRequest {
+  string number = 1;
+  string facility_id = 2;
+  RequisitionSource source = 3;
+  google.protobuf.Timestamp need_by = 4;
+  string cost_centre = 5;
+  string source_reference = 6;
+  repeated RequisitionLine lines = 7;
+  string justification = 8;
+}
+
+message RaiseRequisitionResponse {
+  Requisition requisition = 1;
+}
+
+message GetApprovalRouteRequest {
+  string requisition_id = 1;
+}
+
+message GetApprovalRouteResponse {
+  // Readable before submission, so a requester can see who has to sign rather
+  // than discovering it when the request sits unmoved for a week.
+  repeated string roles = 1;
+}
+
+message SubmitRequisitionRequest {
+  string requisition_id = 1;
+}
+
+message SubmitRequisitionResponse {
+  Requisition requisition = 1;
+  repeated string route = 2;
+}
+
+message DecideRequisitionRequest {
+  string requisition_id = 1;
+  ApprovalDecision decision = 2;
+  // The step being taken. Checked against the route's next step and against
+  // the roles the caller actually holds.
+  string role = 3;
+  string note = 4;
+}
+
+message DecideRequisitionResponse {
+  Requisition requisition = 1;
+  ApprovalStep step = 2;
+}
+
+message GetRequisitionRequest {
+  string requisition_id = 1;
+}
+
+message GetRequisitionResponse {
+  Requisition requisition = 1;
+}
+
+message ListRequisitionsRequest {
+  string state = 1;
+  int32 page_size = 2;
+}
+
+message ListRequisitionsResponse {
+  repeated Requisition requisitions = 1;
+}
+
+message OpenRfqRequest {
+  string number = 1;
+  string requisition_id = 2;
+  repeated string supplier_ids = 3;
+  // Empty takes the requisition's lines.
+  repeated RequisitionLine lines = 4;
+  google.protobuf.Timestamp closes_at = 5;
+}
+
+message OpenRfqResponse {
+  Rfq rfq = 1;
+}
+
+message RecordBidRequest {
+  string rfq_id = 1;
+  string supplier_id = 2;
+  repeated BidLine lines = 3;
+  int32 lead_time_days = 4;
+  int32 warranty_months = 5;
+  int32 payment_terms_days = 6;
+  int64 freight_minor = 7;
+  int64 tax_minor = 8;
+  string currency = 9;
+  string notes = 10;
+}
+
+message RecordBidResponse {
+  Bid bid = 1;
+}
+
+message CompareBidsRequest {
+  string rfq_id = 1;
+}
+
+message CompareBidsResponse {
+  // The comparison, not a winner: which quote to accept weighs lead time
+  // against price against a relationship, and that is a buyer's judgement.
+  repeated Comparison comparisons = 1;
+}
+
+message GetRfqRequest {
+  string rfq_id = 1;
+}
+
+message GetRfqResponse {
+  Rfq rfq = 1;
+}
+
+message ListRfqsRequest {
+  int32 page_size = 1;
+}
+
+message ListRfqsResponse {
+  repeated Rfq rfqs = 1;
+}
+
+message PlaceOrderRequest {
+  string number = 1;
+  string facility_id = 2;
+  string supplier_id = 3;
+  string requisition_id = 4;
+  string bid_id = 5;
+  repeated PurchaseOrderLine lines = 6;
+  string currency = 7;
+  int32 payment_terms_days = 8;
+  string delivery_terms = 9;
+  int32 tolerance_over_percent = 10;
+  int32 tolerance_short_percent = 11;
+}
+
+message PlaceOrderResponse {
+  PurchaseOrder order = 1;
+}
+
+message IssueOrderRequest {
+  string purchase_order_id = 1;
+}
+
+message IssueOrderResponse {
+  PurchaseOrder order = 1;
+}
+
+message AmendOrderRequest {
+  string purchase_order_id = 1;
+  repeated PurchaseOrderLine lines = 2;
+  string reason = 3;
+}
+
+message AmendOrderResponse {
+  // A new revision. The earlier one is closed, because a supplier delivering
+  // against either is the failure versioning exists to prevent.
+  PurchaseOrder order = 1;
+}
+
+message GetPurchaseOrderRequest {
+  string purchase_order_id = 1;
+}
+
+message GetPurchaseOrderResponse {
+  PurchaseOrder order = 1;
+}
+
+message ListOrderRevisionsRequest {
+  string purchase_order_id = 1;
+}
+
+message ListOrderRevisionsResponse {
+  repeated PurchaseOrder revisions = 1;
+}
+
+message ListPurchaseOrdersRequest {
+  string supplier_id = 1;
+  string state = 2;
+  int32 page_size = 3;
+}
+
+message ListPurchaseOrdersResponse {
+  repeated PurchaseOrder orders = 1;
+}
+
+message ReceiveGoodsRequest {
+  string purchase_order_id = 1;
+  string number = 2;
+  string location_id = 3;
+  string delivery_note = 4;
+  string invoice_ref = 5;
+  repeated ReceiptLine lines = 6;
+}
+
+message ReceiveGoodsResponse {
+  Receipt receipt = 1;
+  // Lines beyond the order's short tolerance. Reported rather than refused:
+  // the goods are on the dock whatever the count says.
+  repeated string short = 2;
+  // Lines that landed in quarantine, so a storekeeper is not left wondering
+  // why the shelf figure did not move.
+  repeated string quarantined = 3;
+}
+
+message InspectRequest {
+  string lot_id = 1;
+  string location_id = 2;
+  int32 quantity = 3;
+  bool accept = 4;
+  string reason = 5;
+}
+
+message InspectResponse {
+  Movement movement = 1;
+}
+
+message GetReceiptRequest {
+  string receipt_id = 1;
+}
+
+message GetReceiptResponse {
+  Receipt receipt = 1;
+}
+
+message ListReceiptsRequest {
+  string purchase_order_id = 1;
+}
+
+message ListReceiptsResponse {
+  repeated Receipt receipts = 1;
+}
+
+message RecommendPickRequest {
+  string item_id = 1;
+  string location_id = 2;
+  int32 quantity = 3;
+}
+
+message RecommendPickResponse {
+  Pick pick = 1;
+}
+
+message IssueStockRequest {
+  string item_id = 1;
+  // Empty lets the item's policy choose, which is what a ward top-up does; an
+  // implant for a named patient names its lot.
+  string lot_id = 2;
+  string from_location = 3;
+  // Empty means it left the hospital's stock entirely.
+  string to_location = 4;
+  int32 quantity = 5;
+  string cost_centre = 6;
+  string patient_id = 7;
+  string encounter_id = 8;
+  string reference = 9;
+  string reason = 10;
+}
+
+message IssueStockResponse {
+  repeated Movement movements = 1;
+  int32 short = 2;
+  repeated string skipped = 3;
+  // Links the consumption to what the patient was charged.
+  string charge_id = 4;
+  repeated LiabilityEvent liabilities = 5;
+}
+
+message ReturnStockRequest {
+  string item_id = 1;
+  string lot_id = 2;
+  string from_location = 3;
+  string to_location = 4;
+  int32 quantity = 5;
+  string cost_centre = 6;
+  string reason = 7;
+}
+
+message ReturnStockResponse {
+  // Into quarantine, not onto the shelf: stock that has been to a ward and
+  // back has been out of the store's control.
+  Movement movement = 1;
+}
+
+message ListBalancesRequest {
+  string location_id = 1;
+  string item_id = 2;
+  int32 page_size = 3;
+}
+
+message ListBalancesResponse {
+  repeated Balance balances = 1;
+}
+
+message GetAvailableRequest {
+  string item_id = 1;
+  string location_id = 2;
+}
+
+message GetAvailableResponse {
+  // Available-to-promise: the status, the block and the expiry all have to
+  // pass, and each fails on its own.
+  int32 available = 1;
+}
+
+message ListMovementsRequest {
+  string item_id = 1;
+  google.protobuf.Timestamp period_start = 2;
+  google.protobuf.Timestamp period_end = 3;
+  int32 page_size = 4;
+}
+
+message ListMovementsResponse {
+  repeated Movement movements = 1;
+}
+
+message DispatchTransferRequest {
+  string number = 1;
+  string from_location = 2;
+  string to_location = 3;
+  repeated TransferLine lines = 4;
+  string reason = 5;
+}
+
+message DispatchTransferResponse {
+  Transfer transfer = 1;
+}
+
+message ReceiveTransferRequest {
+  string transfer_id = 1;
+  // What arrived, keyed by "itemID/lotID". A line left out means it all
+  // arrived: a count that has to be retyped line by line is a count nobody
+  // does, and assuming zero would write off a full pallet.
+  map<string, int32> counted = 2;
+}
+
+message ReceiveTransferResponse {
+  Transfer transfer = 1;
+  // What did not arrive. The missing quantity stays in transit rather than
+  // vanishing from both stores.
+  repeated string short = 2;
+}
+
+message ListTransfersInTransitRequest {
+  string to_location = 1;
+  int32 page_size = 2;
+}
+
+message ListTransfersInTransitResponse {
+  repeated Transfer transfers = 1;
+}
+
+message OpenCountRequest {
+  string number = 1;
+  string location_id = 2;
+  bool cycle = 3;
+  // Empty counts everything at the location.
+  repeated string item_ids = 4;
+}
+
+message OpenCountResponse {
+  Count count = 1;
+}
+
+message RecordCountRequest {
+  string count_id = 1;
+  repeated CountLine lines = 2;
+}
+
+message RecordCountResponse {
+  // The expected quantities come from the count as opened, never from the
+  // caller: a client sending its own expectation could make any variance
+  // disappear.
+  Count count = 1;
+}
+
+message ApproveCountRequest {
+  string count_id = 1;
+  string note = 2;
+}
+
+message ApproveCountResponse {
+  Count count = 1;
+  // The adjustments posted, in the same transaction as the approval.
+  repeated Movement adjustments = 2;
+}
+
+message RejectCountRequest {
+  string count_id = 1;
+  string note = 2;
+}
+
+message RejectCountResponse {
+  Count count = 1;
+}
+
+message GetCountRequest {
+  string count_id = 1;
+}
+
+message GetCountResponse {
+  Count count = 1;
+}
+
+message ListCountsRequest {
+  string state = 1;
+  int32 page_size = 2;
+}
+
+message ListCountsResponse {
+  repeated Count counts = 1;
+}
+
+message BlockLotRequest {
+  string lot_id = 1;
+  string reason = 2;
+}
+
+message BlockLotResponse {
+  Lot lot = 1;
+  RecallList recall = 2;
+}
+
+message ReleaseLotRequest {
+  string lot_id = 1;
+  string note = 2;
+}
+
+message ReleaseLotResponse {
+  Lot lot = 1;
+}
+
+message GetRecallListRequest {
+  string lot_id = 1;
+}
+
+message GetRecallListResponse {
+  // What the lot reaches, without blocking anything.
+  RecallList recall = 1;
+}
+
+message ListBlockedLotsRequest {
+  int32 page_size = 1;
+}
+
+message ListBlockedLotsResponse {
+  repeated Lot lots = 1;
+}
+
+message GetLotRequest {
+  string lot_id = 1;
+}
+
+message GetLotResponse {
+  Lot lot = 1;
+}
+
+message ListLotsRequest {
+  string item_id = 1;
+  int32 page_size = 2;
+}
+
+message ListLotsResponse {
+  repeated Lot lots = 1;
+}
+
+message ListAlertsRequest {
+  string location_id = 1;
+  int32 page_size = 2;
+}
+
+message ListAlertsResponse {
+  repeated Alert alerts = 1;
+}
+
+message SuggestOrderRequest {
+  string location_id = 1;
+}
+
+message SuggestOrderResponse {
+  string location_id = 1;
+  // Reviewable before it becomes a requisition: the system proposes, a person
+  // raises.
+  repeated SuggestedLine lines = 2;
+}
+
+message RecordInvoiceRequest {
+  string number = 1;
+  string supplier_id = 2;
+  string purchase_order_id = 3;
+  repeated InvoiceLine lines = 4;
+  string currency = 5;
+}
+
+message RecordInvoiceResponse {
+  Invoice invoice = 1;
+}
+
+message MatchInvoiceRequest {
+  string invoice_id = 1;
+}
+
+message MatchInvoiceResponse {
+  // Surfaces mismatches; it does not resolve them. The resolution is a human
+  // negotiation, and a system that picked one of the three numbers would pay
+  // the wrong one.
+  MatchResult result = 1;
+}
+
+message GetMetricsRequest {
+  string item_id = 1;
+  string location_id = 2;
+  google.protobuf.Timestamp period_start = 3;
+  google.protobuf.Timestamp period_end = 4;
+}
+
+message GetMetricsResponse {
+  Metrics metrics = 1;
+}
+
+message GetFillRateRequest {
+  string supplier_id = 1;
+  google.protobuf.Timestamp period_start = 2;
+  google.protobuf.Timestamp period_end = 3;
+}
+
+message GetFillRateResponse {
+  SupplierFillRate fill_rate = 1;
+}
+
+message ListLiabilitiesRequest {
+  string supplier_id = 1;
+  google.protobuf.Timestamp period_start = 2;
+  google.protobuf.Timestamp period_end = 3;
+  int32 page_size = 4;
+}
+
+message ListLiabilitiesResponse {
+  repeated LiabilityEvent liabilities = 1;
+}
+
+// Materials, procurement and inventory (SRS-MAT-001 … 016).
+service MaterialsService {
+  // SRS-MAT-001, SRS-MAT-003, SRS-MAT-012: the masters.
+  rpc AddItem(AddItemRequest) returns (AddItemResponse);
+  rpc ReconfigureItem(ReconfigureItemRequest) returns (ReconfigureItemResponse);
+  rpc GetItem(GetItemRequest) returns (GetItemResponse);
+  rpc ListItems(ListItemsRequest) returns (ListItemsResponse);
+  rpc AddSupplier(AddSupplierRequest) returns (AddSupplierResponse);
+  rpc SetSupplierApproval(SetSupplierApprovalRequest) returns (SetSupplierApprovalResponse);
+  rpc ListSuppliers(ListSuppliersRequest) returns (ListSuppliersResponse);
+  rpc SetStockLevel(SetStockLevelRequest) returns (SetStockLevelResponse);
+  rpc ListStockLevels(ListStockLevelsRequest) returns (ListStockLevelsResponse);
+  rpc AddApprovalRule(AddApprovalRuleRequest) returns (AddApprovalRuleResponse);
+  rpc ListApprovalRules(ListApprovalRulesRequest) returns (ListApprovalRulesResponse);
+  rpc RemoveApprovalRule(RemoveApprovalRuleRequest) returns (RemoveApprovalRuleResponse);
+
+  // SRS-MAT-001, SRS-MAT-002: requisition and its immutable approval chain.
+  rpc RaiseRequisition(RaiseRequisitionRequest) returns (RaiseRequisitionResponse);
+  rpc GetApprovalRoute(GetApprovalRouteRequest) returns (GetApprovalRouteResponse);
+  rpc SubmitRequisition(SubmitRequisitionRequest) returns (SubmitRequisitionResponse);
+  rpc DecideRequisition(DecideRequisitionRequest) returns (DecideRequisitionResponse);
+  rpc GetRequisition(GetRequisitionRequest) returns (GetRequisitionResponse);
+  rpc ListRequisitions(ListRequisitionsRequest) returns (ListRequisitionsResponse);
+
+  // SRS-MAT-003, SRS-MAT-004: quotation, comparison and the order.
+  rpc OpenRfq(OpenRfqRequest) returns (OpenRfqResponse);
+  rpc RecordBid(RecordBidRequest) returns (RecordBidResponse);
+  rpc CompareBids(CompareBidsRequest) returns (CompareBidsResponse);
+  rpc GetRfq(GetRfqRequest) returns (GetRfqResponse);
+  rpc ListRfqs(ListRfqsRequest) returns (ListRfqsResponse);
+  rpc PlaceOrder(PlaceOrderRequest) returns (PlaceOrderResponse);
+  rpc IssueOrder(IssueOrderRequest) returns (IssueOrderResponse);
+  rpc AmendOrder(AmendOrderRequest) returns (AmendOrderResponse);
+  rpc GetPurchaseOrder(GetPurchaseOrderRequest) returns (GetPurchaseOrderResponse);
+  rpc ListOrderRevisions(ListOrderRevisionsRequest) returns (ListOrderRevisionsResponse);
+  rpc ListPurchaseOrders(ListPurchaseOrdersRequest) returns (ListPurchaseOrdersResponse);
+
+  // SRS-MAT-005, SRS-MAT-006: receipt and inspection.
+  rpc ReceiveGoods(ReceiveGoodsRequest) returns (ReceiveGoodsResponse);
+  rpc Inspect(InspectRequest) returns (InspectResponse);
+  rpc GetReceipt(GetReceiptRequest) returns (GetReceiptResponse);
+  rpc ListReceipts(ListReceiptsRequest) returns (ListReceiptsResponse);
+
+  // SRS-MAT-007, SRS-MAT-008, SRS-MAT-009: the ledger.
+  rpc RecommendPick(RecommendPickRequest) returns (RecommendPickResponse);
+  rpc IssueStock(IssueStockRequest) returns (IssueStockResponse);
+  rpc ReturnStock(ReturnStockRequest) returns (ReturnStockResponse);
+  rpc ListBalances(ListBalancesRequest) returns (ListBalancesResponse);
+  rpc GetAvailable(GetAvailableRequest) returns (GetAvailableResponse);
+  rpc ListMovements(ListMovementsRequest) returns (ListMovementsResponse);
+
+  // SRS-MAT-010, SRS-MAT-011: transfers and counts.
+  rpc DispatchTransfer(DispatchTransferRequest) returns (DispatchTransferResponse);
+  rpc ReceiveTransfer(ReceiveTransferRequest) returns (ReceiveTransferResponse);
+  rpc ListTransfersInTransit(ListTransfersInTransitRequest) returns (ListTransfersInTransitResponse);
+  rpc OpenCount(OpenCountRequest) returns (OpenCountResponse);
+  rpc RecordCount(RecordCountRequest) returns (RecordCountResponse);
+  rpc ApproveCount(ApproveCountRequest) returns (ApproveCountResponse);
+  rpc RejectCount(RejectCountRequest) returns (RejectCountResponse);
+  rpc GetCount(GetCountRequest) returns (GetCountResponse);
+  rpc ListCounts(ListCountsRequest) returns (ListCountsResponse);
+
+  // SRS-MAT-013: blocked lots and their recall.
+  rpc BlockLot(BlockLotRequest) returns (BlockLotResponse);
+  rpc ReleaseLot(ReleaseLotRequest) returns (ReleaseLotResponse);
+  rpc GetRecallList(GetRecallListRequest) returns (GetRecallListResponse);
+  rpc ListBlockedLots(ListBlockedLotsRequest) returns (ListBlockedLotsResponse);
+  rpc GetLot(GetLotRequest) returns (GetLotResponse);
+  rpc ListLots(ListLotsRequest) returns (ListLotsResponse);
+
+  // SRS-MAT-012, SRS-MAT-014, SRS-MAT-015, SRS-MAT-016.
+  rpc ListAlerts(ListAlertsRequest) returns (ListAlertsResponse);
+  rpc SuggestOrder(SuggestOrderRequest) returns (SuggestOrderResponse);
+  rpc RecordInvoice(RecordInvoiceRequest) returns (RecordInvoiceResponse);
+  rpc MatchInvoice(MatchInvoiceRequest) returns (MatchInvoiceResponse);
+  rpc GetMetrics(GetMetricsRequest) returns (GetMetricsResponse);
+  rpc GetFillRate(GetFillRateRequest) returns (GetFillRateResponse);
+  rpc ListLiabilities(ListLiabilitiesRequest) returns (ListLiabilitiesResponse);
+}

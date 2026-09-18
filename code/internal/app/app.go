@@ -25,6 +25,7 @@ import (
 	"github.com/ppusapati/health/code/gen/go/healthcare/encounter/v1/encounterv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/icu/v1/icuv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/identity_access/v1/identityaccessv1connect"
+	"github.com/ppusapati/health/code/gen/go/healthcare/materials/v1/materialsv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/medication/v1/medicationv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/nursing/v1/nursingv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/orders/v1/ordersv1connect"
@@ -64,6 +65,10 @@ import (
 	icuapp "github.com/ppusapati/health/code/internal/icu/application"
 	icutransport "github.com/ppusapati/health/code/internal/icu/transport"
 	identitytransport "github.com/ppusapati/health/code/internal/identity_access/transport"
+	materialsescalate "github.com/ppusapati/health/code/internal/materials/adapters/escalate"
+	materialspostgres "github.com/ppusapati/health/code/internal/materials/adapters/postgres"
+	materialsapp "github.com/ppusapati/health/code/internal/materials/application"
+	materialstransport "github.com/ppusapati/health/code/internal/materials/transport"
 	medicationorders "github.com/ppusapati/health/code/internal/medication/adapters/orders"
 	medicationpostgres "github.com/ppusapati/health/code/internal/medication/adapters/postgres"
 	medicationapp "github.com/ppusapati/health/code/internal/medication/application"
@@ -268,6 +273,17 @@ type Deps struct {
 	// SRS-CSSD-008 exists to close.
 	Sterile sterileapp.Config
 
+	// Materials is what a deployment has decided about its stores: how far
+	// ahead an expiry alert looks, what a delivery may differ from its order
+	// by, and whether consignment stock must name the patient it went into
+	// (SRS-MAT-005, SRS-MAT-012, SRS-MAT-016).
+	//
+	// The zero value takes exact deliveries and raises no expiry alerts. The
+	// first is the safe direction — it keeps unordered stock off the ledger —
+	// and the second is a deployment that has not decided, which the status
+	// document names rather than this code guessing at.
+	Materials materialsapp.Config
+
 	// Emergency is what a deployment has decided about its emergency
 	// department: which triage scale it has approved, what must be measured at
 	// triage, and what each disposition requires (SRS-ER-002, SRS-ER-013).
@@ -292,6 +308,7 @@ type Server struct {
 	Anaesthesia  *anaesthesiaapp.Service
 	BloodBank    *bloodbankapp.Service
 	Sterile      *sterileapp.Service
+	Materials    *materialsapp.Service
 	Nursing      *nursingapp.Service
 	Orders       *ordersapp.Service
 	Medication   *medicationapp.Service
@@ -634,6 +651,31 @@ func New(deps Deps) *Server {
 		Config:      deps.Sterile,
 	})
 
+	materialsRepo := materialspostgres.New(txManager)
+	materialsService := materialsapp.NewService(materialsapp.Deps{
+		UnitOfWork:  txManager,
+		Master:      materialspostgres.MasterRepo{Repository: materialsRepo},
+		Ledger:      materialspostgres.LedgerRepo{Repository: materialsRepo},
+		Procurement: materialspostgres.ProcurementRepo{Repository: materialsRepo},
+		Control:     materialspostgres.ControlRepo{Repository: materialsRepo},
+		// Who a patient is belongs to SRS-EMPI, reached through a port. A
+		// store with its own copy would charge the wrong person.
+		Patients: materialspostgres.NewPatients(
+			empipostgres.PatientRepo{Repository: empiRepo}),
+		// Charges is deliberately nil: what a patient is charged belongs to
+		// SRS-BIL, and wiring materials into it is a cross-context change to a
+		// Wave-1 contract rather than something to half-do here. The seam
+		// exists and is named in the status document.
+		Events: platformStore,
+		Audits: store.AuditAppenderFunc(platformStore.AppendAudit),
+		// SRS-MAT-013's recall. Durable and acknowledged, because the wards
+		// holding the stock have to be told rather than left to open a screen.
+		Escalations: materialsescalate.New(escalationStore),
+		IDs:         uuidGenerator{},
+		Clock:       systemClock{},
+		Config:      deps.Materials,
+	})
+
 	medicationRepo := medicationpostgres.New(txManager)
 	medicationTerminology := medicationpostgres.NewTerminology(medicationRepo)
 	medicationService := medicationapp.NewService(medicationapp.Deps{
@@ -796,6 +838,8 @@ func New(deps Deps) *Server {
 		bloodbanktransport.NewHandler(bloodbankService, time.Now), interceptors))
 	mux.Handle(sterilev1connect.NewSterileServicesServiceHandler(
 		steriletransport.NewHandler(sterileService, time.Now), interceptors))
+	mux.Handle(materialsv1connect.NewMaterialsServiceHandler(
+		materialstransport.NewHandler(materialsService, time.Now), interceptors))
 	billingRepo := billingpostgres.New(txManager)
 	billingService := billingapp.NewService(billingapp.Deps{
 		UnitOfWork: txManager,
@@ -858,6 +902,7 @@ func New(deps Deps) *Server {
 		Anaesthesia:     anaesthesiaService,
 		BloodBank:       bloodbankService,
 		Sterile:         sterileService,
+		Materials:       materialsService,
 		Nursing:         nursingService,
 		Orders:          ordersService,
 		Medication:      medicationService,
