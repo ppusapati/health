@@ -154,10 +154,15 @@ jobs:
           cache-dependency-path: code/go.sum
       # Repository tests run against a real database: constraints, SQLSTATE
       # codes and transaction semantics are what mocks get wrong.
+      #
+      # -timeout is raised from Go's 10m default because internal/app holds
+      # every family's end-to-end tests in one package and each builds a fresh
+      # database. Past 10m the default failure is a panic that reads like a
+      # hung test rather than a suite that needs longer.
       - name: Run tests
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
-        run: go test ./... -race -count=1
+        run: go test ./... -race -count=1 -timeout 40m
 
   manifests:
     name: Deployment manifests

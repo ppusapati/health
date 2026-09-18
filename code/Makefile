@@ -80,8 +80,12 @@ test-unit: ## Run tests that need no database
 	go test ./... -short
 
 .PHONY: test
+# -timeout is raised from Go's 10m default because internal/app is one package
+# holding every family's end-to-end tests, and each one builds a fresh database.
+# That package alone now runs past 10m, and the default failure is a panic that
+# reads like a hung test rather than a suite that needs longer.
 test: ## Run the full suite including repository integration tests
-	TEST_DATABASE_URL="$(TEST_DATABASE_URL)" go test ./... -race -count=1
+	TEST_DATABASE_URL="$(TEST_DATABASE_URL)" go test ./... -race -count=1 -timeout 40m
 
 .PHONY: test-fitness
 test-fitness: ## Run architecture fitness tests (Gate A10)

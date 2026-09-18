@@ -31,6 +31,7 @@ import (
 	"github.com/ppusapati/health/code/gen/go/healthcare/organization/v1/organizationv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/platform_api/v1/platformapiv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/scheduling/v1/schedulingv1connect"
+	"github.com/ppusapati/health/code/gen/go/healthcare/sterile/v1/sterilev1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/theatre/v1/theatrev1connect"
 	anaesthesiapostgres "github.com/ppusapati/health/code/internal/anaesthesia/adapters/postgres"
 	anaesthesiaapp "github.com/ppusapati/health/code/internal/anaesthesia/application"
@@ -89,6 +90,10 @@ import (
 	schedulingapp "github.com/ppusapati/health/code/internal/scheduling/application"
 	schedulingports "github.com/ppusapati/health/code/internal/scheduling/ports"
 	schedulingtransport "github.com/ppusapati/health/code/internal/scheduling/transport"
+	sterileescalate "github.com/ppusapati/health/code/internal/sterile/adapters/escalate"
+	sterilepostgres "github.com/ppusapati/health/code/internal/sterile/adapters/postgres"
+	sterileapp "github.com/ppusapati/health/code/internal/sterile/application"
+	steriletransport "github.com/ppusapati/health/code/internal/sterile/transport"
 	theatrepostgres "github.com/ppusapati/health/code/internal/theatre/adapters/postgres"
 	theatreapp "github.com/ppusapati/health/code/internal/theatre/application"
 	theatretransport "github.com/ppusapati/health/code/internal/theatre/transport"
@@ -253,6 +258,16 @@ type Deps struct {
 	// outcome SRS-BLD-004 exists to prevent.
 	BloodBank bloodbankapp.Config
 
+	// Sterile is what a deployment has decided about its sterile services:
+	// the shelf life a set with no policy of its own takes, and whether every
+	// load waits for its biological indicator (SRS-CSSD-007, SRS-CSSD-008).
+	//
+	// The zero value refuses rather than guesses: DefaultShelfLife is zero, so
+	// a set with no expiry policy is refused at sterilisation instead of
+	// producing a pack that never goes out of date. That is the one direction
+	// SRS-CSSD-008 exists to close.
+	Sterile sterileapp.Config
+
 	// Emergency is what a deployment has decided about its emergency
 	// department: which triage scale it has approved, what must be measured at
 	// triage, and what each disposition requires (SRS-ER-002, SRS-ER-013).
@@ -276,6 +291,7 @@ type Server struct {
 	Theatre      *theatreapp.Service
 	Anaesthesia  *anaesthesiaapp.Service
 	BloodBank    *bloodbankapp.Service
+	Sterile      *sterileapp.Service
 	Nursing      *nursingapp.Service
 	Orders       *ordersapp.Service
 	Medication   *medicationapp.Service
@@ -596,6 +612,28 @@ func New(deps Deps) *Server {
 		Config:      deps.BloodBank,
 	})
 
+	sterileRepo := sterilepostgres.New(txManager)
+	sterileService := sterileapp.NewService(sterileapp.Deps{
+		UnitOfWork:   txManager,
+		Master:       sterilepostgres.MasterRepo{Repository: sterileRepo},
+		Cycles:       sterilepostgres.CycleRepo{Repository: sterileRepo},
+		Runs:         sterilepostgres.RunRepo{Repository: sterileRepo},
+		Distribution: sterilepostgres.DistributionRepo{Repository: sterileRepo},
+		// Whether an operation is real belongs to SRS-OT, reached through a
+		// port. A case trace built on an identifier nobody can resolve is a
+		// trace that reaches no patient.
+		Cases:  sterilepostgres.NewCases(theatrepostgres.ScheduleRepo{Repository: theatreRepo}),
+		Events: platformStore,
+		Audits: store.AuditAppenderFunc(platformStore.AppendAudit),
+		// SRS-CSSD-011's recall tasks. Durable and acknowledged, because a
+		// recall has to reach the wards holding the packs rather than a screen
+		// nobody opened.
+		Escalations: sterileescalate.New(escalationStore),
+		IDs:         uuidGenerator{},
+		Clock:       systemClock{},
+		Config:      deps.Sterile,
+	})
+
 	medicationRepo := medicationpostgres.New(txManager)
 	medicationTerminology := medicationpostgres.NewTerminology(medicationRepo)
 	medicationService := medicationapp.NewService(medicationapp.Deps{
@@ -756,6 +794,8 @@ func New(deps Deps) *Server {
 		anaesthesiatransport.NewHandler(anaesthesiaService, time.Now), interceptors))
 	mux.Handle(bloodbankv1connect.NewBloodBankServiceHandler(
 		bloodbanktransport.NewHandler(bloodbankService, time.Now), interceptors))
+	mux.Handle(sterilev1connect.NewSterileServicesServiceHandler(
+		steriletransport.NewHandler(sterileService, time.Now), interceptors))
 	billingRepo := billingpostgres.New(txManager)
 	billingService := billingapp.NewService(billingapp.Deps{
 		UnitOfWork: txManager,
@@ -817,6 +857,7 @@ func New(deps Deps) *Server {
 		Theatre:         theatreService,
 		Anaesthesia:     anaesthesiaService,
 		BloodBank:       bloodbankService,
+		Sterile:         sterileService,
 		Nursing:         nursingService,
 		Orders:          ordersService,
 		Medication:      medicationService,

@@ -111,6 +111,29 @@ const (
 	// you, and it belongs to somebody whose job is to use it.
 	RoleHaemovigilanceOfficer Role = "haemovigilance_officer"
 
+	// RoleSterileTechnician works the CSSD bench: receiving dirty sets,
+	// moving them through the stages, assembling against the packing list,
+	// running the sterilizer and issuing packs (SRS-CSSD-002 … 009).
+	//
+	// A role of its own because the department is not a ward and not a
+	// laboratory. What it deliberately does not hold is the three decisions
+	// below: it cannot skip a reprocessing stage, cannot release a load, and
+	// cannot raise a recall.
+	RoleSterileTechnician Role = "sterile_technician"
+
+	// RoleSterileSupervisor runs the department and holds the decisions a
+	// hospital is answerable for: authorising a skipped stage, releasing a
+	// sterilizer load, and raising a recall (SRS-CSSD-003, SRS-CSSD-007,
+	// SRS-CSSD-011).
+	//
+	// Separate from the technician for the reason every department separates
+	// them: release is the step that makes an untested pack usable, and the
+	// person who ran the load should not also be the person who declares it
+	// clear. The supervisor holds the technician's permissions too — a
+	// supervisor works the bench — so this is an addition rather than a
+	// different job.
+	RoleSterileSupervisor Role = "sterile_supervisor"
+
 	// RolePharmacist verifies prescriptions and dispenses (SRS-MED-006,
 	// SRS-MED-011, Wave-1 actor "Pharmacist").
 	//
@@ -757,6 +780,50 @@ var rolePermissions = map[Role][]string{
 		// Deliberately nothing that touches inventory or issue: an
 		// investigator who could quarantine and release the units they are
 		// investigating is investigating their own decisions.
+	},
+
+	// A sterile services technician receives, reprocesses, sterilises and
+	// issues (SRS-CSSD-002 … 009).
+	RoleSterileTechnician: {
+		"cssd.record.read",
+		"cssd.run.process",
+		"cssd.cycle.write",
+		"cssd.issue.write",
+		// Deliberately no cssd.stage.skip: the stage sequence is the
+		// department's safety property, and the person who may step round it
+		// should not be whoever is at the bench.
+		// Deliberately no cssd.cycle.release: a load that ran is not a load
+		// that passed, and release is what makes an untested pack usable.
+		// Deliberately no cssd.recall.raise and no cssd.trace.read: raising a
+		// recall tells wards to stop using what they have, and a case trace
+		// reaches every patient a load touched.
+		// Deliberately no cssd.master.configure: what belongs in a tray is a
+		// decision the department makes once, not one a technician makes
+		// while packing.
+	},
+
+	// A sterile services supervisor works the bench and holds the three
+	// decisions the department is answerable for (SRS-CSSD-003, SRS-CSSD-007,
+	// SRS-CSSD-011).
+	RoleSterileSupervisor: {
+		"cssd.record.read",
+		"cssd.run.process",
+		"cssd.cycle.write",
+		"cssd.issue.write",
+		// The packing lists, which are what every assembly and every count
+		// after a case is checked against.
+		"cssd.master.configure",
+		// The authorised exception SRS-CSSD-003 allows. The authoriser is the
+		// caller, so holding this permission is the whole of the sign-off.
+		"cssd.stage.skip",
+		// The step that makes a pack distributable, and the recall that pulls
+		// one back. Both are what this role exists for.
+		"cssd.cycle.release",
+		"cssd.recall.raise",
+		// From a patient's operation back to every set and every sterilizer
+		// cycle it was exposed to. Its own permission and audited, because a
+		// trace and a fishing expedition look identical in the query log.
+		"cssd.trace.read",
 	},
 
 	// A downstream service moves orders through their lifecycle and does

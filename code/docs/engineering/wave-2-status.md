@@ -92,7 +92,7 @@ clinician, and `ValidatedInputs()` is a function rather than a convention.
 | SRS-OT Perioperative | 17 | **15 implemented, 2 partial** — see below |
 | SRS-ANE Anesthesia and PACU | 11 | **11 implemented** — see below |
 | SRS-BLD Blood Bank and Transfusion | 17 | **15 implemented, 2 partial** — see below |
-| SRS-CSSD Sterile Services | 12 | **Not started** |
+| SRS-CSSD Sterile Services | 12 | **12 implemented** — see below |
 | SRS-MAT Materials and Inventory | 16 | **Not started** |
 | SRS-BIO Biomedical Engineering | 11 | **Not started** — Phase 2 §9. Note the prefix collision below |
 | SRS-QMS Quality / NABH | 15 | **Not started** |
@@ -424,6 +424,81 @@ because a look-back reaches every patient who received blood from one donation.
 | SRS-BLD-015 | Haemovigilance and component utilisation reports | **Implemented** — derived from the issue, transfusion and reaction records every time; a running transfusion is not counted as one that happened |
 | SRS-BLD-016 | Emergency uncrossmatched release with senior authorisation, flagged and later reconciled | **Implemented** — its own permission, and an outstanding list that is what "later reconciled" is read against |
 | SRS-BLD-017 | Low-stock and expiry alerts by component type, configurable and acknowledged | **Partial** — thresholds are configurable per component and group, and both alert kinds are derived. Acknowledgement is not built: alerts are computed on read rather than raised as durable notices, so there is nothing to acknowledge yet |
+
+## SRS-CSSD — Sterile services
+
+Twelve requirements, all implemented. The department's own contract
+(`SterileServicesService`) and schema (`sterile`), reached through
+`internal/sterile`.
+
+**The stage sequence is a table, and the table is the test.** SRS-CSSD-003's
+clause is that a stage "cannot be skipped unless authorized exception", which
+is only a rule if the order is one. `Advance` permits exactly one step forward;
+anything else is refused with which stage was expected. The domain test asserts
+all sixty-four transitions rather than a sample, and the assertion was verified
+by deliberately widening the rule: forty-nine of the sixty-four then passed
+that should not have.
+
+**Skipping is its own permission, and the authoriser is the caller.** The
+request carries no `skip_authorised_by` field. A technician holding
+`cssd.run.process` cannot skip; a supervisor holding `cssd.stage.skip` can, and
+the row records them. A field naming somebody else would let a technician type
+a manager's approval without the manager being there. Two stages —
+sterilisation and release — are not skippable by anybody, whatever permission
+they hold.
+
+**A pack names the packing-list version it was assembled against, not the
+set.** Tray sets are versioned rather than edited, with a partial unique index
+holding "at most one current version per code". A revision published tomorrow
+does not change what today's pack was checked against, and the version is the
+only thing that could audit it.
+
+**Release is separate from result, and the department's policy is
+configurable while its consequence is not.** A passed cycle whose biological
+indicator is still incubating is a load nobody may distribute. Most departments
+release routine loads on the chemical indicator and hold implant loads; a few
+hold everything, which `RequireBiologicalIndicator` expresses. Whichever a
+hospital picks, a load that does not satisfy it cannot be distributed, and the
+refusal names every reason rather than the first.
+
+**A pack's issuability is two independent failures.** Unreleased and expired
+fail separately, and both are checked wherever a pack could leave — including
+in the `issuable` field the wire carries, so a client that checked only the
+stage cannot offer an out-of-date pack. The database enforces the other half:
+a sterilised pack's expiry is NOT NULL and must be after its sterilisation,
+because a missing expiry reads as "never expires" to every query that filters
+on it.
+
+**The instrument history is rows, not a status column.** 0034 gave an
+instrument a current status; SRS-CSSD-012's acceptance is "history supports
+replacement and loss analysis", and both questions are about the past. 0035
+adds `sterile.instrument_event`, append-only, written in the same transaction
+as every move. An item that has been away twice and is back in service reads
+as unremarkable in the status column and as a replacement candidate in the
+history.
+
+**A recall reaches the packs that left and the patients they were opened
+for.** The scope names every pack in the load with where it is now — in the
+department, out on a ward, or already used — and every case one was opened
+for. The used packs cannot come back; the case list is why the recall exists.
+Raising one is its own permission, because it tells wards to stop using what
+they have, and it raises a durable acknowledged notice rather than a line in a
+log.
+
+| ID | Requirement | State |
+|---|---|---|
+| SRS-CSSD-001 | Instrument, tray/set and container master with unique identifiers; set composition/version traceable | **Implemented** — sets are versioned, never edited; a serial number identifies one physical object and cannot be reused while another holds it; bulk items have no serial, which is not a gap |
+| SRS-CSSD-002 | Receive contaminated sets from source unit with scan and count | **Implemented** — the count against the packing list happens at receipt, because that is the last moment anybody can say where a missing instrument was; a short set is recorded, not refused |
+| SRS-CSSD-003 | Track decontamination, washing and inspection stages; no skip without authorised exception | **Implemented** — one step forward only, all 64 transitions asserted; a skip needs its own permission and the caller is the authoriser; sterilisation and release are never skippable |
+| SRS-CSSD-004 | Assemble tray against versioned packing list, recording missing and replaced items | **Implemented** — a critical shortfall refuses the assembly, because that pack is a cancelled case found when the surgeon opens it; a non-critical one goes out recorded |
+| SRS-CSSD-005 | Record packaging method, indicator and load assignment | **Implemented** — a load is attached in one call, because a partial attachment leaves packs whose cycle differs from the ones beside them in the chamber |
+| SRS-CSSD-006 | Sterilization cycle parameters, or ingest from equipment where integrated | **Implemented** — parameters are free-form because sterilizers differ; the source distinguishes an ingested record from a typed one, which is evidence of a different weight |
+| SRS-CSSD-007 | Chemical/biological indicator result and release authorisation; failed or uncleared load cannot be distributed | **Implemented** — release is a separate field from result, held by a database CHECK that a released load names who released it; every refusal is returned, not the first |
+| SRS-CSSD-008 | Label sterile packs with set, cycle, sterilized-on and expiry; expired pack cannot be issued | **Implemented** — the label is derived on read and names what it could not be built from; expiry is NOT NULL once sterilised, and issuability is checked at issue rather than trusted from a printed label |
+| SRS-CSSD-009 | Issue sterile sets to OT/ward and record return and usage | **Implemented** — the count comes back with the pack and a shortfall is reported; a pack marked used names its case, held by a database CHECK |
+| SRS-CSSD-010 | Trace patient procedure to tray/set and sterilization cycle | **Implemented** — its own permission and audited, because the answer names every set and cycle a patient was exposed to; the trace names its gaps rather than quietly returning fewer sets |
+| SRS-CSSD-011 | Recall affected packs after a failed indicator or sterilizer event; locations and cases identified, recall tasks generated | **Implemented** — every pack in the load including the ones already opened; a durable acknowledged notice rather than a screen nobody opened; its own permission |
+| SRS-CSSD-012 | Track instrument lifecycle, repairs and missing instruments; history supports replacement and loss analysis | **Implemented** — an append-only history written in the same transaction as every move, so a status cannot change without it; the database refuses a move out of service with no reason |
 
 ### The SRS-NUR-014 duplication
 

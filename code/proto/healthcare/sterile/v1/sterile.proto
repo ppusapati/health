@@ -1,0 +1,856 @@
+// Sterile services / CSSD: the instrument and tray masters, receipt and chain
+// of custody, the reprocessing stages, assembly against a versioned packing
+// list, packaging, the sterilizer cycle and its indicators, release,
+// labelling, issue and return, the case trace and the recall.
+//
+// Owning context : sterile  (Master Engineering Registry)
+// Owning service : SterileServicesService
+// Trace          : SRS-CSSD-001 … SRS-CSSD-012
+//
+// Five shapes in this contract are deliberate.
+//
+// A stage is an ordered enum and a run advances exactly one step. The order is
+// the department's safety property: an instrument packed without being washed
+// carries the last patient's tissue into the next one. SRS-CSSD-003 permits an
+// authorised exception, so a skip is expressible — an exception that cannot be
+// recorded is one that happens off the system — but it needs its own
+// permission, and two stages are not skippable by anybody.
+//
+// A pack names the packing-list version it was assembled against, not the set.
+// A revision published tomorrow must not change what today's pack was checked
+// against, and the version is the only thing that could audit it.
+//
+// A cycle's release is a separate field from its result. A load that passed is
+// not a load that was cleared: the biological indicator may still be
+// incubating, and SRS-CSSD-007's clause is that a failed or uncleared load
+// cannot be distributed.
+//
+// A label is derived, never submitted. A label typed separately is a second
+// account of what is in the pack, and it is the one the scrub nurse reads. It
+// carries what it could not be built from rather than rendering a blank.
+//
+// A recall returns every pack in the load and every case one was opened for.
+// The used packs cannot come back — they went into a patient — but the case
+// list is the reason the recall exists.
+syntax = "proto3";
+
+package healthcare.sterile.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ppusapati/health/code/gen/go/healthcare/sterile/v1;sterilev1";
+
+// Where one instrument is in its life (SRS-CSSD-012).
+enum InstrumentStatus {
+  INSTRUMENT_STATUS_UNSPECIFIED = 0;
+  INSTRUMENT_STATUS_IN_SERVICE = 1;
+  // Away being mended. It cannot be packed, and every tray it belongs to is
+  // short until it comes back.
+  INSTRUMENT_STATUS_IN_REPAIR = 2;
+  // Unaccounted for. Distinct from retired, because a missing instrument may
+  // be inside a patient.
+  INSTRUMENT_STATUS_MISSING = 3;
+  INSTRUMENT_STATUS_RETIRED = 4;
+}
+
+// A step of reprocessing (SRS-CSSD-002 … 007). The order is the rule.
+enum Stage {
+  STAGE_UNSPECIFIED = 0;
+  // Begins the chain of custody: a dirty set arriving, scanned and counted.
+  STAGE_RECEIVED = 1;
+  STAGE_DECONTAMINATED = 2;
+  STAGE_WASHED = 3;
+  // Where a technician looks at each instrument: the step that finds the
+  // crack before it finds the patient.
+  STAGE_INSPECTED = 4;
+  STAGE_ASSEMBLED = 5;
+  STAGE_PACKAGED = 6;
+  STAGE_STERILISED = 7;
+  // The authorisation that lets a pack leave. Separate from sterilised,
+  // because a cycle that ran is not a cycle that passed.
+  STAGE_RELEASED = 8;
+}
+
+// What the sterilizer reported (SRS-CSSD-006).
+enum CycleResult {
+  CYCLE_RESULT_UNSPECIFIED = 0;
+  // A load in the machine. Not a verdict.
+  CYCLE_RESULT_RUNNING = 1;
+  CYCLE_RESULT_PASSED = 2;
+  CYCLE_RESULT_FAILED = 3;
+  // Stopped part-way: the parameters were never reached rather than missed.
+  CYCLE_RESULT_ABORTED = 4;
+}
+
+// Where a cycle record came from. SRS-CSSD-006 asks for ingestion where the
+// equipment supports it, and a hand-typed record is evidence of a different
+// weight.
+enum CycleSource {
+  CYCLE_SOURCE_UNSPECIFIED = 0;
+  CYCLE_SOURCE_MANUAL = 1;
+  CYCLE_SOURCE_INGESTED = 2;
+}
+
+// What was used to check the load (SRS-CSSD-007).
+enum IndicatorKind {
+  INDICATOR_KIND_UNSPECIFIED = 0;
+  // Changes colour when the conditions were met. Read immediately, and the
+  // weaker evidence.
+  INDICATOR_KIND_CHEMICAL = 1;
+  // A spore challenge, incubated. The stronger evidence and the slower: a
+  // load released before it reads is a load released on a promise.
+  INDICATOR_KIND_BIOLOGICAL = 2;
+}
+
+// Why a load may not be distributed (SRS-CSSD-007).
+enum ReleaseRefusal {
+  RELEASE_REFUSAL_UNSPECIFIED = 0;
+  RELEASE_REFUSAL_CYCLE_STILL_RUNNING = 1;
+  RELEASE_REFUSAL_CYCLE_DID_NOT_PASS = 2;
+  RELEASE_REFUSAL_NO_CHEMICAL_INDICATOR = 3;
+  RELEASE_REFUSAL_INDICATOR_FAILED = 4;
+  RELEASE_REFUSAL_BIOLOGICAL_NOT_READ = 5;
+  RELEASE_REFUSAL_ALREADY_RELEASED = 6;
+}
+
+// Where an issued pack has got to (SRS-CSSD-009).
+enum IssueState {
+  ISSUE_STATE_UNSPECIFIED = 0;
+  ISSUE_STATE_OUT = 1;
+  // Opened for a case. The theatre records its own side of this
+  // (SRS-OT-012); this is the department's.
+  ISSUE_STATE_USED = 2;
+  ISSUE_STATE_RETURNED = 3;
+  // Pulled back after a failed indicator or a sterilizer event. It never goes
+  // back on the shelf.
+  ISSUE_STATE_RECALLED = 4;
+}
+
+// One item in the instrument master (SRS-CSSD-001).
+message Instrument {
+  string instrument_id = 1;
+  // The catalogue code, which is what a packing list names.
+  string code = 2;
+  string display = 3;
+  // Identifies one physical instrument where the department tracks them
+  // singly. Empty for an item counted in bulk, which is not a gap.
+  string serial_number = 4;
+  InstrumentStatus status = 5;
+  string location = 6;
+  google.protobuf.Timestamp acquired_on = 7;
+  google.protobuf.Timestamp retired_on = 8;
+  string notes = 9;
+  int64 version = 10;
+  // Derived: only an in-service instrument may go into a tray.
+  bool packable = 11;
+}
+
+// One recorded move of one instrument (SRS-CSSD-012).
+//
+// Append-only history rather than a status field, because the requirement is
+// about the past: whether to replace an item is answered by how often it has
+// been away, and a loss analysis asks where things were when they went
+// missing. Neither can be read from a field the next move overwrites.
+message InstrumentEvent {
+  string instrument_event_id = 1;
+  string instrument_id = 2;
+  // What it left. Unspecified for the registration itself, which is the first
+  // row of every instrument's history.
+  InstrumentStatus from_status = 3;
+  InstrumentStatus to_status = 4;
+  string note = 5;
+  // Where it was at the moment of the move, frozen. The instrument's current
+  // location moves on; a loss analysis needs where it was when it went.
+  string location = 6;
+  google.protobuf.Timestamp occurred_at = 7;
+  string recorded_by = 8;
+}
+
+// One line of a tray's packing list (SRS-CSSD-001).
+message PackingItem {
+  string code = 1;
+  string display = 2;
+  int32 quantity = 3;
+  // An item the tray cannot go out without. A missing retractor is a delay; a
+  // missing blade handle is a cancelled case.
+  bool critical = 4;
+}
+
+// A tray, set or container (SRS-CSSD-001).
+//
+// Versioned rather than edited: a tray packed last month was packed against
+// the list as it was then.
+message TraySet {
+  string set_id = 1;
+  string code = 2;
+  string display = 3;
+  string kind = 4;
+  int32 set_version = 5;
+  string supersedes = 6;
+  bool current = 7;
+  repeated PackingItem items = 8;
+  // How long a pack of this set stays sterile once processed. Zero takes the
+  // deployment's default; a set with neither is refused at sterilisation.
+  int64 shelf_life_seconds = 9;
+  google.protobuf.Timestamp created_at = 10;
+  string created_by = 11;
+  google.protobuf.Timestamp superseded_at = 12;
+}
+
+// One step actually performed (SRS-CSSD-003).
+message StageRecord {
+  string stage_record_id = 1;
+  string run_id = 2;
+  Stage stage = 3;
+  string equipment = 4;
+  string notes = 5;
+  // An authorised exception: a stage that did not happen and was signed off.
+  bool skipped = 6;
+  string skip_authorised_by = 7;
+  string skip_reason = 8;
+  google.protobuf.Timestamp performed_at = 9;
+  string performed_by = 10;
+}
+
+// One pass of a set through the department (SRS-CSSD-002 … 008).
+message Run {
+  string run_id = 1;
+  string set_id = 2;
+  // The packing list this pack was assembled against. Carried, not joined.
+  int32 set_version = 3;
+  string set_code = 4;
+
+  // Where the dirty set came from, which begins the chain of custody.
+  string source_unit = 5;
+  string source_case_id = 6;
+
+  Stage stage = 7;
+  repeated StageRecord stages = 8;
+
+  map<string, int32> received_count = 9;
+  map<string, int32> packed_count = 10;
+  repeated string missing = 11;
+  repeated string replaced = 12;
+
+  string cycle_id = 13;
+  string packaging_method = 14;
+  string indicator_type = 15;
+
+  google.protobuf.Timestamp sterilised_at = 16;
+  google.protobuf.Timestamp expires_at = 17;
+
+  google.protobuf.Timestamp started_at = 18;
+  string started_by = 19;
+  int64 version = 20;
+
+  // Derived, so a client cannot offer an expired pack by checking only the
+  // stage: the two fail independently.
+  bool issuable = 21;
+  // The reprocessing steps this pack did not actually have. An infection
+  // investigation asks this first.
+  repeated string skipped_stages = 22;
+}
+
+// One indicator read against a load (SRS-CSSD-007).
+message IndicatorResult {
+  string indicator_id = 1;
+  string cycle_id = 2;
+  IndicatorKind kind = 3;
+  // A bad batch of indicators invalidates every load they cleared, and the lot
+  // is the only thing that can find them.
+  string lot = 4;
+  bool passed = 5;
+  string notes = 6;
+  google.protobuf.Timestamp read_at = 7;
+  string read_by = 8;
+}
+
+// One sterilizer load (SRS-CSSD-006).
+message Cycle {
+  string cycle_id = 1;
+  // The machine and the load number identify the run to an engineer, and the
+  // load number is what a recall is announced by.
+  string machine = 2;
+  string load_number = 3;
+  string program = 4;
+
+  // What the machine reported or a technician recorded. Free-form, because
+  // sterilizers differ and a fixed schema would lose whatever this one
+  // measures.
+  map<string, double> parameters = 5;
+  CycleSource source = 6;
+
+  CycleResult result = 7;
+  // Separate from the result: a passed cycle with an unread biological
+  // indicator is a load nobody may distribute yet.
+  bool released = 8;
+  string released_by = 9;
+  google.protobuf.Timestamp released_at = 10;
+  string release_note = 11;
+
+  repeated IndicatorResult indicators = 12;
+
+  google.protobuf.Timestamp started_at = 13;
+  google.protobuf.Timestamp ended_at = 14;
+  string started_by = 15;
+  int64 version = 16;
+}
+
+// Whether a load's packs may be distributed (SRS-CSSD-007).
+message ReleaseDecision {
+  bool allowed = 1;
+  // Every reason, not the first: a technician told one at a time comes back to
+  // the same screen three times.
+  repeated ReleaseRefusal refusals = 2;
+  repeated string explanations = 3;
+}
+
+// What goes on the outside of a pack (SRS-CSSD-008).
+//
+// Derived, never submitted.
+message Label {
+  string run_id = 1;
+  string set_code = 2;
+  int32 set_version = 3;
+  string cycle_id = 4;
+  string load_number = 5;
+  string machine = 6;
+  google.protobuf.Timestamp sterilised_at = 7;
+  google.protobuf.Timestamp expires_at = 8;
+  // What the label could not be built from. A pack whose label silently
+  // omitted its cycle would look like any other.
+  repeated string incomplete = 9;
+}
+
+// A sterile pack leaving the department (SRS-CSSD-009).
+message Issue {
+  string issue_id = 1;
+  string run_id = 2;
+  string set_code = 3;
+  string cycle_id = 4;
+  // A pack with no destination is one nobody can fetch back, which is what a
+  // recall has to do.
+  string destination = 5;
+  string issued_to = 6;
+  IssueState state = 7;
+  // The link SRS-CSSD-010's case trace runs along.
+  string used_case_id = 8;
+  map<string, int32> return_count = 9;
+  string return_note = 10;
+  google.protobuf.Timestamp issued_at = 11;
+  string issued_by = 12;
+  google.protobuf.Timestamp closed_at = 13;
+  string closed_by = 14;
+}
+
+// One set used in a case, with its cycle (SRS-CSSD-010).
+message TracedSet {
+  string run_id = 1;
+  string set_code = 2;
+  int32 set_version = 3;
+  string cycle_id = 4;
+  string load_number = 5;
+  string machine = 6;
+  repeated string skipped_stages = 7;
+  google.protobuf.Timestamp sterilised_at = 8;
+  google.protobuf.Timestamp used_at = 9;
+}
+
+// Everything a patient's procedure touched (SRS-CSSD-010).
+message CaseTrace {
+  string case_id = 1;
+  repeated TracedSet sets = 2;
+  // Sets whose chain could not be followed, so a reader can tell "three sets"
+  // from "three sets that we know of".
+  repeated string incomplete = 3;
+}
+
+// One pack in a recall (SRS-CSSD-011).
+message RecalledPack {
+  string run_id = 1;
+  string set_code = 2;
+  // Where it is: still in the department, out somewhere, or already used. The
+  // three need different actions.
+  string state = 3;
+  string location = 4;
+  string used_case_id = 5;
+}
+
+// What a failed load reaches (SRS-CSSD-011).
+message RecallScope {
+  string cycle_id = 1;
+  string load_number = 2;
+  string reason = 3;
+  repeated RecalledPack packs = 4;
+  // The operations a pack from this load was opened for. The list that has to
+  // reach infection control, because those patients cannot have the pack back.
+  repeated string cases = 5;
+  // Where the unopened packs are, so somebody can go and fetch them.
+  repeated string locations = 6;
+}
+
+// A raised recall (SRS-CSSD-011).
+message Recall {
+  string recall_id = 1;
+  string cycle_id = 2;
+  string reason = 3;
+  // Frozen at the moment it was raised, because the packs move afterwards and
+  // a recall report has to say what it found.
+  int32 packs_affected = 4;
+  int32 cases_affected = 5;
+  google.protobuf.Timestamp raised_at = 6;
+  string raised_by = 7;
+  google.protobuf.Timestamp closed_at = 8;
+  string closed_by = 9;
+  string closing_note = 10;
+}
+
+message RegisterInstrumentRequest {
+  string code = 1;
+  string display = 2;
+  string serial_number = 3;
+  string location = 4;
+  google.protobuf.Timestamp acquired_on = 5;
+  string notes = 6;
+}
+
+message RegisterInstrumentResponse {
+  Instrument instrument = 1;
+}
+
+message MoveInstrumentRequest {
+  string instrument_id = 1;
+  InstrumentStatus status = 2;
+  // Required for anything but a return to service: a status change with no
+  // reason is a number in a report nobody can act on.
+  string note = 3;
+}
+
+message MoveInstrumentResponse {
+  Instrument instrument = 1;
+}
+
+message ListInstrumentsRequest {
+  // Empty lists the whole master.
+  string code = 1;
+  // True lists only what is away, missing or retired (SRS-CSSD-012).
+  bool out_of_service_only = 2;
+  int32 page_size = 3;
+}
+
+message ListInstrumentsResponse {
+  repeated Instrument instruments = 1;
+}
+
+message GetInstrumentHistoryRequest {
+  string instrument_id = 1;
+  int32 page_size = 2;
+}
+
+message GetInstrumentHistoryResponse {
+  // Most recent first.
+  repeated InstrumentEvent events = 1;
+}
+
+message ListInstrumentMovesRequest {
+  InstrumentStatus status = 1;
+  // A period is required rather than defaulted: "every instrument ever lost"
+  // and "the ones lost since April" are different reports, and a caller who
+  // meant the second should not be handed the first.
+  google.protobuf.Timestamp period_start = 2;
+  google.protobuf.Timestamp period_end = 3;
+  int32 page_size = 4;
+}
+
+message ListInstrumentMovesResponse {
+  repeated InstrumentEvent events = 1;
+}
+
+message DefineSetRequest {
+  string code = 1;
+  string display = 2;
+  string kind = 3;
+  repeated PackingItem items = 4;
+  int64 shelf_life_seconds = 5;
+}
+
+message DefineSetResponse {
+  // A code that already has a current version is revised rather than replaced,
+  // and the response carries the new version number.
+  TraySet set = 1;
+}
+
+message GetSetRequest {
+  // Either: the code resolves to the version in force, the id to one version.
+  string set_id = 1;
+  string code = 2;
+}
+
+message GetSetResponse {
+  TraySet set = 1;
+}
+
+message ListSetVersionsRequest {
+  string code = 1;
+}
+
+message ListSetVersionsResponse {
+  repeated TraySet versions = 1;
+}
+
+message ListSetsRequest {
+  int32 page_size = 1;
+}
+
+message ListSetsResponse {
+  repeated TraySet sets = 1;
+}
+
+message ReceiveRequest {
+  // The technician scans the tray; which version of the packing list applies
+  // is the service's to resolve.
+  string set_code = 1;
+  string source_unit = 2;
+  string source_case_id = 3;
+  map<string, int32> counted = 4;
+}
+
+message ReceiveResponse {
+  Run run = 1;
+  // Codes that arrived short. Returned rather than refused: the set is on the
+  // counter whatever the count says, and refusing it would leave the shortfall
+  // unwritten.
+  repeated string short = 2;
+}
+
+message AdvanceRequest {
+  string run_id = 1;
+  Stage stage = 2;
+  string equipment = 3;
+  string notes = 4;
+  // An authorised exception. The authoriser is the caller, so a technician
+  // cannot record a manager's approval without the manager being there.
+  bool skipped = 5;
+  string skip_reason = 6;
+}
+
+message AdvanceResponse {
+  StageRecord record = 1;
+}
+
+message AssembleRequest {
+  string run_id = 1;
+  map<string, int32> packed = 2;
+  repeated string replaced = 3;
+  string notes = 4;
+}
+
+message AssembleResponse {
+  StageRecord record = 1;
+  // Non-critical items the pack went out without. A critical shortfall refuses
+  // the assembly instead.
+  repeated string missing = 2;
+}
+
+message PackageRequest {
+  string run_id = 1;
+  string method = 2;
+  string indicator_type = 3;
+  string notes = 4;
+}
+
+message PackageResponse {
+  StageRecord record = 1;
+}
+
+message StartCycleRequest {
+  string machine = 1;
+  string load_number = 2;
+  string program = 3;
+  map<string, double> parameters = 4;
+  CycleSource source = 5;
+  google.protobuf.Timestamp started_at = 6;
+}
+
+message StartCycleResponse {
+  Cycle cycle = 1;
+}
+
+message LoadCycleRequest {
+  string cycle_id = 1;
+  // One call for the whole load: a load is put in together, and a partial
+  // attachment leaves packs whose cycle differs from the packs beside them in
+  // the chamber.
+  repeated string run_ids = 2;
+}
+
+message LoadCycleResponse {
+  repeated Run runs = 1;
+}
+
+message FinishCycleRequest {
+  string cycle_id = 1;
+  CycleResult result = 2;
+  map<string, double> parameters = 3;
+  google.protobuf.Timestamp ended_at = 4;
+}
+
+message FinishCycleResponse {
+  Cycle cycle = 1;
+}
+
+message RecordIndicatorRequest {
+  string cycle_id = 1;
+  IndicatorKind kind = 2;
+  string lot = 3;
+  bool passed = 4;
+  string notes = 5;
+}
+
+message RecordIndicatorResponse {
+  IndicatorResult result = 1;
+}
+
+message GetReleaseDecisionRequest {
+  string cycle_id = 1;
+}
+
+message GetReleaseDecisionResponse {
+  ReleaseDecision decision = 1;
+}
+
+message ReleaseLoadRequest {
+  string cycle_id = 1;
+  string note = 2;
+}
+
+message ReleaseLoadResponse {
+  Cycle cycle = 1;
+  // Every pack in the load, now releasable.
+  repeated Run runs = 2;
+}
+
+message GetCycleRequest {
+  // Either: the id, or the machine and the number on the printout.
+  string cycle_id = 1;
+  string machine = 2;
+  string load_number = 3;
+}
+
+message GetCycleResponse {
+  Cycle cycle = 1;
+}
+
+message ListCyclesAwaitingReleaseRequest {
+  int32 page_size = 1;
+}
+
+message ListCyclesAwaitingReleaseResponse {
+  repeated Cycle cycles = 1;
+}
+
+message ListLoadsClearedByLotRequest {
+  string lot = 1;
+  int32 page_size = 2;
+}
+
+message ListLoadsClearedByLotResponse {
+  // The bad-batch investigation: a failed indicator lot invalidates every load
+  // it passed.
+  repeated Cycle cycles = 1;
+}
+
+message GetRunRequest {
+  string run_id = 1;
+}
+
+message GetRunResponse {
+  Run run = 1;
+}
+
+message GetBoardRequest {
+  int32 page_size = 1;
+}
+
+message GetBoardResponse {
+  // The department's work in progress and how far along each run is.
+  repeated Run runs = 1;
+}
+
+message GetShelfRequest {
+  // Empty returns every set.
+  string set_code = 1;
+  int32 page_size = 2;
+}
+
+message GetShelfResponse {
+  // Released, in-date packs, soonest to expire first, so the department issues
+  // the pack that would otherwise be wasted.
+  repeated Run runs = 1;
+}
+
+message ListExpiredPacksRequest {
+  int32 page_size = 1;
+}
+
+message ListExpiredPacksResponse {
+  repeated Run runs = 1;
+}
+
+message ListExceptionsRequest {
+  google.protobuf.Timestamp period_start = 1;
+  google.protobuf.Timestamp period_end = 2;
+  int32 page_size = 3;
+}
+
+message ListExceptionsResponse {
+  // The register of skipped stages, which is what a quality review reads.
+  repeated StageRecord records = 1;
+}
+
+message GetLabelRequest {
+  string run_id = 1;
+}
+
+message GetLabelResponse {
+  Label label = 1;
+}
+
+message IssuePackRequest {
+  string run_id = 1;
+  string destination = 2;
+  string issued_to = 3;
+}
+
+message IssuePackResponse {
+  Issue issue = 1;
+}
+
+message MarkUsedRequest {
+  string issue_id = 1;
+  string case_id = 2;
+}
+
+message MarkUsedResponse {
+  Issue issue = 1;
+}
+
+message ReturnPackRequest {
+  string issue_id = 1;
+  map<string, int32> counted = 2;
+  string note = 3;
+}
+
+message ReturnPackResponse {
+  Issue issue = 1;
+  // Codes that came back short. The moment a set is counted back is the last
+  // moment anybody can say where a missing instrument was.
+  repeated string short = 2;
+}
+
+message ListOutstandingRequest {
+  string destination = 1;
+  int32 page_size = 2;
+}
+
+message ListOutstandingResponse {
+  repeated Issue issues = 1;
+}
+
+message TraceCaseRequest {
+  string case_id = 1;
+}
+
+message TraceCaseResponse {
+  CaseTrace trace = 1;
+}
+
+message GetRecallScopeRequest {
+  string cycle_id = 1;
+}
+
+message GetRecallScopeResponse {
+  // What the load reaches, without raising anything.
+  RecallScope scope = 1;
+}
+
+message RaiseRecallRequest {
+  string cycle_id = 1;
+  string reason = 2;
+}
+
+message RaiseRecallResponse {
+  Recall recall = 1;
+  RecallScope scope = 2;
+}
+
+message CloseRecallRequest {
+  string recall_id = 1;
+  string note = 2;
+}
+
+message CloseRecallResponse {}
+
+message ListOpenRecallsRequest {
+  int32 page_size = 1;
+}
+
+message ListOpenRecallsResponse {
+  repeated Recall recalls = 1;
+}
+
+// Sterile services / CSSD (SRS-CSSD-001 … 012).
+service SterileServicesService {
+  // SRS-CSSD-001, SRS-CSSD-012.
+  rpc RegisterInstrument(RegisterInstrumentRequest) returns (RegisterInstrumentResponse);
+  rpc MoveInstrument(MoveInstrumentRequest) returns (MoveInstrumentResponse);
+  rpc ListInstruments(ListInstrumentsRequest) returns (ListInstrumentsResponse);
+  // One instrument's history: the replacement question.
+  rpc GetInstrumentHistory(GetInstrumentHistoryRequest) returns (GetInstrumentHistoryResponse);
+  // Every move of one kind in a period: the loss analysis.
+  rpc ListInstrumentMoves(ListInstrumentMovesRequest) returns (ListInstrumentMovesResponse);
+  // A code that already has a current version is revised, not replaced.
+  rpc DefineSet(DefineSetRequest) returns (DefineSetResponse);
+  rpc GetSet(GetSetRequest) returns (GetSetResponse);
+  rpc ListSetVersions(ListSetVersionsRequest) returns (ListSetVersionsResponse);
+  rpc ListSets(ListSetsRequest) returns (ListSetsResponse);
+
+  // SRS-CSSD-002 … 005.
+  rpc Receive(ReceiveRequest) returns (ReceiveResponse);
+  rpc Advance(AdvanceRequest) returns (AdvanceResponse);
+  rpc Assemble(AssembleRequest) returns (AssembleResponse);
+  rpc Package(PackageRequest) returns (PackageResponse);
+
+  // SRS-CSSD-006, SRS-CSSD-007.
+  rpc StartCycle(StartCycleRequest) returns (StartCycleResponse);
+  rpc LoadCycle(LoadCycleRequest) returns (LoadCycleResponse);
+  rpc FinishCycle(FinishCycleRequest) returns (FinishCycleResponse);
+  rpc RecordIndicator(RecordIndicatorRequest) returns (RecordIndicatorResponse);
+  rpc GetReleaseDecision(GetReleaseDecisionRequest) returns (GetReleaseDecisionResponse);
+  rpc ReleaseLoad(ReleaseLoadRequest) returns (ReleaseLoadResponse);
+  rpc GetCycle(GetCycleRequest) returns (GetCycleResponse);
+  rpc ListCyclesAwaitingRelease(ListCyclesAwaitingReleaseRequest) returns (ListCyclesAwaitingReleaseResponse);
+  rpc ListLoadsClearedByLot(ListLoadsClearedByLotRequest) returns (ListLoadsClearedByLotResponse);
+
+  // SRS-CSSD-003, SRS-CSSD-008.
+  rpc GetRun(GetRunRequest) returns (GetRunResponse);
+  rpc GetBoard(GetBoardRequest) returns (GetBoardResponse);
+  rpc GetShelf(GetShelfRequest) returns (GetShelfResponse);
+  rpc ListExpiredPacks(ListExpiredPacksRequest) returns (ListExpiredPacksResponse);
+  rpc ListExceptions(ListExceptionsRequest) returns (ListExceptionsResponse);
+  // Derived from the record, never submitted.
+  rpc GetLabel(GetLabelRequest) returns (GetLabelResponse);
+
+  // SRS-CSSD-009.
+  rpc IssuePack(IssuePackRequest) returns (IssuePackResponse);
+  rpc MarkUsed(MarkUsedRequest) returns (MarkUsedResponse);
+  rpc ReturnPack(ReturnPackRequest) returns (ReturnPackResponse);
+  rpc ListOutstanding(ListOutstandingRequest) returns (ListOutstandingResponse);
+
+  // SRS-CSSD-010, SRS-CSSD-011.
+  rpc TraceCase(TraceCaseRequest) returns (TraceCaseResponse);
+  rpc GetRecallScope(GetRecallScopeRequest) returns (GetRecallScopeResponse);
+  rpc RaiseRecall(RaiseRecallRequest) returns (RaiseRecallResponse);
+  rpc CloseRecall(CloseRecallRequest) returns (CloseRecallResponse);
+  rpc ListOpenRecalls(ListOpenRecallsRequest) returns (ListOpenRecallsResponse);
+}
