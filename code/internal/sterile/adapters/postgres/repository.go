@@ -257,6 +257,98 @@ func instrumentsFrom(rows []sqlcgen.SterileInstrument) []domain.Instrument {
 	return out
 }
 
+// InsertInstrumentEvent appends one move to an instrument's history
+// (SRS-CSSD-012).
+func (r MasterRepo) InsertInstrumentEvent(ctx context.Context,
+	scope authctx.TenantScope, e domain.InstrumentEvent) error {
+
+	tenantID, err := scopeTenantID(scope)
+	if err != nil {
+		return err
+	}
+	eventID, err := uuid.Parse(e.ID)
+	if err != nil {
+		return notFound()
+	}
+	instrumentID, err := uuid.Parse(e.InstrumentID)
+	if err != nil {
+		return notFound()
+	}
+
+	return r.queries(ctx).InsertInstrumentEvent(ctx,
+		sqlcgen.InsertInstrumentEventParams{
+			InstrumentEventID: eventID, TenantID: tenantID,
+			InstrumentID: instrumentID,
+			FromStatus:   string(e.From), ToStatus: string(e.To),
+			Note: e.Note, Location: e.Location,
+			OccurredAt: stamp(e.OccurredAt), RecordedBy: e.RecordedBy,
+		})
+}
+
+// InstrumentHistory reads one instrument's moves, most recent first.
+func (r MasterRepo) InstrumentHistory(ctx context.Context,
+	scope authctx.TenantScope, instrumentID string, limit int32) (
+	[]domain.InstrumentEvent, error) {
+
+	tenantID, err := scopeTenantID(scope)
+	if err != nil {
+		return nil, err
+	}
+	id, err := uuid.Parse(instrumentID)
+	if err != nil {
+		return nil, notFound()
+	}
+
+	rows, err := r.queries(ctx).ListInstrumentEvents(ctx,
+		sqlcgen.ListInstrumentEventsParams{
+			TenantID: tenantID, InstrumentID: id, RowLimit: limit,
+		})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.InstrumentEvent, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, instrumentEventFrom(row))
+	}
+	return out, nil
+}
+
+// MovesByStatus reads every move of one kind in a period.
+func (r MasterRepo) MovesByStatus(ctx context.Context,
+	scope authctx.TenantScope, status domain.InstrumentStatus,
+	from, to time.Time, limit int32) ([]domain.InstrumentEvent, error) {
+
+	tenantID, err := scopeTenantID(scope)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := r.queries(ctx).ListInstrumentEventsByStatus(ctx,
+		sqlcgen.ListInstrumentEventsByStatusParams{
+			TenantID: tenantID, ToStatus: string(status),
+			PeriodStart: stamp(from), PeriodEnd: stamp(to), RowLimit: limit,
+		})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.InstrumentEvent, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, instrumentEventFrom(row))
+	}
+	return out, nil
+}
+
+func instrumentEventFrom(row sqlcgen.SterileInstrumentEvent) domain.InstrumentEvent {
+	return domain.InstrumentEvent{
+		ID: row.InstrumentEventID.String(), TenantID: row.TenantID.String(),
+		InstrumentID: row.InstrumentID.String(),
+		From:         domain.InstrumentStatus(row.FromStatus),
+		To:           domain.InstrumentStatus(row.ToStatus),
+		Note:         row.Note, Location: row.Location,
+		OccurredAt: timeOf(row.OccurredAt), RecordedBy: row.RecordedBy,
+	}
+}
+
 func instrumentFrom(row sqlcgen.SterileInstrument) domain.Instrument {
 	return domain.Instrument{
 		ID: row.InstrumentID.String(), TenantID: row.TenantID.String(),

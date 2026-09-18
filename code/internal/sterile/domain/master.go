@@ -138,6 +138,61 @@ func (i *Instrument) Move(to InstrumentStatus, note string,
 	return nil
 }
 
+// InstrumentEvent is one recorded move of one instrument (SRS-CSSD-012).
+//
+// Append-only history rather than a status column, because the requirement's
+// acceptance is "History supports replacement and loss analysis" and both
+// questions are about the past. Whether to replace a laparoscope is answered
+// by how many times it has been away this year; a loss analysis asks which
+// trays lose instruments and where they were last seen. Neither can be read
+// from a field the next move overwrites.
+type InstrumentEvent struct {
+	ID           string
+	TenantID     string
+	InstrumentID string
+
+	// From is the status it left, empty for the registration itself. Carried
+	// on the row so the sequence reads without joining to the row before it.
+	From InstrumentStatus
+	To   InstrumentStatus
+
+	Note string
+	// Location is where it was at the moment of the move, frozen. The
+	// instrument's current location moves on; a loss analysis needs where it
+	// was when it went missing.
+	Location string
+
+	OccurredAt time.Time
+	RecordedBy string
+}
+
+// NewInstrumentEvent records a move (SRS-CSSD-012).
+func NewInstrumentEvent(id string, i Instrument, from InstrumentStatus,
+	note, by string, now time.Time) (InstrumentEvent, error) {
+
+	switch {
+	case strings.TrimSpace(id) == "":
+		return InstrumentEvent{}, fmt.Errorf("%w: an instrument event needs an id",
+			ErrInvalidSet)
+	case strings.TrimSpace(by) == "":
+		return InstrumentEvent{}, fmt.Errorf(
+			"%w: an instrument event names who recorded it", ErrInvalidSet)
+	case i.Status != InstrumentInService && strings.TrimSpace(note) == "":
+		// The same rule Move applies, restated here because this row is what
+		// the analysis reads: a move out of service with no reason is a
+		// number in a report nobody can act on.
+		return InstrumentEvent{}, fmt.Errorf("%w: say why this instrument is %s",
+			ErrInvalidSet, i.Status)
+	}
+
+	return InstrumentEvent{
+		ID: id, TenantID: i.TenantID, InstrumentID: i.ID,
+		From: from, To: i.Status,
+		Note: strings.TrimSpace(note), Location: i.Location,
+		OccurredAt: now.UTC(), RecordedBy: strings.TrimSpace(by),
+	}, nil
+}
+
 // PackingItem is one line of a tray's packing list (SRS-CSSD-001).
 type PackingItem struct {
 	// Code is the catalogue code, matched against the instruments packed.

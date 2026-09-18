@@ -27,6 +27,34 @@ WHERE tenant_id = @tenant_id
 ORDER BY code, serial_number
 LIMIT @row_limit;
 
+-- The lifecycle history one move at a time (SRS-CSSD-012). Append-only: no
+-- update or delete exists for this table.
+-- name: InsertInstrumentEvent :exec
+INSERT INTO sterile.instrument_event (
+    instrument_event_id, tenant_id, instrument_id, from_status, to_status,
+    note, location, occurred_at, recorded_by
+) VALUES (
+    @instrument_event_id, @tenant_id, @instrument_id, @from_status,
+    @to_status, @note, @location, @occurred_at, @recorded_by
+);
+
+-- One instrument's history, most recent first. The replacement question:
+-- how many times has this item been away this year.
+-- name: ListInstrumentEvents :many
+SELECT * FROM sterile.instrument_event
+WHERE tenant_id = @tenant_id AND instrument_id = @instrument_id
+ORDER BY occurred_at DESC
+LIMIT @row_limit;
+
+-- Every move of one kind across the master. The loss analysis: which codes
+-- keep going missing, and where they were last seen.
+-- name: ListInstrumentEventsByStatus :many
+SELECT e.* FROM sterile.instrument_event e
+WHERE e.tenant_id = @tenant_id AND e.to_status = @to_status
+  AND e.occurred_at >= @period_start AND e.occurred_at < @period_end
+ORDER BY e.occurred_at DESC
+LIMIT @row_limit;
+
 -- The lifecycle worklist: what is away, missing or retired (SRS-CSSD-012).
 -- name: ListInstrumentsOutOfService :many
 SELECT * FROM sterile.instrument

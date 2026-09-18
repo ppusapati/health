@@ -895,3 +895,141 @@ func TestAnotherTenantSeesNoSterileRecords(t *testing.T) {
 		t.Error("another tenant read the current packing list")
 	}
 }
+
+// SRS-CSSD-012. The lifecycle history is what "history supports replacement
+// and loss analysis" means when it is written down as rows rather than as a
+// status column the next move overwrites.
+func TestTheInstrumentHistoryOutlivesTheStatusColumn(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	instrument, err := domain.NewInstrument(uuid.NewString(), f.tenantID,
+		domain.NewInstrumentInput{
+			Code: "SCOPE-5", Display: "10mm laparoscope",
+			SerialNumber: "SN-88110", Location: "store",
+		}, "cssd-1", at)
+	if err != nil {
+		t.Fatalf("NewInstrument: %v", err)
+	}
+	if err := f.master.InsertInstrument(ctx, f.scope, instrument); err != nil {
+		t.Fatalf("InsertInstrument: %v", err)
+	}
+
+	// Three moves: away, back, away again. The status column ends where it
+	// started but the item has been out of service twice, which is the whole
+	// of the replacement question.
+	moves := []struct {
+		to   domain.InstrumentStatus
+		note string
+		when time.Time
+	}{
+		{domain.InstrumentInRepair, "lens fogged", at.Add(time.Hour)},
+		{domain.InstrumentInService, "", at.Add(48 * time.Hour)},
+		{domain.InstrumentInRepair, "light cable intermittent", at.Add(72 * time.Hour)},
+	}
+	for _, move := range moves {
+		from := instrument.Status
+		if err := instrument.Move(move.to, move.note, move.when); err != nil {
+			t.Fatalf("Move(%s): %v", move.to, err)
+		}
+		if err := f.master.UpdateInstrument(ctx, f.scope, instrument,
+			instrument.Version); err != nil {
+			t.Fatalf("UpdateInstrument: %v", err)
+		}
+		instrument.Version++
+
+		event, err := domain.NewInstrumentEvent(uuid.NewString(), instrument,
+			from, move.note, "cssd-1", move.when)
+		if err != nil {
+			t.Fatalf("NewInstrumentEvent: %v", err)
+		}
+		if err := f.master.InsertInstrumentEvent(ctx, f.scope, event); err != nil {
+			t.Fatalf("InsertInstrumentEvent: %v", err)
+		}
+	}
+
+	history, err := f.master.InstrumentHistory(ctx, f.scope, instrument.ID, 50)
+	if err != nil {
+		t.Fatalf("InstrumentHistory: %v", err)
+	}
+	if len(history) != 3 {
+		t.Fatalf("history = %d move(s), want 3", len(history))
+	}
+	// Most recent first, and each row says what it left.
+	if history[0].From != domain.InstrumentInService ||
+		history[0].To != domain.InstrumentInRepair {
+		t.Errorf("most recent move = %s -> %s, want in_service -> in_repair",
+			history[0].From, history[0].To)
+	}
+	if history[0].Note != "light cable intermittent" {
+		t.Errorf("most recent note = %q", history[0].Note)
+	}
+	if history[2].From != domain.InstrumentInService {
+		t.Errorf("oldest move left %q, want in_service", history[2].From)
+	}
+
+	// The loss analysis runs the other way: every move of a kind in a period,
+	// across the master.
+	repairs, err := f.master.MovesByStatus(ctx, f.scope, domain.InstrumentInRepair,
+		at, at.Add(100*time.Hour), 50)
+	if err != nil {
+		t.Fatalf("MovesByStatus: %v", err)
+	}
+	if len(repairs) != 2 {
+		t.Errorf("repairs in the period = %d, want 2", len(repairs))
+	}
+	// A period that ends before the second one excludes it, which is what
+	// makes the report a report rather than a running total.
+	earlier, err := f.master.MovesByStatus(ctx, f.scope, domain.InstrumentInRepair,
+		at, at.Add(24*time.Hour), 50)
+	if err != nil {
+		t.Fatalf("MovesByStatus: %v", err)
+	}
+	if len(earlier) != 1 {
+		t.Errorf("repairs in the first day = %d, want 1", len(earlier))
+	}
+}
+
+// SRS-CSSD-012. The database refuses a move out of service with no reason.
+//
+// Raw SQL, because the rule under test belongs to the database: a status
+// change with no reason is a number in a report nobody can act on, and the
+// domain's own refusal would be no use to a repair tool writing directly.
+func TestTheDatabaseRefusesAnUnexplainedMoveOutOfService(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	instrument, err := domain.NewInstrument(uuid.NewString(), f.tenantID,
+		domain.NewInstrumentInput{Code: "SCOPE-7", SerialNumber: "SN-99001"},
+		"cssd-1", at)
+	if err != nil {
+		t.Fatalf("NewInstrument: %v", err)
+	}
+	if err := f.master.InsertInstrument(ctx, f.scope, instrument); err != nil {
+		t.Fatalf("InsertInstrument: %v", err)
+	}
+
+	_, err = f.pool.Exec(ctx, `
+		INSERT INTO sterile.instrument_event (
+		    instrument_event_id, tenant_id, instrument_id, from_status,
+		    to_status, note, occurred_at, recorded_by)
+		VALUES ($1, $2, $3, 'in_service', 'missing', '', now(), 'someone')`,
+		uuid.New(), f.tenantID, instrument.ID)
+	if err == nil {
+		t.Fatal("an instrument went missing with no reason recorded; a loss " +
+			"analysis would have a count and nothing to act on")
+	}
+
+	// The same move with a reason is accepted, so the constraint is not
+	// simply refusing everything.
+	_, err = f.pool.Exec(ctx, `
+		INSERT INTO sterile.instrument_event (
+		    instrument_event_id, tenant_id, instrument_id, from_status,
+		    to_status, note, occurred_at, recorded_by)
+		VALUES ($1, $2, $3, 'in_service', 'missing',
+		        'not in the count after the case', now(), 'someone')`,
+		uuid.New(), f.tenantID, instrument.ID)
+	if err != nil {
+		t.Fatalf("an explained move was refused: %v", err)
+	}
+}

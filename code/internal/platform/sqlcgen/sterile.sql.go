@@ -417,6 +417,45 @@ func (q *Queries) InsertInstrument(ctx context.Context, arg InsertInstrumentPara
 	return err
 }
 
+const insertInstrumentEvent = `-- name: InsertInstrumentEvent :exec
+INSERT INTO sterile.instrument_event (
+    instrument_event_id, tenant_id, instrument_id, from_status, to_status,
+    note, location, occurred_at, recorded_by
+) VALUES (
+    $1, $2, $3, $4,
+    $5, $6, $7, $8, $9
+)
+`
+
+type InsertInstrumentEventParams struct {
+	InstrumentEventID uuid.UUID
+	TenantID          uuid.UUID
+	InstrumentID      uuid.UUID
+	FromStatus        string
+	ToStatus          string
+	Note              string
+	Location          string
+	OccurredAt        pgtype.Timestamptz
+	RecordedBy        string
+}
+
+// The lifecycle history one move at a time (SRS-CSSD-012). Append-only: no
+// update or delete exists for this table.
+func (q *Queries) InsertInstrumentEvent(ctx context.Context, arg InsertInstrumentEventParams) error {
+	_, err := q.db.Exec(ctx, insertInstrumentEvent,
+		arg.InstrumentEventID,
+		arg.TenantID,
+		arg.InstrumentID,
+		arg.FromStatus,
+		arg.ToStatus,
+		arg.Note,
+		arg.Location,
+		arg.OccurredAt,
+		arg.RecordedBy,
+	)
+	return err
+}
+
 const insertRecall = `-- name: InsertRecall :exec
 INSERT INTO sterile.recall (
     recall_id, tenant_id, cycle_id, reason, packs_affected, cases_affected,
@@ -870,6 +909,105 @@ func (q *Queries) ListIndicators(ctx context.Context, arg ListIndicatorsParams) 
 			&i.Notes,
 			&i.ReadAt,
 			&i.ReadBy,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listInstrumentEvents = `-- name: ListInstrumentEvents :many
+SELECT instrument_event_id, tenant_id, instrument_id, from_status, to_status, note, location, occurred_at, recorded_by FROM sterile.instrument_event
+WHERE tenant_id = $1 AND instrument_id = $2
+ORDER BY occurred_at DESC
+LIMIT $3
+`
+
+type ListInstrumentEventsParams struct {
+	TenantID     uuid.UUID
+	InstrumentID uuid.UUID
+	RowLimit     int32
+}
+
+// One instrument's history, most recent first. The replacement question:
+// how many times has this item been away this year.
+func (q *Queries) ListInstrumentEvents(ctx context.Context, arg ListInstrumentEventsParams) ([]SterileInstrumentEvent, error) {
+	rows, err := q.db.Query(ctx, listInstrumentEvents, arg.TenantID, arg.InstrumentID, arg.RowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SterileInstrumentEvent{}
+	for rows.Next() {
+		var i SterileInstrumentEvent
+		if err := rows.Scan(
+			&i.InstrumentEventID,
+			&i.TenantID,
+			&i.InstrumentID,
+			&i.FromStatus,
+			&i.ToStatus,
+			&i.Note,
+			&i.Location,
+			&i.OccurredAt,
+			&i.RecordedBy,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listInstrumentEventsByStatus = `-- name: ListInstrumentEventsByStatus :many
+SELECT e.instrument_event_id, e.tenant_id, e.instrument_id, e.from_status, e.to_status, e.note, e.location, e.occurred_at, e.recorded_by FROM sterile.instrument_event e
+WHERE e.tenant_id = $1 AND e.to_status = $2
+  AND e.occurred_at >= $3 AND e.occurred_at < $4
+ORDER BY e.occurred_at DESC
+LIMIT $5
+`
+
+type ListInstrumentEventsByStatusParams struct {
+	TenantID    uuid.UUID
+	ToStatus    string
+	PeriodStart pgtype.Timestamptz
+	PeriodEnd   pgtype.Timestamptz
+	RowLimit    int32
+}
+
+// Every move of one kind across the master. The loss analysis: which codes
+// keep going missing, and where they were last seen.
+func (q *Queries) ListInstrumentEventsByStatus(ctx context.Context, arg ListInstrumentEventsByStatusParams) ([]SterileInstrumentEvent, error) {
+	rows, err := q.db.Query(ctx, listInstrumentEventsByStatus,
+		arg.TenantID,
+		arg.ToStatus,
+		arg.PeriodStart,
+		arg.PeriodEnd,
+		arg.RowLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SterileInstrumentEvent{}
+	for rows.Next() {
+		var i SterileInstrumentEvent
+		if err := rows.Scan(
+			&i.InstrumentEventID,
+			&i.TenantID,
+			&i.InstrumentID,
+			&i.FromStatus,
+			&i.ToStatus,
+			&i.Note,
+			&i.Location,
+			&i.OccurredAt,
+			&i.RecordedBy,
 		); err != nil {
 			return nil, err
 		}

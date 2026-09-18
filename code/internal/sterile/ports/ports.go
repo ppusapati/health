@@ -37,6 +37,22 @@ type MasterRepository interface {
 	OutOfService(ctx context.Context, scope authctx.TenantScope, limit int32) (
 		[]domain.Instrument, error)
 
+	// InsertInstrumentEvent appends one move to an instrument's history
+	// (SRS-CSSD-012). Append-only: there is no update and no delete, because
+	// a history that can be rewritten cannot support the loss analysis it
+	// exists for.
+	InsertInstrumentEvent(ctx context.Context, scope authctx.TenantScope,
+		e domain.InstrumentEvent) error
+	// InstrumentHistory is one instrument's moves, most recent first: the
+	// replacement question.
+	InstrumentHistory(ctx context.Context, scope authctx.TenantScope,
+		instrumentID string, limit int32) ([]domain.InstrumentEvent, error)
+	// MovesByStatus is every move of one kind in a period: the loss analysis,
+	// which asks which codes keep going missing rather than where one item is.
+	MovesByStatus(ctx context.Context, scope authctx.TenantScope,
+		status domain.InstrumentStatus, from, to time.Time, limit int32) (
+		[]domain.InstrumentEvent, error)
+
 	InsertSet(ctx context.Context, scope authctx.TenantScope,
 		s domain.TraySet) error
 	// Supersede closes a version and opens its replacement, in one

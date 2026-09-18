@@ -3239,6 +3239,18 @@ type SterileInstrument struct {
 	Version      int64
 }
 
+type SterileInstrumentEvent struct {
+	InstrumentEventID uuid.UUID
+	TenantID          uuid.UUID
+	InstrumentID      uuid.UUID
+	FromStatus        string
+	ToStatus          string
+	Note              string
+	Location          string
+	OccurredAt        pgtype.Timestamptz
+	RecordedBy        string
+}
+
 type SterileIssue struct {
 	IssueID     uuid.UUID
 	TenantID    uuid.UUID
