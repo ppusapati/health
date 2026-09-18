@@ -79,9 +79,14 @@ type PurchaseOrder struct {
 	RequisitionID string
 	BidID         string
 
-	// Revision counts from one. Supersedes points at the version this
-	// replaces, so the chain reads backwards.
+	// Revision counts from one. ChainID is the first revision's id and stays
+	// the same down the whole chain; Supersedes points at the immediate
+	// predecessor. Both, because they answer different questions: "every
+	// revision of this order" needs the root, and "what did this one change"
+	// needs the parent — and a parent pointer alone cannot express "at most
+	// one live revision" past the second amendment.
 	Revision   int
+	ChainID    string
 	Supersedes string
 	// AmendmentReason is required on every revision after the first: an
 	// amendment nobody explained is one nobody can defend when the invoice
@@ -169,8 +174,8 @@ func NewPurchaseOrder(id, tenantID string, in NewPOInput, supplier Supplier,
 		SupplierID:    supplier.ID,
 		RequisitionID: strings.TrimSpace(in.RequisitionID),
 		BidID:         strings.TrimSpace(in.BidID),
-		Revision:      1,
-		Lines:         lines, State: PODraft,
+		Revision:      1, ChainID: id,
+		Lines: lines, State: PODraft,
 		Currency: currency, PaymentTermsDays: terms,
 		DeliveryTerms:         strings.TrimSpace(in.DeliveryTerms),
 		ToleranceOverPercent:  in.ToleranceOverPercent,
@@ -281,6 +286,9 @@ func (p PurchaseOrder) Amend(id string, lines []POLine, reason, by string,
 			ErrInvalidMaterials)
 	}
 	next.Revision, next.Supersedes = p.Revision+1, p.ID
+	// Inherited, not recomputed: the chain's root is the first revision, and
+	// a third amendment that pointed at the second would start a new chain.
+	next.ChainID = p.ChainID
 	next.AmendmentReason = strings.TrimSpace(reason)
 	next.Lines = checked
 	// An amended order is re-issued, so a supplier is never delivering

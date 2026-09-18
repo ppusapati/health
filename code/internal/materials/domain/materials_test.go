@@ -706,6 +706,40 @@ func TestAnAmendmentIsANewRevisionAndSaysWhy(t *testing.T) {
 	}
 }
 
+// SRS-MAT-004. A chain of amendments keeps one root, which is what "at most
+// one live revision" can be held by. A parent pointer alone cannot say it: by
+// the third revision the parent is no longer the root.
+func TestAnAmendmentChainKeepsOneRootPastTheSecondRevision(t *testing.T) {
+	first := issuedOrder(t)
+	lines := first.Lines
+
+	second, err := first.Amend("po-2", lines, "list increased", "buyer-1",
+		at.Add(time.Hour))
+	if err != nil {
+		t.Fatalf("Amend: %v", err)
+	}
+	third, err := second.Amend("po-3", lines, "price renegotiated", "buyer-1",
+		at.Add(2*time.Hour))
+	if err != nil {
+		t.Fatalf("Amend: %v", err)
+	}
+
+	for _, order := range []domain.PurchaseOrder{first, second, third} {
+		if order.ChainID != first.ID {
+			t.Errorf("revision %d has chain %q, want %q; the third revision "+
+				"would otherwise start a chain of its own and both could be live",
+				order.Revision, order.ChainID, first.ID)
+		}
+	}
+	if second.Supersedes != first.ID || third.Supersedes != second.ID {
+		t.Errorf("the backwards chain is %q <- %q <- %q",
+			first.ID, second.Supersedes, third.Supersedes)
+	}
+	if third.Revision != 3 {
+		t.Errorf("revision = %d, want 3", third.Revision)
+	}
+}
+
 // SRS-MAT-005. Over-receipt is refused and short receipt is recorded, and the
 // asymmetry is the whole rule.
 func TestOverReceiptIsRefusedAndShortReceiptIsRecorded(t *testing.T) {

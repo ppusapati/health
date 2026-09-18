@@ -1689,6 +1689,269 @@ type IdentityAccessStepUpProof struct {
 	ObtainedAt pgtype.Timestamptz
 }
 
+type MaterialsApprovalRule struct {
+	ApprovalRuleID uuid.UUID
+	TenantID       uuid.UUID
+	MinimumValue   int64
+	Currency       string
+	Category       string
+	FacilityID     pgtype.UUID
+	Roles          []string
+	CreatedAt      pgtype.Timestamptz
+	CreatedBy      string
+}
+
+type MaterialsApprovalStep struct {
+	ApprovalStepID uuid.UUID
+	TenantID       uuid.UUID
+	RequisitionID  uuid.UUID
+	Level          int32
+	Role           string
+	Decision       string
+	Decider        string
+	Note           string
+	DecidedAt      pgtype.Timestamptz
+}
+
+type MaterialsBalance struct {
+	TenantID   uuid.UUID
+	ItemID     uuid.UUID
+	LotID      uuid.UUID
+	LocationID string
+	Status     string
+	Quantity   int64
+}
+
+type MaterialsBid struct {
+	BidID            uuid.UUID
+	TenantID         uuid.UUID
+	RfqID            uuid.UUID
+	SupplierID       uuid.UUID
+	Lines            []byte
+	LeadTimeDays     int32
+	WarrantyMonths   int32
+	PaymentTermsDays int32
+	FreightMinor     int64
+	TaxMinor         int64
+	Currency         string
+	Notes            string
+	ReceivedAt       pgtype.Timestamptz
+	RecordedBy       string
+}
+
+type MaterialsInvoice struct {
+	InvoiceID       uuid.UUID
+	TenantID        uuid.UUID
+	Number          string
+	SupplierID      uuid.UUID
+	PurchaseOrderID pgtype.UUID
+	Lines           []byte
+	Currency        string
+	ReceivedAt      pgtype.Timestamptz
+	RecordedBy      string
+}
+
+type MaterialsItem struct {
+	ItemID           uuid.UUID
+	TenantID         uuid.UUID
+	Code             string
+	Display          string
+	Category         string
+	Uom              string
+	Tracking         string
+	Policy           string
+	Perishable       bool
+	InspectOnReceipt bool
+	Consignable      bool
+	Active           bool
+	CreatedAt        pgtype.Timestamptz
+	CreatedBy        string
+	Version          int64
+}
+
+type MaterialsLiabilityEvent struct {
+	LiabilityEventID uuid.UUID
+	TenantID         uuid.UUID
+	LotID            uuid.UUID
+	ItemID           uuid.UUID
+	SupplierID       uuid.UUID
+	Quantity         int32
+	PatientID        pgtype.UUID
+	EncounterID      pgtype.UUID
+	MovementID       uuid.UUID
+	OccurredAt       pgtype.Timestamptz
+	RecordedBy       string
+}
+
+type MaterialsLot struct {
+	LotID         uuid.UUID
+	TenantID      uuid.UUID
+	ItemID        uuid.UUID
+	Code          string
+	Expiry        pgtype.Timestamptz
+	ReceivedAt    pgtype.Timestamptz
+	Ownership     string
+	SupplierID    pgtype.UUID
+	Blocked       bool
+	BlockedReason string
+	BlockedAt     pgtype.Timestamptz
+	BlockedBy     string
+	CreatedAt     pgtype.Timestamptz
+	Version       int64
+}
+
+type MaterialsMovement struct {
+	MovementID   uuid.UUID
+	TenantID     uuid.UUID
+	ItemID       uuid.UUID
+	LotID        uuid.UUID
+	FromLocation string
+	FromStatus   string
+	ToLocation   string
+	ToStatus     string
+	Quantity     int32
+	Kind         string
+	Reference    string
+	Reason       string
+	CostCentre   string
+	PatientID    pgtype.UUID
+	EncounterID  pgtype.UUID
+	OccurredAt   pgtype.Timestamptz
+	RecordedBy   string
+}
+
+type MaterialsPurchaseOrder struct {
+	PurchaseOrderID       uuid.UUID
+	TenantID              uuid.UUID
+	Number                string
+	FacilityID            pgtype.UUID
+	SupplierID            uuid.UUID
+	RequisitionID         pgtype.UUID
+	BidID                 pgtype.UUID
+	Revision              int32
+	ChainID               uuid.UUID
+	Supersedes            pgtype.UUID
+	AmendmentReason       string
+	Lines                 []byte
+	State                 string
+	Currency              string
+	PaymentTermsDays      int32
+	DeliveryTerms         string
+	ToleranceOverPercent  int32
+	ToleranceShortPercent int32
+	IssuedAt              pgtype.Timestamptz
+	IssuedBy              string
+	CreatedAt             pgtype.Timestamptz
+	CreatedBy             string
+	Version               int64
+}
+
+type MaterialsReceipt struct {
+	ReceiptID       uuid.UUID
+	TenantID        uuid.UUID
+	Number          string
+	PurchaseOrderID uuid.UUID
+	PoRevision      int32
+	SupplierID      uuid.UUID
+	LocationID      string
+	DeliveryNote    string
+	InvoiceRef      string
+	Lines           []byte
+	ReceivedAt      pgtype.Timestamptz
+	ReceivedBy      string
+	Version         int64
+}
+
+type MaterialsRequisition struct {
+	RequisitionID   uuid.UUID
+	TenantID        uuid.UUID
+	Number          string
+	FacilityID      pgtype.UUID
+	Source          string
+	NeedBy          pgtype.Timestamptz
+	CostCentre      string
+	SourceReference string
+	Lines           []byte
+	State           string
+	Justification   string
+	RaisedAt        pgtype.Timestamptz
+	RaisedBy        string
+	Version         int64
+}
+
+type MaterialsRfq struct {
+	RfqID         uuid.UUID
+	TenantID      uuid.UUID
+	Number        string
+	RequisitionID pgtype.UUID
+	SupplierIds   []uuid.UUID
+	Lines         []byte
+	ClosesAt      pgtype.Timestamptz
+	IssuedAt      pgtype.Timestamptz
+	IssuedBy      string
+	Version       int64
+}
+
+type MaterialsStockCount struct {
+	CountID      uuid.UUID
+	TenantID     uuid.UUID
+	Number       string
+	LocationID   string
+	Cycle        bool
+	Lines        []byte
+	State        string
+	ApprovedBy   string
+	ApprovedAt   pgtype.Timestamptz
+	ApprovalNote string
+	OpenedAt     pgtype.Timestamptz
+	OpenedBy     string
+	CountedAt    pgtype.Timestamptz
+	CountedBy    string
+	Version      int64
+}
+
+type MaterialsStockLevel struct {
+	TenantID        uuid.UUID
+	ItemID          uuid.UUID
+	LocationID      string
+	Minimum         int32
+	Maximum         int32
+	ReorderQuantity int32
+	UpdatedAt       pgtype.Timestamptz
+	UpdatedBy       string
+}
+
+type MaterialsSupplier struct {
+	SupplierID       uuid.UUID
+	TenantID         uuid.UUID
+	Code             string
+	Display          string
+	Approved         bool
+	ContactEmail     string
+	ContactPhone     string
+	PaymentTermsDays int32
+	Currency         string
+	CreatedAt        pgtype.Timestamptz
+	CreatedBy        string
+	Version          int64
+}
+
+type MaterialsTransfer struct {
+	TransferID   uuid.UUID
+	TenantID     uuid.UUID
+	Number       string
+	FromLocation string
+	ToLocation   string
+	Lines        []byte
+	State        string
+	Reason       string
+	DispatchedAt pgtype.Timestamptz
+	DispatchedBy string
+	ReceivedAt   pgtype.Timestamptz
+	ReceivedBy   string
+	Version      int64
+}
+
 type MedicationDoseRule struct {
 	TenantID               uuid.UUID
 	RuleID                 string
