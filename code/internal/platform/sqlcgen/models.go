@@ -428,6 +428,224 @@ type BillingTariffLine struct {
 	UpdatedAt     pgtype.Timestamptz
 }
 
+type BloodbankCollection struct {
+	CollectionID   uuid.UUID
+	TenantID       uuid.UUID
+	DonorID        uuid.UUID
+	ScreeningID    uuid.UUID
+	DonationNumber string
+	Kind           string
+	VolumeMl       int32
+	Abo            *string
+	Rhd            *string
+	CollectedAt    pgtype.Timestamptz
+	CollectedBy    string
+	AdverseEvent   bool
+	AdverseNote    string
+}
+
+type BloodbankComponent struct {
+	ComponentID    uuid.UUID
+	TenantID       uuid.UUID
+	UnitNumber     string
+	CollectionID   uuid.UUID
+	DonorID        pgtype.UUID
+	Source         string
+	ComponentClass string
+	Abo            string
+	Rhd            string
+	Status         string
+	DiscardReason  string
+	VolumeMl       int32
+	Attributes     []string
+	Location       string
+	CollectedAt    pgtype.Timestamptz
+	ExpiresAt      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	CreatedBy      string
+	Version        int64
+}
+
+type BloodbankDonor struct {
+	DonorID       uuid.UUID
+	TenantID      uuid.UUID
+	DonorNumber   string
+	PatientID     pgtype.UUID
+	DisplayName   string
+	BirthDate     pgtype.Date
+	ContactPhone  string
+	Abo           *string
+	Rhd           *string
+	Deferral      *string
+	DeferralCode  string
+	DeferralNote  string
+	DeferredAt    pgtype.Timestamptz
+	DeferredBy    string
+	DeferredUntil pgtype.Timestamptz
+	RegisteredAt  pgtype.Timestamptz
+	RegisteredBy  string
+	Version       int64
+}
+
+type BloodbankEpisode struct {
+	EpisodeID     uuid.UUID
+	TenantID      uuid.UUID
+	ComponentID   uuid.UUID
+	IssueID       pgtype.UUID
+	PatientID     uuid.UUID
+	EncounterID   pgtype.UUID
+	Status        string
+	StartedAt     pgtype.Timestamptz
+	StartedBy     string
+	EndedAt       pgtype.Timestamptz
+	VolumeGivenMl int32
+	StopReason    string
+	CheckedBy     string
+	CheckedWith   string
+}
+
+type BloodbankIssue struct {
+	IssueID             uuid.UUID
+	TenantID            uuid.UUID
+	ComponentID         uuid.UUID
+	ReservationID       pgtype.UUID
+	PatientID           uuid.UUID
+	RequestID           pgtype.UUID
+	Destination         string
+	Emergency           bool
+	EmergencyAuthoriser string
+	EmergencyReason     string
+	Reconciled          bool
+	ReconciledAt        pgtype.Timestamptz
+	ReconciledBy        string
+	ReconcileNote       string
+	IssuedAt            pgtype.Timestamptz
+	IssuedBy            string
+	IssuedTo            string
+	CheckedBy           string
+}
+
+type BloodbankObservation struct {
+	ObservationID uuid.UUID
+	TenantID      uuid.UUID
+	EpisodeID     uuid.UUID
+	Timing        string
+	Values        []byte
+	Note          string
+	ObservedAt    pgtype.Timestamptz
+	ObservedBy    string
+}
+
+type BloodbankPatientSample struct {
+	SampleID               uuid.UUID
+	TenantID               uuid.UUID
+	PatientID              uuid.UUID
+	SampleNumber           string
+	Abo                    string
+	Rhd                    string
+	AntibodyScreenPositive bool
+	AntibodyNote           string
+	SecondCheck            bool
+	CollectedAt            pgtype.Timestamptz
+	CollectedBy            string
+	ExpiresAt              pgtype.Timestamptz
+	TestedAt               pgtype.Timestamptz
+	TestedBy               string
+}
+
+type BloodbankReaction struct {
+	ReactionID     uuid.UUID
+	TenantID       uuid.UUID
+	EpisodeID      pgtype.UUID
+	ComponentID    uuid.UUID
+	PatientID      uuid.UUID
+	Severity       string
+	Features       []string
+	Note           string
+	ReportedAt     pgtype.Timestamptz
+	ReportedBy     string
+	State          string
+	Classification string
+	Conclusion     string
+	ConcludedAt    pgtype.Timestamptz
+	ConcludedBy    string
+	UnitReturned   bool
+}
+
+type BloodbankRequest struct {
+	RequestID      uuid.UUID
+	TenantID       uuid.UUID
+	PatientID      uuid.UUID
+	EncounterID    pgtype.UUID
+	FacilityID     string
+	ComponentClass string
+	Quantity       int32
+	Indication     string
+	Urgency        string
+	Requirements   []string
+	RequiredBy     pgtype.Timestamptz
+	Status         string
+	RequestedBy    string
+	RequestedAt    pgtype.Timestamptz
+	Version        int64
+}
+
+type BloodbankReservation struct {
+	ReservationID  uuid.UUID
+	TenantID       uuid.UUID
+	ComponentID    uuid.UUID
+	RequestID      pgtype.UUID
+	PatientID      uuid.UUID
+	SampleID       pgtype.UUID
+	Crossmatched   bool
+	CrossmatchNote string
+	Status         string
+	ExpiresAt      pgtype.Timestamptz
+	ReservedAt     pgtype.Timestamptz
+	ReservedBy     string
+	ReleasedReason string
+}
+
+type BloodbankScreening struct {
+	ScreeningID  uuid.UUID
+	TenantID     uuid.UUID
+	DonorID      uuid.UUID
+	Answers      []byte
+	Measurements []byte
+	Consented    bool
+	ConsentNote  string
+	Accepted     bool
+	Deferral     *string
+	DeferralCode string
+	ScreenedAt   pgtype.Timestamptz
+	ScreenedBy   string
+}
+
+type BloodbankStockThreshold struct {
+	ThresholdID    uuid.UUID
+	TenantID       uuid.UUID
+	FacilityID     string
+	ComponentClass string
+	Abo            string
+	Rhd            string
+	Minimum        int32
+	SetBy          string
+	SetAt          pgtype.Timestamptz
+}
+
+type BloodbankTestResult struct {
+	TestID       uuid.UUID
+	TenantID     uuid.UUID
+	CollectionID uuid.UUID
+	Code         string
+	Display      string
+	Reactive     bool
+	Value        string
+	Method       string
+	TestedAt     pgtype.Timestamptz
+	TestedBy     string
+}
+
 type ClinicalAllergy struct {
 	AllergyID        uuid.UUID
 	TenantID         uuid.UUID

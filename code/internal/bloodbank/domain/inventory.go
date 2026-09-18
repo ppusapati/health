@@ -196,6 +196,10 @@ type Component struct {
 	Class  ComponentClass
 	Group  Group
 	Status UnitStatus
+	// DiscardReason is why the unit left inventory, and is part of its state
+	// rather than a separate log: the utilisation report reads it off the row,
+	// and a reason held somewhere else would be a second record of one fact.
+	DiscardReason DiscardReason
 
 	VolumeML int
 	// Attributes are the special ones a request can require: irradiated,
@@ -413,6 +417,6 @@ func (c *Component) Discard(reason DiscardReason) error {
 	if !knownDiscardReasons[reason] {
 		return fmt.Errorf("%w: unknown discard reason %q", ErrInvalidUnit, reason)
 	}
-	c.Status = UnitDiscarded
+	c.Status, c.DiscardReason = UnitDiscarded, reason
 	return nil
 }

@@ -457,6 +457,11 @@ type Issue struct {
 	// IssuedTo is the person who collected it, which is the other half of the
 	// chain of custody.
 	IssuedTo string
+	// CheckedBy is who made the final identity check at the counter. Kept on
+	// the record rather than only validated, because SRS-BLD-009's clause is
+	// that the issue "captures unit, patient, destination, user and time" —
+	// and a check nobody can name afterwards is one that cannot be reviewed.
+	CheckedBy string
 }
 
 // IssueCheck is the final identity verification before a unit leaves
@@ -531,7 +536,8 @@ func IssueComponent(id, tenantID string, in NewIssueInput, unit Component,
 		RequestID:   strings.TrimSpace(in.RequestID),
 		Destination: strings.TrimSpace(in.Destination),
 		IssuedAt:    now.UTC(), IssuedBy: strings.TrimSpace(by),
-		IssuedTo: strings.TrimSpace(in.IssuedTo),
+		IssuedTo:  strings.TrimSpace(in.IssuedTo),
+		CheckedBy: strings.TrimSpace(in.Check.CheckedBy),
 	}
 
 	if in.Emergency {
