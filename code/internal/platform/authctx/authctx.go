@@ -163,6 +163,23 @@ func (s Session) HasPermission(name string) bool {
 	return false
 }
 
+// HasRole reports whether the caller holds a named role.
+//
+// Distinct from HasPermission, and needed where a step names the role that
+// must take it rather than the capability it requires. An approval route is
+// the case that motivates it: "the head of department signs, then finance"
+// cannot be expressed as a permission, because everyone in the chain holds the
+// same approve permission and the question is which of them is signing.
+// Without this, a caller could claim any role by typing it.
+func (s Session) HasRole(name string) bool {
+	for _, r := range s.Roles {
+		if r == name {
+			return true
+		}
+	}
+	return false
+}
+
 type sessionKey struct{}
 
 // WithSession returns a context carrying the verified session.
