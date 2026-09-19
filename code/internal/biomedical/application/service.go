@@ -354,3 +354,10 @@ func (s *Service) escalateIfCritical(ctx context.Context,
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }
+
+// BlocksOnCalibration reports this deployment's reading of SRS-BIO-004.
+//
+// Exposed because the transport derives "why is this unusable" at the moment
+// of rendering, and it has to ask the same question the use cases do. A
+// second copy of the setting in the handler would drift.
+func (s *Service) BlocksOnCalibration() bool { return s.config.BlockOnCalibration }

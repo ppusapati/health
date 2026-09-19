@@ -166,6 +166,32 @@ const (
 	// the ledger.
 	RoleBuyer Role = "buyer"
 
+	// RoleBiomedicalEngineer maintains the equipment: the register, the
+	// maintenance schedules, the service work and the device telemetry
+	// (SRS-BIO-001, SRS-BIO-003, SRS-BIO-005, SRS-BIO-006, SRS-BIO-010).
+	//
+	// A role of its own because the department is not a ward and not a store.
+	// What it deliberately does not hold is the four decisions below: it
+	// cannot validate its own repair, cannot record a calibration, cannot run
+	// a recall, and cannot dispose of an asset.
+	RoleBiomedicalEngineer Role = "biomedical_engineer"
+
+	// RoleBiomedicalManager runs the department and holds the decisions a
+	// hospital is answerable for: validating a repair, recording a
+	// calibration, running a recall, and disposing of an asset (SRS-BIO-004,
+	// SRS-BIO-006, SRS-BIO-008, SRS-BIO-011).
+	//
+	// Separate from the engineer for the reason every engineering function
+	// separates them: closing a ticket is the validation, and the person who
+	// made the repair should not be the person who declares it good. The
+	// manager holds the engineer's permissions too — a manager works the
+	// bench — so this is an addition rather than a different job.
+	//
+	// Holding bio.ticket.close is necessary and not sufficient: the domain
+	// refuses the engineer who did the work whoever they are, so a manager who
+	// fixed a machine still cannot sign it off.
+	RoleBiomedicalManager Role = "biomedical_manager"
+
 	// RolePharmacist verifies prescriptions and dispenses (SRS-MED-006,
 	// SRS-MED-011, Wave-1 actor "Pharmacist").
 	//
@@ -644,6 +670,16 @@ var rolePermissions = map[Role][]string{
 		// (SRS-NUR-018).
 		"nur.downtime.manage",
 
+		// Reporting a broken machine (SRS-BIO-005). Granted because the person
+		// who finds one is whoever was using it, and a ward that has to ask
+		// somebody else to raise the ticket is a ward that writes it on a
+		// sticky note instead. Read alongside it, so the nurse can see the
+		// asset they are reporting and whether it is already held.
+		// Deliberately nothing else: a nurse does not close the repair,
+		// calibrate the machine, or lift a safety hold.
+		"bio.record.read",
+		"bio.ticket.raise",
+
 		// The emergency department (SRS-ER). Triage is nursing work and this
 		// is the role that holds it: a nurse assigns acuity against the
 		// department's published scale (SRS-ER-002), records the timeline, and
@@ -915,6 +951,50 @@ var rolePermissions = map[Role][]string{
 		// Deliberately no mat.requisition.approve: a buyer approving the
 		// request they are about to fill is the request and the check on it
 		// in one pair of hands.
+	},
+
+	// A biomedical engineer maintains the equipment and does the service work
+	// (SRS-BIO-001, SRS-BIO-003, SRS-BIO-005, SRS-BIO-006, SRS-BIO-010).
+	RoleBiomedicalEngineer: {
+		"bio.record.read",
+		"bio.asset.register",
+		"bio.plan.write",
+		"bio.ticket.raise",
+		"bio.ticket.work",
+		"bio.telemetry.append",
+		"bio.analysis.read",
+		// Deliberately no bio.ticket.close: closing is the validation, and a
+		// repair signed off by the person who made it is the same claim twice.
+		// Deliberately no bio.calibration.record: a calibration is what makes
+		// a machine's readings admissible, and somebody who could record one
+		// could make an uncalibrated analyser look fit to report on patients.
+		// Deliberately no bio.notice.manage: raising a recall stops equipment
+		// across the hospital, and lifting a hold puts it back into use.
+		// Deliberately no bio.asset.dispose: a disposal is the last thing that
+		// ever happens to a record, and anything missing at that point is
+		// missing for ever.
+		// Deliberately no bio.contract.write: a contract is money, and a
+		// renewal is a purchase.
+	},
+
+	// A biomedical manager works the bench and holds the four decisions the
+	// department is answerable for (SRS-BIO-004, SRS-BIO-006, SRS-BIO-008,
+	// SRS-BIO-011).
+	RoleBiomedicalManager: {
+		"bio.record.read",
+		"bio.asset.register",
+		"bio.plan.write",
+		"bio.ticket.raise",
+		"bio.ticket.work",
+		"bio.telemetry.append",
+		"bio.analysis.read",
+		// The four the engineer does not hold.
+		"bio.ticket.close",
+		"bio.calibration.record",
+		"bio.notice.manage",
+		"bio.asset.dispose",
+		// Renewals and their money.
+		"bio.contract.write",
 	},
 
 	// A sterile services supervisor works the bench and holds the three

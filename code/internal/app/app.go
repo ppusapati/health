@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/ppusapati/health/code/gen/go/healthcare/anaesthesia/v1/anaesthesiav1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/billing/v1/billingv1connect"
+	"github.com/ppusapati/health/code/gen/go/healthcare/biomedical/v1/biomedicalv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/bloodbank/v1/bloodbankv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/clinical/v1/clinicalv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/emergency/v1/emergencyv1connect"
@@ -40,6 +41,10 @@ import (
 	billingpostgres "github.com/ppusapati/health/code/internal/billing/adapters/postgres"
 	billingapp "github.com/ppusapati/health/code/internal/billing/application"
 	billingtransport "github.com/ppusapati/health/code/internal/billing/transport"
+	biomedicalescalate "github.com/ppusapati/health/code/internal/biomedical/adapters/escalate"
+	biomedicalpostgres "github.com/ppusapati/health/code/internal/biomedical/adapters/postgres"
+	biomedicalapp "github.com/ppusapati/health/code/internal/biomedical/application"
+	biomedicaltransport "github.com/ppusapati/health/code/internal/biomedical/transport"
 	bloodbankescalate "github.com/ppusapati/health/code/internal/bloodbank/adapters/escalate"
 	bloodbankpostgres "github.com/ppusapati/health/code/internal/bloodbank/adapters/postgres"
 	bloodbankapp "github.com/ppusapati/health/code/internal/bloodbank/application"
@@ -284,6 +289,20 @@ type Deps struct {
 	// document names rather than this code guessing at.
 	Materials materialsapp.Config
 
+	// Biomedical is what a deployment has decided about its equipment:
+	// whether a lapsed calibration stops a machine being used, how far ahead
+	// the maintenance and renewal lists look, what a ticket promises on an
+	// asset with no contract, and which criticality escalates when it goes
+	// down (SRS-BIO-002 … 005, SRS-BIO-009).
+	//
+	// The zero value reports and does not enforce: a lapsed calibration is
+	// named rather than blocking, the lists report only what has already
+	// lapsed, and nothing escalates. Each of those is a deployment that has
+	// not decided, which the status document names rather than this code
+	// guessing at — the stricter reading of SRS-BIO-004 is a hospital's call,
+	// not a default.
+	Biomedical biomedicalapp.Config
+
 	// Emergency is what a deployment has decided about its emergency
 	// department: which triage scale it has approved, what must be measured at
 	// triage, and what each disposition requires (SRS-ER-002, SRS-ER-013).
@@ -309,6 +328,7 @@ type Server struct {
 	BloodBank    *bloodbankapp.Service
 	Sterile      *sterileapp.Service
 	Materials    *materialsapp.Service
+	Biomedical   *biomedicalapp.Service
 	Nursing      *nursingapp.Service
 	Orders       *ordersapp.Service
 	Medication   *medicationapp.Service
@@ -676,6 +696,27 @@ func New(deps Deps) *Server {
 		Config:      deps.Materials,
 	})
 
+	biomedicalRepo := biomedicalpostgres.New(txManager)
+	biomedicalService := biomedicalapp.NewService(biomedicalapp.Deps{
+		UnitOfWork: txManager,
+		Assets:     biomedicalpostgres.AssetRepo{Repository: biomedicalRepo},
+		Contracts:  biomedicalpostgres.ContractRepo{Repository: biomedicalRepo},
+		Plans:      biomedicalpostgres.PlanRepo{Repository: biomedicalRepo},
+		Tickets:    biomedicalpostgres.TicketRepo{Repository: biomedicalRepo},
+		Notices:    biomedicalpostgres.NoticeRepo{Repository: biomedicalRepo},
+		Telemetry:  biomedicalpostgres.TelemetryRepo{Repository: biomedicalRepo},
+		Disposals:  biomedicalpostgres.DisposalRepo{Repository: biomedicalRepo},
+		Events:     platformStore,
+		Audits:     store.AuditAppenderFunc(platformStore.AppendAudit),
+		// SRS-BIO-008's recall and a critical machine going down. Durable and
+		// acknowledged, because both have to reach the ward rather than a
+		// screen nobody opened.
+		Escalations: biomedicalescalate.New(escalationStore),
+		IDs:         uuidGenerator{},
+		Clock:       systemClock{},
+		Config:      deps.Biomedical,
+	})
+
 	medicationRepo := medicationpostgres.New(txManager)
 	medicationTerminology := medicationpostgres.NewTerminology(medicationRepo)
 	medicationService := medicationapp.NewService(medicationapp.Deps{
@@ -838,6 +879,8 @@ func New(deps Deps) *Server {
 		bloodbanktransport.NewHandler(bloodbankService, time.Now), interceptors))
 	mux.Handle(sterilev1connect.NewSterileServicesServiceHandler(
 		steriletransport.NewHandler(sterileService, time.Now), interceptors))
+	mux.Handle(biomedicalv1connect.NewBiomedicalServiceHandler(
+		biomedicaltransport.NewHandler(biomedicalService, time.Now), interceptors))
 	mux.Handle(materialsv1connect.NewMaterialsServiceHandler(
 		materialstransport.NewHandler(materialsService, time.Now), interceptors))
 	billingRepo := billingpostgres.New(txManager)
@@ -903,6 +946,7 @@ func New(deps Deps) *Server {
 		BloodBank:       bloodbankService,
 		Sterile:         sterileService,
 		Materials:       materialsService,
+		Biomedical:      biomedicalService,
 		Nursing:         nursingService,
 		Orders:          ordersService,
 		Medication:      medicationService,

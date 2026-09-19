@@ -1,0 +1,1113 @@
+// Biomedical engineering: the equipment register, service contracts,
+// preventive maintenance and its due list, breakdown and service work with
+// contract-derived SLAs, calibration, recalls and field safety notices,
+// device telemetry, uptime and reliability figures, the link from equipment
+// availability to what a room can be scheduled for, and disposal.
+//
+// Owning context : biomedical  (Master Engineering Registry)
+// Owning service : BiomedicalService
+// Trace          : SRS-BIO-001 … SRS-BIO-011
+//
+// Six shapes in this contract are deliberate.
+//
+// A ticket carries a kind, and only a corrective one is a failure. MTBF is
+// the mean time between failures; counting a scheduled service as one makes a
+// well-maintained machine look unreliable, which would be an argument for
+// servicing less. Planned downtime is reported beside the unplanned kind
+// rather than mixed into it.
+//
+// A ticket's SLA hours are read-only on the wire. They are derived from the
+// asset's live contract and tightened by priority, and a request that could
+// set them could give itself a week for an emergency.
+//
+// A disposal names a requester but not an approver. The approver is the
+// authenticated caller, because an approval field a client can fill in is an
+// approval the requester grants themselves.
+//
+// A location's capability is a map of counts, not a list of flags. A theatre
+// with two image intensifiers loses nothing when one goes for service, and a
+// boolean would take the room off the list.
+//
+// Expiries and the maintenance due list have no "create" RPC. Both are
+// derived on read, because a stored reminder stays raised after the contract
+// is renewed and an engineer who has learned to ignore stale reminders
+// ignores the real one too.
+//
+// A runtime maintenance plan with no meter reading is reported as
+// unanswerable rather than as not-due. "We do not know" and "it is fine" are
+// different answers, and only one of them needs somebody to go and look.
+syntax = "proto3";
+
+package healthcare.biomedical.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ppusapati/health/code/gen/go/healthcare/biomedical/v1;biomedicalv1";
+
+// How much the hospital depends on one machine (SRS-BIO-001).
+enum Criticality {
+  CRITICALITY_UNSPECIFIED = 0;
+  // Replaceable within a day without anybody noticing.
+  CRITICALITY_ROUTINE = 1;
+  // A department's work slows without it.
+  CRITICALITY_IMPORTANT = 2;
+  // A service stops without it.
+  CRITICALITY_CRITICAL = 3;
+  // A patient is on it. The level that escalates the moment it goes down.
+  CRITICALITY_LIFE_SUPPORT = 4;
+}
+
+// Where a piece of equipment stands (SRS-BIO-001, SRS-BIO-011).
+enum AssetStatus {
+  ASSET_STATUS_UNSPECIFIED = 0;
+  ASSET_STATUS_IN_SERVICE = 1;
+  // Being worked on. Counted, located, and not usable.
+  ASSET_STATUS_UNDER_MAINTENANCE = 2;
+  // Broken and waiting. Distinct from under maintenance because the wait is
+  // the vendor's and the escalation is different.
+  ASSET_STATUS_AWAITING_PARTS = 3;
+  // Withdrawn but still owned — condemned, or held pending a decision.
+  ASSET_STATUS_OUT_OF_SERVICE = 4;
+  // Approved for disposal and awaiting it. It can still take a final safety
+  // check, which is often the last thing that happens to one.
+  ASSET_STATUS_DECOMMISSIONED = 5;
+  // Gone. Set by DisposeAsset and never by a status change, because disposal
+  // needs an approval and sanitisation evidence.
+  ASSET_STATUS_DISPOSED = 6;
+}
+
+// What kind of agreement covers a machine (SRS-BIO-002).
+enum ContractKind {
+  CONTRACT_KIND_UNSPECIFIED = 0;
+  CONTRACT_KIND_WARRANTY = 1;
+  // Annual maintenance: labour, parts charged separately.
+  CONTRACT_KIND_AMC = 2;
+  // Comprehensive: labour and parts. The most protective of the three.
+  CONTRACT_KIND_CMC = 3;
+}
+
+// What a maintenance plan counts (SRS-BIO-003).
+enum PlanBasis {
+  PLAN_BASIS_UNSPECIFIED = 0;
+  // Calendar days since the last service.
+  PLAN_BASIS_INTERVAL = 1;
+  // Hours the machine has run, from its meter.
+  PLAN_BASIS_RUNTIME = 2;
+  // A calendar interval set by a risk assessment rather than by the
+  // manufacturer. Separate from INTERVAL so the reason is on the record.
+  PLAN_BASIS_RISK = 3;
+}
+
+// Where one planned service stands (SRS-BIO-003).
+enum DueState {
+  DUE_STATE_UNSPECIFIED = 0;
+  DUE_STATE_NOT_DUE = 1;
+  DUE_STATE_DUE_SOON = 2;
+  DUE_STATE_DUE = 3;
+  DUE_STATE_OVERDUE = 4;
+}
+
+// Why the engineer is there (SRS-BIO-005, SRS-BIO-007).
+enum TicketKind {
+  TICKET_KIND_UNSPECIFIED = 0;
+  // A breakdown. The only kind that counts as a failure.
+  TICKET_KIND_CORRECTIVE = 1;
+  // Scheduled work against a plan, which it must name.
+  TICKET_KIND_PREVENTIVE = 2;
+  TICKET_KIND_CALIBRATION = 3;
+  TICKET_KIND_INSPECTION = 4;
+}
+
+// How fast the hospital needs it back (SRS-BIO-005).
+enum Priority {
+  PRIORITY_UNSPECIFIED = 0;
+  PRIORITY_LOW = 1;
+  PRIORITY_NORMAL = 2;
+  PRIORITY_HIGH = 3;
+  // Equipment a patient is on now.
+  PRIORITY_EMERGENCY = 4;
+}
+
+// What the fault is doing to the service (SRS-BIO-005).
+enum Impact {
+  IMPACT_UNSPECIFIED = 0;
+  IMPACT_NONE = 1;
+  IMPACT_DEGRADED = 2;
+  IMPACT_SERVICE_STOPPED = 3;
+  IMPACT_PATIENT_AFFECTED = 4;
+}
+
+// Where a work order stands (SRS-BIO-005, SRS-BIO-006).
+enum TicketState {
+  TICKET_STATE_UNSPECIFIED = 0;
+  TICKET_STATE_OPEN = 1;
+  TICKET_STATE_ASSIGNED = 2;
+  TICKET_STATE_IN_PROGRESS = 3;
+  // Waiting on a part. The resolution clock is stopped: an SLA measures what
+  // the service provider controls, and a manufacturer's lead time is a supply
+  // problem reported as an engineering one.
+  TICKET_STATE_AWAITING_PARTS = 4;
+  TICKET_STATE_RESOLVED = 5;
+  // Closed is the validation, and never by the engineer who did the work.
+  TICKET_STATE_CLOSED = 6;
+  TICKET_STATE_CANCELLED = 7;
+}
+
+// What kind of safety notice this is (SRS-BIO-008).
+enum NoticeKind {
+  NOTICE_KIND_UNSPECIFIED = 0;
+  // A recall always holds the equipment it matches.
+  NOTICE_KIND_RECALL = 1;
+  NOTICE_KIND_FIELD_SAFETY = 2;
+  NOTICE_KIND_ADVISORY = 3;
+}
+
+// What has been done to one asset under a notice (SRS-BIO-008).
+enum TaskState {
+  TASK_STATE_UNSPECIFIED = 0;
+  TASK_STATE_OUTSTANDING = 1;
+  TASK_STATE_INSPECTED = 2;
+  TASK_STATE_CORRECTED = 3;
+  // The one verdict that ends the enquiry, so it is the one that needs a
+  // reason.
+  TASK_STATE_NOT_AFFECTED = 4;
+  TASK_STATE_QUARANTINED = 5;
+}
+
+// What is coming due (SRS-BIO-002, SRS-BIO-004).
+enum ExpiryKind {
+  EXPIRY_KIND_UNSPECIFIED = 0;
+  EXPIRY_KIND_CONTRACT = 1;
+  EXPIRY_KIND_CALIBRATION = 2;
+}
+
+// Asset is one piece of equipment (SRS-BIO-001).
+message Asset {
+  string asset_id = 1;
+  // The number on the sticker. Unique within the tenant, and what a service
+  // request names.
+  string tag = 2;
+  // The manufacturer's identifiers. Both, because a recall is announced by
+  // one or the other and a hospital does not get to choose which.
+  string udi = 3;
+  string serial = 4;
+  string make = 5;
+  string model = 6;
+  string category = 7;
+  Criticality criticality = 8;
+  AssetStatus status = 9;
+  // Where it stands. What SRS-BIO-009's capability read runs over.
+  string location_id = 10;
+  string department = 11;
+  // What this asset lets a room do. The same vocabulary a theatre matches a
+  // case's requirements against, so one out of service subtracts from it.
+  repeated string capabilities = 12;
+  google.protobuf.Timestamp acquired_on = 13;
+  // Minor units and an integer, never a float: depreciation and replacement
+  // analysis add these up.
+  int64 acquisition_cost_minor = 14;
+  int32 expected_life_years = 15;
+  bool calibration_required = 16;
+  google.protobuf.Timestamp calibration_due = 17;
+  string calibration_certificate = 18;
+  // Stopped by a safety notice. Separate from status, because a held asset
+  // may be perfectly serviceable and still must not be used.
+  bool safety_hold = 19;
+  string safety_hold_reason = 20;
+  string notes = 21;
+  google.protobuf.Timestamp created_at = 22;
+  string created_by = 23;
+  int64 version = 24;
+  // Why this asset cannot be used right now, one line per reason. Derived on
+  // read and empty when it is fine. Every reason rather than the first,
+  // because fixing one and finding another is how an engineer loses a day.
+  repeated string unusable_reasons = 25;
+}
+
+message RegisterAssetRequest {
+  string tag = 1;
+  string udi = 2;
+  string serial = 3;
+  string make = 4;
+  string model = 5;
+  string category = 6;
+  Criticality criticality = 7;
+  string location_id = 8;
+  string department = 9;
+  repeated string capabilities = 10;
+  google.protobuf.Timestamp acquired_on = 11;
+  int64 acquisition_cost_minor = 12;
+  int32 expected_life_years = 13;
+  bool calibration_required = 14;
+  google.protobuf.Timestamp calibration_due = 15;
+  string notes = 16;
+}
+
+message RegisterAssetResponse {
+  Asset asset = 1;
+}
+
+message GetAssetRequest {
+  string asset_id = 1;
+}
+
+message GetAssetResponse {
+  Asset asset = 1;
+}
+
+message GetAssetByTagRequest {
+  string tag = 1;
+}
+
+message GetAssetByTagResponse {
+  Asset asset = 1;
+}
+
+message ListAssetsRequest {
+  string category = 1;
+  AssetStatus status = 2;
+  // Drop decommissioned and disposed equipment, which is what a working list
+  // wants and an audit does not.
+  bool exclude_retired = 3;
+  int32 page_size = 4;
+}
+
+message ListAssetsResponse {
+  repeated Asset assets = 1;
+}
+
+message MoveAssetRequest {
+  string asset_id = 1;
+  // Leave unspecified to move a machine between rooms without implying it
+  // broke.
+  AssetStatus status = 2;
+  string location_id = 3;
+  // Set to move it to nowhere, which an empty location_id does not mean.
+  bool clear_location = 4;
+  string department = 5;
+  // Required for any status other than in-service: a status change with no
+  // reason is a number a replacement analysis cannot act on.
+  string note = 6;
+  int64 expected_version = 7;
+}
+
+message MoveAssetResponse {
+  Asset asset = 1;
+}
+
+message RecordCalibrationRequest {
+  string asset_id = 1;
+  // The reference an auditor asks for. A calibration recorded without one is
+  // a claim rather than evidence.
+  string certificate = 2;
+  google.protobuf.Timestamp next_due = 3;
+  int64 expected_version = 4;
+}
+
+message RecordCalibrationResponse {
+  Asset asset = 1;
+}
+
+message HoldAssetRequest {
+  string asset_id = 1;
+  string reason = 2;
+  int64 expected_version = 3;
+}
+
+message HoldAssetResponse {
+  Asset asset = 1;
+}
+
+message ReleaseAssetRequest {
+  string asset_id = 1;
+  string reason = 2;
+  int64 expected_version = 3;
+}
+
+message ReleaseAssetResponse {
+  Asset asset = 1;
+}
+
+// UnusableAsset explains why one machine is not counted (SRS-BIO-009).
+message UnusableAsset {
+  string tag = 1;
+  repeated string reasons = 2;
+}
+
+message GetLocationCapabilityRequest {
+  string location_id = 1;
+}
+
+// GetLocationCapabilityResponse is what a room can do right now
+// (SRS-BIO-009).
+//
+// Derived on read. A stored capability list is stale the moment a machine is
+// wheeled out, and a scheduler offering a slot on one is offering something
+// the hospital cannot deliver.
+message GetLocationCapabilityResponse {
+  string location_id = 1;
+  // Counted, not flagged: two intensifiers means the room survives one going
+  // for service.
+  map<string, int32> available = 2;
+  // What the room claims and cannot deliver.
+  repeated string unavailable = 3;
+  // Per asset, so "why can we not do this list" has an answer.
+  repeated UnusableAsset unusable = 4;
+  google.protobuf.Timestamp observed_at = 5;
+}
+
+// ServiceContract is a warranty, AMC or CMC (SRS-BIO-002).
+message ServiceContract {
+  string contract_id = 1;
+  string asset_id = 2;
+  ContractKind kind = 3;
+  string reference = 4;
+  string vendor_name = 5;
+  string vendor_contact = 6;
+  string vendor_phone = 7;
+  string vendor_email = 8;
+  google.protobuf.Timestamp starts_on = 9;
+  google.protobuf.Timestamp ends_on = 10;
+  int64 value_minor = 11;
+  // What the vendor promised. A ticket's clock comes from here rather than
+  // from a number somebody typed.
+  int32 response_hours = 12;
+  int32 resolution_hours = 13;
+  string notes = 14;
+  google.protobuf.Timestamp created_at = 15;
+  string created_by = 16;
+  int64 version = 17;
+}
+
+message RecordContractRequest {
+  string asset_id = 1;
+  ContractKind kind = 2;
+  string reference = 3;
+  string vendor_name = 4;
+  string vendor_contact = 5;
+  string vendor_phone = 6;
+  string vendor_email = 7;
+  google.protobuf.Timestamp starts_on = 8;
+  google.protobuf.Timestamp ends_on = 9;
+  int64 value_minor = 10;
+  int32 response_hours = 11;
+  int32 resolution_hours = 12;
+  string notes = 13;
+}
+
+message RecordContractResponse {
+  ServiceContract contract = 1;
+}
+
+message GetContractRequest {
+  string contract_id = 1;
+}
+
+message GetContractResponse {
+  ServiceContract contract = 1;
+}
+
+message ListContractsForAssetRequest {
+  string asset_id = 1;
+}
+
+message ListContractsForAssetResponse {
+  repeated ServiceContract contracts = 1;
+}
+
+message GetCoverForAssetRequest {
+  string asset_id = 1;
+}
+
+// GetCoverForAssetResponse names the agreement that applies right now.
+//
+// Answered by the server rather than left to the caller, because "the most
+// protective live contract" is a rule and three clients would each get it
+// slightly different.
+message GetCoverForAssetResponse {
+  ServiceContract contract = 1;
+  bool covered = 2;
+}
+
+// Expiry is one thing coming due (SRS-BIO-002, SRS-BIO-004).
+message Expiry {
+  ExpiryKind kind = 1;
+  string asset_id = 2;
+  // The tag, so a reminder names the machine rather than a UUID.
+  string asset_tag = 3;
+  string reference = 4;
+  string vendor_name = 5;
+  google.protobuf.Timestamp expires_on = 6;
+  // Negative once it has lapsed, so one list holds both "renew this" and
+  // "this lapsed a month ago" and a reader can sort by it.
+  int32 days_remaining = 7;
+  string detail = 8;
+}
+
+message ListExpiryRemindersRequest {
+  int32 page_size = 1;
+}
+
+message ListExpiryRemindersResponse {
+  repeated Expiry expiries = 1;
+}
+
+// PMPlan is a preventive maintenance schedule (SRS-BIO-003).
+message PMPlan {
+  string plan_id = 1;
+  string asset_id = 2;
+  PlanBasis basis = 3;
+  int32 interval_days = 4;
+  int32 runtime_hours = 5;
+  // What the engineer is meant to do. Carried because a plan that says only
+  // "service it" produces a record that says only "serviced".
+  string procedure = 6;
+  int32 estimated_minutes = 7;
+  // The baseline the next due date is computed from. Advanced by closing
+  // planned work against the plan, never set directly.
+  google.protobuf.Timestamp last_performed_at = 8;
+  int32 last_runtime_hours = 9;
+  bool active = 10;
+  google.protobuf.Timestamp created_at = 11;
+  string created_by = 12;
+  int64 version = 13;
+}
+
+message SchedulePlanRequest {
+  string asset_id = 1;
+  PlanBasis basis = 2;
+  int32 interval_days = 3;
+  int32 runtime_hours = 4;
+  string procedure = 5;
+  int32 estimated_minutes = 6;
+  google.protobuf.Timestamp last_performed_at = 7;
+  int32 last_runtime_hours = 8;
+}
+
+message SchedulePlanResponse {
+  PMPlan plan = 1;
+}
+
+message RetirePlanRequest {
+  string plan_id = 1;
+  int64 expected_version = 2;
+}
+
+// RetirePlanResponse returns the deactivated plan.
+//
+// Deactivated rather than deleted: the closed tickets raised under it are the
+// evidence that maintenance was done, and a plan that vanishes takes the
+// compliance history with it.
+message RetirePlanResponse {
+  PMPlan plan = 1;
+}
+
+message ListPlansRequest {
+  string asset_id = 1;
+  bool active_only = 2;
+  int32 page_size = 3;
+}
+
+message ListPlansResponse {
+  repeated PMPlan plans = 1;
+}
+
+// Due is one planned service and where it stands (SRS-BIO-003).
+message Due {
+  string plan_id = 1;
+  string asset_id = 2;
+  string asset_tag = 3;
+  PlanBasis basis = 4;
+  string procedure = 5;
+  Criticality criticality = 6;
+  DueState state = 7;
+  // The calendar date for an interval or risk plan. Unset for a runtime plan,
+  // where the answer is a number of hours rather than a date.
+  google.protobuf.Timestamp due_on = 8;
+  // Positive once it has passed. Negative counts down.
+  int32 days_overdue = 9;
+  // For a runtime plan: negative once the machine has run past its service.
+  int32 hours_remaining = 10;
+  // A runtime plan with no meter reading. Named rather than reported as
+  // not-due, because only one of "we do not know" and "it is fine" needs
+  // somebody to go and look.
+  bool unanswerable = 11;
+}
+
+message ListDueMaintenanceRequest {
+  int32 page_size = 1;
+}
+
+message ListDueMaintenanceResponse {
+  repeated Due due = 1;
+}
+
+// PartUsed is one component fitted during a repair (SRS-BIO-006).
+message PartUsed {
+  string code = 1;
+  string description = 2;
+  // Where the part came from stock, so the two ledgers can be reconciled.
+  string materials_item_id = 3;
+  int32 quantity = 4;
+  int64 cost_minor = 5;
+  // That somebody else paid. The number a contract renewal is argued with.
+  bool covered_by_contract = 6;
+}
+
+// Ticket is one breakdown or service request (SRS-BIO-005, SRS-BIO-006).
+message Ticket {
+  string ticket_id = 1;
+  string number = 2;
+  TicketKind kind = 3;
+  string asset_id = 4;
+  // The plan this work was raised against, where it was. PM compliance is
+  // counted along this: a closed ticket naming no plan is not evidence that a
+  // plan was followed.
+  string plan_id = 5;
+  // Carried so a closed ticket still names the machine after the asset is
+  // re-tagged or moved.
+  string asset_tag = 6;
+  string location_id = 7;
+  string symptom = 8;
+  Priority priority = 9;
+  Impact impact = 10;
+  TicketState state = 11;
+  string owner_id = 12;
+  // Derived from the asset's live contract and tightened by priority. Frozen
+  // on the ticket, because the contract may lapse before the ticket closes
+  // and the promise that applied is the one it was raised under. Read-only:
+  // a request cannot set them.
+  google.protobuf.Timestamp respond_by = 13;
+  google.protobuf.Timestamp resolve_by = 14;
+  // Which agreement set them, so an SLA breach can be taken to the right
+  // vendor.
+  string contract_id = 15;
+  string diagnosis = 16;
+  string work_performed = 17;
+  repeated PartUsed parts = 18;
+  // The outage. Separate from the ticket's own timestamps because a machine
+  // can be reported on Monday and have failed on Friday, and uptime is
+  // measured from when it stopped working.
+  google.protobuf.Timestamp down_from = 19;
+  google.protobuf.Timestamp down_until = 20;
+  int32 awaiting_parts_minutes = 21;
+  google.protobuf.Timestamp responded_at = 22;
+  google.protobuf.Timestamp resolved_at = 23;
+  google.protobuf.Timestamp closed_at = 24;
+  // Never the engineer who did the work.
+  string closed_by = 25;
+  string closure_note = 26;
+  string cancelled_reason = 27;
+  google.protobuf.Timestamp raised_at = 28;
+  string raised_by = 29;
+  int64 version = 30;
+}
+
+message RaiseTicketRequest {
+  TicketKind kind = 1;
+  string asset_id = 2;
+  // Required for preventive work: planned work naming no plan cannot be
+  // counted towards compliance with one.
+  string plan_id = 3;
+  string symptom = 4;
+  Priority priority = 5;
+  Impact impact = 6;
+  // When the machine actually stopped, where the reporter knows. Unset takes
+  // the moment the ticket was raised, which understates downtime rather than
+  // inventing it.
+  google.protobuf.Timestamp down_from = 7;
+  // The hospital's own work-order number, where it has one. Left empty the
+  // server assigns it.
+  string number = 8;
+}
+
+message RaiseTicketResponse {
+  Ticket ticket = 1;
+}
+
+message GetTicketRequest {
+  string ticket_id = 1;
+}
+
+message GetTicketResponse {
+  Ticket ticket = 1;
+}
+
+message ListTicketsRequest {
+  string asset_id = 1;
+  TicketState state = 2;
+  bool open_only = 3;
+  int32 page_size = 4;
+}
+
+message ListTicketsResponse {
+  repeated Ticket tickets = 1;
+}
+
+message AssignTicketRequest {
+  string ticket_id = 1;
+  string owner_id = 2;
+  int64 expected_version = 3;
+}
+
+message AssignTicketResponse {
+  Ticket ticket = 1;
+}
+
+message StartTicketRequest {
+  string ticket_id = 1;
+  int64 expected_version = 2;
+}
+
+message StartTicketResponse {
+  Ticket ticket = 1;
+}
+
+message AwaitPartsRequest {
+  string ticket_id = 1;
+  string note = 2;
+  int64 expected_version = 3;
+}
+
+message AwaitPartsResponse {
+  Ticket ticket = 1;
+}
+
+message CancelTicketRequest {
+  string ticket_id = 1;
+  string reason = 2;
+  int64 expected_version = 3;
+}
+
+message CancelTicketResponse {
+  Ticket ticket = 1;
+}
+
+message ResolveTicketRequest {
+  string ticket_id = 1;
+  // What was wrong. Without it the history says a machine was fixed four
+  // times and nothing about whether it is the same fault.
+  string diagnosis = 2;
+  string work_performed = 3;
+  repeated PartUsed parts = 4;
+  // When the machine worked again. Unset takes the moment of resolution.
+  google.protobuf.Timestamp back_in_service_at = 5;
+  int64 expected_version = 6;
+}
+
+message ResolveTicketResponse {
+  Ticket ticket = 1;
+}
+
+message CloseTicketRequest {
+  string ticket_id = 1;
+  string note = 2;
+  int64 expected_version = 3;
+}
+
+// CloseTicketResponse returns the validated repair.
+//
+// The caller is the validator, and it is never the engineer who did the work:
+// a repair signed off by the person who made it is the same claim twice.
+message CloseTicketResponse {
+  Ticket ticket = 1;
+}
+
+// Breach is one work order past the promise it was raised under
+// (SRS-BIO-005).
+message Breach {
+  Ticket ticket = 1;
+  bool response_breached = 2;
+  bool resolution_breached = 3;
+}
+
+message ListBreachesRequest {
+  int32 page_size = 1;
+}
+
+message ListBreachesResponse {
+  repeated Breach breaches = 1;
+}
+
+// SafetyNotice is a recall or field safety notice (SRS-BIO-008).
+message SafetyNotice {
+  string notice_id = 1;
+  string reference = 2;
+  NoticeKind kind = 3;
+  string issuer = 4;
+  string summary = 5;
+  // How the notice names the equipment it covers, kept as it states them:
+  // the matching is only as good as what was written down, and a reader has
+  // to be able to check it.
+  string make = 6;
+  string model = 7;
+  string serial_from = 8;
+  string serial_to = 9;
+  string affected_udi = 10;
+  // Stop every matched asset. Always true for a recall.
+  bool hold_affected = 11;
+  string required_action = 12;
+  google.protobuf.Timestamp due_by = 13;
+  google.protobuf.Timestamp issued_on = 14;
+  google.protobuf.Timestamp raised_at = 15;
+  string raised_by = 16;
+  google.protobuf.Timestamp closed_at = 17;
+  string closed_by = 18;
+  string closure_note = 19;
+  int64 version = 20;
+}
+
+// NoticeTask is what has to be done to one asset under a notice
+// (SRS-BIO-008).
+message NoticeTask {
+  string task_id = 1;
+  string notice_id = 2;
+  string asset_id = 3;
+  string asset_tag = 4;
+  TaskState state = 5;
+  string note = 6;
+  google.protobuf.Timestamp completed_at = 7;
+  string completed_by = 8;
+}
+
+message RaiseNoticeRequest {
+  string reference = 1;
+  NoticeKind kind = 2;
+  string issuer = 3;
+  string summary = 4;
+  string make = 5;
+  string model = 6;
+  string serial_from = 7;
+  string serial_to = 8;
+  string affected_udi = 9;
+  bool hold_affected = 10;
+  string required_action = 11;
+  google.protobuf.Timestamp due_by = 12;
+  google.protobuf.Timestamp issued_on = 13;
+}
+
+// RaiseNoticeResponse carries the tasks the notice produced.
+//
+// Matched and held in the same transaction that recorded the notice: a recall
+// recorded now and swept later is a window in which the hospital has been
+// told and the equipment is still in use.
+message RaiseNoticeResponse {
+  SafetyNotice notice = 1;
+  repeated NoticeTask tasks = 2;
+}
+
+message GetNoticeRequest {
+  string notice_id = 1;
+}
+
+message GetNoticeResponse {
+  SafetyNotice notice = 1;
+}
+
+message ListNoticesRequest {
+  bool open_only = 1;
+  int32 page_size = 2;
+}
+
+message ListNoticesResponse {
+  repeated SafetyNotice notices = 1;
+}
+
+message ListNoticeTasksRequest {
+  string notice_id = 1;
+}
+
+message ListNoticeTasksResponse {
+  repeated NoticeTask tasks = 1;
+}
+
+message AdvanceTaskRequest {
+  string task_id = 1;
+  TaskState state = 2;
+  // Required for NOT_AFFECTED: it is the one verdict that ends the enquiry.
+  string note = 3;
+  // Lift the asset's safety hold as part of the step. Honoured only once the
+  // work is complete, and only when nothing else holds the machine.
+  bool release_hold = 4;
+}
+
+message AdvanceTaskResponse {
+  NoticeTask task = 1;
+}
+
+message TrackNoticeRequest {
+  string notice_id = 1;
+}
+
+// TrackNoticeResponse reports how far a recall has got (SRS-BIO-008).
+message TrackNoticeResponse {
+  string notice_id = 1;
+  int32 total = 2;
+  int32 outstanding = 3;
+  int32 inspected = 4;
+  int32 complete = 5;
+  // Past the notice's due date with work still outstanding, which is what an
+  // inspection actually asks about.
+  bool overdue = 6;
+}
+
+message CloseNoticeRequest {
+  string notice_id = 1;
+  string note = 2;
+  int64 expected_version = 3;
+}
+
+// CloseNoticeResponse returns the signed-off notice.
+//
+// Refused while any asset still has work outstanding: a notice closed over
+// unfinished work is a hospital that believes a recall was completed when it
+// was not.
+message CloseNoticeResponse {
+  SafetyNotice notice = 1;
+}
+
+// Reading is one device telemetry sample (SRS-BIO-010).
+message Reading {
+  string reading_id = 1;
+  string asset_id = 2;
+  // What was measured — "runtime_hours", "chamber_temperature_c".
+  string metric = 3;
+  double value = 4;
+  string unit = 5;
+  // The device or gateway that reported it. A hand-entered meter reading and
+  // an ingested one are evidence of different weight.
+  string source = 6;
+  bool ingested = 7;
+  google.protobuf.Timestamp observed_at = 8;
+  google.protobuf.Timestamp recorded_at = 9;
+  string recorded_by = 10;
+}
+
+message NewReading {
+  string asset_id = 1;
+  string metric = 2;
+  double value = 3;
+  string unit = 4;
+  string source = 5;
+  bool ingested = 6;
+  google.protobuf.Timestamp observed_at = 7;
+}
+
+// AppendReadingsRequest is a batch, because a gateway reports a shift's worth
+// at a time and a half-ingested batch is a meter reading that jumps
+// backwards.
+message AppendReadingsRequest {
+  repeated NewReading readings = 1;
+}
+
+message AppendReadingsResponse {
+  repeated Reading readings = 1;
+}
+
+message ListReadingsRequest {
+  string asset_id = 1;
+  string metric = 2;
+  google.protobuf.Timestamp from = 3;
+  google.protobuf.Timestamp to = 4;
+  int32 page_size = 5;
+}
+
+message ListReadingsResponse {
+  repeated Reading readings = 1;
+}
+
+// Metrics are one machine's reliability figures (SRS-BIO-007).
+message Metrics {
+  string asset_id = 1;
+  string asset_tag = 2;
+  google.protobuf.Timestamp from = 3;
+  google.protobuf.Timestamp to = 4;
+  int32 period_minutes = 5;
+  int32 downtime_minutes = 6;
+  int32 uptime_minutes = 7;
+  double uptime_percent = 8;
+  // Breakdowns only. Counting planned work would make a well-maintained
+  // machine look unreliable.
+  int32 failures = 9;
+  // Time out for scheduled work, reported beside the unplanned kind rather
+  // than mixed into it.
+  int32 planned_downtime_minutes = 10;
+  // Zero failures gives zero rather than infinity, and is read alongside
+  // failures rather than as "never fails".
+  double mtbf_hours = 11;
+  // Over the repairs that finished. A machine still broken has no repair time
+  // yet, and including it would make this fall every time a ticket was left
+  // open.
+  double mttr_hours = 12;
+  int32 pm_due = 13;
+  int32 pm_done = 14;
+  double pm_compliance = 15;
+  // What a figure could not be built from, so a reader can tell a real zero
+  // from a gap.
+  repeated string incomplete = 16;
+}
+
+message GetAssetMetricsRequest {
+  string asset_id = 1;
+  google.protobuf.Timestamp from = 2;
+  google.protobuf.Timestamp to = 3;
+}
+
+message GetAssetMetricsResponse {
+  Metrics metrics = 1;
+}
+
+// FleetLine is one asset's place in the ranking (SRS-BIO-007).
+message FleetLine {
+  string asset_id = 1;
+  string asset_tag = 2;
+  Criticality criticality = 3;
+  Metrics metrics = 4;
+}
+
+message GetFleetMetricsRequest {
+  string category = 1;
+  google.protobuf.Timestamp from = 2;
+  google.protobuf.Timestamp to = 3;
+  int32 page_size = 4;
+}
+
+// GetFleetMetricsResponse ranks worst uptime first.
+//
+// By uptime rather than by failure count: a machine that failed once for a
+// week is a worse problem than one that failed five times for an hour, and a
+// list sorted the other way puts the wrong one at the top.
+message GetFleetMetricsResponse {
+  repeated FleetLine lines = 1;
+}
+
+// Disposal is one asset leaving the hospital (SRS-BIO-011).
+message Disposal {
+  string disposal_id = 1;
+  string asset_id = 2;
+  string asset_tag = 3;
+  string method = 4;
+  string reason = 5;
+  string requested_by = 6;
+  // Never the requester, and never a name the client supplied: it is the
+  // authenticated caller.
+  string approved_by = 7;
+  google.protobuf.Timestamp approved_at = 8;
+  bool sanitisation_required = 9;
+  string sanitisation_method = 10;
+  string sanitisation_certificate = 11;
+  string sanitised_by = 12;
+  string recipient = 13;
+  int64 proceeds_minor = 14;
+  google.protobuf.Timestamp disposed_at = 15;
+  string recorded_by = 16;
+}
+
+message DisposeAssetRequest {
+  string asset_id = 1;
+  string method = 2;
+  string reason = 3;
+  // Who asked for it. The approver is the caller, so naming yourself here is
+  // refused rather than recorded.
+  string requested_by = 4;
+  // True for anything that held patient data.
+  bool sanitisation_required = 5;
+  // The evidence, required where sanitisation is: a disposal recorded without
+  // them is a hard drive in a skip.
+  string sanitisation_method = 6;
+  string sanitisation_certificate = 7;
+  string sanitised_by = 8;
+  string recipient = 9;
+  int64 proceeds_minor = 10;
+}
+
+message DisposeAssetResponse {
+  Disposal disposal = 1;
+}
+
+message GetDisposalRequest {
+  string asset_id = 1;
+}
+
+message GetDisposalResponse {
+  Disposal disposal = 1;
+}
+
+message ListDisposalsRequest {
+  google.protobuf.Timestamp from = 1;
+  google.protobuf.Timestamp to = 2;
+  int32 page_size = 3;
+}
+
+message ListDisposalsResponse {
+  repeated Disposal disposals = 1;
+}
+
+// BiomedicalService is the biomedical engineering contract
+// (SRS-BIO-001 … 011).
+service BiomedicalService {
+  // The equipment register (SRS-BIO-001).
+  rpc RegisterAsset(RegisterAssetRequest) returns (RegisterAssetResponse);
+  rpc GetAsset(GetAssetRequest) returns (GetAssetResponse);
+  rpc GetAssetByTag(GetAssetByTagRequest) returns (GetAssetByTagResponse);
+  rpc ListAssets(ListAssetsRequest) returns (ListAssetsResponse);
+  rpc MoveAsset(MoveAssetRequest) returns (MoveAssetResponse);
+
+  // Calibration (SRS-BIO-004).
+  rpc RecordCalibration(RecordCalibrationRequest) returns (RecordCalibrationResponse);
+
+  // Equipment availability, which is what a room can be scheduled for
+  // (SRS-BIO-009).
+  rpc GetLocationCapability(GetLocationCapabilityRequest) returns (GetLocationCapabilityResponse);
+
+  // Service contracts and renewal (SRS-BIO-002).
+  rpc RecordContract(RecordContractRequest) returns (RecordContractResponse);
+  rpc GetContract(GetContractRequest) returns (GetContractResponse);
+  rpc ListContractsForAsset(ListContractsForAssetRequest) returns (ListContractsForAssetResponse);
+  rpc GetCoverForAsset(GetCoverForAssetRequest) returns (GetCoverForAssetResponse);
+  rpc ListExpiryReminders(ListExpiryRemindersRequest) returns (ListExpiryRemindersResponse);
+
+  // Preventive maintenance (SRS-BIO-003).
+  rpc SchedulePlan(SchedulePlanRequest) returns (SchedulePlanResponse);
+  rpc RetirePlan(RetirePlanRequest) returns (RetirePlanResponse);
+  rpc ListPlans(ListPlansRequest) returns (ListPlansResponse);
+  rpc ListDueMaintenance(ListDueMaintenanceRequest) returns (ListDueMaintenanceResponse);
+
+  // Breakdown and service work (SRS-BIO-005, SRS-BIO-006).
+  rpc RaiseTicket(RaiseTicketRequest) returns (RaiseTicketResponse);
+  rpc GetTicket(GetTicketRequest) returns (GetTicketResponse);
+  rpc ListTickets(ListTicketsRequest) returns (ListTicketsResponse);
+  rpc AssignTicket(AssignTicketRequest) returns (AssignTicketResponse);
+  rpc StartTicket(StartTicketRequest) returns (StartTicketResponse);
+  rpc AwaitParts(AwaitPartsRequest) returns (AwaitPartsResponse);
+  rpc CancelTicket(CancelTicketRequest) returns (CancelTicketResponse);
+  rpc ResolveTicket(ResolveTicketRequest) returns (ResolveTicketResponse);
+  rpc CloseTicket(CloseTicketRequest) returns (CloseTicketResponse);
+  rpc ListBreaches(ListBreachesRequest) returns (ListBreachesResponse);
+
+  // Recalls and field safety notices (SRS-BIO-008).
+  rpc RaiseNotice(RaiseNoticeRequest) returns (RaiseNoticeResponse);
+  rpc GetNotice(GetNoticeRequest) returns (GetNoticeResponse);
+  rpc ListNotices(ListNoticesRequest) returns (ListNoticesResponse);
+  rpc ListNoticeTasks(ListNoticeTasksRequest) returns (ListNoticeTasksResponse);
+  rpc AdvanceTask(AdvanceTaskRequest) returns (AdvanceTaskResponse);
+  rpc TrackNotice(TrackNoticeRequest) returns (TrackNoticeResponse);
+  rpc CloseNotice(CloseNoticeRequest) returns (CloseNoticeResponse);
+
+  // Safety holds (SRS-BIO-008).
+  rpc HoldAsset(HoldAssetRequest) returns (HoldAssetResponse);
+  rpc ReleaseAsset(ReleaseAssetRequest) returns (ReleaseAssetResponse);
+
+  // Device telemetry (SRS-BIO-010).
+  rpc AppendReadings(AppendReadingsRequest) returns (AppendReadingsResponse);
+  rpc ListReadings(ListReadingsRequest) returns (ListReadingsResponse);
+
+  // Uptime and reliability (SRS-BIO-007).
+  rpc GetAssetMetrics(GetAssetMetricsRequest) returns (GetAssetMetricsResponse);
+  rpc GetFleetMetrics(GetFleetMetricsRequest) returns (GetFleetMetricsResponse);
+
+  // Disposal (SRS-BIO-011).
+  rpc DisposeAsset(DisposeAssetRequest) returns (DisposeAssetResponse);
+  rpc GetDisposal(GetDisposalRequest) returns (GetDisposalResponse);
+  rpc ListDisposals(ListDisposalsRequest) returns (ListDisposalsResponse);
+}
