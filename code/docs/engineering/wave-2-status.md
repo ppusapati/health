@@ -15,11 +15,12 @@ test names.
 prose, because a status document whose honest summary is a fraction is one
 whose per-row claims have to be read carefully.
 
-Eight families are now built: SRS-ER the Emergency Department, SRS-ICU
+Nine families are now built: SRS-ER the Emergency Department, SRS-ICU
 critical care, SRS-OT the operating theatre, SRS-ANE anaesthesia and PACU,
 SRS-BLD blood bank and transfusion, SRS-CSSD sterile services, SRS-MAT
-materials and inventory, and SRS-BIO biomedical engineering. Their rows are
-below. Four remain: SRS-QMS, SRS-IPC, SRS-MRD and the support services.
+materials and inventory, SRS-BIO biomedical engineering, and SRS-QMS quality
+management. Their rows are below. Three remain: SRS-IPC, SRS-MRD and the
+support services.
 
 `make traceability` reads a row naming a requirement as a claim about it
 unless the row says the work is not built, so the unbuilt ER requirements are
@@ -100,7 +101,7 @@ clinician, and `ValidatedInputs()` is a function rather than a convention.
 | SRS-CSSD Sterile Services | 12 | **12 implemented** — see below |
 | SRS-MAT Materials and Inventory | 16 | **16 implemented** — see below |
 | SRS-BIO Biomedical Engineering | 11 | **11 implemented** — Phase 2 §9. Note the prefix collision below |
-| SRS-QMS Quality / NABH | 15 | **Not started** |
+| SRS-QMS Quality / NABH | 15 | **15 implemented** — see below |
 | SRS-IPC Infection Prevention | 10 | **Not started** |
 | SRS-MRD Medical Records / HIM | 10 | **Not started** |
 | SRS-AMB, SRS-DIET, SRS-FAC, SRS-HKP, SRS-LND, SRS-MORT support services | 52 | **Not started** — except SRS-FAC-012 above |
@@ -758,6 +759,118 @@ Nothing here raises a charge or a cost centre entry. Contract values,
 acquisition cost, part cost and disposal proceeds are all recorded in minor
 units and all stay inside `biomedical`. What the hospital's finance system
 does with them belongs to SRS-BIL and to a wave that owns fixed assets.
+
+## SRS-QMS — Quality management, accreditation and risk
+
+Fifteen requirements, all implemented. Incidents and risk, root cause
+analysis, corrective and preventive action, document control, internal audit,
+committees, the accreditation evidence map, the indicator dictionary,
+complaints, peer review, competency and legal hold, in one contract
+(`QualityService`) and one schema (`quality`), reached through
+`internal/quality`.
+
+**An incident's reach is three states, not a near-miss flag beside a harm
+level.** Two columns that can contradict each other will, and the
+contradiction is the one that matters: a near miss filed with harm is a
+mis-filed record whichever way round it is, and every report built on it is
+wrong. Both directions are unwritable — in the domain, in the schema, and at
+the RPC boundary.
+
+**A death is a sentinel event whatever the reporter ticked, and a sentinel
+event is restricted.** Left to the reporter, the one incident that most needs
+an executive review is the one nobody wants to escalate. The hospital's own
+sentinel categories are configuration on top of that, never instead of it.
+
+**Restriction redacts where there is something left to say and refuses where
+there is not.** A ward needs to know that an incident of this kind happened in
+it; what it must not have is the narrative, the patient and the people. So an
+incident comes back redacted, carrying its category, department and risk band
+but not the score components — which would let a reader reconstruct the
+consequence, and for a restricted case that is most of the story. An analysis
+or a set of minutes refuses instead, because they *are* the discussion. Every
+read of restricted material under the permission is audited, which is what
+SRS-QMS-012 means by "access limited to authorized committee and audit
+logged".
+
+**A corrective action closes only on an effectiveness check that passed,
+approved by somebody other than its owner.** A failed check is recorded and
+sends the action back to work rather than being discarded: "we checked and it
+had not worked" is the finding, and the history "fixed, checked, had not
+worked, fixed again, checked, had" is what tells a hospital whether its
+analysis was any good. The two refusals carry different messages, because "not
+checked" and "the check failed" send somebody to do two different things.
+
+**Acknowledgement is per document version.** A system that carries an
+acknowledgement forward across a revision reports full compliance with a policy
+nobody has read. Approving a version supersedes the earlier ones in the same
+transaction — two versions both in force is the state document control exists
+to prevent, and a sweep afterwards would leave a window in which the hospital
+had two hand hygiene policies.
+
+**A major non-conformity closes only through a closed corrective action.**
+That is the whole of "audit trail links finding to closure": a finding closed
+with a note is one somebody talked their way out of, and the next audit finds
+it again.
+
+**Five things are read from the database rather than taken from the request**,
+each closing a way the record could be made to say something untrue: how many
+actions an analysis produced, whether a finding's action is actually closed,
+whether an audit still has open findings, whether a clause has evidence filed,
+and whether a meeting was quorate against the committee's real membership.
+Three more are assigned by the server — a version's ordinal, an indicator's
+revision, and an award's expiry — because a client that chose them could let
+two records collide or one outlive its own rules.
+
+**Three things are reported as unanswerable rather than as zero**: an
+indicator period with no eligible cases, a document with no review interval
+configured, and a controlled document with nothing in force. Each is a gap
+somebody has to see, and each has a zero that would hide it.
+
+| ID | Requirement | State |
+|---|---|---|
+| SRS-QMS-001 | Record incident/near miss with category, location, severity, patient/asset links and immediate action; unique ID and restricted access | **Implemented** — reach is three states so a near miss cannot record harm and an event classed as harm cannot record none; an event that reached a patient must say what was done at the time; restriction redacts to what a ward may know rather than withholding, and anonymous reporting hides the reporter from readers and never from the trail |
+| SRS-QMS-002 | Severity/risk scoring and escalation; high severity triggers configured notifications | **Implemented** — the score is consequence × likelihood and the band follows, derived and held to the arithmetic by a database CHECK; a score a reporter could type is one they could type low; escalation is durable and acknowledged, fires at the configured band, and on a re-score fires only upwards |
+| SRS-QMS-003 | Root cause analysis with configurable method and contributing factors; cannot close without accountable owner | **Implemented** — the method is checked against the hospital's approved set; factors are categorised because the value of analysis across many incidents is being able to count them; closing needs an owner, at least one factor, findings, and either an action or a stated reason there was none |
+| SRS-QMS-004 | CAPA with action, owner, due date, effectiveness check and closure approval; overdue escalates | **Implemented** — approval is refused for the raiser and closure for the owner, in the domain and in the schema; closing needs a check that passed; a failed check is kept and returns the action to work; overdue is derived, separates the action's date from its check's, and escalates on demand rather than as a side effect of reading |
+| SRS-QMS-005 | Sentinel event workflow with restricted access and executive notification; review milestones tracked | **Implemented** — a death is a sentinel event whatever was ticked and a sentinel event is restricted, both held by database CHECKs; the notice is durable and acknowledged and goes to the executive chain rather than the departmental risk queue; the restriction cannot be lifted |
+| SRS-QMS-006 | Policy/SOP/document control with version, approval, effective date, acknowledgement and obsolete state; only effective version shown by default, history retained | **Implemented** — the version in force is derived from the dates rather than a flag a job maintains; approval supersedes the earlier ones in the same transaction; the author cannot approve their own revision; acknowledgement is per version and the caller cannot choose which version they are confirming |
+| SRS-QMS-007 | Internal audits with findings and CAPA; audit trail links finding to closure | **Implemented** — a non-conformity records its evidence and closes only through a closed corrective action, held by the domain and by a database CHECK; an audit cannot close over an open finding, and the findings are read rather than trusted from the request |
+| SRS-QMS-008 | Committee meetings, agenda, attendance, minutes, decisions and actions; action items flow to task engine | **Implemented** — minutes recording decisions cannot be approved below quorum, checked against the committee's real membership; a quorum larger than the membership is refused at formation; committee actions are CAPAs rather than a second kind of task, so there is one overdue report rather than two |
+| SRS-QMS-009 | Accreditation evidence map to configurable standard/clause set; evidence attached and reviewed by clause | **Implemented** — a standard and its clauses load in one transaction, because a half-loaded standard is clauses nobody is failing; evidence is pinned to a document *version* and the record it names is checked to exist; a clause judged met with nothing filed is refused, and one found not met must name the action that will close it |
+| SRS-QMS-010 | KPI dictionary with target, numerator/denominator, frequency and owner; dashboard shows current value with formula/version | **Implemented** — the dictionary is versioned by revision and never edited in place, the revision is server-assigned, and a recorded value carries the revision it was computed under; the rate is derived from the counts; a zero denominator is unanswerable rather than zero |
+| SRS-QMS-011 | Patient complaint/grievance with SLA and resolution; escalation and closure reason retained | **Implemented** — two clocks rather than one, both from the deployment's SLA configuration rather than the request; a complaint cannot be resolved without the complainant being spoken to, except by withdrawal; the escalation is written to the record as well as derived, so it survives resolution |
+| SRS-QMS-012 | Mortality/morbidity and peer-review restricted workflows; access limited to authorized committee and audit logged | **Implemented** — its own permission, held by neither the quality officer nor the quality manager; peer review belongs to a restricted committee; every read is audited; a completed review names the meeting that made it, and a preventable or potentially preventable death must name corrective actions that exist |
+| SRS-QMS-013 | Staff training/competency evidence linked to controlled documents and roles; expired/missing competency visible | **Implemented** — gaps are derived on read and distinguish never-held from expired from trained-against-superseded-text, because they need three different actions; a revision expires earlier training only where the approver marked it as requiring retraining; the expiry is computed from the competency's validity period, never supplied |
+| SRS-QMS-014 | Tracer/readiness dashboard for accreditation survey preparation; open evidence gaps and overdue actions shown | **Implemented** — derived every time, because a stored percentage is out of date the moment a document is revised; critical gaps and stale judgements are counted apart; the overdue actions are the hospital's rather than the standard's, because a survey asks whether the quality system is working |
+| SRS-QMS-015 | Preserve QMS records against deletion subject to retention/legal hold; deletion attempts follow policy and audit | **Implemented** — the adapter has no DELETE anywhere in it, which is stronger than a policy somebody reads once; a hold blocks writes as well as deletion, because a closure that rewrites what a court asked to see loses the record just as surely; the hold is the platform's own mechanism reached through a port, and placing or lifting one is its own permission and audited |
+
+### What SRS-QMS does not reach
+
+Three seams are named rather than half-built.
+
+**The indicator dictionary stores definitions and recorded values; it does not
+compute them.** An entry says in words what its numerator and denominator are
+and a value records the counts with a note saying where they came from.
+Computing those counts from the hospital's source records is a reporting
+engine, which is Phase 6's command centre, and a half-built one here would be
+a second set of numbers disagreeing with the first. SRS-OPSNFR-008's
+reproducibility requirement is met by the version pinning and the source note,
+not by a calculation this context performs.
+
+**Committee action items are CAPAs, not a separate task engine.**
+SRS-QMS-008's acceptance says action items flow to the task engine; an action
+item with an owner, a due date and an escalation when it is late is what a
+CAPA already is, and building a second one would mean two overdue reports
+that disagree. The durable workflow engine from Wave 0 (ADR-006) remains
+available for anything that genuinely needs one.
+
+**The acknowledgement and competency gap reports are only as good as the
+directory.** They read who holds which role from identity and access through a
+port, and a deployment that configures no roles for them gets an empty gap
+report — which reads exactly like a compliant hospital. `app.Deps.Quality`
+carries `AcknowledgementRoles` and `CompetencyRoles` for that reason, and a
+deployment leaving them empty is named here rather than discovering it at a
+survey.
 
 ## What Wave 2 depends on
 
