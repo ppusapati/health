@@ -1859,6 +1859,341 @@ type IdentityAccessStepUpProof struct {
 	ObtainedAt pgtype.Timestamptz
 }
 
+type InfectionAlert struct {
+	AlertID        uuid.UUID
+	TenantID       uuid.UUID
+	PatientID      string
+	EncounterID    string
+	FacilityID     string
+	RuleID         pgtype.UUID
+	RuleCode       string
+	RuleRevision   int32
+	Organism       string
+	OrganismCode   string
+	LastPositiveAt pgtype.Timestamptz
+	Precaution     string
+	Advice         string
+	RaisedAt       pgtype.Timestamptz
+	AcknowledgedAt pgtype.Timestamptz
+	AcknowledgedBy string
+	Overridden     bool
+	OverrideWhy    string
+	OverriddenBy   string
+	OverriddenAt   pgtype.Timestamptz
+}
+
+type InfectionAlertRule struct {
+	RuleID        uuid.UUID
+	TenantID      uuid.UUID
+	Code          string
+	Name          string
+	Revision      int32
+	Organisms     []string
+	LookbackDays  int32
+	Precaution    string
+	Advice        string
+	Approved      bool
+	ApprovedBy    string
+	ApprovedAt    pgtype.Timestamptz
+	EffectiveFrom pgtype.Timestamptz
+	SupersededAt  pgtype.Timestamptz
+	CreatedAt     pgtype.Timestamptz
+	CreatedBy     string
+}
+
+type InfectionCorrectiveAction struct {
+	ActionID       uuid.UUID
+	TenantID       uuid.UUID
+	SampleID       uuid.UUID
+	LocationID     string
+	Action         string
+	Owner          string
+	DueBy          pgtype.Timestamptz
+	State          string
+	DoneAt         pgtype.Timestamptz
+	DoneBy         string
+	DoneNote       string
+	RepeatSampleID pgtype.UUID
+	VerifiedAt     pgtype.Timestamptz
+	VerifiedBy     string
+	Version        int64
+}
+
+type InfectionDeviceDayCount struct {
+	CountID     uuid.UUID
+	TenantID    uuid.UUID
+	FacilityID  string
+	LocationID  string
+	Device      string
+	CountedOn   pgtype.Date
+	PatientDays int32
+	DeviceDays  int32
+	RecordedAt  pgtype.Timestamptz
+	RecordedBy  string
+}
+
+type InfectionEnvironmentalLimit struct {
+	LimitID        uuid.UUID
+	TenantID       uuid.UUID
+	Code           string
+	Name           string
+	Revision       int32
+	SampleKind     string
+	Unit           string
+	ActionLevel    int64
+	FailLevel      int64
+	DetectionFails bool
+	BelowIsFailure bool
+	Approved       bool
+	ApprovedBy     string
+	ApprovedAt     pgtype.Timestamptz
+	EffectiveFrom  pgtype.Timestamptz
+	SupersededAt   pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	CreatedBy      string
+}
+
+type InfectionEnvironmentalSample struct {
+	SampleID      uuid.UUID
+	TenantID      uuid.UUID
+	Reference     string
+	SampleKind    string
+	FacilityID    string
+	LocationID    string
+	SamplePoint   string
+	PlanID        pgtype.UUID
+	OutbreakID    pgtype.UUID
+	RepeatOfID    pgtype.UUID
+	CollectedAt   pgtype.Timestamptz
+	CollectedBy   string
+	Method        string
+	State         string
+	LabReference  string
+	Value         int64
+	Unit          string
+	Organism      string
+	Detected      bool
+	ResultedAt    pgtype.Timestamptz
+	ResultedBy    string
+	Outcome       string
+	LimitCode     string
+	LimitRevision int32
+	ClosedAt      pgtype.Timestamptz
+	ClosedBy      string
+	Version       int64
+}
+
+type InfectionExposure struct {
+	ExposureID      uuid.UUID
+	TenantID        uuid.UUID
+	Reference       string
+	StaffID         string
+	Discipline      string
+	FacilityID      string
+	LocationID      string
+	Kind            string
+	Device          string
+	Circumstance    string
+	DeepInjury      bool
+	SourcePatientID string
+	SourceKnown     bool
+	SourceConsented bool
+	Restricted      bool
+	OccurredAt      pgtype.Timestamptz
+	ReportedAt      pgtype.Timestamptz
+	ReportedBy      string
+	ClosedAt        pgtype.Timestamptz
+	ClosedBy        string
+	Outcome         string
+	Version         int64
+}
+
+type InfectionExposureTask struct {
+	TaskID      uuid.UUID
+	TenantID    uuid.UUID
+	ExposureID  uuid.UUID
+	Code        string
+	DueBy       pgtype.Timestamptz
+	State       string
+	Outcome     string
+	CompletedAt pgtype.Timestamptz
+	CompletedBy string
+}
+
+type InfectionHygieneObservation struct {
+	ObservationID uuid.UUID
+	TenantID      uuid.UUID
+	SessionID     uuid.UUID
+	Discipline    string
+	Moment        string
+	Action        string
+	GlovesWorn    bool
+	ObservedAt    pgtype.Timestamptz
+}
+
+type InfectionHygieneSession struct {
+	SessionID  uuid.UUID
+	TenantID   uuid.UUID
+	FacilityID string
+	LocationID string
+	ObserverID string
+	StartedAt  pgtype.Timestamptz
+	EndedAt    pgtype.Timestamptz
+	Notes      string
+	CreatedAt  pgtype.Timestamptz
+	Version    int64
+}
+
+type InfectionIsolation struct {
+	IsolationID uuid.UUID
+	TenantID    uuid.UUID
+	PatientID   string
+	EncounterID string
+	FacilityID  string
+	LocationID  string
+	BedID       string
+	Precaution  string
+	Reason      string
+	CaseID      pgtype.UUID
+	StartedAt   pgtype.Timestamptz
+	StartedBy   string
+	ReviewDue   pgtype.Timestamptz
+	EndedAt     pgtype.Timestamptz
+	EndedBy     string
+	EndReason   string
+	Version     int64
+}
+
+type InfectionOutbreak struct {
+	OutbreakID      uuid.UUID
+	TenantID        uuid.UUID
+	Reference       string
+	Organism        string
+	CaseDefinition  string
+	Locations       []string
+	WindowFrom      pgtype.Timestamptz
+	WindowTo        pgtype.Timestamptz
+	State           string
+	Findings        string
+	ControlMeasures []string
+	ActionIds       []string
+	DeclaredAt      pgtype.Timestamptz
+	DeclaredBy      string
+	ClosedAt        pgtype.Timestamptz
+	ClosedBy        string
+	ClosureWhy      string
+	CreatedAt       pgtype.Timestamptz
+	CreatedBy       string
+	Version         int64
+}
+
+type InfectionOutbreakMember struct {
+	MembershipID uuid.UUID
+	TenantID     uuid.UUID
+	OutbreakID   uuid.UUID
+	CaseID       string
+	PatientID    string
+	Reason       string
+	Note         string
+	DecidedAt    pgtype.Timestamptz
+	DecidedBy    string
+}
+
+type InfectionSamplingPlan struct {
+	PlanID      uuid.UUID
+	TenantID    uuid.UUID
+	Code        string
+	SampleKind  string
+	FacilityID  string
+	LocationID  string
+	SamplePoint string
+	EveryDays   int32
+	Active      bool
+	StartedAt   pgtype.Timestamptz
+	StoppedAt   pgtype.Timestamptz
+}
+
+type InfectionStewardshipReview struct {
+	ReviewID        uuid.UUID
+	TenantID        uuid.UUID
+	PatientID       string
+	EncounterID     string
+	LocationID      string
+	RuleID          pgtype.UUID
+	RuleCode        string
+	RuleRevision    int32
+	Kind            string
+	Agent           string
+	OrderID         string
+	Why             string
+	State           string
+	RaisedAt        pgtype.Timestamptz
+	DueBy           pgtype.Timestamptz
+	Recommendation  string
+	Advice          string
+	ReviewedBy      string
+	ReviewedAt      pgtype.Timestamptz
+	Response        string
+	ResponseReason  string
+	RespondedBy     string
+	RespondedAt     pgtype.Timestamptz
+	WithdrawnReason string
+	Version         int64
+}
+
+type InfectionStewardshipRule struct {
+	RuleID        uuid.UUID
+	TenantID      uuid.UUID
+	Code          string
+	Name          string
+	Revision      int32
+	Kind          string
+	Agents        []string
+	AllAgents     bool
+	DayThreshold  int32
+	Prompt        string
+	Approved      bool
+	ApprovedBy    string
+	ApprovedAt    pgtype.Timestamptz
+	EffectiveFrom pgtype.Timestamptz
+	SupersededAt  pgtype.Timestamptz
+	CreatedAt     pgtype.Timestamptz
+	CreatedBy     string
+}
+
+type InfectionSurveillanceCase struct {
+	CaseID             uuid.UUID
+	TenantID           uuid.UUID
+	Reference          string
+	PatientID          string
+	EncounterID        string
+	FacilityID         string
+	LocationID         string
+	Organism           string
+	OrganismCode       string
+	Site               string
+	MultidrugResistant bool
+	Onset              string
+	OnsetOverride      string
+	OnsetOverrideWhy   string
+	OnsetOverriddenBy  string
+	AdmittedAt         pgtype.Timestamptz
+	OnsetAt            pgtype.Timestamptz
+	WindowHours        int32
+	Criteria           string
+	ReviewedBy         string
+	ReviewedAt         pgtype.Timestamptz
+	DeviceInSitu       bool
+	DeviceDays         int32
+	State              string
+	Notes              string
+	ReportedAt         pgtype.Timestamptz
+	ReportedBy         string
+	ClosedAt           pgtype.Timestamptz
+	ClosedBy           string
+	Version            int64
+}
+
 type MaterialsApprovalRule struct {
 	ApprovalRuleID uuid.UUID
 	TenantID       uuid.UUID

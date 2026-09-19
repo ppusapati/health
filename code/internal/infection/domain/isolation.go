@@ -429,6 +429,7 @@ type Alert struct {
 	Overridden   bool
 	OverrideWhy  string
 	OverriddenBy string
+	OverriddenAt time.Time
 }
 
 // RaiseAlert fires a rule for a patient (SRS-IPC-004).
@@ -508,7 +509,7 @@ func (a *Alert) Override(reason, by string, now time.Time) error {
 	}
 	a.Overridden = true
 	a.OverrideWhy = strings.TrimSpace(reason)
-	a.OverriddenBy = by
+	a.OverriddenBy, a.OverriddenAt = by, now.UTC()
 	if a.AcknowledgedAt.IsZero() {
 		a.AcknowledgedAt, a.AcknowledgedBy = now.UTC(), by
 	}

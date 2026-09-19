@@ -266,6 +266,7 @@ func TestFIT02_GeneratedQueriesImportedOnlyByAdapters(t *testing.T) {
 		"internal/materials/adapters/postgres",
 		"internal/biomedical/adapters/postgres",
 		"internal/quality/adapters/postgres",
+		"internal/infection/adapters/postgres",
 		"internal/platform/store",
 		"internal/platform/workflow",
 		"internal/platform/rules",
@@ -533,6 +534,14 @@ func TestFIT08_NoDeleteOnAppendOnlyTables(t *testing.T) {
 		// did not. A deleted entry is a charge the patient was told about and
 		// can no longer be shown the reason for.
 		"billing.package_consumption",
+		// SRS-IPC-006 reports hand hygiene compliance. A deleted observation
+		// is a miss that never happened, and the rate still adds up — to a
+		// better number, with nothing to audit it against.
+		"infection.hygiene_observation",
+		// SRS-IPC-004's acceptance is that an override is audited. A deleted
+		// alert is an override nobody can review, and the patient's next
+		// encounter carries on as though the rule had never fired.
+		"infection.alert",
 	}
 
 	for _, f := range loadGoFiles(t) {

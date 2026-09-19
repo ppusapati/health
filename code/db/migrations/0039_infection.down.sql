@@ -1,0 +1,12 @@
+-- Rollback for 0039.
+--
+-- Drops every surveillance case, device-day denominator, isolation, alert and
+-- alert rule, outbreak investigation and its membership decisions, hand
+-- hygiene session and observation, occupational exposure and its
+-- time-sensitive follow-up tasks, stewardship rule and review, environmental
+-- limit, sampling plan, sample and corrective action.
+--
+-- The exposure records are staff health records with statutory follow-up
+-- attached, and the surveillance cases are the hospital's reported infection
+-- rates. Treat this as a disaster-recovery action, never a deployment step.
+DROP SCHEMA IF EXISTS infection CASCADE;
