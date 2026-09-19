@@ -42,6 +42,7 @@ sql:
       - db/migrations/0037_biomedical.up.sql
       - db/migrations/0038_quality.up.sql
       - db/migrations/0039_infection.up.sql
+      - db/migrations/0040_records.up.sql
     gen:
       go:
         package: sqlcgen

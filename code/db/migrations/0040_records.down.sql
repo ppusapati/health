@@ -1,0 +1,11 @@
+-- Rollback for 0040.
+--
+-- Drops every chart completion checklist, deficiency, coded episode and its
+-- revisions, record release and the package that went with it, disclosure
+-- accounting entry, retention rule, disposition list, physical record
+-- location and statutory certificate.
+--
+-- The certificates are documents a family and a registrar hold copies of, and
+-- the disclosure accounting is what a patient is entitled to ask for. Treat
+-- this as a disaster-recovery action, never a deployment step.
+DROP SCHEMA IF EXISTS records CASCADE;

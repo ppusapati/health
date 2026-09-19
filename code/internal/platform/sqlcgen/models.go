@@ -3986,6 +3986,302 @@ type QualityStandard struct {
 	Version    int64
 }
 
+type RecordsAssignedCode struct {
+	CodeID             uuid.UUID
+	TenantID           uuid.UUID
+	RevisionID         uuid.UUID
+	CodeSystem         string
+	CodeVersion        string
+	CodeValue          string
+	Display            string
+	Role               string
+	Sequence           int32
+	PresentOnAdmission string
+	SourceDocumentID   string
+}
+
+type RecordsCertificate struct {
+	CertificateID uuid.UUID
+	TenantID      uuid.UUID
+	Kind          string
+	FormCode      string
+	FormRevision  int32
+	Jurisdiction  string
+	PatientID     string
+	EncounterID   string
+	SerialNumber  string
+	State         string
+	VoidReason    string
+	VoidedBy      string
+	VoidedAt      pgtype.Timestamptz
+	CreatedAt     pgtype.Timestamptz
+	Version       int64
+}
+
+type RecordsCertificateField struct {
+	FieldID    uuid.UUID
+	TenantID   uuid.UUID
+	FormID     uuid.UUID
+	Code       string
+	Label      string
+	Required   bool
+	SourcePath string
+	Ordinal    int32
+}
+
+type RecordsCertificateForm struct {
+	FormID        uuid.UUID
+	TenantID      uuid.UUID
+	Code          string
+	Name          string
+	Revision      int32
+	Kind          string
+	Jurisdiction  string
+	IssuerRole    string
+	Approved      bool
+	ApprovedBy    string
+	ApprovedAt    pgtype.Timestamptz
+	EffectiveFrom pgtype.Timestamptz
+	SupersededAt  pgtype.Timestamptz
+	CreatedAt     pgtype.Timestamptz
+	CreatedBy     string
+}
+
+type RecordsCertificateVersion struct {
+	VersionID     uuid.UUID
+	TenantID      uuid.UUID
+	CertificateID uuid.UUID
+	Version       int32
+	Values        []byte
+	SourceRefs    []byte
+	Reason        string
+	IssuerID      string
+	IssuerName    string
+	IssuerRole    string
+	IssuedAt      pgtype.Timestamptz
+	SerialNumber  string
+}
+
+type RecordsChartChecklist struct {
+	ChecklistID    uuid.UUID
+	TenantID       uuid.UUID
+	Code           string
+	Name           string
+	Revision       int32
+	EncounterClass string
+	Specialty      string
+	Approved       bool
+	ApprovedBy     string
+	ApprovedAt     pgtype.Timestamptz
+	EffectiveFrom  pgtype.Timestamptz
+	SupersededAt   pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	CreatedBy      string
+}
+
+type RecordsChecklistItem struct {
+	ItemID           uuid.UUID
+	TenantID         uuid.UUID
+	ChecklistID      uuid.UUID
+	DocumentKind     string
+	Label            string
+	Requirement      string
+	DueWithinSeconds int64
+	ConditionCode    string
+}
+
+type RecordsCodedEpisode struct {
+	EpisodeID   uuid.UUID
+	TenantID    uuid.UUID
+	PatientID   string
+	EncounterID string
+	FacilityID  string
+	CreatedAt   pgtype.Timestamptz
+	CreatedBy   string
+	Version     int64
+}
+
+type RecordsCodingRevision struct {
+	RevisionID uuid.UUID
+	TenantID   uuid.UUID
+	EpisodeID  uuid.UUID
+	Revision   int32
+	Reason     string
+	State      string
+	CodedBy    string
+	CodedAt    pgtype.Timestamptz
+	ReviewedBy string
+	ReviewedAt pgtype.Timestamptz
+}
+
+type RecordsDeficiency struct {
+	DeficiencyID         uuid.UUID
+	TenantID             uuid.UUID
+	PatientID            string
+	EncounterID          string
+	FacilityID           string
+	Kind                 string
+	DocumentKind         string
+	Label                string
+	DocumentID           string
+	Detail               string
+	OwnerID              string
+	ChecklistCode        string
+	ChecklistRevision    int32
+	State                string
+	DueBy                pgtype.Timestamptz
+	RaisedAt             pgtype.Timestamptz
+	RaisedBy             string
+	ResolvedByDocumentID string
+	ResolvedAt           pgtype.Timestamptz
+	ResolvedBy           string
+	WaivedReason         string
+	EscalatedAt          pgtype.Timestamptz
+	Version              int64
+}
+
+type RecordsDisclosure struct {
+	DisclosureID       uuid.UUID
+	TenantID           uuid.UUID
+	PatientID          string
+	Kind               string
+	ReleaseID          pgtype.UUID
+	ActorID            string
+	Purpose            string
+	ScopeSummary       string
+	RecipientReference string
+	RecipientName      string
+	Items              int32
+	Pages              int32
+	OccurredAt         pgtype.Timestamptz
+}
+
+type RecordsDispositionItem struct {
+	ItemID       uuid.UUID
+	TenantID     uuid.UUID
+	ListID       uuid.UUID
+	RecordID     string
+	PatientID    string
+	RecordClass  string
+	Description  string
+	RuleCode     string
+	RuleRevision int32
+	Authority    string
+	AnchorDate   pgtype.Timestamptz
+	EligibleFrom pgtype.Timestamptz
+}
+
+type RecordsDispositionList struct {
+	ListID          uuid.UUID
+	TenantID        uuid.UUID
+	Reference       string
+	Jurisdiction    string
+	Disposition     string
+	State           string
+	PreparedAt      pgtype.Timestamptz
+	PreparedBy      string
+	ApprovedAt      pgtype.Timestamptz
+	ApprovedBy      string
+	ExecutedAt      pgtype.Timestamptz
+	ExecutedBy      string
+	Certificate     string
+	CancelledReason string
+	Version         int64
+}
+
+type RecordsPhysicalRecord struct {
+	RecordID        uuid.UUID
+	TenantID        uuid.UUID
+	Reference       string
+	PatientID       string
+	Volume          int32
+	RecordClass     string
+	Jurisdiction    string
+	Description     string
+	State           string
+	HomeLocation    string
+	CurrentLocation string
+	Custodian       string
+	CheckedOutAt    pgtype.Timestamptz
+	CheckedOutBy    string
+	DueBackAt       pgtype.Timestamptz
+	Purpose         string
+	CreatedAt       pgtype.Timestamptz
+	CreatedBy       string
+	Version         int64
+}
+
+type RecordsReleaseItem struct {
+	ItemID       uuid.UUID
+	TenantID     uuid.UUID
+	ReleaseID    uuid.UUID
+	DocumentID   string
+	EncounterID  string
+	DocumentKind string
+	RecordClass  string
+	OccurredAt   pgtype.Timestamptz
+	Restricted   bool
+	Pages        int32
+}
+
+type RecordsReleaseRequest struct {
+	ReleaseID          uuid.UUID
+	TenantID           uuid.UUID
+	Reference          string
+	PatientID          string
+	Purpose            string
+	AuthorityKind      string
+	AuthorityReference string
+	AuthoritySignedBy  string
+	AuthoritySignedAt  pgtype.Timestamptz
+	AuthorityExpiresAt pgtype.Timestamptz
+	RecipientKind      string
+	RecipientName      string
+	RecipientReference string
+	DeliveryMethod     string
+	ScopeFrom          pgtype.Timestamptz
+	ScopeTo            pgtype.Timestamptz
+	RecordClasses      []string
+	DocumentKinds      []string
+	EncounterIds       []string
+	WholeRecord        bool
+	IncludeRestricted  bool
+	State              string
+	RefusalReason      string
+	RequestedAt        pgtype.Timestamptz
+	RequestedBy        string
+	ApprovedAt         pgtype.Timestamptz
+	ApprovedBy         string
+	ContentHash        string
+	Pages              int32
+	AssembledAt        pgtype.Timestamptz
+	AssembledBy        string
+	ReleasedAt         pgtype.Timestamptz
+	ReleasedBy         string
+	Version            int64
+}
+
+type RecordsRetentionRule struct {
+	RuleID        uuid.UUID
+	TenantID      uuid.UUID
+	Code          string
+	Name          string
+	Revision      int32
+	RecordClass   string
+	Jurisdiction  string
+	Anchor        string
+	RetainYears   int32
+	Disposition   string
+	Authority     string
+	Approved      bool
+	ApprovedBy    string
+	ApprovedAt    pgtype.Timestamptz
+	EffectiveFrom pgtype.Timestamptz
+	SupersededAt  pgtype.Timestamptz
+	CreatedAt     pgtype.Timestamptz
+	CreatedBy     string
+}
+
 type SchedulingAppointment struct {
 	AppointmentID     uuid.UUID
 	TenantID          uuid.UUID

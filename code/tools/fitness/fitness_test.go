@@ -267,6 +267,7 @@ func TestFIT02_GeneratedQueriesImportedOnlyByAdapters(t *testing.T) {
 		"internal/biomedical/adapters/postgres",
 		"internal/quality/adapters/postgres",
 		"internal/infection/adapters/postgres",
+		"internal/records/adapters/postgres",
 		"internal/platform/store",
 		"internal/platform/workflow",
 		"internal/platform/rules",
@@ -542,6 +543,13 @@ func TestFIT08_NoDeleteOnAppendOnlyTables(t *testing.T) {
 		// alert is an override nobody can review, and the patient's next
 		// encounter carries on as though the rule had never fired.
 		"infection.alert",
+		// SRS-MRD-010's accounting of disclosures is what a patient is
+		// entitled to ask for. A deleted row is a copy of somebody's record
+		// that left the hospital and that nobody can be told about.
+		"records.disclosure",
+		// A certificate version went to a family and to a registrar. Deleting
+		// one makes the hospital's account of what it issued untrue.
+		"records.certificate_version",
 	}
 
 	for _, f := range loadGoFiles(t) {

@@ -303,13 +303,26 @@ func validateCodes(codes []AssignedCode) ([]AssignedCode, error) {
 			ErrInvalidRecord, principalProcedures)
 	}
 
-	sort.SliceStable(out, func(a, b int) bool {
-		if out[a].Role != out[b].Role {
-			return roleRank(out[a].Role) < roleRank(out[b].Role)
-		}
-		return out[a].Sequence < out[b].Sequence
-	})
+	SortCodes(out)
 	return out, nil
+}
+
+// SortCodes puts a revision's codes in the order a grouper reads them:
+// principal diagnosis first, then the secondaries in their sequence, then
+// the procedures.
+//
+// Exported because the persistence adapter has to restore this order after a
+// round trip, and two definitions of "the order the codes are in" would
+// diverge the first time somebody changed one. A coded episode whose
+// principal diagnosis is not first is one a grouper reads differently from
+// the way the coder meant it.
+func SortCodes(codes []AssignedCode) {
+	sort.SliceStable(codes, func(a, b int) bool {
+		if codes[a].Role != codes[b].Role {
+			return roleRank(codes[a].Role) < roleRank(codes[b].Role)
+		}
+		return codes[a].Sequence < codes[b].Sequence
+	})
 }
 
 func roleRank(r CodeRole) int {
