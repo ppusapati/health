@@ -592,6 +592,11 @@ func New(deps Deps) *Server {
 	})
 
 	theatreRepo := theatrepostgres.New(txManager)
+	// Built before the theatre because the theatre reads it: what a room can
+	// be scheduled for depends on which of its machines are working
+	// (SRS-BIO-009).
+	biomedicalRepo := biomedicalpostgres.New(txManager)
+
 	theatreService := theatreapp.NewService(theatreapp.Deps{
 		UnitOfWork: txManager,
 		Schedule:   theatrepostgres.ScheduleRepo{Repository: theatreRepo},
@@ -603,11 +608,23 @@ func New(deps Deps) *Server {
 		// Whether a procedure has sides belongs to the code system
 		// (SRS-OT-002), not to the theatre.
 		Procedures: theatrepostgres.NewLateralProcedures(deps.LateralProcedures),
-		Events:     platformStore,
-		Audits:     store.AuditAppenderFunc(platformStore.AppendAudit),
-		IDs:        uuidGenerator{},
-		Clock:      systemClock{},
-		Config:     deps.Theatre,
+		// What the room's machines can actually do right now (SRS-BIO-009).
+		// An adapter over the equipment register rather than a second copy
+		// here: "is the intensifier working" has to have one answer, and it
+		// belongs to the people who maintain it.
+		//
+		// The calibration setting is passed from the biomedical config rather
+		// than read again, so a hospital that treats a certificate as a
+		// condition of use has its theatre list agree with its equipment
+		// screen.
+		Equipment: theatrepostgres.NewEquipment(
+			biomedicalpostgres.AssetRepo{Repository: biomedicalRepo},
+			deps.Biomedical.BlockOnCalibration, time.Now),
+		Events: platformStore,
+		Audits: store.AuditAppenderFunc(platformStore.AppendAudit),
+		IDs:    uuidGenerator{},
+		Clock:  systemClock{},
+		Config: deps.Theatre,
 	})
 
 	anaesthesiaRepo := anaesthesiapostgres.New(txManager)
@@ -696,7 +713,6 @@ func New(deps Deps) *Server {
 		Config:      deps.Materials,
 	})
 
-	biomedicalRepo := biomedicalpostgres.New(txManager)
 	biomedicalService := biomedicalapp.NewService(biomedicalapp.Deps{
 		UnitOfWork: txManager,
 		Assets:     biomedicalpostgres.AssetRepo{Repository: biomedicalRepo},

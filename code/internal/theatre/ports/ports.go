@@ -178,3 +178,25 @@ type IDGenerator interface{ NewID() string }
 
 // Clock reads the time.
 type Clock interface{ Now() time.Time }
+
+// Equipment reports what the machines standing in a room can actually do
+// (SRS-BIO-009).
+//
+// Owned here and implemented by an adapter over the equipment register, so
+// the theatre asks the question without owning the answer. Optional: a
+// deployment without an equipment register leaves it nil and the scheduler
+// trusts the room's fitted list, which is what it did before the register
+// existed.
+type Equipment interface {
+	// StatusFor reads one room, named by every identifier it is known by —
+	// its id and its code. Both, because the engineer who registers a
+	// ventilator types the code on the door and the scheduler holds the id,
+	// and a link that bound only to one of those would be wired and never
+	// carry anything.
+	//
+	// A room the register knows nothing about returns a zero status and no
+	// error: a theatre with no machines on the register is not an error, it
+	// is a theatre nobody has surveyed yet.
+	StatusFor(ctx context.Context, scope authctx.TenantScope,
+		locations []string) (domain.EquipmentStatus, error)
+}

@@ -432,10 +432,26 @@ func (s *Service) conflictsFor(ctx context.Context, scope authctx.TenantScope,
 		}
 	}
 
+	// What the room's machines can actually do right now (SRS-BIO-009). Read
+	// at the moment the slot is checked rather than stored on the room: a
+	// room's fitted list is a fact about the building, and what is working is
+	// a fact about this minute. Nil where no equipment register is wired, and
+	// the check falls back to the fitted list.
+	var equipment *domain.EquipmentStatus
+	if s.equipment != nil {
+		status, err := s.equipment.StatusFor(ctx, scope,
+			[]string{room.ID, room.Code})
+		if err != nil {
+			return nil, domain.Room{}, err
+		}
+		equipment = &status
+	}
+
 	conflicts := c.CheckSlot(domain.ScheduleRequest{
 		RoomID: in.RoomID, Start: in.Start, End: in.End,
 	}, domain.SchedulingContext{
 		Room: room, Booked: booked, Blocks: blocks, SurgeonBusy: surgeonBusy,
+		Equipment: equipment,
 	}, s.clock.Now())
 
 	return conflicts, room, nil

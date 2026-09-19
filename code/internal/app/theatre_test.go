@@ -9,6 +9,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	biomedicalv1 "github.com/ppusapati/health/code/gen/go/healthcare/biomedical/v1"
+	"github.com/ppusapati/health/code/gen/go/healthcare/biomedical/v1/biomedicalv1connect"
 	empiv1 "github.com/ppusapati/health/code/gen/go/healthcare/empi/v1"
 	"github.com/ppusapati/health/code/gen/go/healthcare/empi/v1/empiv1connect"
 	encounterv1 "github.com/ppusapati/health/code/gen/go/healthcare/encounter/v1"
@@ -42,6 +44,7 @@ import (
 type otHarness struct {
 	pool       *pgxpool.Pool
 	theatre    theatrev1connect.TheatreServiceClient
+	biomedical biomedicalv1connect.BiomedicalServiceClient
 	encounters encounterv1connect.EncounterServiceClient
 	patients   empiv1connect.PatientServiceClient
 	org        organizationv1connect.OrganizationServiceClient
@@ -76,6 +79,7 @@ func newOtHarness(t *testing.T) *otHarness {
 	h := &otHarness{
 		pool:       pool,
 		theatre:    theatrev1connect.NewTheatreServiceClient(server.Client(), server.URL),
+		biomedical: biomedicalv1connect.NewBiomedicalServiceClient(server.Client(), server.URL),
 		encounters: encounterv1connect.NewEncounterServiceClient(server.Client(), server.URL),
 		patients:   empiv1connect.NewPatientServiceClient(server.Client(), server.URL),
 		org:        organizationv1connect.NewOrganizationServiceClient(server.Client(), server.URL),
@@ -102,7 +106,7 @@ func newOtHarness(t *testing.T) *otHarness {
 	}
 	h.facility = facility.Msg.GetFacility().GetFacilityId()
 
-	for _, module := range []string{"empi", "encounter", "theatre"} {
+	for _, module := range []string{"empi", "encounter", "theatre", "biomedical"} {
 		h.entitle(t, module)
 	}
 	return h
@@ -1119,4 +1123,161 @@ func (h *otHarness) clearChecklist(t *testing.T, caseID string) {
 			t.Fatalf("RecordPreop(%s): %v", code, err)
 		}
 	}
+}
+
+// SRS-BIO-009, across two contexts. The theatre's room says what it is meant
+// to have; the equipment register says what is working. The requirement's
+// acceptance is that a scheduler cannot be offered a slot the hospital cannot
+// deliver — so this has to be tested through the assembled stack, because the
+// two facts live in different contexts and the link between them is the thing
+// under test.
+func TestARoomLosesASlotWhenItsEquipmentDoes(t *testing.T) {
+	h := newOtHarness(t)
+	ctx := context.Background()
+
+	room := h.room(t, "OT1", []string{"image_intensifier"})
+	surgery := h.request(t, h.encounter(t, "Menon", "+91-99000-44201"),
+		func(req *theatrev1.RequestSurgeryRequest) {
+			req.Requirements = []string{"image_intensifier"}
+		})
+	caseID := surgery.GetSurgicalCase().GetCaseId()
+
+	start := time.Now().UTC().Add(2 * time.Hour)
+	slot := &theatrev1.CheckSlotRequest{
+		CaseId: caseID, RoomId: room,
+		Start: timestamppb.New(start),
+		End:   timestamppb.New(start.Add(time.Hour)),
+	}
+
+	// Two intensifiers standing in the room, registered against the room's
+	// own identifier.
+	first := h.intensifier(t, "BME-II-1", room)
+	h.intensifier(t, "BME-II-2", room)
+
+	if got := h.roomConflicts(t, slot); len(got) != 0 {
+		t.Fatalf("a room with two working intensifiers refused the case: %v", got)
+	}
+
+	// One goes for service. Counted rather than flagged, so the room keeps
+	// the slot: the hospital can still do the work.
+	version := h.sendForService(t, first, "detector fault")
+	if got := h.roomConflicts(t, slot); len(got) != 0 {
+		t.Fatalf("losing one of two intensifiers took the slot: %v", got)
+	}
+
+	// The second goes too. Now the room genuinely cannot do it.
+	second, err := h.biomedical.GetAssetByTag(ctx,
+		withFacility(h.bmeToken(), h.facility,
+			&biomedicalv1.GetAssetByTagRequest{Tag: "BME-II-2"}))
+	if err != nil {
+		t.Fatalf("GetAssetByTag: %v", err)
+	}
+	h.sendForService(t, second.Msg.GetAsset(), "awaiting detector")
+
+	conflicts := h.roomConflicts(t, slot)
+	if len(conflicts) != 1 {
+		t.Fatalf("conflicts = %v, want the room refused for equipment",
+			conflicts)
+	}
+	// Named, so a scheduler looking at a room with an intensifier bolted to
+	// the floor is told which machine and why rather than that the room has
+	// none.
+	if !strings.Contains(conflicts[0].GetDetail(), "BME-II-") {
+		t.Fatalf("detail = %q, want it to name the machine",
+			conflicts[0].GetDetail())
+	}
+	// Overridable: a hospital can wheel one in from the next theatre, and a
+	// scheduler who knows that should not be stopped — only told.
+	if !conflicts[0].GetOverridable() {
+		t.Fatal("an equipment conflict was made unoverridable")
+	}
+
+	// Repairing one gives the slot back, without anybody touching the
+	// theatre's room record.
+	h.returnToService(t, first.GetTag())
+	if got := h.roomConflicts(t, slot); len(got) != 0 {
+		t.Fatalf("the room did not get its slot back after the repair: %v", got)
+	}
+	_ = version
+}
+
+func (h *otHarness) bmeToken() string {
+	return h.tenantID + ":bme-1:biomedical_manager:" + h.facility
+}
+
+func (h *otHarness) intensifier(t *testing.T, tag,
+	room string) *biomedicalv1.Asset {
+
+	t.Helper()
+	out, err := h.biomedical.RegisterAsset(context.Background(),
+		withFacility(h.bmeToken(), h.facility,
+			&biomedicalv1.RegisterAssetRequest{
+				Tag: tag, Serial: tag, Make: "Siemens", Model: "Cios",
+				Category:    "imaging",
+				Criticality: biomedicalv1.Criticality_CRITICALITY_CRITICAL,
+				// The room's own identifier: the register's location is what
+				// the scheduler knows the room by.
+				LocationId:   room,
+				Capabilities: []string{"image_intensifier"},
+			}))
+	if err != nil {
+		t.Fatalf("RegisterAsset(%s): %v", tag, err)
+	}
+	return out.Msg.GetAsset()
+}
+
+func (h *otHarness) sendForService(t *testing.T, asset *biomedicalv1.Asset,
+	note string) int64 {
+
+	t.Helper()
+	out, err := h.biomedical.MoveAsset(context.Background(),
+		withFacility(h.bmeToken(), h.facility, &biomedicalv1.MoveAssetRequest{
+			AssetId: asset.GetAssetId(),
+			Status:  biomedicalv1.AssetStatus_ASSET_STATUS_AWAITING_PARTS,
+			Note:    note, ExpectedVersion: asset.GetVersion(),
+		}))
+	if err != nil {
+		t.Fatalf("MoveAsset(%s): %v", asset.GetTag(), err)
+	}
+	return out.Msg.GetAsset().GetVersion()
+}
+
+func (h *otHarness) returnToService(t *testing.T, tag string) {
+	t.Helper()
+	ctx := context.Background()
+
+	current, err := h.biomedical.GetAssetByTag(ctx,
+		withFacility(h.bmeToken(), h.facility,
+			&biomedicalv1.GetAssetByTagRequest{Tag: tag}))
+	if err != nil {
+		t.Fatalf("GetAssetByTag(%s): %v", tag, err)
+	}
+	if _, err := h.biomedical.MoveAsset(ctx, withFacility(h.bmeToken(),
+		h.facility, &biomedicalv1.MoveAssetRequest{
+			AssetId:         current.Msg.GetAsset().GetAssetId(),
+			Status:          biomedicalv1.AssetStatus_ASSET_STATUS_IN_SERVICE,
+			ExpectedVersion: current.Msg.GetAsset().GetVersion(),
+		})); err != nil {
+		t.Fatalf("MoveAsset(%s, back): %v", tag, err)
+	}
+}
+
+// roomConflicts returns only the room's own refusals, so a clash or a block
+// added by some other part of the schedule cannot make this test pass.
+func (h *otHarness) roomConflicts(t *testing.T,
+	req *theatrev1.CheckSlotRequest) []*theatrev1.ScheduleConflict {
+
+	t.Helper()
+	checked, err := h.theatre.CheckSlot(context.Background(),
+		withFacility(h.schedulerToken(), h.facility, req))
+	if err != nil {
+		t.Fatalf("CheckSlot: %v", err)
+	}
+	var out []*theatrev1.ScheduleConflict
+	for _, conflict := range checked.Msg.GetConflicts() {
+		if conflict.GetKind() == "room" {
+			out = append(out, conflict)
+		}
+	}
+	return out
 }

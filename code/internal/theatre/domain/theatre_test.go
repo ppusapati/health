@@ -911,3 +911,69 @@ func TestAnEmergencyInsertionPostponesRatherThanErases(t *testing.T) {
 		t.Fatalf("Schedule the emergency: %v", err)
 	}
 }
+
+// SRS-BIO-009. A room's fitted list says what it is meant to have; the
+// equipment register says what is working. The requirement's acceptance is
+// that the second one is what a scheduler sees.
+func TestARoomWithABrokenIntensifierIsNotOfferedForIntensifierWork(t *testing.T) {
+	room := domain.Room{
+		ID: "room-1", TenantID: "t", FacilityID: "f", Code: "OT1",
+		Equipment: []string{"image_intensifier"}, Active: true,
+	}
+
+	// No register wired: the fitted list is all there is, and the room suits.
+	// That is a narrower answer rather than a wrong one, and it is what a
+	// deployment without an equipment register has always had.
+	if missing, ok := room.Suits("", []string{"image_intensifier"}, nil); !ok {
+		t.Fatalf("with no register the room refused the case: %v", missing)
+	}
+
+	// Two intensifiers, one away for service. The room still suits: counted
+	// rather than flagged, because the hospital can still do the work.
+	if missing, ok := room.Suits("", []string{"image_intensifier"},
+		&domain.EquipmentStatus{
+			Working: map[string]int{"image_intensifier": 1},
+		}); !ok {
+		t.Fatalf("a room with one working intensifier refused the case: %v",
+			missing)
+	}
+
+	// Both away. Now the room genuinely cannot do it, and offering the slot
+	// would be offering something the hospital cannot deliver.
+	missing, ok := room.Suits("", []string{"image_intensifier"},
+		&domain.EquipmentStatus{
+			Working: map[string]int{"image_intensifier": 0},
+			Down: map[string]string{
+				"image_intensifier": "BME-II-1: awaiting parts",
+			},
+		})
+	if ok {
+		t.Fatal("a room whose only intensifier is broken was offered for it")
+	}
+	if len(missing) != 1 {
+		t.Fatalf("missing = %v, want one reason", missing)
+	}
+	// Named, because "this room has no image intensifier" about a room with
+	// one bolted to the floor reads as a bug and gets ignored.
+	if !strings.Contains(missing[0], "awaiting parts") ||
+		!strings.Contains(missing[0], "BME-II-1") {
+		t.Fatalf("missing = %q, want it to name the machine and the reason",
+			missing[0])
+	}
+}
+
+// The room's fitted list and the equipment register are maintained by
+// different departments, and one of them will capitalise differently.
+func TestCapabilityMatchingDoesNotTurnOnCapitalisation(t *testing.T) {
+	room := domain.Room{
+		ID: "room-1", TenantID: "t", FacilityID: "f", Code: "OT1",
+		Equipment: []string{"Image_Intensifier"}, Active: true,
+	}
+
+	if missing, ok := room.Suits("", []string{"image_intensifier"},
+		&domain.EquipmentStatus{
+			Working: map[string]int{"IMAGE_INTENSIFIER": 1},
+		}); !ok {
+		t.Fatalf("a working machine was missed on capitalisation: %v", missing)
+	}
+}

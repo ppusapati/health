@@ -31,8 +31,36 @@ type Room struct {
 	Active    bool
 }
 
+// EquipmentStatus is what the machines standing in a room can actually do
+// right now (SRS-BIO-009).
+//
+// Separate from Room.Equipment, which is what the room is meant to have. The
+// two disagree the moment an image intensifier goes for service, and the
+// requirement's acceptance is precisely that the disagreement is visible:
+// unavailable equipment must not be shown as schedulable.
+type EquipmentStatus struct {
+	// Working counts the working units per capability. Counted rather than
+	// flagged, because a theatre with two intensifiers loses nothing when one
+	// goes for service.
+	Working map[string]int
+	// Down explains, per capability the room has and cannot deliver, why. A
+	// scheduler told "this room has no image intensifier" about a room with
+	// one bolted to the floor will assume the system is wrong; told "its
+	// image intensifier is awaiting parts" they will go and find another
+	// room.
+	Down map[string]string
+}
+
 // Suits reports whether a room can take a case's specialty and equipment.
-func (r Room) Suits(specialty string, equipment []string) ([]string, bool) {
+//
+// status is what the room's machines can do right now, or nil where no
+// equipment register is wired. Nil trusts the room's fitted list, which is
+// the behaviour a deployment without SRS-BIO has and the one it had before
+// the register existed — it is a narrower answer, not a wrong one, and the
+// status document names it rather than this code pretending otherwise.
+func (r Room) Suits(specialty string, equipment []string,
+	status *EquipmentStatus) ([]string, bool) {
+
 	if !r.Active {
 		return []string{"room is not in service"}, false
 	}
@@ -43,9 +71,51 @@ func (r Room) Suits(specialty string, equipment []string) ([]string, bool) {
 	for _, needed := range equipment {
 		if !contains(r.Equipment, needed) {
 			missing = append(missing, needed)
+			continue
 		}
+		if status == nil {
+			continue
+		}
+		// Fitted, and the register says none of it is working. Reported with
+		// the reason where the register gave one, because "no image
+		// intensifier" about a room that visibly has one reads as a bug.
+		if workingUnits(status.Working, needed) > 0 {
+			continue
+		}
+		if reason := lookup(status.Down, needed); reason != "" {
+			missing = append(missing, needed+" in service ("+reason+")")
+			continue
+		}
+		missing = append(missing, needed+" in service")
 	}
 	return missing, len(missing) == 0
+}
+
+// workingUnits looks a capability up without caring about case, because the
+// room's fitted list and the equipment register are maintained by different
+// departments and one of them will capitalise differently.
+func workingUnits(working map[string]int, capability string) int {
+	if count, found := working[capability]; found {
+		return count
+	}
+	for name, count := range working {
+		if strings.EqualFold(name, capability) {
+			return count
+		}
+	}
+	return 0
+}
+
+func lookup(reasons map[string]string, capability string) string {
+	if reason, found := reasons[capability]; found {
+		return reason
+	}
+	for name, reason := range reasons {
+		if strings.EqualFold(name, capability) {
+			return reason
+		}
+	}
+	return ""
 }
 
 func contains(haystack []string, needle string) bool {
@@ -483,6 +553,12 @@ type SchedulingContext struct {
 	// SurgeonBusy is the surgeon's other bookings, anywhere. A surgeon in two
 	// theatres at once is the conflict a room-only check misses.
 	SurgeonBusy []Case
+
+	// Equipment is what the room's machines can actually do right now
+	// (SRS-BIO-009), or nil where no equipment register is wired. Read rather
+	// than stored on the Room: a room's fitted list is a fact about the
+	// building, and what is working is a fact about this minute.
+	Equipment *EquipmentStatus
 }
 
 // CheckSlot reports every reason a case cannot go in a slot (SRS-OT-004).
@@ -502,7 +578,8 @@ func (c Case) CheckSlot(req ScheduleRequest, ctx SchedulingContext,
 		return conflicts
 	}
 
-	if missing, ok := ctx.Room.Suits(specialtyOf(c), c.Requirements); !ok {
+	if missing, ok := ctx.Room.Suits(specialtyOf(c), c.Requirements,
+		ctx.Equipment); !ok {
 		for _, item := range missing {
 			conflicts = append(conflicts, ScheduleConflict{
 				Kind: "room", Detail: "this room has no " + item,

@@ -106,6 +106,7 @@ type Service struct {
 	cases      ports.CaseRepository
 	encounters ports.Encounters
 	procedures ports.Procedures
+	equipment  ports.Equipment
 	events     ports.EventAppender
 	audits     ports.AuditAppender
 	ids        ports.IDGenerator
@@ -125,11 +126,17 @@ type Deps struct {
 	// terminology service exists, and visible in the status document rather
 	// than hidden here.
 	Procedures ports.Procedures
-	Events     ports.EventAppender
-	Audits     ports.AuditAppender
-	IDs        ports.IDGenerator
-	Clock      ports.Clock
-	Config     Config
+	// Equipment reports what a room's machines can actually do right now
+	// (SRS-BIO-009). Nil trusts the room's fitted list, which is what a
+	// deployment without an equipment register has — a narrower answer, and
+	// one the status document names rather than this code pretending
+	// otherwise.
+	Equipment ports.Equipment
+	Events    ports.EventAppender
+	Audits    ports.AuditAppender
+	IDs       ports.IDGenerator
+	Clock     ports.Clock
+	Config    Config
 }
 
 // NewService wires the use cases to their ports.
@@ -137,7 +144,8 @@ func NewService(d Deps) *Service {
 	return &Service{
 		uow: d.UnitOfWork, schedule: d.Schedule, cases: d.Cases,
 		encounters: d.Encounters, procedures: d.Procedures,
-		events: d.Events, audits: d.Audits,
+		equipment: d.Equipment,
+		events:    d.Events, audits: d.Audits,
 		ids: d.IDs, clock: d.Clock, config: d.Config,
 	}
 }
