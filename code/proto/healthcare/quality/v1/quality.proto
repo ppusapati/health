@@ -1,0 +1,1770 @@
+// Quality management: incident and near-miss reporting, risk scoring, root
+// cause analysis, corrective and preventive action, sentinel events, document
+// control, internal audit, committees, the accreditation evidence map, the
+// indicator dictionary, complaints, peer review, competency and legal hold.
+//
+// Owning context : quality  (Master Engineering Registry)
+// Owning service : QualityService
+// Trace          : SRS-QMS-001 … SRS-QMS-015
+//
+// Seven shapes in this contract are deliberate.
+//
+// An incident's reach is three states rather than a near-miss flag beside a
+// harm level. Two fields that can contradict each other will, and the
+// contradiction is the one that matters: a near miss filed with harm is a
+// mis-filed record either way, and every report built on it is wrong.
+//
+// The risk score and band are read-only on the wire. They come from the
+// consequence and the likelihood, and a score a reporter could type is a score
+// a reporter could type low.
+//
+// A restricted incident is returned redacted rather than withheld. A ward
+// needs to know that something of this kind happened in it; what it must not
+// have is the narrative, the patient and the people. A restricted analysis or
+// set of minutes is withheld instead, because they are the discussion and
+// there is nothing left to return.
+//
+// A corrective action carries every effectiveness check, including the ones
+// that failed. "Fixed, checked, had not worked, fixed again, checked, had" is
+// the history that tells a hospital whether its analysis was any good, and a
+// single boolean keeps only the last word of it.
+//
+// A document version carries its own effective date and there is no "current"
+// flag. The version in force is derived from the dates, because a flag needs a
+// job to maintain it and a document control system whose current version is
+// whatever a job last set will eventually show an unapproved draft as policy.
+//
+// An indicator value carries the dictionary revision it was computed under.
+// SRS-OPSNFR-008 requires quality indicators be reproducible from source
+// records, and an indicator edited in place turns its own history into two
+// different measurements plotted on one line.
+//
+// A measurement with a zero denominator is marked unanswerable rather than
+// reported as zero. "No eligible cases this month" and "we failed every case
+// this month" are opposite facts, and a zero says the second.
+syntax = "proto3";
+
+package healthcare.quality.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ppusapati/health/code/gen/go/healthcare/quality/v1;qualityv1";
+
+// How far an event got (SRS-QMS-001).
+enum Reach {
+  REACH_UNSPECIFIED = 0;
+  // Never got to the patient. Caught by a check, a person, or luck — and a
+  // free lesson.
+  REACH_NEAR_MISS = 1;
+  // Got to the patient and did nothing to them.
+  REACH_NO_HARM = 2;
+  // Got to the patient and hurt them.
+  REACH_HARM = 3;
+  // Did not involve a patient: a staff injury, a property loss.
+  REACH_NOT_PATIENT = 4;
+}
+
+// How badly somebody was hurt (SRS-QMS-001).
+enum Harm {
+  HARM_UNSPECIFIED = 0;
+  HARM_NONE = 1;
+  HARM_MILD = 2;
+  HARM_MODERATE = 3;
+  HARM_SEVERE = 4;
+  // A death is always a sentinel event, whatever the reporter ticked.
+  HARM_DEATH = 5;
+}
+
+// How bad the outcome was or could have been (SRS-QMS-002).
+enum Consequence {
+  CONSEQUENCE_UNSPECIFIED = 0;
+  CONSEQUENCE_NEGLIGIBLE = 1;
+  CONSEQUENCE_MINOR = 2;
+  CONSEQUENCE_MODERATE = 3;
+  CONSEQUENCE_MAJOR = 4;
+  CONSEQUENCE_CATASTROPHIC = 5;
+}
+
+// How often this is expected to happen again (SRS-QMS-002).
+enum Likelihood {
+  LIKELIHOOD_UNSPECIFIED = 0;
+  LIKELIHOOD_RARE = 1;
+  LIKELIHOOD_UNLIKELY = 2;
+  LIKELIHOOD_POSSIBLE = 3;
+  LIKELIHOOD_LIKELY = 4;
+  LIKELIHOOD_ALMOST_CERTAIN = 5;
+}
+
+// Where a score falls (SRS-QMS-002).
+enum RiskBand {
+  RISK_BAND_UNSPECIFIED = 0;
+  RISK_BAND_LOW = 1;
+  RISK_BAND_MODERATE = 2;
+  RISK_BAND_HIGH = 3;
+  RISK_BAND_EXTREME = 4;
+}
+
+// Where a report stands (SRS-QMS-001).
+enum IncidentState {
+  INCIDENT_STATE_UNSPECIFIED = 0;
+  INCIDENT_STATE_REPORTED = 1;
+  INCIDENT_STATE_UNDER_REVIEW = 2;
+  INCIDENT_STATE_INVESTIGATED = 3;
+  INCIDENT_STATE_CLOSED = 4;
+  // A report the reviewer found was not an incident. Kept rather than
+  // deleted: a report somebody dismissed is evidence about the reviewer.
+  INCIDENT_STATE_REJECTED = 5;
+}
+
+// What group a contributing factor falls in (SRS-QMS-003).
+enum FactorCategory {
+  FACTOR_CATEGORY_UNSPECIFIED = 0;
+  FACTOR_CATEGORY_PATIENT = 1;
+  FACTOR_CATEGORY_TASK = 2;
+  FACTOR_CATEGORY_INDIVIDUAL = 3;
+  FACTOR_CATEGORY_TEAM = 4;
+  FACTOR_CATEGORY_ENVIRONMENT = 5;
+  FACTOR_CATEGORY_EQUIPMENT = 6;
+  FACTOR_CATEGORY_ORGANISATIONAL = 7;
+}
+
+// Where an analysis or a peer review stands.
+enum ReviewState {
+  REVIEW_STATE_UNSPECIFIED = 0;
+  REVIEW_STATE_OPEN = 1;
+  REVIEW_STATE_COMPLETE = 2;
+}
+
+// Fixing this one, or stopping the next one (SRS-QMS-004).
+enum ActionKind {
+  ACTION_KIND_UNSPECIFIED = 0;
+  // Repairs the instance.
+  ACTION_KIND_CORRECTIVE = 1;
+  // Changes the system so it does not recur. An analysis whose actions are
+  // all corrective has fixed a patient and left the cause in place.
+  ACTION_KIND_PREVENTIVE = 2;
+}
+
+// What raised an action (SRS-QMS-004, SRS-QMS-007).
+enum ActionSource {
+  ACTION_SOURCE_UNSPECIFIED = 0;
+  ACTION_SOURCE_INCIDENT = 1;
+  ACTION_SOURCE_RCA = 2;
+  ACTION_SOURCE_AUDIT_FINDING = 3;
+  ACTION_SOURCE_COMPLAINT = 4;
+  ACTION_SOURCE_COMMITTEE = 5;
+  ACTION_SOURCE_INSPECTION = 6;
+}
+
+// Where an action stands (SRS-QMS-004).
+enum ActionState {
+  ACTION_STATE_UNSPECIFIED = 0;
+  ACTION_STATE_DRAFT = 1;
+  ACTION_STATE_APPROVED = 2;
+  ACTION_STATE_OPEN = 3;
+  ACTION_STATE_IN_PROGRESS = 4;
+  ACTION_STATE_EFFECTIVENESS_REVIEW = 5;
+  ACTION_STATE_CLOSED = 6;
+  ACTION_STATE_CANCELLED = 7;
+}
+
+// What sort of controlled document this is (SRS-QMS-006).
+enum DocumentKind {
+  DOCUMENT_KIND_UNSPECIFIED = 0;
+  DOCUMENT_KIND_POLICY = 1;
+  DOCUMENT_KIND_SOP = 2;
+  DOCUMENT_KIND_PROTOCOL = 3;
+  DOCUMENT_KIND_GUIDELINE = 4;
+  DOCUMENT_KIND_FORM = 5;
+  DOCUMENT_KIND_MANUAL = 6;
+}
+
+// Where one revision stands (SRS-QMS-006).
+enum VersionState {
+  VERSION_STATE_UNSPECIFIED = 0;
+  // Being written. Never shown as the document.
+  VERSION_STATE_DRAFT = 1;
+  // Signed off and waiting for its effective date.
+  VERSION_STATE_APPROVED = 2;
+  VERSION_STATE_EFFECTIVE = 3;
+  // Replaced, and retained: an incident is judged against the version in
+  // force when it happened.
+  VERSION_STATE_OBSOLETE = 4;
+}
+
+// How serious an audit finding is (SRS-QMS-007).
+enum FindingSeverity {
+  FINDING_SEVERITY_UNSPECIFIED = 0;
+  // Advice. Closes with a note.
+  FINDING_SEVERITY_OBSERVATION = 1;
+  // A failure. Closes only through a closed corrective action.
+  FINDING_SEVERITY_MINOR_NC = 2;
+  FINDING_SEVERITY_MAJOR_NC = 3;
+}
+
+// Where an audit stands (SRS-QMS-007).
+enum AuditState {
+  AUDIT_STATE_UNSPECIFIED = 0;
+  AUDIT_STATE_PLANNED = 1;
+  AUDIT_STATE_IN_PROGRESS = 2;
+  AUDIT_STATE_REPORTED = 3;
+  AUDIT_STATE_CLOSED = 4;
+  AUDIT_STATE_CANCELLED = 5;
+}
+
+// Where a meeting stands (SRS-QMS-008).
+enum MeetingState {
+  MEETING_STATE_UNSPECIFIED = 0;
+  MEETING_STATE_SCHEDULED = 1;
+  MEETING_STATE_HELD = 2;
+  MEETING_STATE_MINUTES_APPROVED = 3;
+  MEETING_STATE_CANCELLED = 4;
+}
+
+// What sort of thing is offered against a clause (SRS-QMS-009).
+enum EvidenceKind {
+  EVIDENCE_KIND_UNSPECIFIED = 0;
+  // A controlled document *version*, never a document: an SOP revised after
+  // the evidence was filed is a different document.
+  EVIDENCE_KIND_DOCUMENT_VERSION = 1;
+  EVIDENCE_KIND_AUDIT = 2;
+  EVIDENCE_KIND_AUDIT_FINDING = 3;
+  EVIDENCE_KIND_CAPA = 4;
+  EVIDENCE_KIND_KPI = 5;
+  EVIDENCE_KIND_COMMITTEE_MEETING = 6;
+  EVIDENCE_KIND_COMPETENCY = 7;
+  // Held outside this system. A reference and a description, because
+  // pretending to hold a fire certificate would be worse than naming where it
+  // is.
+  EVIDENCE_KIND_EXTERNAL = 8;
+}
+
+// A reviewer's judgement of a clause (SRS-QMS-009).
+enum Verdict {
+  VERDICT_UNSPECIFIED = 0;
+  VERDICT_UNREVIEWED = 1;
+  VERDICT_MET = 2;
+  VERDICT_PARTIALLY_MET = 3;
+  // Must name the action that will close it.
+  VERDICT_NOT_MET = 4;
+  // The verdict that removes a clause from the assessment, so the one that
+  // needs a reason.
+  VERDICT_NOT_APPLICABLE = 5;
+}
+
+// Which way an indicator should move (SRS-QMS-010).
+enum Direction {
+  DIRECTION_UNSPECIFIED = 0;
+  DIRECTION_HIGHER_IS_BETTER = 1;
+  DIRECTION_LOWER_IS_BETTER = 2;
+}
+
+// How often an indicator is measured (SRS-QMS-010).
+enum Frequency {
+  FREQUENCY_UNSPECIFIED = 0;
+  FREQUENCY_DAILY = 1;
+  FREQUENCY_WEEKLY = 2;
+  FREQUENCY_MONTHLY = 3;
+  FREQUENCY_QUARTERLY = 4;
+  FREQUENCY_ANNUAL = 5;
+}
+
+// Who is complaining (SRS-QMS-011).
+enum ComplainantKind {
+  COMPLAINANT_KIND_UNSPECIFIED = 0;
+  COMPLAINANT_KIND_PATIENT = 1;
+  COMPLAINANT_KIND_RELATIVE = 2;
+  COMPLAINANT_KIND_VISITOR = 3;
+  COMPLAINANT_KIND_STAFF = 4;
+  COMPLAINANT_KIND_EXTERNAL = 5;
+}
+
+// How a complaint was decided (SRS-QMS-011).
+enum ComplaintOutcome {
+  COMPLAINT_OUTCOME_UNSPECIFIED = 0;
+  COMPLAINT_OUTCOME_UPHELD = 1;
+  COMPLAINT_OUTCOME_PARTIALLY_UPHELD = 2;
+  COMPLAINT_OUTCOME_NOT_UPHELD = 3;
+  COMPLAINT_OUTCOME_WITHDRAWN = 4;
+}
+
+// Where a grievance stands (SRS-QMS-011).
+enum ComplaintState {
+  COMPLAINT_STATE_UNSPECIFIED = 0;
+  COMPLAINT_STATE_RECEIVED = 1;
+  COMPLAINT_STATE_ACKNOWLEDGED = 2;
+  COMPLAINT_STATE_INVESTIGATING = 3;
+  COMPLAINT_STATE_RESOLVED = 4;
+  COMPLAINT_STATE_CLOSED = 5;
+}
+
+// A peer review's verdict on a death (SRS-QMS-012).
+enum DeathClassification {
+  DEATH_CLASSIFICATION_UNSPECIFIED = 0;
+  DEATH_CLASSIFICATION_EXPECTED = 1;
+  DEATH_CLASSIFICATION_UNEXPECTED = 2;
+  // The classification that produces change, and the one that must name a
+  // corrective action.
+  DEATH_CLASSIFICATION_POTENTIALLY_PREVENTABLE = 3;
+  DEATH_CLASSIFICATION_PREVENTABLE = 4;
+}
+
+// Risk is a scored incident (SRS-QMS-002).
+//
+// Every field is read-only. The score is consequence × likelihood and the band
+// follows from the score; a request that could set them could set the one
+// incident that most needs escalating to "low".
+message Risk {
+  Consequence consequence = 1;
+  Likelihood likelihood = 2;
+  int32 score = 3;
+  RiskBand band = 4;
+}
+
+// Incident is one reported event or near miss (SRS-QMS-001).
+message Incident {
+  string incident_id = 1;
+  string reference = 2;
+  string category = 3;
+  string subcategory = 4;
+
+  Reach reach = 5;
+  Harm harm = 6;
+  Risk risk = 7;
+
+  // All optional and all independent: an incident can involve a patient, a
+  // machine, both or neither. Blanked on a restricted record the caller may
+  // not read in full.
+  string patient_id = 8;
+  string encounter_id = 9;
+  string asset_id = 10;
+  string location_id = 11;
+  string facility_id = 12;
+  string department = 13;
+
+  // Blanked on a restricted record the caller may not read in full.
+  string narrative = 14;
+  string immediate_action = 15;
+
+  // Told about individually. Always true for a death, and always restricted.
+  bool sentinel = 16;
+  // Limited to authorised readers. Separate from the incident's existence.
+  bool restricted = 17;
+  // True where the caller was given the redacted form. A client that cannot
+  // tell a blank narrative from a withheld one shows the ward an empty screen
+  // and no explanation.
+  bool redacted = 18;
+
+  IncidentState state = 19;
+  // Hidden from readers and never from the audit trail. A reporting system in
+  // which staff are identified is one staff stop using.
+  bool anonymous = 20;
+  string reported_by = 21;
+
+  google.protobuf.Timestamp occurred_at = 22;
+  google.protobuf.Timestamp reported_at = 23;
+  string reviewed_by = 24;
+  google.protobuf.Timestamp reviewed_at = 25;
+  string closed_by = 26;
+  google.protobuf.Timestamp closed_at = 27;
+  string closure_reason = 28;
+  int64 version = 29;
+}
+
+message ReportIncidentRequest {
+  string reference = 1;
+  string category = 2;
+  string subcategory = 3;
+  Reach reach = 4;
+  Harm harm = 5;
+  // The score is derived from these two.
+  Consequence consequence = 6;
+  Likelihood likelihood = 7;
+  string patient_id = 8;
+  string encounter_id = 9;
+  string asset_id = 10;
+  string location_id = 11;
+  string facility_id = 12;
+  string department = 13;
+  string narrative = 14;
+  // Required once anything reached a patient.
+  string immediate_action = 15;
+  // Requested, not decided: a death is a sentinel event whatever this says,
+  // and so is anything in the hospital's configured sentinel categories.
+  bool sentinel = 16;
+  bool anonymous = 17;
+  google.protobuf.Timestamp occurred_at = 18;
+}
+
+message ReportIncidentResponse {
+  Incident incident = 1;
+}
+
+message GetIncidentRequest {
+  string incident_id = 1;
+}
+
+message GetIncidentResponse {
+  Incident incident = 1;
+}
+
+message ListIncidentsRequest {
+  string category = 1;
+  IncidentState state = 2;
+  bool open_only = 3;
+  bool sentinel_only = 4;
+  google.protobuf.Timestamp from = 5;
+  google.protobuf.Timestamp to = 6;
+  int32 page_size = 7;
+}
+
+message ListIncidentsResponse {
+  repeated Incident incidents = 1;
+}
+
+message RescoreIncidentRequest {
+  string incident_id = 1;
+  Consequence consequence = 2;
+  Likelihood likelihood = 3;
+  int64 expected_version = 4;
+}
+
+message RescoreIncidentResponse {
+  Incident incident = 1;
+}
+
+message AdvanceIncidentRequest {
+  string incident_id = 1;
+  IncidentState state = 2;
+  // Required at closure and at rejection: both are decisions somebody has to
+  // be able to question later.
+  string reason = 3;
+  int64 expected_version = 4;
+}
+
+// AdvanceIncidentResponse names what a closure left behind (SRS-QMS-003).
+//
+// Reported rather than refused. An incident log that will not let anything
+// close until somebody has done a root cause analysis is a log work goes into
+// and never comes out of, and the backlog hides the real ones.
+message AdvanceIncidentResponse {
+  Incident incident = 1;
+  repeated string concerns = 2;
+}
+
+message SetIncidentRestrictionRequest {
+  string incident_id = 1;
+  bool restricted = 2;
+  string reason = 3;
+  int64 expected_version = 4;
+}
+
+message SetIncidentRestrictionResponse {
+  Incident incident = 1;
+}
+
+// Trend is one line of the incident pattern (SRS-QMS-002).
+message Trend {
+  string category = 1;
+  int32 count = 2;
+  // Counted separately rather than folded in: a category whose count is
+  // rising because people have started reporting near misses is getting
+  // safer, and a single total says the opposite.
+  int32 near_misses = 3;
+  int32 harmful = 4;
+  // The worst single outcome, so a category with one death and forty
+  // scratches does not read as forty-one scratches.
+  Harm worst_harm = 5;
+  int32 extreme = 6;
+}
+
+message GetTrendsRequest {
+  google.protobuf.Timestamp from = 1;
+  google.protobuf.Timestamp to = 2;
+}
+
+message GetTrendsResponse {
+  repeated Trend trends = 1;
+}
+
+// ContributingFactor is one thing that helped an incident happen
+// (SRS-QMS-003).
+message ContributingFactor {
+  FactorCategory category = 1;
+  string detail = 2;
+  // A cause rather than a circumstance. An analysis that calls everything a
+  // root cause has not analysed anything.
+  bool root = 3;
+}
+
+// RootCauseAnalysis is an investigation of one incident (SRS-QMS-003).
+message RootCauseAnalysis {
+  string rca_id = 1;
+  string incident_id = 2;
+  // Five whys, fishbone, the London Protocol. Named because the method
+  // decides what the analysis can find.
+  string method = 3;
+  // Required at completion. An analysis owned by "the committee" is owned by
+  // nobody.
+  string accountable_owner = 4;
+  repeated ContributingFactor factors = 5;
+  string findings = 6;
+  // Required when the analysis raised no corrective action: "we investigated
+  // and changed nothing" is a defensible conclusion and an undefended one is
+  // how root cause analysis becomes paperwork.
+  string no_action_reason = 7;
+  ReviewState state = 8;
+  bool restricted = 9;
+  google.protobuf.Timestamp opened_at = 10;
+  string opened_by = 11;
+  google.protobuf.Timestamp closed_at = 12;
+  string closed_by = 13;
+  int64 version = 14;
+}
+
+message StartRcaRequest {
+  string incident_id = 1;
+  string method = 2;
+}
+
+message StartRcaResponse {
+  RootCauseAnalysis rca = 1;
+}
+
+message AddFactorRequest {
+  string rca_id = 1;
+  ContributingFactor factor = 2;
+}
+
+message AddFactorResponse {
+  RootCauseAnalysis rca = 1;
+}
+
+message CompleteRcaRequest {
+  string rca_id = 1;
+  string accountable_owner = 2;
+  string findings = 3;
+  string no_action_reason = 4;
+  int64 expected_version = 5;
+}
+
+message CompleteRcaResponse {
+  RootCauseAnalysis rca = 1;
+}
+
+message GetRcaRequest {
+  string rca_id = 1;
+}
+
+message GetRcaResponse {
+  RootCauseAnalysis rca = 1;
+}
+
+// EffectivenessCheck says whether an action worked (SRS-QMS-004).
+message EffectivenessCheck {
+  google.protobuf.Timestamp checked_at = 1;
+  string checked_by = 2;
+  bool effective = 3;
+  // What was looked at. "It worked" is an opinion; a re-audit result is a
+  // fact.
+  string evidence = 4;
+}
+
+// CorrectiveAction is one corrective or preventive action (SRS-QMS-004).
+message CorrectiveAction {
+  string capa_id = 1;
+  string reference = 2;
+  ActionKind kind = 3;
+  ActionSource source_kind = 4;
+  string source_id = 5;
+  string action = 6;
+  string owner_id = 7;
+  google.protobuf.Timestamp due_on = 8;
+  // Separate from the action's own due date, because the check is meaningless
+  // before the change has had time to be used.
+  google.protobuf.Timestamp effectiveness_due_on = 9;
+  ActionState state = 10;
+  string approved_by = 11;
+  google.protobuf.Timestamp approved_at = 12;
+  // Every check, including the ones that failed.
+  repeated EffectivenessCheck checks = 13;
+  string closed_by = 14;
+  google.protobuf.Timestamp closed_at = 15;
+  string closure_note = 16;
+  string cancelled_reason = 17;
+  bool restricted = 18;
+  google.protobuf.Timestamp raised_at = 19;
+  string raised_by = 20;
+  int64 version = 21;
+}
+
+message RaiseActionRequest {
+  string reference = 1;
+  ActionKind kind = 2;
+  ActionSource source_kind = 3;
+  string source_id = 4;
+  string action = 5;
+  string owner_id = 6;
+  google.protobuf.Timestamp due_on = 7;
+  google.protobuf.Timestamp effectiveness_due_on = 8;
+  bool restricted = 9;
+}
+
+message RaiseActionResponse {
+  CorrectiveAction action = 1;
+}
+
+message ApproveActionRequest {
+  string capa_id = 1;
+  int64 expected_version = 2;
+}
+
+message ApproveActionResponse {
+  CorrectiveAction action = 1;
+}
+
+message AdvanceActionRequest {
+  string capa_id = 1;
+  ActionState state = 2;
+  string reason = 3;
+  int64 expected_version = 4;
+}
+
+message AdvanceActionResponse {
+  CorrectiveAction action = 1;
+}
+
+// RecordEffectivenessRequest records a review of whether an action worked.
+//
+// A failed check is recorded and returns the action to work rather than being
+// discarded: "we checked and it had not worked" is the finding.
+message RecordEffectivenessRequest {
+  string capa_id = 1;
+  bool effective = 2;
+  string evidence = 3;
+  int64 expected_version = 4;
+}
+
+message RecordEffectivenessResponse {
+  CorrectiveAction action = 1;
+}
+
+message CloseActionRequest {
+  string capa_id = 1;
+  string note = 2;
+  int64 expected_version = 3;
+}
+
+message CloseActionResponse {
+  CorrectiveAction action = 1;
+}
+
+message GetActionRequest {
+  string capa_id = 1;
+}
+
+message GetActionResponse {
+  CorrectiveAction action = 1;
+}
+
+message ListActionsRequest {
+  ActionSource source_kind = 1;
+  string source_id = 2;
+  string owner_id = 3;
+  bool live_only = 4;
+  int32 page_size = 5;
+}
+
+message ListActionsResponse {
+  repeated CorrectiveAction actions = 1;
+}
+
+// OverdueAction is one action past a date it should have met (SRS-QMS-004).
+message OverdueAction {
+  CorrectiveAction action = 1;
+  // Reported separately, because an action that was done on time and never
+  // checked is a different failure from one that was never done.
+  int32 action_overdue_days = 2;
+  int32 check_overdue_days = 3;
+}
+
+message ListOverdueActionsRequest {}
+
+message ListOverdueActionsResponse {
+  repeated OverdueAction overdue = 1;
+}
+
+message EscalateOverdueActionsRequest {}
+
+message EscalateOverdueActionsResponse {
+  int32 raised = 1;
+}
+
+// ControlledDocument is a policy, SOP or protocol under version control
+// (SRS-QMS-006).
+message ControlledDocument {
+  string document_id = 1;
+  string code = 2;
+  string title = 3;
+  DocumentKind kind = 4;
+  string owner_id = 5;
+  // Zero means nobody has decided, which the readiness report names rather
+  // than treating as "never expires".
+  int32 review_months = 6;
+  string department = 7;
+  bool withdrawn = 8;
+  google.protobuf.Timestamp withdrawn_at = 9;
+  google.protobuf.Timestamp created_at = 10;
+  string created_by = 11;
+  int64 version = 12;
+}
+
+// DocumentVersion is one revision (SRS-QMS-006).
+message DocumentVersion {
+  string version_id = 1;
+  string document_id = 2;
+  // What the hospital calls it. The ordinal is what the system orders by,
+  // because "10" sorts before "9" as a string.
+  string label = 3;
+  int32 ordinal = 4;
+  string content_ref = 5;
+  string change_summary = 6;
+  VersionState state = 7;
+  string approved_by = 8;
+  google.protobuf.Timestamp approved_at = 9;
+  // May be in the future: that is how a hospital publishes a policy change
+  // before the date it starts applying.
+  google.protobuf.Timestamp effective_from = 10;
+  google.protobuf.Timestamp obsolete_from = 11;
+  // Per version. Acknowledging version 1 says nothing about version 2.
+  bool requires_acknowledgement = 12;
+  // Expires competencies awarded against earlier versions. Not every revision
+  // does: a typo correction should not invalidate a ward's training records.
+  bool requires_retraining = 13;
+  google.protobuf.Timestamp created_at = 14;
+  string created_by = 15;
+  int64 version = 16;
+}
+
+message RegisterDocumentRequest {
+  string code = 1;
+  string title = 2;
+  DocumentKind kind = 3;
+  string owner_id = 4;
+  int32 review_months = 5;
+  string department = 6;
+}
+
+message RegisterDocumentResponse {
+  ControlledDocument document = 1;
+}
+
+// DraftVersionRequest starts a revision.
+//
+// The ordinal is assigned by the server, one past whatever exists: two people
+// drafting from the same screen would otherwise both pick the next number.
+message DraftVersionRequest {
+  string document_id = 1;
+  string label = 2;
+  string content_ref = 3;
+  string change_summary = 4;
+  bool requires_acknowledgement = 5;
+  bool requires_retraining = 6;
+}
+
+message DraftVersionResponse {
+  DocumentVersion version = 1;
+}
+
+message ApproveVersionRequest {
+  string version_id = 1;
+  google.protobuf.Timestamp effective_from = 2;
+  int64 expected_version = 3;
+}
+
+message ApproveVersionResponse {
+  DocumentVersion version = 1;
+}
+
+message GetCurrentVersionRequest {
+  string document_id = 1;
+}
+
+// GetCurrentVersionResponse is the revision in force right now.
+//
+// found is false where nothing is in force — a gap somebody has to see, not a
+// reason to return an unapproved draft.
+message GetCurrentVersionResponse {
+  DocumentVersion version = 1;
+  bool found = 2;
+}
+
+message ListVersionsRequest {
+  string document_id = 1;
+}
+
+message ListVersionsResponse {
+  repeated DocumentVersion versions = 1;
+}
+
+message ListDocumentsRequest {
+  DocumentKind kind = 1;
+  string department = 2;
+  bool exclude_withdrawn = 3;
+  int32 page_size = 4;
+}
+
+message ListDocumentsResponse {
+  repeated ControlledDocument documents = 1;
+}
+
+// AcknowledgeDocumentRequest confirms the caller has read the version in
+// force.
+//
+// The caller does not name the version: a client that could choose which
+// version it was confirming could confirm the old one for ever.
+message AcknowledgeDocumentRequest {
+  string document_id = 1;
+  string role = 2;
+}
+
+message AcknowledgeDocumentResponse {
+  string acknowledgement_id = 1;
+  string version_id = 2;
+  google.protobuf.Timestamp acknowledged_at = 3;
+}
+
+// AcknowledgementGap is somebody who has not read a version they must.
+message AcknowledgementGap {
+  string document_id = 1;
+  string version_id = 2;
+  string code = 3;
+  string person_id = 4;
+  string role = 5;
+}
+
+message ListOutstandingAcknowledgementsRequest {
+  string document_id = 1;
+}
+
+message ListOutstandingAcknowledgementsResponse {
+  repeated AcknowledgementGap gaps = 1;
+}
+
+// ReviewDue is a controlled document past its own review interval
+// (SRS-QMS-006).
+message ReviewDue {
+  string document_id = 1;
+  string code = 2;
+  string title = 3;
+  string owner_id = 4;
+  google.protobuf.Timestamp last_effective = 5;
+  google.protobuf.Timestamp due_on = 6;
+  int32 days_overdue = 7;
+  // Nothing in force at all: approved drafts, obsolete versions, or nothing.
+  // The worse case, and reported apart from an overdue review.
+  bool no_effective_version = 8;
+  // Nobody decided a review period. Named rather than treated as "never due",
+  // because that is the answer that makes the report look clean.
+  bool no_review_interval = 9;
+}
+
+message ListReviewsDueRequest {}
+
+message ListReviewsDueResponse {
+  repeated ReviewDue due = 1;
+}
+
+// Competency is a skill somebody must be able to evidence (SRS-QMS-013).
+message Competency {
+  string competency_id = 1;
+  string code = 2;
+  string name = 3;
+  // The controlled document that defines it. What makes a policy revision
+  // able to expire training against it.
+  string document_id = 4;
+  // Zero means it does not expire, which is a decision rather than an
+  // omission.
+  int32 valid_months = 5;
+  bool active = 6;
+}
+
+message DefineCompetencyRequest {
+  string code = 1;
+  string name = 2;
+  string document_id = 3;
+  int32 valid_months = 4;
+}
+
+message DefineCompetencyResponse {
+  Competency competency = 1;
+}
+
+message RequireCompetencyRequest {
+  string role = 1;
+  string competency_id = 2;
+}
+
+message RequireCompetencyResponse {}
+
+// AwardCompetencyRequest records training or assessment.
+//
+// The expiry is computed from the competency's own validity period: a caller
+// that could set its own could award a one-year certificate that lasts ten.
+message AwardCompetencyRequest {
+  string competency_id = 1;
+  string person_id = 2;
+  // The document version they were trained against. Left empty the server
+  // takes the one in force.
+  string version_id = 3;
+  string evidence = 4;
+  google.protobuf.Timestamp awarded_at = 5;
+}
+
+message AwardCompetencyResponse {
+  string award_id = 1;
+  google.protobuf.Timestamp expires_at = 2;
+}
+
+// CompetencyGap is somebody missing something their role requires.
+//
+// The reason distinguishes never-held from lapsed from trained-against-
+// superseded-text, because they need three different actions: train them,
+// re-assess them, or brief them on what changed.
+message CompetencyGap {
+  string person_id = 1;
+  string role = 2;
+  string competency_id = 3;
+  string code = 4;
+  string reason = 5;
+}
+
+message ListCompetencyGapsRequest {}
+
+message ListCompetencyGapsResponse {
+  repeated CompetencyGap gaps = 1;
+}
+
+// Audit is one planned internal audit (SRS-QMS-007).
+message Audit {
+  string audit_id = 1;
+  string reference = 2;
+  string title = 3;
+  string scope = 4;
+  string standard_id = 5;
+  string auditor_id = 6;
+  string auditee_department = 7;
+  google.protobuf.Timestamp planned_from = 8;
+  google.protobuf.Timestamp planned_to = 9;
+  AuditState state = 10;
+  string summary = 11;
+  google.protobuf.Timestamp created_at = 12;
+  string created_by = 13;
+  google.protobuf.Timestamp closed_at = 14;
+  string closed_by = 15;
+  int64 version = 16;
+}
+
+// Finding is one thing an audit found (SRS-QMS-007).
+message Finding {
+  string finding_id = 1;
+  string audit_id = 2;
+  // The accreditation clause it fails, where there is one.
+  string clause_id = 3;
+  FindingSeverity severity = 4;
+  string detail = 5;
+  // Required for a non-conformity: an accusation with no evidence is an
+  // opinion, and the department it names will treat it as one.
+  string evidence = 6;
+  // The action it will close through. A non-conformity closes no other way.
+  string capa_id = 7;
+  google.protobuf.Timestamp closed_at = 8;
+  string closed_by = 9;
+  string closure_note = 10;
+  google.protobuf.Timestamp raised_at = 11;
+  string raised_by = 12;
+}
+
+message PlanAuditRequest {
+  string reference = 1;
+  string title = 2;
+  string scope = 3;
+  string standard_id = 4;
+  string auditor_id = 5;
+  string auditee_department = 6;
+  google.protobuf.Timestamp planned_from = 7;
+  google.protobuf.Timestamp planned_to = 8;
+}
+
+message PlanAuditResponse {
+  Audit audit = 1;
+}
+
+message RecordFindingRequest {
+  string audit_id = 1;
+  string clause_id = 2;
+  FindingSeverity severity = 3;
+  string detail = 4;
+  string evidence = 5;
+}
+
+message RecordFindingResponse {
+  Finding finding = 1;
+}
+
+message LinkFindingActionRequest {
+  string finding_id = 1;
+  string capa_id = 2;
+}
+
+message LinkFindingActionResponse {
+  Finding finding = 1;
+}
+
+message CloseFindingRequest {
+  string finding_id = 1;
+  // How an observation is closed. A non-conformity cannot be closed this way.
+  string note = 2;
+}
+
+message CloseFindingResponse {
+  Finding finding = 1;
+}
+
+message ReportAuditRequest {
+  string audit_id = 1;
+  string summary = 2;
+  int64 expected_version = 3;
+}
+
+message ReportAuditResponse {
+  Audit audit = 1;
+}
+
+message CloseAuditRequest {
+  string audit_id = 1;
+  int64 expected_version = 2;
+}
+
+message CloseAuditResponse {
+  Audit audit = 1;
+}
+
+message GetAuditRequest {
+  string audit_id = 1;
+}
+
+message GetAuditResponse {
+  Audit audit = 1;
+}
+
+message ListAuditsRequest {
+  AuditState state = 1;
+  int32 page_size = 2;
+}
+
+message ListAuditsResponse {
+  repeated Audit audits = 1;
+}
+
+message ListFindingsRequest {
+  string audit_id = 1;
+  bool open_only = 2;
+}
+
+message ListFindingsResponse {
+  repeated Finding findings = 1;
+}
+
+// Committee is a standing group that meets and decides (SRS-QMS-008).
+message Committee {
+  string committee_id = 1;
+  string code = 2;
+  string name = 3;
+  string terms = 4;
+  // Zero means the hospital has not set one, which is reported rather than
+  // treated as "any number will do".
+  int32 quorum_size = 5;
+  // Minutes are peer-review material — mortality and morbidity, serious
+  // incident review.
+  bool restricted = 6;
+  repeated string members = 7;
+  bool active = 8;
+}
+
+// Decision is one thing a meeting decided (SRS-QMS-008).
+message Decision {
+  string text = 1;
+  // Committee actions are corrective actions, not a second kind of task: an
+  // action item with an owner and a due date that escalates when it is late
+  // is what a CAPA already is.
+  repeated string action_ids = 2;
+}
+
+// Meeting is one sitting of a committee (SRS-QMS-008).
+message Meeting {
+  string meeting_id = 1;
+  string committee_id = 2;
+  google.protobuf.Timestamp scheduled_at = 3;
+  google.protobuf.Timestamp held_at = 4;
+  repeated string agenda = 5;
+  repeated string attendees = 6;
+  // Recorded apart from absence: "did not come and said so" and "did not
+  // come" are different facts about a committee.
+  repeated string apologies = 7;
+  string minutes = 8;
+  repeated Decision decisions = 9;
+  MeetingState state = 10;
+  string approved_by = 11;
+  google.protobuf.Timestamp approved_at = 12;
+  bool restricted = 13;
+  int64 version = 14;
+}
+
+message FormCommitteeRequest {
+  string code = 1;
+  string name = 2;
+  string terms = 3;
+  int32 quorum_size = 4;
+  bool restricted = 5;
+  repeated string members = 6;
+}
+
+message FormCommitteeResponse {
+  Committee committee = 1;
+}
+
+message ScheduleMeetingRequest {
+  string committee_id = 1;
+  google.protobuf.Timestamp scheduled_at = 2;
+  repeated string agenda = 3;
+}
+
+message ScheduleMeetingResponse {
+  Meeting meeting = 1;
+}
+
+// RecordMinutesRequest writes a sitting up and optionally approves it.
+//
+// Minutes recording decisions cannot be approved below the committee's quorum:
+// a decision taken by two people from a committee of nine is not the
+// committee's decision, and minutes that record it as one are the document a
+// survey reads.
+message RecordMinutesRequest {
+  string meeting_id = 1;
+  google.protobuf.Timestamp held_at = 2;
+  repeated string attendees = 3;
+  repeated string apologies = 4;
+  string minutes = 5;
+  repeated Decision decisions = 6;
+  bool approve = 7;
+  int64 expected_version = 8;
+}
+
+message RecordMinutesResponse {
+  Meeting meeting = 1;
+}
+
+message GetMeetingRequest {
+  string meeting_id = 1;
+}
+
+message GetMeetingResponse {
+  Meeting meeting = 1;
+}
+
+message ListCommitteesRequest {
+  bool active_only = 1;
+}
+
+message ListCommitteesResponse {
+  repeated Committee committees = 1;
+}
+
+// Standard is an accreditation standard (SRS-QMS-009).
+message Standard {
+  string standard_id = 1;
+  string code = 2;
+  string name = 3;
+  // Part of the identity: clause numbering changes between editions, and
+  // evidence filed under the old numbering is evidence against a clause that
+  // no longer exists.
+  string edition = 4;
+  bool active = 5;
+}
+
+// Clause is one requirement of a standard (SRS-QMS-009).
+message Clause {
+  string clause_id = 1;
+  string standard_id = 2;
+  string reference = 3;
+  string chapter = 4;
+  string text = 5;
+  // A clause a survey will not pass without. Counted apart, because a
+  // readiness report that treats every clause as equal hides the ones that
+  // matter.
+  bool critical = 6;
+}
+
+message ClauseInput {
+  string reference = 1;
+  string chapter = 2;
+  string text = 3;
+  bool critical = 4;
+}
+
+// LoadStandardRequest registers a standard and its clause tree in one call.
+//
+// A half-loaded standard is a readiness report that says the hospital is doing
+// better than it is, because the clauses that did not load are clauses nobody
+// is failing.
+message LoadStandardRequest {
+  string code = 1;
+  string name = 2;
+  string edition = 3;
+  repeated ClauseInput clauses = 4;
+}
+
+message LoadStandardResponse {
+  Standard standard = 1;
+  int32 clauses_loaded = 2;
+}
+
+// Evidence is one thing offered against one clause (SRS-QMS-009).
+message Evidence {
+  string evidence_id = 1;
+  string clause_id = 2;
+  EvidenceKind kind = 3;
+  string ref_id = 4;
+  string external_ref = 5;
+  string description = 6;
+  google.protobuf.Timestamp added_at = 7;
+  string added_by = 8;
+  // Withdrawn rather than deleted: a survey that asks what changed since the
+  // last one is asking exactly this.
+  google.protobuf.Timestamp removed_at = 9;
+  string removed_by = 10;
+  string removed_why = 11;
+}
+
+message FileEvidenceRequest {
+  string clause_id = 1;
+  EvidenceKind kind = 2;
+  // The record inside this system, for every kind but EXTERNAL. Checked to
+  // exist: evidence naming a record that does not is a tick in a box that
+  // looks like a link.
+  string ref_id = 3;
+  string external_ref = 4;
+  string description = 5;
+}
+
+message FileEvidenceResponse {
+  Evidence evidence = 1;
+}
+
+message WithdrawEvidenceRequest {
+  string evidence_id = 1;
+  string reason = 2;
+}
+
+message WithdrawEvidenceResponse {}
+
+message ReviewClauseRequest {
+  string standard_id = 1;
+  string clause_id = 2;
+  Verdict verdict = 3;
+  string note = 4;
+  // Required for NOT_MET.
+  string capa_id = 5;
+}
+
+message ReviewClauseResponse {
+  string review_id = 1;
+  Verdict verdict = 2;
+  google.protobuf.Timestamp reviewed_at = 3;
+}
+
+// ClauseStatus is one line of the readiness view (SRS-QMS-014).
+message ClauseStatus {
+  string clause_id = 1;
+  string reference = 2;
+  string chapter = 3;
+  bool critical = 4;
+  Verdict verdict = 5;
+  int32 evidence_count = 6;
+  google.protobuf.Timestamp reviewed_at = 7;
+  string reviewed_by = 8;
+  // Reviewed longer ago than the survey window. A judgement from three years
+  // ago is not evidence that the clause is met today.
+  bool stale = 9;
+  string capa_id = 10;
+}
+
+message GetReadinessRequest {
+  string standard_id = 1;
+}
+
+// GetReadinessResponse is the survey-preparation picture (SRS-QMS-014).
+//
+// Derived every time. A stored readiness percentage is out of date the moment
+// a document is revised or an action closes.
+message GetReadinessResponse {
+  string standard_id = 1;
+  int32 total = 2;
+  int32 met = 3;
+  int32 partially_met = 4;
+  int32 not_met = 5;
+  int32 not_applicable = 6;
+  int32 unreviewed = 7;
+  // Critical clauses not met, partially met or never reviewed. Counted apart
+  // because a survey does not average them in with the rest.
+  int32 critical_gaps = 8;
+  int32 stale_reviews = 9;
+  // Clauses with no live evidence at all, whatever the verdict says.
+  int32 evidence_gaps = 10;
+  // The hospital's overdue corrective actions, not this standard's: a survey
+  // asks whether the quality system is working.
+  int32 overdue_actions = 11;
+  // Worst first, critical before ordinary at the same verdict.
+  repeated ClauseStatus clauses = 12;
+}
+
+message ListStandardsRequest {
+  bool active_only = 1;
+}
+
+message ListStandardsResponse {
+  repeated Standard standards = 1;
+}
+
+message ListClausesRequest {
+  string standard_id = 1;
+}
+
+message ListClausesResponse {
+  repeated Clause clauses = 1;
+}
+
+// IndicatorDefinition is one entry in the dictionary (SRS-QMS-010).
+message IndicatorDefinition {
+  string definition_id = 1;
+  string code = 2;
+  string name = 3;
+  // Assigned by the server, one past whatever exists. Versioned and never
+  // edited: an indicator changed in place turns its own history into two
+  // different measurements plotted on one line.
+  int32 revision = 4;
+  // What is counted, in words. Computing these from the hospital's source
+  // records is a reporting engine's job and is a named seam rather than half
+  // built here.
+  string numerator = 5;
+  string denominator = 6;
+  string unit = 7;
+  // Parts per thousand and an integer. A float target that reads 0.949999 in
+  // one report and 95% in another is an argument in a committee meeting.
+  int32 target_permille = 8;
+  Direction direction = 9;
+  Frequency frequency = 10;
+  string owner_id = 11;
+  google.protobuf.Timestamp effective_from = 12;
+  google.protobuf.Timestamp superseded_at = 13;
+}
+
+// IndicatorValue is one measurement over one period (SRS-QMS-010).
+message IndicatorValue {
+  string value_id = 1;
+  string definition_id = 2;
+  string code = 3;
+  // The revision this value was computed under.
+  int32 revision = 4;
+  google.protobuf.Timestamp period_from = 5;
+  google.protobuf.Timestamp period_to = 6;
+  int64 numerator = 7;
+  int64 denominator = 8;
+  // Derived, never supplied: a value a submitter can type is a value that
+  // will not match its own numerator.
+  int32 permille = 9;
+  // A period with a zero denominator. Named rather than reported as zero,
+  // because "no eligible cases" and "we failed every case" are opposite
+  // facts.
+  bool unanswerable = 10;
+  string source_note = 11;
+  google.protobuf.Timestamp recorded_at = 12;
+  string recorded_by = 13;
+}
+
+message DefineIndicatorRequest {
+  string code = 1;
+  string name = 2;
+  string numerator = 3;
+  string denominator = 4;
+  string unit = 5;
+  int32 target_permille = 6;
+  Direction direction = 7;
+  Frequency frequency = 8;
+  string owner_id = 9;
+  google.protobuf.Timestamp effective_from = 10;
+}
+
+message DefineIndicatorResponse {
+  IndicatorDefinition definition = 1;
+}
+
+message RecordIndicatorValueRequest {
+  string code = 1;
+  google.protobuf.Timestamp period_from = 2;
+  google.protobuf.Timestamp period_to = 3;
+  int64 numerator = 4;
+  int64 denominator = 5;
+  // Where the counts came from, which is what makes the figure auditable.
+  string source_note = 6;
+}
+
+message RecordIndicatorValueResponse {
+  IndicatorValue value = 1;
+}
+
+// IndicatorLine is one dictionary entry with its latest measurement.
+message IndicatorLine {
+  IndicatorDefinition definition = 1;
+  IndicatorValue latest = 2;
+  // An indicator defined and never measured is a gap, not a zero.
+  bool recorded = 3;
+  bool met_target = 4;
+  // Whether the question could be asked at all: an unanswerable period is not
+  // a failure.
+  bool comparable = 5;
+}
+
+message GetDashboardRequest {
+  google.protobuf.Timestamp from = 1;
+  google.protobuf.Timestamp to = 2;
+}
+
+message GetDashboardResponse {
+  repeated IndicatorLine lines = 1;
+}
+
+message ListIndicatorValuesRequest {
+  string code = 1;
+  google.protobuf.Timestamp from = 2;
+  google.protobuf.Timestamp to = 3;
+}
+
+message ListIndicatorValuesResponse {
+  repeated IndicatorValue values = 1;
+}
+
+// Complaint is one grievance and its handling (SRS-QMS-011).
+message Complaint {
+  string complaint_id = 1;
+  string reference = 2;
+  ComplainantKind kind = 3;
+  string complainant_ref = 4;
+  string patient_id = 5;
+  string encounter_id = 6;
+  string category = 7;
+  string department = 8;
+  string facility_id = 9;
+  string channel = 10;
+  string detail = 11;
+  // Two clocks, not one. A hospital that acknowledges in a day and resolves
+  // in a month is behaving correctly; merging them hides whichever is being
+  // missed. Both are set from the deployment's SLA configuration.
+  google.protobuf.Timestamp acknowledge_by = 12;
+  google.protobuf.Timestamp acknowledged_at = 13;
+  string acknowledged_by = 14;
+  google.protobuf.Timestamp resolve_by = 15;
+  ComplaintState state = 16;
+  ComplaintOutcome outcome = 17;
+  string resolution = 18;
+  string closure_reason = 19;
+  // Kept on the record as well as derived: the acceptance is that the
+  // escalation is retained, and a derived-only view loses that it ever
+  // happened once the complaint is resolved.
+  bool escalated = 20;
+  google.protobuf.Timestamp escalated_at = 21;
+  google.protobuf.Timestamp received_at = 22;
+  string received_by = 23;
+  google.protobuf.Timestamp closed_at = 24;
+  string closed_by = 25;
+  int64 version = 26;
+}
+
+message ReceiveComplaintRequest {
+  string reference = 1;
+  ComplainantKind kind = 2;
+  string complainant_ref = 3;
+  string patient_id = 4;
+  string encounter_id = 5;
+  string category = 6;
+  string department = 7;
+  string facility_id = 8;
+  string channel = 9;
+  string detail = 10;
+  google.protobuf.Timestamp received_at = 11;
+}
+
+message ReceiveComplaintResponse {
+  Complaint complaint = 1;
+}
+
+message AcknowledgeComplaintRequest {
+  string complaint_id = 1;
+  int64 expected_version = 2;
+}
+
+message AcknowledgeComplaintResponse {
+  Complaint complaint = 1;
+}
+
+message ResolveComplaintRequest {
+  string complaint_id = 1;
+  ComplaintOutcome outcome = 2;
+  string resolution = 3;
+  int64 expected_version = 4;
+}
+
+message ResolveComplaintResponse {
+  Complaint complaint = 1;
+}
+
+message CloseComplaintRequest {
+  string complaint_id = 1;
+  string reason = 2;
+  int64 expected_version = 3;
+}
+
+message CloseComplaintResponse {
+  Complaint complaint = 1;
+}
+
+message GetComplaintRequest {
+  string complaint_id = 1;
+}
+
+message GetComplaintResponse {
+  Complaint complaint = 1;
+}
+
+message ListComplaintsRequest {
+  string category = 1;
+  bool open_only = 2;
+  int32 page_size = 3;
+}
+
+message ListComplaintsResponse {
+  repeated Complaint complaints = 1;
+}
+
+// ComplaintBreach is one grievance past a clock (SRS-QMS-011).
+message ComplaintBreach {
+  Complaint complaint = 1;
+  bool acknowledgement_breached = 2;
+  bool resolution_breached = 3;
+}
+
+message ListComplaintBreachesRequest {}
+
+message ListComplaintBreachesResponse {
+  repeated ComplaintBreach breaches = 1;
+}
+
+message EscalateComplaintBreachesRequest {}
+
+message EscalateComplaintBreachesResponse {
+  int32 raised = 1;
+}
+
+// MortalityReview is one peer review of a death (SRS-QMS-012).
+//
+// Always restricted, behind its own permission, and every read audited. Peer
+// review is a discussion between clinicians about whether a colleague's care
+// was adequate, and it only happens honestly if it is not readable by
+// everybody with a clinical login.
+message MortalityReview {
+  string review_id = 1;
+  string patient_id = 2;
+  string encounter_id = 3;
+  google.protobuf.Timestamp died_at = 4;
+  string committee_id = 5;
+  // Required at completion: a peer review signed by one person is not a peer
+  // review.
+  string meeting_id = 6;
+  DeathClassification classification = 7;
+  string findings = 8;
+  // What the hospital takes from it, apart from the findings: the findings
+  // are about this death and the learning is what changes for the next
+  // patient.
+  string learning_points = 9;
+  repeated string action_ids = 10;
+  ReviewState state = 11;
+  google.protobuf.Timestamp opened_at = 12;
+  string opened_by = 13;
+  google.protobuf.Timestamp completed_at = 14;
+  string completed_by = 15;
+  int64 version = 16;
+}
+
+message StartMortalityReviewRequest {
+  string patient_id = 1;
+  string encounter_id = 2;
+  string committee_id = 3;
+  google.protobuf.Timestamp died_at = 4;
+}
+
+message StartMortalityReviewResponse {
+  MortalityReview review = 1;
+}
+
+message CompleteMortalityReviewRequest {
+  string review_id = 1;
+  string meeting_id = 2;
+  DeathClassification classification = 3;
+  string findings = 4;
+  string learning_points = 5;
+  // Required for a preventable or potentially preventable death.
+  repeated string action_ids = 6;
+  int64 expected_version = 7;
+}
+
+message CompleteMortalityReviewResponse {
+  MortalityReview review = 1;
+}
+
+message GetMortalityReviewRequest {
+  string review_id = 1;
+}
+
+message GetMortalityReviewResponse {
+  MortalityReview review = 1;
+}
+
+message ListMortalityReviewsRequest {
+  bool open_only = 1;
+  google.protobuf.Timestamp from = 2;
+  google.protobuf.Timestamp to = 3;
+  int32 page_size = 4;
+}
+
+message ListMortalityReviewsResponse {
+  repeated MortalityReview reviews = 1;
+}
+
+// PlaceHoldRequest puts a record beyond deletion and beyond change
+// (SRS-QMS-015).
+message PlaceHoldRequest {
+  // One of the record classes this context holds.
+  string record_class = 1;
+  string record_id = 2;
+  string reason = 3;
+}
+
+message PlaceHoldResponse {}
+
+message ReleaseHoldRequest {
+  string record_class = 1;
+  string record_id = 2;
+  string reason = 3;
+}
+
+message ReleaseHoldResponse {}
+
+// QualityService is the quality management contract (SRS-QMS-001 … 015).
+service QualityService {
+  // Incidents, near misses and risk (SRS-QMS-001, SRS-QMS-002, SRS-QMS-005).
+  rpc ReportIncident(ReportIncidentRequest) returns (ReportIncidentResponse);
+  rpc GetIncident(GetIncidentRequest) returns (GetIncidentResponse);
+  rpc ListIncidents(ListIncidentsRequest) returns (ListIncidentsResponse);
+  rpc RescoreIncident(RescoreIncidentRequest) returns (RescoreIncidentResponse);
+  rpc AdvanceIncident(AdvanceIncidentRequest) returns (AdvanceIncidentResponse);
+  rpc SetIncidentRestriction(SetIncidentRestrictionRequest) returns (SetIncidentRestrictionResponse);
+  rpc GetTrends(GetTrendsRequest) returns (GetTrendsResponse);
+
+  // Root cause analysis (SRS-QMS-003).
+  rpc StartRca(StartRcaRequest) returns (StartRcaResponse);
+  rpc AddFactor(AddFactorRequest) returns (AddFactorResponse);
+  rpc CompleteRca(CompleteRcaRequest) returns (CompleteRcaResponse);
+  rpc GetRca(GetRcaRequest) returns (GetRcaResponse);
+
+  // Corrective and preventive action (SRS-QMS-004).
+  rpc RaiseAction(RaiseActionRequest) returns (RaiseActionResponse);
+  rpc ApproveAction(ApproveActionRequest) returns (ApproveActionResponse);
+  rpc AdvanceAction(AdvanceActionRequest) returns (AdvanceActionResponse);
+  rpc RecordEffectiveness(RecordEffectivenessRequest) returns (RecordEffectivenessResponse);
+  rpc CloseAction(CloseActionRequest) returns (CloseActionResponse);
+  rpc GetAction(GetActionRequest) returns (GetActionResponse);
+  rpc ListActions(ListActionsRequest) returns (ListActionsResponse);
+  rpc ListOverdueActions(ListOverdueActionsRequest) returns (ListOverdueActionsResponse);
+  rpc EscalateOverdueActions(EscalateOverdueActionsRequest) returns (EscalateOverdueActionsResponse);
+
+  // Document control (SRS-QMS-006).
+  rpc RegisterDocument(RegisterDocumentRequest) returns (RegisterDocumentResponse);
+  rpc DraftVersion(DraftVersionRequest) returns (DraftVersionResponse);
+  rpc ApproveVersion(ApproveVersionRequest) returns (ApproveVersionResponse);
+  rpc GetCurrentVersion(GetCurrentVersionRequest) returns (GetCurrentVersionResponse);
+  rpc ListVersions(ListVersionsRequest) returns (ListVersionsResponse);
+  rpc ListDocuments(ListDocumentsRequest) returns (ListDocumentsResponse);
+  rpc AcknowledgeDocument(AcknowledgeDocumentRequest) returns (AcknowledgeDocumentResponse);
+  rpc ListOutstandingAcknowledgements(ListOutstandingAcknowledgementsRequest) returns (ListOutstandingAcknowledgementsResponse);
+  rpc ListReviewsDue(ListReviewsDueRequest) returns (ListReviewsDueResponse);
+
+  // Competency (SRS-QMS-013).
+  rpc DefineCompetency(DefineCompetencyRequest) returns (DefineCompetencyResponse);
+  rpc RequireCompetency(RequireCompetencyRequest) returns (RequireCompetencyResponse);
+  rpc AwardCompetency(AwardCompetencyRequest) returns (AwardCompetencyResponse);
+  rpc ListCompetencyGaps(ListCompetencyGapsRequest) returns (ListCompetencyGapsResponse);
+
+  // Internal audit (SRS-QMS-007).
+  rpc PlanAudit(PlanAuditRequest) returns (PlanAuditResponse);
+  rpc RecordFinding(RecordFindingRequest) returns (RecordFindingResponse);
+  rpc LinkFindingAction(LinkFindingActionRequest) returns (LinkFindingActionResponse);
+  rpc CloseFinding(CloseFindingRequest) returns (CloseFindingResponse);
+  rpc ReportAudit(ReportAuditRequest) returns (ReportAuditResponse);
+  rpc CloseAudit(CloseAuditRequest) returns (CloseAuditResponse);
+  rpc GetAudit(GetAuditRequest) returns (GetAuditResponse);
+  rpc ListAudits(ListAuditsRequest) returns (ListAuditsResponse);
+  rpc ListFindings(ListFindingsRequest) returns (ListFindingsResponse);
+
+  // Committees (SRS-QMS-008).
+  rpc FormCommittee(FormCommitteeRequest) returns (FormCommitteeResponse);
+  rpc ScheduleMeeting(ScheduleMeetingRequest) returns (ScheduleMeetingResponse);
+  rpc RecordMinutes(RecordMinutesRequest) returns (RecordMinutesResponse);
+  rpc GetMeeting(GetMeetingRequest) returns (GetMeetingResponse);
+  rpc ListCommittees(ListCommitteesRequest) returns (ListCommitteesResponse);
+
+  // Accreditation and readiness (SRS-QMS-009, SRS-QMS-014).
+  rpc LoadStandard(LoadStandardRequest) returns (LoadStandardResponse);
+  rpc FileEvidence(FileEvidenceRequest) returns (FileEvidenceResponse);
+  rpc WithdrawEvidence(WithdrawEvidenceRequest) returns (WithdrawEvidenceResponse);
+  rpc ReviewClause(ReviewClauseRequest) returns (ReviewClauseResponse);
+  rpc GetReadiness(GetReadinessRequest) returns (GetReadinessResponse);
+  rpc ListStandards(ListStandardsRequest) returns (ListStandardsResponse);
+  rpc ListClauses(ListClausesRequest) returns (ListClausesResponse);
+
+  // The indicator dictionary (SRS-QMS-010).
+  rpc DefineIndicator(DefineIndicatorRequest) returns (DefineIndicatorResponse);
+  rpc RecordIndicatorValue(RecordIndicatorValueRequest) returns (RecordIndicatorValueResponse);
+  rpc GetDashboard(GetDashboardRequest) returns (GetDashboardResponse);
+  rpc ListIndicatorValues(ListIndicatorValuesRequest) returns (ListIndicatorValuesResponse);
+
+  // Complaints (SRS-QMS-011).
+  rpc ReceiveComplaint(ReceiveComplaintRequest) returns (ReceiveComplaintResponse);
+  rpc AcknowledgeComplaint(AcknowledgeComplaintRequest) returns (AcknowledgeComplaintResponse);
+  rpc ResolveComplaint(ResolveComplaintRequest) returns (ResolveComplaintResponse);
+  rpc CloseComplaint(CloseComplaintRequest) returns (CloseComplaintResponse);
+  rpc GetComplaint(GetComplaintRequest) returns (GetComplaintResponse);
+  rpc ListComplaints(ListComplaintsRequest) returns (ListComplaintsResponse);
+  rpc ListComplaintBreaches(ListComplaintBreachesRequest) returns (ListComplaintBreachesResponse);
+  rpc EscalateComplaintBreaches(EscalateComplaintBreachesRequest) returns (EscalateComplaintBreachesResponse);
+
+  // Peer review (SRS-QMS-012).
+  rpc StartMortalityReview(StartMortalityReviewRequest) returns (StartMortalityReviewResponse);
+  rpc CompleteMortalityReview(CompleteMortalityReviewRequest) returns (CompleteMortalityReviewResponse);
+  rpc GetMortalityReview(GetMortalityReviewRequest) returns (GetMortalityReviewResponse);
+  rpc ListMortalityReviews(ListMortalityReviewsRequest) returns (ListMortalityReviewsResponse);
+
+  // Retention and legal hold (SRS-QMS-015).
+  rpc PlaceHold(PlaceHoldRequest) returns (PlaceHoldResponse);
+  rpc ReleaseHold(ReleaseHoldRequest) returns (ReleaseHoldResponse);
+}

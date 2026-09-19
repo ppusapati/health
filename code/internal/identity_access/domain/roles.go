@@ -166,6 +166,45 @@ const (
 	// the ledger.
 	RoleBuyer Role = "buyer"
 
+	// RoleQualityOfficer runs the quality system day to day: incidents, root
+	// cause analysis, corrective actions, internal audits, the accreditation
+	// evidence map, the indicator dictionary and complaints (SRS-QMS-001 …
+	// 011, SRS-QMS-014).
+	//
+	// A role of its own because quality is not a clinical function and not an
+	// administrative one. What it deliberately does not hold is the five
+	// decisions below: it cannot read restricted material, approve a
+	// corrective action, approve a document version, sit on a peer review, or
+	// place a legal hold.
+	RoleQualityOfficer Role = "quality_officer"
+
+	// RoleQualityManager runs the department and holds the decisions the
+	// hospital is answerable for: reading restricted material, approving a
+	// corrective action, approving a controlled document, and placing a legal
+	// hold (SRS-QMS-004, SRS-QMS-005, SRS-QMS-006, SRS-QMS-015).
+	//
+	// Separate from the officer for the reason every quality function
+	// separates them: approving a corrective action and closing it are the two
+	// ends the separation of duties is at, and the person who raised it should
+	// not also be the person who signs it off. The manager holds the officer's
+	// permissions too — a manager works the caseload — so this is an addition
+	// rather than a different job.
+	//
+	// Deliberately no qms.peerreview.conduct: reading a committee's
+	// conclusions and sitting on the committee are different things, and a
+	// mortality review belongs to clinicians.
+	RoleQualityManager Role = "quality_manager"
+
+	// RolePeerReviewer sits on the mortality and morbidity committee
+	// (SRS-QMS-012).
+	//
+	// Its own role and nothing else, because peer review is the narrowest
+	// access in this system: a discussion between clinicians about whether a
+	// colleague's care was adequate, which only happens honestly if it is not
+	// readable by everybody with a clinical login. Every read under it is
+	// audited.
+	RolePeerReviewer Role = "peer_reviewer"
+
 	// RoleBiomedicalEngineer maintains the equipment: the register, the
 	// maintenance schedules, the service work and the device telemetry
 	// (SRS-BIO-001, SRS-BIO-003, SRS-BIO-005, SRS-BIO-006, SRS-BIO-010).
@@ -680,6 +719,16 @@ var rolePermissions = map[Role][]string{
 		"bio.record.read",
 		"bio.ticket.raise",
 
+		// Reporting an incident or near miss, and confirming a policy has
+		// been read (SRS-QMS-001, SRS-QMS-006). Both held as widely as any
+		// permission in this system: a reporting system only the quality
+		// department can write to receives nothing, and an acknowledgement
+		// somebody else can give on your behalf is not an acknowledgement.
+		// Deliberately nothing else: a nurse does not score, close or
+		// restrict what they reported.
+		"qms.incident.report",
+		"qms.document.acknowledge",
+
 		// The emergency department (SRS-ER). Triage is nursing work and this
 		// is the role that holds it: a nurse assigns acuity against the
 		// department's published scale (SRS-ER-002), records the timeline, and
@@ -951,6 +1000,78 @@ var rolePermissions = map[Role][]string{
 		// Deliberately no mat.requisition.approve: a buyer approving the
 		// request they are about to fill is the request and the check on it
 		// in one pair of hands.
+	},
+
+	// A quality officer runs the quality system day to day (SRS-QMS-001 …
+	// 011, SRS-QMS-014).
+	RoleQualityOfficer: {
+		"qms.record.read",
+		"qms.incident.report",
+		"qms.incident.review",
+		"qms.rca.conduct",
+		"qms.capa.write",
+		"qms.document.write",
+		"qms.document.acknowledge",
+		"qms.competency.write",
+		"qms.audit.conduct",
+		"qms.committee.manage",
+		"qms.accreditation.write",
+		"qms.indicator.write",
+		"qms.complaint.handle",
+		// Deliberately no qms.restricted.read: a sentinel event's review and
+		// a serious-incident analysis name identifiable staff, and the people
+		// who may read them are a shorter list than the people who run the
+		// system.
+		// Deliberately no qms.capa.approve: approving an action and closing it
+		// are the two ends the separation of duties is at, and this is the
+		// role that raises them.
+		// Deliberately no qms.document.approve: approval is what makes a draft
+		// into policy, and the author of a revision should not be the person
+		// who makes it binding.
+		// Deliberately no qms.peerreview.conduct: a mortality review belongs
+		// to clinicians.
+		// Deliberately no qms.record.hold: a legal hold is what stops a record
+		// being destroyed, and lifting one is the step nobody takes casually.
+	},
+
+	// A quality manager runs the department and holds the four decisions the
+	// hospital is answerable for (SRS-QMS-004, SRS-QMS-005, SRS-QMS-006,
+	// SRS-QMS-015).
+	RoleQualityManager: {
+		"qms.record.read",
+		"qms.incident.report",
+		"qms.incident.review",
+		"qms.rca.conduct",
+		"qms.capa.write",
+		"qms.document.write",
+		"qms.document.acknowledge",
+		"qms.competency.write",
+		"qms.audit.conduct",
+		"qms.committee.manage",
+		"qms.accreditation.write",
+		"qms.indicator.write",
+		"qms.complaint.handle",
+		// The four the officer does not hold. Holding qms.capa.approve is
+		// necessary and not sufficient: the domain refuses the raiser and the
+		// owner whoever they are, so a manager who raised an action still
+		// cannot approve it and one who owns it still cannot close it.
+		"qms.restricted.read",
+		"qms.capa.approve",
+		"qms.document.approve",
+		"qms.record.hold",
+		// Still no qms.peerreview.conduct.
+	},
+
+	// A peer reviewer sits on the mortality and morbidity committee
+	// (SRS-QMS-012). The narrowest access in this system, and every read
+	// under it is audited.
+	RolePeerReviewer: {
+		"qms.record.read",
+		"qms.incident.report",
+		"qms.restricted.read",
+		"qms.peerreview.conduct",
+		// Deliberately nothing else. Sitting on the committee is not running
+		// the quality system.
 	},
 
 	// A biomedical engineer maintains the equipment and does the service work

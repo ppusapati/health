@@ -32,6 +32,7 @@ import (
 	"github.com/ppusapati/health/code/gen/go/healthcare/orders/v1/ordersv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/organization/v1/organizationv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/platform_api/v1/platformapiv1connect"
+	"github.com/ppusapati/health/code/gen/go/healthcare/quality/v1/qualityv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/scheduling/v1/schedulingv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/sterile/v1/sterilev1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/theatre/v1/theatrev1connect"
@@ -69,6 +70,7 @@ import (
 	icupostgres "github.com/ppusapati/health/code/internal/icu/adapters/postgres"
 	icuapp "github.com/ppusapati/health/code/internal/icu/application"
 	icutransport "github.com/ppusapati/health/code/internal/icu/transport"
+	identitypostgres "github.com/ppusapati/health/code/internal/identity_access/adapters/postgres"
 	identitytransport "github.com/ppusapati/health/code/internal/identity_access/transport"
 	materialsescalate "github.com/ppusapati/health/code/internal/materials/adapters/escalate"
 	materialspostgres "github.com/ppusapati/health/code/internal/materials/adapters/postgres"
@@ -96,10 +98,15 @@ import (
 	"github.com/ppusapati/health/code/internal/platform/store"
 	platformtransport "github.com/ppusapati/health/code/internal/platform/transport"
 	platformapitransport "github.com/ppusapati/health/code/internal/platform_api/transport"
+	qualityescalate "github.com/ppusapati/health/code/internal/quality/adapters/escalate"
+	qualitypostgres "github.com/ppusapati/health/code/internal/quality/adapters/postgres"
+	qualityapp "github.com/ppusapati/health/code/internal/quality/application"
+	qualitytransport "github.com/ppusapati/health/code/internal/quality/transport"
 	schedulingpostgres "github.com/ppusapati/health/code/internal/scheduling/adapters/postgres"
 	schedulingapp "github.com/ppusapati/health/code/internal/scheduling/application"
 	schedulingports "github.com/ppusapati/health/code/internal/scheduling/ports"
 	schedulingtransport "github.com/ppusapati/health/code/internal/scheduling/transport"
+	securitypostgres "github.com/ppusapati/health/code/internal/security/adapters/postgres"
 	sterileescalate "github.com/ppusapati/health/code/internal/sterile/adapters/escalate"
 	sterilepostgres "github.com/ppusapati/health/code/internal/sterile/adapters/postgres"
 	sterileapp "github.com/ppusapati/health/code/internal/sterile/application"
@@ -303,6 +310,21 @@ type Deps struct {
 	// not a default.
 	Biomedical biomedicalapp.Config
 
+	// Quality is what a deployment has decided about its quality system: which
+	// analysis methods it has approved, which incident categories are sentinel
+	// events, the risk band that escalates and the one that calls for an
+	// analysis, how long an accreditation judgement stays current, the
+	// complaint SLAs, and which roles the acknowledgement and competency gap
+	// reports cover (SRS-QMS-002 … 014).
+	//
+	// The zero value escalates nothing, accepts any named analysis method,
+	// marks no accreditation review stale, and reports no acknowledgement or
+	// competency gaps. Each is a deployment that has not decided, and the last
+	// two are the ones to watch: a clean gap report that means nothing reads
+	// exactly like a compliant hospital. The status document names them rather
+	// than this code guessing.
+	Quality qualityapp.Config
+
 	// Emergency is what a deployment has decided about its emergency
 	// department: which triage scale it has approved, what must be measured at
 	// triage, and what each disposition requires (SRS-ER-002, SRS-ER-013).
@@ -329,6 +351,7 @@ type Server struct {
 	Sterile      *sterileapp.Service
 	Materials    *materialsapp.Service
 	Biomedical   *biomedicalapp.Service
+	Quality      *qualityapp.Service
 	Nursing      *nursingapp.Service
 	Orders       *ordersapp.Service
 	Medication   *medicationapp.Service
@@ -733,6 +756,45 @@ func New(deps Deps) *Server {
 		Config:      deps.Biomedical,
 	})
 
+	// The platform's legal-hold store and the staff directory, both owned by
+	// other contexts and reached through adapters. Quality places holds on its
+	// own records and asks who holds which role; it owns neither answer.
+	securityRepo := securitypostgres.New(txManager)
+	identityRepo := identitypostgres.New(txManager)
+
+	qualityRepo := qualitypostgres.New(txManager)
+	qualityService := qualityapp.NewService(qualityapp.Deps{
+		UnitOfWork:     txManager,
+		Incidents:      qualitypostgres.IncidentRepo{Repository: qualityRepo},
+		Investigations: qualitypostgres.InvestigationRepo{Repository: qualityRepo},
+		Actions:        qualitypostgres.ActionRepo{Repository: qualityRepo},
+		Documents:      qualitypostgres.DocumentRepo{Repository: qualityRepo},
+		Competencies:   qualitypostgres.CompetencyRepo{Repository: qualityRepo},
+		Audits:         qualitypostgres.AuditRepo{Repository: qualityRepo},
+		Committees:     qualitypostgres.CommitteeRepo{Repository: qualityRepo},
+		Accreditation:  qualitypostgres.AccreditationRepo{Repository: qualityRepo},
+		Indicators:     qualitypostgres.IndicatorRepo{Repository: qualityRepo},
+		Complaints:     qualitypostgres.ComplaintRepo{Repository: qualityRepo},
+		PeerReviews:    qualitypostgres.PeerReviewRepo{Repository: qualityRepo},
+		// SRS-QMS-015's retention. The platform's own hold mechanism rather
+		// than a second one: a hold placed in one place and a purge that reads
+		// another is a hold that does nothing.
+		Holds: qualitypostgres.NewHolds(securityRepo, uuidGenerator{}),
+		// Who works here belongs to identity and access (SRS-QMS-006,
+		// SRS-QMS-013). A second copy would drift the first time somebody
+		// changed job, and the gap report would be counting people who left.
+		Staff:      qualitypostgres.NewStaffDirectory(identityRepo),
+		Events:     platformStore,
+		AuditTrail: store.AuditAppenderFunc(platformStore.AppendAudit),
+		// A sentinel event, a high-risk incident, an overdue corrective action
+		// and a breached complaint clock. Durable and acknowledged, because
+		// all four have to reach somebody rather than a screen nobody opened.
+		Escalations: qualityescalate.New(escalationStore),
+		IDs:         uuidGenerator{},
+		Clock:       systemClock{},
+		Config:      deps.Quality,
+	})
+
 	medicationRepo := medicationpostgres.New(txManager)
 	medicationTerminology := medicationpostgres.NewTerminology(medicationRepo)
 	medicationService := medicationapp.NewService(medicationapp.Deps{
@@ -897,6 +959,8 @@ func New(deps Deps) *Server {
 		steriletransport.NewHandler(sterileService, time.Now), interceptors))
 	mux.Handle(biomedicalv1connect.NewBiomedicalServiceHandler(
 		biomedicaltransport.NewHandler(biomedicalService, time.Now), interceptors))
+	mux.Handle(qualityv1connect.NewQualityServiceHandler(
+		qualitytransport.NewHandler(qualityService, time.Now), interceptors))
 	mux.Handle(materialsv1connect.NewMaterialsServiceHandler(
 		materialstransport.NewHandler(materialsService, time.Now), interceptors))
 	billingRepo := billingpostgres.New(txManager)
@@ -963,6 +1027,7 @@ func New(deps Deps) *Server {
 		Sterile:         sterileService,
 		Materials:       materialsService,
 		Biomedical:      biomedicalService,
+		Quality:         qualityService,
 		Nursing:         nursingService,
 		Orders:          ordersService,
 		Medication:      medicationService,
