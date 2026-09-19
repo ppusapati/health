@@ -205,6 +205,49 @@ const (
 	// audited.
 	RolePeerReviewer Role = "peer_reviewer"
 
+	// RoleInfectionControlNurse runs surveillance, isolation, outbreak
+	// investigation, hand hygiene audit and environmental sampling
+	// (SRS-IPC-001 … 003, SRS-IPC-005, SRS-IPC-006, SRS-IPC-009).
+	//
+	// A role of its own because infection control is neither a ward function
+	// nor a laboratory one: it counts the hospital's own harms and reports
+	// them. What it deliberately does not hold is the four decisions below —
+	// it cannot override an onset classification, approve a rule, read an
+	// occupational exposure, or sign off an environmental corrective action.
+	RoleInfectionControlNurse Role = "infection_control_nurse"
+
+	// RoleInfectionControlLead holds the decisions the hospital's reported
+	// infection rates depend on: overriding a derived onset classification,
+	// and putting an alert rule, a stewardship trigger or an environmental
+	// limit in force (SRS-IPC-001, SRS-IPC-004, SRS-IPC-008, SRS-IPC-009).
+	//
+	// Separate from the practitioner because of what an override does: a
+	// healthcare-associated infection reclassified as community-acquired
+	// leaves the rate entirely, and that decision should sit with the person
+	// answerable for the rate. The lead holds the practitioner's permissions
+	// too — a lead works the caseload — so this is an addition rather than a
+	// different job.
+	//
+	// Holding both ipc.rule.write and ipc.rule.approve is necessary and not
+	// sufficient: the domain and the database each refuse a rule approved by
+	// its own author, whoever they are.
+	//
+	// Deliberately no ipc.exposure.manage: a staff health record belongs to
+	// occupational health, and no ipc.stewardship.respond, because answering
+	// stewardship advice is a prescriber's decision.
+	RoleInfectionControlLead Role = "infection_control_lead"
+
+	// RoleOccupationalHealth works staff exposure records and their
+	// time-sensitive follow-up (SRS-IPC-007).
+	//
+	// Its own role and almost nothing else, because these are health records
+	// about members of staff held by their employer, with a source patient's
+	// serology attached. Every read under it is audited. A hospital whose
+	// exposure records are readable by the ward is a hospital whose staff
+	// stop reporting exposures, and an unreported needlestick is an untreated
+	// one.
+	RoleOccupationalHealth Role = "occupational_health"
+
 	// RoleBiomedicalEngineer maintains the equipment: the register, the
 	// maintenance schedules, the service work and the device telemetry
 	// (SRS-BIO-001, SRS-BIO-003, SRS-BIO-005, SRS-BIO-006, SRS-BIO-010).
@@ -578,6 +621,19 @@ var rolePermissions = map[Role][]string{
 		// bld.component.release: deciding what leaves the fridge is the
 		// laboratory's, and a clinician who could crossmatch their own
 		// patient's blood would be both the request and the check on it.
+
+		// Infection control (SRS-IPC). A doctor reads the bed board to know
+		// what to wear, answers an MDRO alert on a patient they have
+		// assessed, records what they did about stewardship advice, and
+		// reports their own needlestick.
+		"ipc.board.read",
+		"ipc.alert.override",
+		"ipc.stewardship.respond",
+		"ipc.exposure.report",
+		// Deliberately no ipc.case.write and no ipc.onset.override: a
+		// surveillance case is counted against the hospital, and a clinician
+		// who could reclassify an infection acquired on their own ward would
+		// be marking their own homework.
 	},
 
 	// A pharmacist checks what was prescribed and decides what is dispensed
@@ -601,6 +657,15 @@ var rolePermissions = map[Role][]string{
 		//
 		// And no med.safety.override: the warning is shown to the prescriber,
 		// and a pharmacist answering it would be answering on their behalf.
+
+		// Antimicrobial stewardship (SRS-IPC-008). The review is a
+		// pharmacist's job and the recommendation is all it produces.
+		// Deliberately no ipc.stewardship.respond: the whole requirement is
+		// that the team advises and somebody with prescribing authority
+		// decides, and a programme that could record acceptance of its own
+		// advice would be writing the one number it is judged on.
+		"ipc.record.read",
+		"ipc.stewardship.review",
 	},
 
 	// A billing user works out what is owed (SRS-BIL-003, SRS-BIL-006,
@@ -788,6 +853,21 @@ var rolePermissions = map[Role][]string{
 		// Deliberately no bld.issue.write: a nurse collects a unit from the
 		// bank, and the person who releases it is on the other side of the
 		// counter. That counter is the second check.
+
+		// Infection control (SRS-IPC). The bed board says what to wear
+		// outside a bay and never why the patient is in it; the device
+		// census is a count somebody takes at the bedside, and a rate whose
+		// denominator was estimated is a rate that moves when somebody
+		// changes their estimate; hand hygiene observation is ward work; and
+		// reporting a needlestick has to be as easy as this or it does not
+		// happen.
+		"ipc.board.read",
+		"ipc.denominator.record",
+		"ipc.hygiene.observe",
+		"ipc.exposure.report",
+		// Deliberately no ipc.case.write, no ipc.isolation.write and no
+		// ipc.alert.override: placing and lifting precautions is an infection
+		// control decision, and an alert a ward could dismiss is an alert.
 	},
 
 	// An anaesthetist assesses, plans, gives and records the anaesthetic, and
@@ -1072,6 +1152,65 @@ var rolePermissions = map[Role][]string{
 		"qms.peerreview.conduct",
 		// Deliberately nothing else. Sitting on the committee is not running
 		// the quality system.
+	},
+
+	// An infection control practitioner runs surveillance, isolation,
+	// outbreaks, hand hygiene audit and environmental sampling
+	// (SRS-IPC-001 … 003, SRS-IPC-005, SRS-IPC-006, SRS-IPC-009).
+	RoleInfectionControlNurse: {
+		"ipc.record.read",
+		"ipc.board.read",
+		"ipc.case.write",
+		"ipc.denominator.record",
+		"ipc.isolation.write",
+		"ipc.outbreak.manage",
+		"ipc.hygiene.observe",
+		"ipc.exposure.report",
+		"ipc.environment.sample",
+		// Deliberately no ipc.onset.override: reclassifying a
+		// healthcare-associated infection as community-acquired removes it
+		// from the rate this role is measured by.
+		//
+		// Deliberately no ipc.rule.write or ipc.rule.approve: an alert rule
+		// decides what every ward is told about every patient.
+		//
+		// Deliberately no ipc.exposure.manage: a staff health record belongs
+		// to occupational health.
+		//
+		// Deliberately no ipc.environment.act: raising a corrective action
+		// and verifying it are estates work, and the verification is what
+		// stops "flushed and cleared" standing in for a repeat that passed.
+	},
+
+	// The lead holds the practitioner's caseload and the decisions the
+	// hospital's reported rates depend on (SRS-IPC-001, SRS-IPC-004,
+	// SRS-IPC-008, SRS-IPC-009).
+	RoleInfectionControlLead: {
+		"ipc.record.read",
+		"ipc.board.read",
+		"ipc.case.write",
+		"ipc.denominator.record",
+		"ipc.isolation.write",
+		"ipc.outbreak.manage",
+		"ipc.hygiene.observe",
+		"ipc.exposure.report",
+		"ipc.environment.sample",
+		// The four the practitioner does not hold.
+		"ipc.onset.override",
+		"ipc.rule.write",
+		"ipc.rule.approve",
+		"ipc.environment.act",
+		// Still no ipc.exposure.manage and no ipc.stewardship.respond.
+	},
+
+	// Occupational health works staff exposure records (SRS-IPC-007). Every
+	// read under ipc.exposure.manage is written to the audit trail.
+	RoleOccupationalHealth: {
+		"ipc.exposure.report",
+		"ipc.exposure.manage",
+		// Deliberately nothing else. Following up a needlestick is not
+		// running infection control, and this role has no reason to read a
+		// surveillance case or a bed board.
 	},
 
 	// A biomedical engineer maintains the equipment and does the service work
