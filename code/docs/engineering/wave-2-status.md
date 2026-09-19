@@ -11,15 +11,20 @@ The same standard as Waves 0 and 1 applies: nothing here is claimed as RTM
 implementations, and `make traceability` fails on any id claimed here that no
 test names.
 
-**This wave is early.** Most of it is not built. The table below says so per
-family rather than in prose, because a status document whose honest summary is
-"barely started" is one whose per-row claims have to be read carefully.
+**This wave is part-built.** The table below says so per family rather than in
+prose, because a status document whose honest summary is a fraction is one
+whose per-row claims have to be read carefully.
 
-Three families are now built: SRS-ER, the Emergency Department, SRS-ICU,
-critical care, and SRS-OT, the operating theatre. Their rows are below. `make traceability` reads a row naming a requirement as a claim about
-it unless the row says the work is not built, so the unbuilt ER requirements
-are named here too — a status document that had to leave them out to pass its
-own gate would be hiding exactly what a reader greps for.
+Eight families are now built: SRS-ER the Emergency Department, SRS-ICU
+critical care, SRS-OT the operating theatre, SRS-ANE anaesthesia and PACU,
+SRS-BLD blood bank and transfusion, SRS-CSSD sterile services, SRS-MAT
+materials and inventory, and SRS-BIO biomedical engineering. Their rows are
+below. Four remain: SRS-QMS, SRS-IPC, SRS-MRD and the support services.
+
+`make traceability` reads a row naming a requirement as a claim about it
+unless the row says the work is not built, so the unbuilt ER requirements are
+named here too — a status document that had to leave them out to pass its own
+gate would be hiding exactly what a reader greps for.
 
 ## Why this document exists before the work does
 
@@ -94,7 +99,7 @@ clinician, and `ValidatedInputs()` is a function rather than a convention.
 | SRS-BLD Blood Bank and Transfusion | 17 | **15 implemented, 2 partial** — see below |
 | SRS-CSSD Sterile Services | 12 | **12 implemented** — see below |
 | SRS-MAT Materials and Inventory | 16 | **16 implemented** — see below |
-| SRS-BIO Biomedical Engineering | 11 | **Not started** — Phase 2 §9. Note the prefix collision below |
+| SRS-BIO Biomedical Engineering | 11 | **11 implemented** — Phase 2 §9. Note the prefix collision below |
 | SRS-QMS Quality / NABH | 15 | **Not started** |
 | SRS-IPC Infection Prevention | 10 | **Not started** |
 | SRS-MRD Medical Records / HIM | 10 | **Not started** |
@@ -617,6 +622,142 @@ SRS-BIL and a hospital has one place that decides it. A consumption records the
 movement and the cost centre; it does not raise a bill.
 
 Both are known gaps with named resolutions, not designs.
+
+## SRS-BIO — Biomedical engineering and asset maintenance
+
+Eleven requirements, all implemented. The equipment register, its contracts
+and maintenance schedules, the service work, recalls, telemetry, the
+reliability figures and disposal, in one contract (`BiomedicalService`) and
+one schema (`biomedical`), reached through `internal/biomedical`.
+
+**A ticket carries a kind, and only a corrective one is a failure.** The first
+version of this did not, and the domain test found the consequence: every
+service visit counted against the machine, so MTBF measured how often a
+ventilator was maintained rather than how reliably it ran, and a department
+that serviced its equipment properly read as a department whose equipment kept
+breaking. That is not a reporting nicety — it is an argument for servicing
+less. Planned downtime is now reported beside the unplanned kind rather than
+mixed into it, and preventive work must name the plan it was raised against,
+because otherwise PM compliance is whatever anybody labels preventive.
+
+**An SLA is derived, never supplied.** A ticket's response and resolution
+clocks come from the asset's live contract — the most protective one, because
+a machine under both a warranty and a CMC is covered by the CMC — and priority
+only tightens them. A vendor who agreed next-business-day has not made an
+emergency less urgent to the hospital. The hours are frozen onto the ticket at
+the moment it is raised, because the contract may lapse before the work
+finishes and the promise that applied is the one it was raised under. Nothing
+on the wire can set them.
+
+**Closing a repair is guarded twice.** `bio.ticket.close` is its own
+permission, held by the biomedical manager and not the engineer; and the
+domain separately refuses whoever did the work, whatever they hold. Two
+controls rather than one, because a permission grant is one configuration
+mistake away and the domain rule is not — a manager who fixed a machine
+himself still cannot sign it off. Both are tested separately, and each was
+checked by removing the other.
+
+**Expiries and the maintenance due list are derived on read.** No stored
+reminder, no stored due date. A stored reminder stays raised after the
+contract is renewed, and an engineer who has learned to ignore stale reminders
+ignores the real one too; a stored due date drifts the moment somebody
+services a machine without closing the right record. A plan's baseline moves
+only when planned work closes against it, and nothing can set it directly — a
+baseline anybody can write is a compliance figure anybody can correct upwards.
+
+**A runtime plan with no meter reading is reported as unanswerable.** Not as
+not-due. "We do not know" and "it is fine" are different answers and only one
+of them needs somebody to go and look at the meter.
+
+**A recall matches and holds inside the transaction that records it.** Not in
+a sweep afterwards: the gap between the two is a window in which the hospital
+has been told and the equipment is still on a patient, and that window is what
+SRS-BIO-008 exists to close. The notice is durable and acknowledged rather
+than a screen somebody might open, and it cannot be closed while any asset
+still has work outstanding. Serial ranges deliberately match an asset with no
+serial recorded, because a machine nobody can rule out is a machine to go and
+look at.
+
+**A disposal is approved by the authenticated caller.** The request names who
+asked for it and cannot name who approved it, so a requester cannot sign off
+their own. Sanitisation evidence is required where sanitisation is — a
+certificate, not "we wiped it" — and both are refusals rather than warnings,
+because a disposal is the last thing that ever happens to a record and
+anything missing at that point is missing for ever. The database holds all
+three: one disposal per asset, an approver who is not the requester, and
+evidence where it is required.
+
+**SRS-BIO-009 was a real gap in the theatre, and it is closed.** See the
+section below.
+
+| ID | Requirement | State |
+|---|---|---|
+| SRS-BIO-001 | Equipment register with identifiers, location, criticality and lifecycle status | **Implemented** — UDI and serial both, because a recall is announced by one or the other and a hospital does not choose which; the tag is unique per tenant and the serial unique per make, excluding assets with none |
+| SRS-BIO-002 | Warranty, AMC and CMC contracts with vendor details and renewal reminders | **Implemented** — cover is the most protective live contract, answered by the server rather than by each client; reminders are derived on read and hold contracts and calibrations in one list, because the person who chases one chases the other |
+| SRS-BIO-003 | Preventive maintenance schedules by interval, runtime or risk; due and overdue reportable | **Implemented** — derived on read; a plan whose basis carries no interval is refused by a database CHECK rather than never coming due; a runtime plan with no meter reading reports unanswerable |
+| SRS-BIO-004 | Calibration records with certificate and next-due date; overdue calibration flagged | **Implemented** — its own permission, because a calibration is what makes a machine's readings admissible; the certificate is required; whether a lapse blocks use or only reports is a deployment decision, and both directions are tested |
+| SRS-BIO-005 | Breakdown/service request with priority, impact and SLA; assignment and escalation | **Implemented** — the SLA comes from the contract and is tightened by priority, never set by the request; awaiting-parts stops the resolution clock, because a manufacturer's lead time is a supply problem reported as an engineering one; a critical machine crossing into unusable raises a durable notice, only on the transition |
+| SRS-BIO-006 | Maintenance history with diagnosis, parts, cost and downtime; closure validated | **Implemented** — a resolution with no diagnosis is refused, because a history that says a machine was fixed four times says nothing about whether it is the same fault; closure is a separate permission and never the engineer who did the work, held by the domain and by a database CHECK |
+| SRS-BIO-007 | Uptime, MTBF, MTTR and PM compliance per asset and fleet | **Implemented** — only breakdowns count as failures; planned downtime is reported separately; MTTR counts only repairs that finished, so leaving a ticket open cannot improve it; the fleet ranks by uptime rather than failure count, because one week-long outage is worse than five hour-long ones |
+| SRS-BIO-008 | Recall and field safety notices matched to assets; affected equipment quarantined and tracked to closure | **Implemented** — matched and held in the call that records the notice; UDI wins over make and model, and a serial range includes assets with no serial; a hold is separate from status, because a recalled machine may be perfectly serviceable and still must not be used; the notice cannot close over outstanding work |
+| SRS-BIO-009 | Equipment availability visible to scheduling; unavailable equipment cannot be falsely shown as schedulable | **Implemented** — the theatre reads the register through a port and counts working units per capability rather than flagging them; see the section below for what was wrong before |
+| SRS-BIO-010 | Ingest device telemetry to inform maintenance; readings cannot alter maintenance records | **Implemented** — append and read, with no method on the port that reaches a maintenance record; a batch is one transaction, because a half-ingested batch is a meter reading that jumps backwards; an ingested reading is distinguished from a typed one |
+| SRS-BIO-011 | Disposal with approval, sanitisation evidence and asset closure; disposed asset cannot be assigned for use | **Implemented** — the approver is the caller and never the requester; sanitisation evidence is required where sanitisation is; a disposed asset is nowhere, takes no work orders, and its status cannot be reached by a status change |
+
+### SRS-BIO-009 was a gap, not a label
+
+Before this family was built, the theatre matched a case's requirements
+against `Room.Equipment` — a free-text list of what the room is meant to have
+— with no notion of whether any of it worked. A hospital could send an image
+intensifier for service on Monday and be offered intensifier slots in that
+room all week, which is exactly the outcome the requirement's acceptance
+forbids.
+
+`Room.Suits` now takes what the room's machines can actually do, read through
+a port over the equipment register. Three properties matter:
+
+It is counted, not flagged. A theatre with two intensifiers keeps its slots
+when one goes for service and loses them when the second does. A boolean would
+have taken the room off the list on the first fault, which is its own way of
+being wrong.
+
+The refusal names the machine and the reason — "BME-II-1: awaiting parts". A
+scheduler told "this room has no image intensifier", about a room with one
+bolted to the floor, concludes the system is wrong and stops reading it. The
+conflict stays overridable, because a hospital can wheel one in from the next
+theatre and a scheduler who knows that should be told rather than stopped.
+
+There is no second copy of the answer. The adapter calls the same domain
+function the biomedical use cases call, so a room's capability and the
+equipment screen cannot drift; and the calibration setting is passed from the
+biomedical configuration rather than read again, so a hospital that treats a
+certificate as a condition of use has its theatre list agree with its
+equipment screen.
+
+The port takes every identifier a room is known by, its id and its code, and
+sums across them. The engineer who registers a ventilator types the code on
+the door and the scheduler holds the id, and a link bound to only one of those
+would be wired and never carry anything. **A deployment whose register keys
+equipment on neither will get the old behaviour** — the fitted list, trusted —
+which is a narrower answer rather than a wrong one, and is named here rather
+than hidden. `Deps.Equipment` nil does the same thing, for a deployment with
+no register at all.
+
+### What SRS-BIO does not reach
+
+Two seams are named rather than half-built.
+
+A part fitted during a repair carries `materials_item_id`, and nothing
+decrements the materials ledger. The two ledgers can be reconciled on that
+field; they are not reconciled automatically, because a part taken from the
+biomedical store and one taken from central stores are different movements and
+deciding which is a materials question. This is the same shape as the
+consumption seam below.
+
+Nothing here raises a charge or a cost centre entry. Contract values,
+acquisition cost, part cost and disposal proceeds are all recorded in minor
+units and all stay inside `biomedical`. What the hospital's finance system
+does with them belongs to SRS-BIL and to a wave that owns fixed assets.
 
 ## What Wave 2 depends on
 
