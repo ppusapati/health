@@ -517,6 +517,14 @@ func ComputeRate(in RateInput) Rate {
 		out.Infections++
 	}
 
+	// The denominator is counted by calendar day, so the period is read by
+	// calendar day too. Comparing a midnight census against a period that
+	// starts at half past two drops that day's device days while keeping its
+	// infections — which inflates the rate, silently, in whichever direction
+	// the caller's clock happened to fall.
+	fromDay := in.From.UTC().Truncate(24 * time.Hour)
+	toDay := in.To.UTC().Truncate(24 * time.Hour)
+
 	for _, count := range in.Counts {
 		if associated && count.Device != device {
 			continue
@@ -524,7 +532,7 @@ func ComputeRate(in RateInput) Rate {
 		if in.Location != "" && count.LocationID != in.Location {
 			continue
 		}
-		if count.On.Before(in.From) || !count.On.Before(in.To) {
+		if count.On.Before(fromDay) || !count.On.Before(toDay) {
 			continue
 		}
 		out.DeviceDays += count.DeviceDays

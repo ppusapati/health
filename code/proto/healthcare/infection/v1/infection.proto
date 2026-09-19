@@ -1,0 +1,1484 @@
+// Infection prevention and control: surveillance cases and their onset
+// classification, device-day denominators, isolation and the bed board,
+// multidrug-resistant organism alerting, outbreak investigation, hand hygiene
+// audit, occupational exposure, antimicrobial stewardship and environmental
+// testing.
+//
+// Owning context : infection  (Master Engineering Registry)
+// Owning service : InfectionService
+// Trace          : SRS-IPC-001 … SRS-IPC-010
+//
+// Six shapes in this contract are deliberate.
+//
+// A case's onset classification is read-only on the wire. It is derived from
+// the admission and onset dates against the configured surveillance window,
+// and a classification a reporter could type is a classification a reporter
+// could type "community acquired" — which does not move an infection between
+// reports, it removes it from the hospital's rate entirely.
+//
+// The override is a separate field with its own reason, its own permission
+// and its own RPC. A report that cannot tell a derived classification from an
+// overridden one cannot audit its own rates.
+//
+// A board entry carries the precaution, the PPE and whether a side room is
+// needed, and there is no field on it for the reason. A board is a screen on
+// a wall that visitors and contractors walk past, and the reason a patient is
+// isolated is a diagnosis.
+//
+// A hand hygiene observation has no field naming the person observed. Not an
+// optional one: an audit that names individuals becomes a disciplinary
+// instrument, and the moment it does, observed compliance goes to ninety-nine
+// per cent and stops meaning anything. Small groups come back suppressed with
+// their counts blanked, because "four opportunities, one performed" against a
+// night shift names somebody by arithmetic.
+//
+// A stewardship review carries an order reference and no field that changes a
+// prescription. SRS-IPC-008's acceptance is that a review appears in the
+// worklist without autonomous medication change, and this contract has
+// nothing to change one with: the review holds advice, and the prescriber's
+// response is recorded by a different RPC under a different permission.
+//
+// Every rate, compliance figure and pass rate carries an "unanswerable" flag
+// rather than reporting zero when its denominator is empty. "No ventilated
+// patients this month" and "no infections among our ventilated patients" are
+// different facts and only one of them is good news.
+syntax = "proto3";
+
+package healthcare.infection.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ppusapati/health/code/gen/go/healthcare/infection/v1;infectionv1";
+
+// Whether an infection was acquired here (SRS-IPC-001).
+enum Onset {
+  ONSET_UNSPECIFIED = 0;
+  // Present or incubating on admission.
+  ONSET_COMMUNITY_ACQUIRED = 1;
+  // Appeared after the surveillance window, so the hospital owns it.
+  ONSET_HEALTHCARE_ASSOCIATED = 2;
+  // Cannot be decided from the dates available. Named rather than forced
+  // either way, because guessing biases the rate in whichever direction the
+  // default happens to fall.
+  ONSET_INDETERMINATE = 3;
+}
+
+// Where the infection is (SRS-IPC-001, SRS-IPC-002).
+enum InfectionSite {
+  INFECTION_SITE_UNSPECIFIED = 0;
+  // The four device-associated sites are named individually because each has
+  // its own denominator.
+  INFECTION_SITE_VENTILATOR_ASSOCIATED_PNEUMONIA = 1;
+  INFECTION_SITE_CENTRAL_LINE_BLOODSTREAM = 2;
+  INFECTION_SITE_CATHETER_ASSOCIATED_URINARY = 3;
+  INFECTION_SITE_SURGICAL_SITE = 4;
+  INFECTION_SITE_BLOODSTREAM = 5;
+  INFECTION_SITE_RESPIRATORY = 6;
+  INFECTION_SITE_URINARY = 7;
+  INFECTION_SITE_SKIN_SOFT_TISSUE = 8;
+  INFECTION_SITE_GASTROINTESTINAL = 9;
+  INFECTION_SITE_OTHER = 10;
+}
+
+// The device a site's denominator counts (SRS-IPC-002).
+enum DeviceKind {
+  DEVICE_KIND_UNSPECIFIED = 0;
+  DEVICE_KIND_VENTILATOR = 1;
+  DEVICE_KIND_CENTRAL_LINE = 2;
+  DEVICE_KIND_URINARY_CATHETER = 3;
+}
+
+// Where a surveillance case stands (SRS-IPC-001).
+enum CaseState {
+  CASE_STATE_UNSPECIFIED = 0;
+  CASE_STATE_SUSPECTED = 1;
+  CASE_STATE_CONFIRMED = 2;
+  // Kept rather than deleted: a case the reviewer rejected is evidence about
+  // the definition as much as about the patient.
+  CASE_STATE_REFUTED = 3;
+  CASE_STATE_CLOSED = 4;
+}
+
+// What a ward has to do (SRS-IPC-003).
+enum Precaution {
+  PRECAUTION_UNSPECIFIED = 0;
+  PRECAUTION_STANDARD = 1;
+  PRECAUTION_CONTACT = 2;
+  PRECAUTION_DROPLET = 3;
+  PRECAUTION_AIRBORNE = 4;
+  // Protecting the patient from the ward rather than the ward from the
+  // patient.
+  PRECAUTION_PROTECTIVE = 5;
+}
+
+// Where a cluster investigation stands (SRS-IPC-005).
+enum OutbreakState {
+  OUTBREAK_STATE_UNSPECIFIED = 0;
+  OUTBREAK_STATE_SUSPECTED = 1;
+  OUTBREAK_STATE_DECLARED = 2;
+  OUTBREAK_STATE_CONTAINED = 3;
+  OUTBREAK_STATE_CLOSED = 4;
+  // Investigated and found not to be a cluster.
+  OUTBREAK_STATE_REFUTED = 5;
+}
+
+// Why a case is or is not part of a cluster (SRS-IPC-005).
+enum MembershipReason {
+  MEMBERSHIP_REASON_UNSPECIFIED = 0;
+  MEMBERSHIP_REASON_MEETS_DEFINITION = 1;
+  // Outside the window or location and linked anyway — a contact, a transfer.
+  MEMBERSHIP_REASON_EPIDEMIOLOGICAL_LINK = 2;
+  MEMBERSHIP_REASON_EXCLUDED = 3;
+}
+
+// The professional group observed (SRS-IPC-006). A category and never a
+// person.
+enum Discipline {
+  DISCIPLINE_UNSPECIFIED = 0;
+  DISCIPLINE_DOCTOR = 1;
+  DISCIPLINE_NURSE = 2;
+  DISCIPLINE_ALLIED_HEALTH = 3;
+  DISCIPLINE_SUPPORT_STAFF = 4;
+  DISCIPLINE_STUDENT = 5;
+  DISCIPLINE_VISITOR = 6;
+}
+
+// One of the five occasions hand hygiene is expected (SRS-IPC-006).
+enum Moment {
+  MOMENT_UNSPECIFIED = 0;
+  MOMENT_BEFORE_PATIENT_CONTACT = 1;
+  MOMENT_BEFORE_ASEPTIC_PROCEDURE = 2;
+  MOMENT_AFTER_BODY_FLUID_EXPOSURE = 3;
+  MOMENT_AFTER_PATIENT_CONTACT = 4;
+  MOMENT_AFTER_PATIENT_SURROUNDINGS = 5;
+}
+
+// What the observer saw (SRS-IPC-006).
+enum HygieneAction {
+  HYGIENE_ACTION_UNSPECIFIED = 0;
+  HYGIENE_ACTION_ALCOHOL_RUB = 1;
+  HYGIENE_ACTION_SOAP_AND_WATER = 2;
+  HYGIENE_ACTION_MISSED = 3;
+  // Wearing gloves instead of cleaning hands: its own failure, and the
+  // commonest one. Folded into "missed" it would be invisible, and the
+  // training that fixes it is different.
+  HYGIENE_ACTION_GLOVES_ONLY = 4;
+}
+
+// How a member of staff was exposed (SRS-IPC-007).
+enum ExposureKind {
+  EXPOSURE_KIND_UNSPECIFIED = 0;
+  EXPOSURE_KIND_NEEDLESTICK = 1;
+  EXPOSURE_KIND_SHARPS = 2;
+  EXPOSURE_KIND_MUCOCUTANEOUS_SPLASH = 3;
+  EXPOSURE_KIND_BITE = 4;
+  EXPOSURE_KIND_AIRBORNE_CONTACT = 5;
+}
+
+// Where one time-sensitive step stands (SRS-IPC-007).
+enum TaskState {
+  TASK_STATE_UNSPECIFIED = 0;
+  TASK_STATE_DUE = 1;
+  TASK_STATE_DONE = 2;
+  TASK_STATE_DECLINED = 3;
+  // Ruled out by the assessment: a source known negative, a member of staff
+  // already immune.
+  TASK_STATE_NOT_APPLICABLE = 4;
+}
+
+// Why a stewardship review was raised (SRS-IPC-008). Each is a question, and
+// none of them is an instruction.
+enum TriggerKind {
+  TRIGGER_KIND_UNSPECIFIED = 0;
+  TRIGGER_KIND_RESTRICTED_AGENT = 1;
+  TRIGGER_KIND_DURATION = 2;
+  TRIGGER_KIND_BUG_DRUG_MISMATCH = 3;
+  TRIGGER_KIND_DE_ESCALATION = 4;
+  TRIGGER_KIND_IV_TO_ORAL = 5;
+  TRIGGER_KIND_REDUNDANT_COVER = 6;
+}
+
+// Where a stewardship review stands (SRS-IPC-008).
+enum ReviewState {
+  REVIEW_STATE_UNSPECIFIED = 0;
+  REVIEW_STATE_OPEN = 1;
+  // Answered by the reviewer. The prescription is unchanged at this point,
+  // always.
+  REVIEW_STATE_ADVISED = 2;
+  REVIEW_STATE_CLOSED = 3;
+  REVIEW_STATE_WITHDRAWN = 4;
+}
+
+// What the reviewer advises (SRS-IPC-008).
+enum Recommendation {
+  RECOMMENDATION_UNSPECIFIED = 0;
+  RECOMMENDATION_CONTINUE = 1;
+  RECOMMENDATION_STOP = 2;
+  RECOMMENDATION_NARROW_SPECTRUM = 3;
+  RECOMMENDATION_SWITCH_TO_ORAL = 4;
+  RECOMMENDATION_CHANGE_DOSE = 5;
+  RECOMMENDATION_SEND_CULTURES = 6;
+  RECOMMENDATION_REFER_TO_INFECTION_SPECIALIST = 7;
+}
+
+// What the prescriber did about the advice (SRS-IPC-008).
+enum Response {
+  RESPONSE_UNSPECIFIED = 0;
+  RESPONSE_ACCEPTED = 1;
+  RESPONSE_DECLINED = 2;
+  // Taken in part. Counted apart from accepted, because a programme
+  // reporting ninety per cent acceptance where half of it was "we did
+  // something else" is reporting a number that is not true.
+  RESPONSE_MODIFIED = 3;
+}
+
+// What was tested (SRS-IPC-009).
+enum SampleKind {
+  SAMPLE_KIND_UNSPECIFIED = 0;
+  SAMPLE_KIND_WATER = 1;
+  SAMPLE_KIND_DIALYSIS_WATER = 2;
+  SAMPLE_KIND_ICE = 3;
+  SAMPLE_KIND_AIR_SETTLE_PLATE = 4;
+  SAMPLE_KIND_AIR_PARTICLE_COUNT = 5;
+  SAMPLE_KIND_SURFACE_SWAB = 6;
+  SAMPLE_KIND_ENDOSCOPE_RINSE = 7;
+  SAMPLE_KIND_VENTILATION_PRESSURE = 8;
+}
+
+// How a result stands against its limit (SRS-IPC-009). Derived from the
+// limit, never supplied.
+enum Outcome {
+  OUTCOME_UNSPECIFIED = 0;
+  OUTCOME_PASS = 1;
+  // Above the action level and below failure: the point at which a hospital
+  // does something before it has a problem.
+  OUTCOME_ACTION_LEVEL = 2;
+  OUTCOME_FAIL = 3;
+  // No live limit to judge it by. Named rather than passed: a sample nobody
+  // can judge is not a sample that passed.
+  OUTCOME_UNASSESSABLE = 4;
+}
+
+// Where an environmental sample stands (SRS-IPC-009).
+enum SampleState {
+  SAMPLE_STATE_UNSPECIFIED = 0;
+  SAMPLE_STATE_COLLECTED = 1;
+  SAMPLE_STATE_RESULTED = 2;
+  SAMPLE_STATE_CLOSED = 3;
+}
+
+// Where a corrective action stands (SRS-IPC-009).
+enum ActionState {
+  ACTION_STATE_UNSPECIFIED = 0;
+  ACTION_STATE_OPEN = 1;
+  ACTION_STATE_DONE = 2;
+  // Closed against a repeat sample that passed, not against somebody saying
+  // the tap was flushed.
+  ACTION_STATE_VERIFIED = 3;
+}
+
+// One infection under surveillance (SRS-IPC-001).
+message SurveillanceCase {
+  string case_id = 1;
+  string reference = 2;
+  string patient_id = 3;
+  string encounter_id = 4;
+  string facility_id = 5;
+  string location_id = 6;
+  string organism = 7;
+  string organism_code = 8;
+  InfectionSite site = 9;
+  // Set from the hospital's configured list rather than typed.
+  bool multidrug_resistant = 10;
+
+  // Derived from the dates and the window. Read-only.
+  Onset onset = 11;
+  // The reviewer's disagreement, where there was one. A separate field, with
+  // its reason and its author, so a reclassification stays visible as one.
+  Onset onset_override = 12;
+  string onset_override_why = 13;
+  string onset_overridden_by = 14;
+
+  google.protobuf.Timestamp admitted_at = 15;
+  google.protobuf.Timestamp onset_at = 16;
+  // The surveillance window the classification used, frozen on the case: a
+  // definition change must not silently re-judge history.
+  int32 window_hours = 17;
+
+  string criteria = 18;
+  string reviewed_by = 19;
+  google.protobuf.Timestamp reviewed_at = 20;
+
+  bool device_in_situ = 21;
+  int32 device_days = 22;
+
+  CaseState state = 23;
+  string notes = 24;
+  google.protobuf.Timestamp reported_at = 25;
+  string reported_by = 26;
+  google.protobuf.Timestamp closed_at = 27;
+  string closed_by = 28;
+  int64 version = 29;
+}
+
+// One day's device usage in one location (SRS-IPC-002).
+message DeviceDayCount {
+  string count_id = 1;
+  string facility_id = 2;
+  string location_id = 3;
+  DeviceKind device = 4;
+  google.protobuf.Timestamp counted_on = 5;
+  int32 patient_days = 6;
+  int32 device_days = 7;
+  google.protobuf.Timestamp recorded_at = 8;
+  string recorded_by = 9;
+}
+
+// How a period's cases were classified (SRS-IPC-010).
+message OnsetSummary {
+  int32 healthcare = 1;
+  int32 community = 2;
+  int32 indeterminate = 3;
+  // Counted separately and never folded in. A month in which eleven
+  // healthcare-associated infections were reclassified by hand is a month
+  // somebody should look at.
+  int32 overridden = 4;
+  int32 overridden_to_community = 5;
+}
+
+// One infection rate over one period (SRS-IPC-002, SRS-IPC-010).
+message Rate {
+  InfectionSite site = 1;
+  DeviceKind device = 2;
+  string location_id = 3;
+  google.protobuf.Timestamp period_from = 4;
+  google.protobuf.Timestamp period_to = 5;
+
+  // Confirmed, healthcare-associated cases at this site.
+  int32 infections = 6;
+  int32 device_days = 7;
+  int32 patient_days = 8;
+  // Per 1000 device days, in tenths: 4.7 is 47. Integer arithmetic
+  // throughout, because a rate that reads 4.699999 in one report and 4.7 in
+  // another is an argument in a committee meeting.
+  int32 per_thousand_device_days_tenths = 9;
+  // Device days over patient days, parts per thousand. A rate falling because
+  // the ward stopped using the device is a different fact from a rate falling
+  // because it got safer.
+  int32 utilisation_permille = 10;
+  // No denominator, so no rate.
+  bool unanswerable = 11;
+
+  OnsetSummary onsets = 12;
+  // The versioned indicator definition this was filed against, where one is
+  // configured (SRS-IPC-010).
+  string indicator_code = 13;
+  int32 indicator_revision = 14;
+}
+
+// One patient under precautions (SRS-IPC-003).
+message Isolation {
+  string isolation_id = 1;
+  string patient_id = 2;
+  string encounter_id = 3;
+  string facility_id = 4;
+  string location_id = 5;
+  string bed_id = 6;
+  Precaution precaution = 7;
+  // The clinical justification. Returned to infection control and never on a
+  // board entry.
+  string reason = 8;
+  string case_id = 9;
+  google.protobuf.Timestamp started_at = 10;
+  string started_by = 11;
+  google.protobuf.Timestamp review_due = 12;
+  google.protobuf.Timestamp ended_at = 13;
+  string ended_by = 14;
+  string end_reason = 15;
+  int64 version = 16;
+}
+
+// What a bed board may show (SRS-IPC-003, SRS-OPSSEC-006).
+//
+// There is no reason field here, and that is the point.
+message BoardEntry {
+  string bed_id = 1;
+  string location_id = 2;
+  string patient_id = 3;
+  Precaution precaution = 4;
+  repeated string ppe = 5;
+  bool requires_side_room = 6;
+  google.protobuf.Timestamp since = 7;
+  bool review_overdue = 8;
+}
+
+// A configured multidrug-resistant organism rule (SRS-IPC-004).
+message AlertRule {
+  string rule_id = 1;
+  string code = 2;
+  string name = 3;
+  // (code, revision) is the identity. A rule edited in place would make every
+  // past alert unexplainable.
+  int32 revision = 4;
+  repeated string organisms = 5;
+  int32 lookback_days = 6;
+  Precaution precaution = 7;
+  string advice = 8;
+  bool approved = 9;
+  string approved_by = 10;
+  google.protobuf.Timestamp approved_at = 11;
+  google.protobuf.Timestamp effective_from = 12;
+  google.protobuf.Timestamp superseded_at = 13;
+  google.protobuf.Timestamp created_at = 14;
+  string created_by = 15;
+}
+
+// One rule firing for one patient at one encounter (SRS-IPC-004).
+message Alert {
+  string alert_id = 1;
+  string patient_id = 2;
+  string encounter_id = 3;
+  string facility_id = 4;
+  string rule_id = 5;
+  string rule_code = 6;
+  // The revision it fired under, so an alert from eighteen months ago stays
+  // explicable.
+  int32 rule_revision = 7;
+  string organism = 8;
+  string organism_code = 9;
+  google.protobuf.Timestamp last_positive_at = 10;
+  Precaution precaution = 11;
+  string advice = 12;
+  google.protobuf.Timestamp raised_at = 13;
+  google.protobuf.Timestamp acknowledged_at = 14;
+  string acknowledged_by = 15;
+  bool overridden = 16;
+  string override_why = 17;
+  string overridden_by = 18;
+  google.protobuf.Timestamp overridden_at = 19;
+}
+
+// One cluster investigation (SRS-IPC-005).
+message Outbreak {
+  string outbreak_id = 1;
+  string reference = 2;
+  string organism = 3;
+  // What makes a patient part of this cluster. An outbreak whose cases were
+  // chosen one at a time is an outbreak whose size is whatever the
+  // investigator decided.
+  string case_definition = 4;
+  repeated string locations = 5;
+  google.protobuf.Timestamp window_from = 6;
+  google.protobuf.Timestamp window_to = 7;
+  OutbreakState state = 8;
+  string findings = 9;
+  repeated string control_measures = 10;
+  // Corrective actions raised in the quality system, named rather than
+  // duplicated.
+  repeated string action_ids = 11;
+  google.protobuf.Timestamp declared_at = 12;
+  string declared_by = 13;
+  google.protobuf.Timestamp closed_at = 14;
+  string closed_by = 15;
+  string closure_why = 16;
+  google.protobuf.Timestamp created_at = 17;
+  string created_by = 18;
+  int64 version = 19;
+}
+
+// One case's place in a cluster (SRS-IPC-005).
+message Membership {
+  string membership_id = 1;
+  string outbreak_id = 2;
+  string case_id = 3;
+  string patient_id = 4;
+  MembershipReason reason = 5;
+  string note = 6;
+  google.protobuf.Timestamp decided_at = 7;
+  string decided_by = 8;
+}
+
+// An investigation's size and shape (SRS-IPC-005, SRS-IPC-010).
+message ClusterSummary {
+  string outbreak_id = 1;
+  // Reported together, because a cluster of six that started as a cluster of
+  // fourteen is a different fact from a cluster of six.
+  int32 included = 2;
+  int32 excluded = 3;
+  int32 by_link = 4;
+  repeated string locations = 5;
+  google.protobuf.Timestamp first_onset = 6;
+  google.protobuf.Timestamp last_onset = 7;
+}
+
+// One period of hand hygiene observation (SRS-IPC-006).
+message HygieneSession {
+  string session_id = 1;
+  string facility_id = 2;
+  string location_id = 3;
+  // The observer is named; the observed never are.
+  string observer_id = 4;
+  google.protobuf.Timestamp started_at = 5;
+  google.protobuf.Timestamp ended_at = 6;
+  string notes = 7;
+  int64 version = 8;
+}
+
+// One opportunity and what happened (SRS-IPC-006).
+//
+// There is no field here naming the person observed.
+message HygieneObservation {
+  string observation_id = 1;
+  string session_id = 2;
+  Discipline discipline = 3;
+  Moment moment = 4;
+  HygieneAction action = 5;
+  bool gloves_worn = 6;
+  google.protobuf.Timestamp observed_at = 7;
+}
+
+// One group's hand hygiene rate (SRS-IPC-006).
+message Compliance {
+  string group = 1;
+  int32 opportunities = 2;
+  int32 performed = 3;
+  int32 permille = 4;
+  int32 gloves_instead_of = 5;
+  // Too few observations to report. The counts come back blank with it,
+  // because publishing them would name somebody by arithmetic.
+  bool suppressed = 6;
+}
+
+// One occupational exposure (SRS-IPC-007). Restricted, always.
+message Exposure {
+  string exposure_id = 1;
+  string reference = 2;
+  string staff_id = 3;
+  Discipline discipline = 4;
+  string facility_id = 5;
+  string location_id = 6;
+  ExposureKind kind = 7;
+  string device = 8;
+  // What a prevention programme reads: the same cannula on the same ward
+  // three times is a finding.
+  string circumstance = 9;
+  bool deep_injury = 10;
+  string source_patient_id = 11;
+  bool source_known = 12;
+  // Testing a source patient's blood is a decision with its own law.
+  bool source_consented = 13;
+  google.protobuf.Timestamp occurred_at = 14;
+  google.protobuf.Timestamp reported_at = 15;
+  string reported_by = 16;
+  google.protobuf.Timestamp closed_at = 17;
+  string closed_by = 18;
+  string outcome = 19;
+  int64 version = 20;
+}
+
+// One time-sensitive step after an exposure (SRS-IPC-007).
+message ExposureTask {
+  string task_id = 1;
+  string exposure_id = 2;
+  string code = 3;
+  // When it stops being useful, counted from the exposure and not from the
+  // report.
+  google.protobuf.Timestamp due_by = 4;
+  TaskState state = 5;
+  string outcome = 6;
+  google.protobuf.Timestamp completed_at = 7;
+  string completed_by = 8;
+}
+
+// A configured stewardship review trigger (SRS-IPC-008).
+message StewardshipRule {
+  string rule_id = 1;
+  string code = 2;
+  string name = 3;
+  int32 revision = 4;
+  TriggerKind kind = 5;
+  repeated string agents = 6;
+  // Explicit rather than inferred from an empty agent list: a rule that
+  // silently widened to everything would flood the worklist, and a flooded
+  // worklist is an unread one.
+  bool all_agents = 7;
+  int32 day_threshold = 8;
+  // The question put to the reviewer. A trigger that says only "review" gets
+  // a review that says only "continue".
+  string prompt = 9;
+  bool approved = 10;
+  string approved_by = 11;
+  google.protobuf.Timestamp approved_at = 12;
+  google.protobuf.Timestamp effective_from = 13;
+  google.protobuf.Timestamp superseded_at = 14;
+  google.protobuf.Timestamp created_at = 15;
+  string created_by = 16;
+}
+
+// One stewardship worklist entry (SRS-IPC-008).
+//
+// order_id is a reference a reviewer opens. There is no field here that
+// changes a prescription.
+message StewardshipReview {
+  string review_id = 1;
+  string patient_id = 2;
+  string encounter_id = 3;
+  string location_id = 4;
+  string rule_id = 5;
+  string rule_code = 6;
+  int32 rule_revision = 7;
+  TriggerKind kind = 8;
+  string agent = 9;
+  string order_id = 10;
+  // The fact that fired the rule, in words a prescriber reads.
+  string why = 11;
+  ReviewState state = 12;
+  google.protobuf.Timestamp raised_at = 13;
+  google.protobuf.Timestamp due_by = 14;
+  Recommendation recommendation = 15;
+  string advice = 16;
+  string reviewed_by = 17;
+  google.protobuf.Timestamp reviewed_at = 18;
+  Response response = 19;
+  string response_reason = 20;
+  string responded_by = 21;
+  google.protobuf.Timestamp responded_at = 22;
+  string withdrawn_reason = 23;
+  int64 version = 24;
+}
+
+// Days of therapy against patient days (SRS-IPC-010).
+message TherapyRate {
+  int32 therapy_days = 1;
+  int32 patient_days = 2;
+  int32 per_thousand_tenths = 3;
+  bool unanswerable = 4;
+}
+
+// The stewardship programme's numbers (SRS-IPC-008, SRS-IPC-010).
+message StewardshipSummary {
+  int32 raised = 1;
+  int32 awaiting = 2;
+  int32 advised = 3;
+  int32 accepted = 4;
+  int32 modified = 5;
+  int32 declined = 6;
+  int32 withdrawn = 7;
+  int32 overdue = 8;
+  // Accepted over the advice that got a response, parts per thousand.
+  // Modified counts in the denominator and not the numerator.
+  int32 acceptance_permille = 9;
+  // Advice nobody has responded to yet. Reporting zero would read as
+  // universal refusal.
+  bool unanswerable = 10;
+  TherapyRate therapy_rate = 11;
+  string indicator_code = 12;
+  int32 indicator_revision = 13;
+}
+
+// A versioned environmental threshold (SRS-IPC-009, SRS-IPC-010).
+message EnvironmentalLimit {
+  string limit_id = 1;
+  string code = 2;
+  string name = 3;
+  int32 revision = 4;
+  SampleKind sample_kind = 5;
+  // The unit the values are counted in — cfu/ml, cfu/plate, particles/m3,
+  // tenths of a pascal. Integers, so two reports of one sample cannot differ
+  // by a rounding.
+  string unit = 6;
+  int64 action_level = 7;
+  int64 fail_level = 8;
+  // Any detection fails regardless of count.
+  bool detection_fails = 9;
+  // Inverts the comparison where low is bad: a negative-pressure room, an
+  // air-change rate.
+  bool below_is_failure = 10;
+  bool approved = 11;
+  string approved_by = 12;
+  google.protobuf.Timestamp approved_at = 13;
+  google.protobuf.Timestamp effective_from = 14;
+  google.protobuf.Timestamp superseded_at = 15;
+  google.protobuf.Timestamp created_at = 16;
+  string created_by = 17;
+}
+
+// A configured sampling schedule for a point (SRS-IPC-009).
+message SamplingPlan {
+  string plan_id = 1;
+  string code = 2;
+  SampleKind sample_kind = 3;
+  string facility_id = 4;
+  string location_id = 5;
+  string sample_point = 6;
+  int32 every_days = 7;
+  bool active = 8;
+  google.protobuf.Timestamp started_at = 9;
+  google.protobuf.Timestamp stopped_at = 10;
+}
+
+// One water, air or surface test (SRS-IPC-009).
+message EnvironmentalSample {
+  string sample_id = 1;
+  string reference = 2;
+  SampleKind sample_kind = 3;
+  string facility_id = 4;
+  // Required. A positive result that names only "the hospital" tells the
+  // estates team nothing they can act on.
+  string location_id = 5;
+  // The tap, the duct, the bench. A ward has forty of them and they do not
+  // fail together.
+  string sample_point = 6;
+  string plan_id = 7;
+  string outbreak_id = 8;
+  string repeat_of_id = 9;
+  google.protobuf.Timestamp collected_at = 10;
+  string collected_by = 11;
+  string method = 12;
+  SampleState state = 13;
+  string lab_reference = 14;
+  int64 value = 15;
+  string unit = 16;
+  string organism = 17;
+  bool detected = 18;
+  google.protobuf.Timestamp resulted_at = 19;
+  string resulted_by = 20;
+  // Derived from the limit in force when the result was reported. Read-only.
+  Outcome outcome = 21;
+  string limit_code = 22;
+  int32 limit_revision = 23;
+  google.protobuf.Timestamp closed_at = 24;
+  string closed_by = 25;
+  int64 version = 26;
+}
+
+// What was done about a failing result (SRS-IPC-009).
+message CorrectiveAction {
+  string action_id = 1;
+  string sample_id = 2;
+  string location_id = 3;
+  string action = 4;
+  string owner = 5;
+  google.protobuf.Timestamp due_by = 6;
+  ActionState state = 7;
+  google.protobuf.Timestamp done_at = 8;
+  string done_by = 9;
+  string done_note = 10;
+  // The repeat that verified it: same point, taken after the work, passed.
+  string repeat_sample_id = 11;
+  google.protobuf.Timestamp verified_at = 12;
+  string verified_by = 13;
+  int64 version = 14;
+}
+
+// One sampling point that is due or overdue (SRS-IPC-009).
+message DuePoint {
+  string plan_id = 1;
+  SampleKind sample_kind = 2;
+  string location_id = 3;
+  string sample_point = 4;
+  google.protobuf.Timestamp last_taken_at = 5;
+  google.protobuf.Timestamp due_at = 6;
+  int32 overdue_days = 7;
+  // A point with a plan and no sample at all. Reported separately because it
+  // is the worst case and a "days overdue" column shows it as a blank.
+  bool never_sampled = 8;
+}
+
+// A period's environmental testing (SRS-IPC-010).
+message EnvironmentSummary {
+  int32 samples = 1;
+  int32 passed = 2;
+  int32 action_level = 3;
+  int32 failed = 4;
+  int32 unassessable = 5;
+  int32 actions_open = 6;
+  int32 actions_done = 7;
+  int32 actions_verified = 8;
+  // Passes over the samples that could be judged at all. Unassessable ones
+  // are excluded rather than counted as passes.
+  int32 pass_permille = 9;
+  bool unanswerable = 10;
+}
+
+message OpenCaseRequest {
+  string reference = 1;
+  string patient_id = 2;
+  string encounter_id = 3;
+  string facility_id = 4;
+  string location_id = 5;
+  string organism = 6;
+  string organism_code = 7;
+  InfectionSite site = 8;
+  google.protobuf.Timestamp admitted_at = 9;
+  google.protobuf.Timestamp onset_at = 10;
+  bool device_in_situ = 11;
+  int32 device_days = 12;
+  string criteria = 13;
+  string notes = 14;
+  // No onset field. It is derived from the dates above.
+}
+
+message OpenCaseResponse {
+  SurveillanceCase surveillance_case = 1;
+}
+
+message ReviewCaseRequest {
+  string case_id = 1;
+  CaseState state = 2;
+  string criteria = 3;
+}
+
+message ReviewCaseResponse {
+  SurveillanceCase surveillance_case = 1;
+}
+
+message OverrideOnsetRequest {
+  string case_id = 1;
+  Onset onset = 2;
+  string reason = 3;
+}
+
+message OverrideOnsetResponse {
+  SurveillanceCase surveillance_case = 1;
+}
+
+message ListCasesRequest {
+  string patient_id = 1;
+  CaseState state = 2;
+  InfectionSite site = 3;
+  string location_id = 4;
+  google.protobuf.Timestamp onset_from = 5;
+  google.protobuf.Timestamp onset_to = 6;
+  int32 page_size = 7;
+  int32 page_offset = 8;
+}
+
+message ListCasesResponse {
+  repeated SurveillanceCase cases = 1;
+}
+
+message RecordDeviceDaysRequest {
+  string facility_id = 1;
+  string location_id = 2;
+  DeviceKind device = 3;
+  google.protobuf.Timestamp counted_on = 4;
+  int32 patient_days = 5;
+  int32 device_days = 6;
+}
+
+message RecordDeviceDaysResponse {
+  DeviceDayCount count = 1;
+}
+
+message GetRateRequest {
+  InfectionSite site = 1;
+  string location_id = 2;
+  google.protobuf.Timestamp period_from = 3;
+  google.protobuf.Timestamp period_to = 4;
+}
+
+message GetRateResponse {
+  Rate rate = 1;
+}
+
+message StartIsolationRequest {
+  string patient_id = 1;
+  string encounter_id = 2;
+  string facility_id = 3;
+  string location_id = 4;
+  string bed_id = 5;
+  Precaution precaution = 6;
+  string reason = 7;
+  string case_id = 8;
+  google.protobuf.Timestamp started_at = 9;
+}
+
+message StartIsolationResponse {
+  Isolation isolation = 1;
+}
+
+message ExtendIsolationRequest {
+  string isolation_id = 1;
+}
+
+message ExtendIsolationResponse {
+  Isolation isolation = 1;
+}
+
+message EndIsolationRequest {
+  string isolation_id = 1;
+  string reason = 2;
+}
+
+message EndIsolationResponse {
+  Isolation isolation = 1;
+}
+
+message GetBoardRequest {
+  string location_id = 1;
+}
+
+message GetBoardResponse {
+  repeated BoardEntry entries = 1;
+}
+
+message DraftAlertRuleRequest {
+  string code = 1;
+  string name = 2;
+  int32 revision = 3;
+  repeated string organisms = 4;
+  int32 lookback_days = 5;
+  Precaution precaution = 6;
+  string advice = 7;
+}
+
+message DraftAlertRuleResponse {
+  AlertRule rule = 1;
+}
+
+message ApproveAlertRuleRequest {
+  string rule_id = 1;
+  google.protobuf.Timestamp effective_from = 2;
+}
+
+message ApproveAlertRuleResponse {
+  AlertRule rule = 1;
+}
+
+message ScreenEncounterRequest {
+  string patient_id = 1;
+  string encounter_id = 2;
+  string facility_id = 3;
+  string organism = 4;
+  string organism_code = 5;
+  google.protobuf.Timestamp last_positive_at = 6;
+}
+
+message ScreenEncounterResponse {
+  repeated Alert alerts = 1;
+}
+
+message AcknowledgeAlertRequest {
+  string alert_id = 1;
+}
+
+message AcknowledgeAlertResponse {
+  Alert alert = 1;
+}
+
+message OverrideAlertRequest {
+  string alert_id = 1;
+  string reason = 2;
+}
+
+message OverrideAlertResponse {
+  Alert alert = 1;
+}
+
+message ListAlertsRequest {
+  string patient_id = 1;
+  string encounter_id = 2;
+  bool outstanding_only = 3;
+  int32 page_size = 4;
+}
+
+message ListAlertsResponse {
+  repeated Alert alerts = 1;
+}
+
+message OpenOutbreakRequest {
+  string reference = 1;
+  string organism = 2;
+  string case_definition = 3;
+  repeated string locations = 4;
+  google.protobuf.Timestamp window_from = 5;
+  google.protobuf.Timestamp window_to = 6;
+}
+
+message OpenOutbreakResponse {
+  Outbreak outbreak = 1;
+}
+
+message AdvanceOutbreakRequest {
+  string outbreak_id = 1;
+  OutbreakState state = 2;
+  string reason = 3;
+}
+
+message AdvanceOutbreakResponse {
+  Outbreak outbreak = 1;
+}
+
+message CloseOutbreakRequest {
+  string outbreak_id = 1;
+  string findings = 2;
+  string reason = 3;
+  repeated string control_measures = 4;
+  repeated string action_ids = 5;
+}
+
+message CloseOutbreakResponse {
+  Outbreak outbreak = 1;
+}
+
+message AddOutbreakMemberRequest {
+  string outbreak_id = 1;
+  string case_id = 2;
+  MembershipReason reason = 3;
+  string note = 4;
+  // Whether the case meets the definition is computed from the investigation
+  // rather than asserted here.
+}
+
+message AddOutbreakMemberResponse {
+  Membership membership = 1;
+}
+
+message GetClusterRequest {
+  string outbreak_id = 1;
+}
+
+message GetClusterResponse {
+  ClusterSummary cluster = 1;
+}
+
+message ListOutbreaksRequest {
+  OutbreakState state = 1;
+  bool open_only = 2;
+  int32 page_size = 3;
+}
+
+message ListOutbreaksResponse {
+  repeated Outbreak outbreaks = 1;
+}
+
+message StartHygieneSessionRequest {
+  string facility_id = 1;
+  string location_id = 2;
+  string notes = 3;
+  google.protobuf.Timestamp started_at = 4;
+}
+
+message StartHygieneSessionResponse {
+  HygieneSession session = 1;
+}
+
+message RecordObservationRequest {
+  string session_id = 1;
+  Discipline discipline = 2;
+  Moment moment = 3;
+  HygieneAction action = 4;
+  bool gloves_worn = 5;
+  google.protobuf.Timestamp observed_at = 6;
+  // No field naming the person observed, by design.
+}
+
+message RecordObservationResponse {
+  HygieneObservation observation = 1;
+}
+
+message EndHygieneSessionRequest {
+  string session_id = 1;
+  string notes = 2;
+}
+
+message EndHygieneSessionResponse {
+  HygieneSession session = 1;
+}
+
+message GetHygieneComplianceRequest {
+  string location_id = 1;
+  // "discipline", "moment", or empty for a single total.
+  string group_by = 2;
+  google.protobuf.Timestamp period_from = 3;
+  google.protobuf.Timestamp period_to = 4;
+}
+
+message GetHygieneComplianceResponse {
+  repeated Compliance groups = 1;
+  int32 observations = 2;
+  // The group size below which a figure was withheld. Reported, because a
+  // report with no suppression and one where nothing was small enough to
+  // suppress look identical otherwise.
+  int32 suppression_threshold = 3;
+  string indicator_code = 4;
+  int32 indicator_revision = 5;
+}
+
+message ReportExposureRequest {
+  string reference = 1;
+  // Empty reports the caller's own exposure.
+  string staff_id = 2;
+  Discipline discipline = 3;
+  string facility_id = 4;
+  string location_id = 5;
+  ExposureKind kind = 6;
+  string device = 7;
+  string circumstance = 8;
+  bool deep_injury = 9;
+  string source_patient_id = 10;
+  bool source_known = 11;
+  bool source_consented = 12;
+  google.protobuf.Timestamp occurred_at = 13;
+}
+
+message ReportExposureResponse {
+  Exposure exposure = 1;
+  repeated ExposureTask tasks = 2;
+}
+
+message GetExposureRequest {
+  string exposure_id = 1;
+}
+
+message GetExposureResponse {
+  Exposure exposure = 1;
+  repeated ExposureTask tasks = 2;
+}
+
+message CompleteExposureTaskRequest {
+  string exposure_id = 1;
+  string task_id = 2;
+  TaskState state = 3;
+  string outcome = 4;
+}
+
+message CompleteExposureTaskResponse {
+  ExposureTask task = 1;
+}
+
+message CloseExposureRequest {
+  string exposure_id = 1;
+  string outcome = 2;
+}
+
+message CloseExposureResponse {
+  Exposure exposure = 1;
+}
+
+message ListExposuresRequest {
+  string staff_id = 1;
+  bool open_only = 2;
+  google.protobuf.Timestamp occurred_from = 3;
+  google.protobuf.Timestamp occurred_to = 4;
+  int32 page_size = 5;
+  int32 page_offset = 6;
+}
+
+message ListExposuresResponse {
+  repeated Exposure exposures = 1;
+}
+
+message SweepExposureTasksRequest {}
+
+message SweepExposureTasksResponse {
+  int32 escalated = 1;
+}
+
+message DraftStewardshipRuleRequest {
+  string code = 1;
+  string name = 2;
+  int32 revision = 3;
+  TriggerKind kind = 4;
+  repeated string agents = 5;
+  bool all_agents = 6;
+  int32 day_threshold = 7;
+  string prompt = 8;
+}
+
+message DraftStewardshipRuleResponse {
+  StewardshipRule rule = 1;
+}
+
+message ApproveStewardshipRuleRequest {
+  string rule_id = 1;
+  google.protobuf.Timestamp effective_from = 2;
+}
+
+message ApproveStewardshipRuleResponse {
+  StewardshipRule rule = 1;
+}
+
+message ReviewEncounterRequest {
+  string encounter_id = 1;
+}
+
+message ReviewEncounterResponse {
+  repeated StewardshipReview reviews = 1;
+}
+
+message AdviseReviewRequest {
+  string review_id = 1;
+  Recommendation recommendation = 2;
+  string advice = 3;
+}
+
+message AdviseReviewResponse {
+  StewardshipReview review = 1;
+}
+
+message RespondToReviewRequest {
+  string review_id = 1;
+  Response response = 2;
+  string reason = 3;
+}
+
+message RespondToReviewResponse {
+  StewardshipReview review = 1;
+}
+
+message WithdrawReviewRequest {
+  string review_id = 1;
+  string reason = 2;
+}
+
+message WithdrawReviewResponse {
+  StewardshipReview review = 1;
+}
+
+message ListReviewsRequest {
+  string patient_id = 1;
+  string encounter_id = 2;
+  ReviewState state = 3;
+  bool worklist_only = 4;
+  google.protobuf.Timestamp raised_from = 5;
+  google.protobuf.Timestamp raised_to = 6;
+  int32 page_size = 7;
+  int32 page_offset = 8;
+}
+
+message ListReviewsResponse {
+  repeated StewardshipReview reviews = 1;
+}
+
+message GetStewardshipIndicatorsRequest {
+  string location_id = 1;
+  google.protobuf.Timestamp period_from = 2;
+  google.protobuf.Timestamp period_to = 3;
+}
+
+message GetStewardshipIndicatorsResponse {
+  StewardshipSummary summary = 1;
+}
+
+message DraftLimitRequest {
+  string code = 1;
+  string name = 2;
+  int32 revision = 3;
+  SampleKind sample_kind = 4;
+  string unit = 5;
+  int64 action_level = 6;
+  int64 fail_level = 7;
+  bool detection_fails = 8;
+  bool below_is_failure = 9;
+}
+
+message DraftLimitResponse {
+  EnvironmentalLimit limit = 1;
+}
+
+message ApproveLimitRequest {
+  string limit_id = 1;
+  google.protobuf.Timestamp effective_from = 2;
+}
+
+message ApproveLimitResponse {
+  EnvironmentalLimit limit = 1;
+}
+
+message AddSamplingPlanRequest {
+  string code = 1;
+  SampleKind sample_kind = 2;
+  string facility_id = 3;
+  string location_id = 4;
+  string sample_point = 5;
+  int32 every_days = 6;
+  google.protobuf.Timestamp started_at = 7;
+}
+
+message AddSamplingPlanResponse {
+  SamplingPlan plan = 1;
+}
+
+message CollectSampleRequest {
+  string reference = 1;
+  SampleKind sample_kind = 2;
+  string facility_id = 3;
+  string location_id = 4;
+  string sample_point = 5;
+  string plan_id = 6;
+  string outbreak_id = 7;
+  string repeat_of_id = 8;
+  google.protobuf.Timestamp collected_at = 9;
+  string method = 10;
+}
+
+message CollectSampleResponse {
+  EnvironmentalSample sample = 1;
+}
+
+message RecordSampleResultRequest {
+  string sample_id = 1;
+  string lab_reference = 2;
+  int64 value = 3;
+  string unit = 4;
+  string organism = 5;
+  bool detected = 6;
+  google.protobuf.Timestamp resulted_at = 7;
+  // No outcome field. It is derived from the limit in force.
+}
+
+message RecordSampleResultResponse {
+  EnvironmentalSample sample = 1;
+}
+
+message RaiseCorrectiveActionRequest {
+  string sample_id = 1;
+  string action = 2;
+  string owner = 3;
+  google.protobuf.Timestamp due_by = 4;
+}
+
+message RaiseCorrectiveActionResponse {
+  CorrectiveAction action = 1;
+}
+
+message CompleteCorrectiveActionRequest {
+  string action_id = 1;
+  string note = 2;
+}
+
+message CompleteCorrectiveActionResponse {
+  CorrectiveAction action = 1;
+}
+
+message VerifyCorrectiveActionRequest {
+  string action_id = 1;
+  string repeat_sample_id = 2;
+}
+
+message VerifyCorrectiveActionResponse {
+  CorrectiveAction action = 1;
+}
+
+message CloseSampleRequest {
+  string sample_id = 1;
+}
+
+message CloseSampleResponse {
+  EnvironmentalSample sample = 1;
+}
+
+message ListDueSamplingRequest {
+  string location_id = 1;
+}
+
+message ListDueSamplingResponse {
+  repeated DuePoint points = 1;
+}
+
+message ListSamplesRequest {
+  string location_id = 1;
+  SampleKind sample_kind = 2;
+  bool failing_only = 3;
+  google.protobuf.Timestamp collected_from = 4;
+  google.protobuf.Timestamp collected_to = 5;
+  int32 page_size = 6;
+  int32 page_offset = 7;
+}
+
+message ListSamplesResponse {
+  repeated EnvironmentalSample samples = 1;
+}
+
+message ListCorrectiveActionsRequest {
+  string sample_id = 1;
+  bool open_only = 2;
+}
+
+message ListCorrectiveActionsResponse {
+  repeated CorrectiveAction actions = 1;
+}
+
+message GetEnvironmentSummaryRequest {
+  string location_id = 1;
+  google.protobuf.Timestamp period_from = 2;
+  google.protobuf.Timestamp period_to = 3;
+}
+
+message GetEnvironmentSummaryResponse {
+  EnvironmentSummary summary = 1;
+}
+
+service InfectionService {
+  // Surveillance and rates (SRS-IPC-001, SRS-IPC-002, SRS-IPC-010).
+  rpc OpenCase(OpenCaseRequest) returns (OpenCaseResponse);
+  rpc ReviewCase(ReviewCaseRequest) returns (ReviewCaseResponse);
+  rpc OverrideOnset(OverrideOnsetRequest) returns (OverrideOnsetResponse);
+  rpc ListCases(ListCasesRequest) returns (ListCasesResponse);
+  rpc RecordDeviceDays(RecordDeviceDaysRequest) returns (RecordDeviceDaysResponse);
+  rpc GetRate(GetRateRequest) returns (GetRateResponse);
+
+  // Isolation and the bed board (SRS-IPC-003).
+  rpc StartIsolation(StartIsolationRequest) returns (StartIsolationResponse);
+  rpc ExtendIsolation(ExtendIsolationRequest) returns (ExtendIsolationResponse);
+  rpc EndIsolation(EndIsolationRequest) returns (EndIsolationResponse);
+  rpc GetBoard(GetBoardRequest) returns (GetBoardResponse);
+
+  // Multidrug-resistant organism alerting (SRS-IPC-004).
+  rpc DraftAlertRule(DraftAlertRuleRequest) returns (DraftAlertRuleResponse);
+  rpc ApproveAlertRule(ApproveAlertRuleRequest) returns (ApproveAlertRuleResponse);
+  rpc ScreenEncounter(ScreenEncounterRequest) returns (ScreenEncounterResponse);
+  rpc AcknowledgeAlert(AcknowledgeAlertRequest) returns (AcknowledgeAlertResponse);
+  rpc OverrideAlert(OverrideAlertRequest) returns (OverrideAlertResponse);
+  rpc ListAlerts(ListAlertsRequest) returns (ListAlertsResponse);
+
+  // Outbreak investigation (SRS-IPC-005).
+  rpc OpenOutbreak(OpenOutbreakRequest) returns (OpenOutbreakResponse);
+  rpc AdvanceOutbreak(AdvanceOutbreakRequest) returns (AdvanceOutbreakResponse);
+  rpc CloseOutbreak(CloseOutbreakRequest) returns (CloseOutbreakResponse);
+  rpc AddOutbreakMember(AddOutbreakMemberRequest) returns (AddOutbreakMemberResponse);
+  rpc GetCluster(GetClusterRequest) returns (GetClusterResponse);
+  rpc ListOutbreaks(ListOutbreaksRequest) returns (ListOutbreaksResponse);
+
+  // Hand hygiene audit (SRS-IPC-006).
+  rpc StartHygieneSession(StartHygieneSessionRequest) returns (StartHygieneSessionResponse);
+  rpc RecordObservation(RecordObservationRequest) returns (RecordObservationResponse);
+  rpc EndHygieneSession(EndHygieneSessionRequest) returns (EndHygieneSessionResponse);
+  rpc GetHygieneCompliance(GetHygieneComplianceRequest) returns (GetHygieneComplianceResponse);
+
+  // Occupational exposure (SRS-IPC-007).
+  rpc ReportExposure(ReportExposureRequest) returns (ReportExposureResponse);
+  rpc GetExposure(GetExposureRequest) returns (GetExposureResponse);
+  rpc CompleteExposureTask(CompleteExposureTaskRequest) returns (CompleteExposureTaskResponse);
+  rpc CloseExposure(CloseExposureRequest) returns (CloseExposureResponse);
+  rpc ListExposures(ListExposuresRequest) returns (ListExposuresResponse);
+  rpc SweepExposureTasks(SweepExposureTasksRequest) returns (SweepExposureTasksResponse);
+
+  // Antimicrobial stewardship (SRS-IPC-008). Nothing here changes a
+  // prescription.
+  rpc DraftStewardshipRule(DraftStewardshipRuleRequest) returns (DraftStewardshipRuleResponse);
+  rpc ApproveStewardshipRule(ApproveStewardshipRuleRequest) returns (ApproveStewardshipRuleResponse);
+  rpc ReviewEncounter(ReviewEncounterRequest) returns (ReviewEncounterResponse);
+  rpc AdviseReview(AdviseReviewRequest) returns (AdviseReviewResponse);
+  rpc RespondToReview(RespondToReviewRequest) returns (RespondToReviewResponse);
+  rpc WithdrawReview(WithdrawReviewRequest) returns (WithdrawReviewResponse);
+  rpc ListReviews(ListReviewsRequest) returns (ListReviewsResponse);
+  rpc GetStewardshipIndicators(GetStewardshipIndicatorsRequest) returns (GetStewardshipIndicatorsResponse);
+
+  // Environmental surveillance (SRS-IPC-009).
+  rpc DraftLimit(DraftLimitRequest) returns (DraftLimitResponse);
+  rpc ApproveLimit(ApproveLimitRequest) returns (ApproveLimitResponse);
+  rpc AddSamplingPlan(AddSamplingPlanRequest) returns (AddSamplingPlanResponse);
+  rpc CollectSample(CollectSampleRequest) returns (CollectSampleResponse);
+  rpc RecordSampleResult(RecordSampleResultRequest) returns (RecordSampleResultResponse);
+  rpc RaiseCorrectiveAction(RaiseCorrectiveActionRequest) returns (RaiseCorrectiveActionResponse);
+  rpc CompleteCorrectiveAction(CompleteCorrectiveActionRequest) returns (CompleteCorrectiveActionResponse);
+  rpc VerifyCorrectiveAction(VerifyCorrectiveActionRequest) returns (VerifyCorrectiveActionResponse);
+  rpc CloseSample(CloseSampleRequest) returns (CloseSampleResponse);
+  rpc ListDueSampling(ListDueSamplingRequest) returns (ListDueSamplingResponse);
+  rpc ListSamples(ListSamplesRequest) returns (ListSamplesResponse);
+  rpc ListCorrectiveActions(ListCorrectiveActionsRequest) returns (ListCorrectiveActionsResponse);
+  rpc GetEnvironmentSummary(GetEnvironmentSummaryRequest) returns (GetEnvironmentSummaryResponse);
+}

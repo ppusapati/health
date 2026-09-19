@@ -234,6 +234,33 @@ func TestARateCountsConfirmedHealthcareAssociatedCasesOnly(t *testing.T) {
 	}
 }
 
+// SRS-IPC-002. The denominator is counted by day, so the period is read by
+// day: a report asked for at half past two must not lose that day's device
+// days while keeping its infections.
+func TestADayCountIsNotLostToTheCallersClock(t *testing.T) {
+	midday := time.Date(2026, 3, 1, 14, 32, 0, 0, time.UTC)
+
+	var counts []domain.DeviceDayCount
+	for day := 0; day < 3; day++ {
+		count, err := domain.NewDeviceDayCount("d", "t1", "f1", "icu",
+			domain.DeviceCentralLine, midday.AddDate(0, 0, day), 20, 10,
+			"nurse-1", midday)
+		if err != nil {
+			t.Fatalf("NewDeviceDayCount: %v", err)
+		}
+		counts = append(counts, count)
+	}
+
+	rate := domain.ComputeRate(domain.RateInput{
+		Site: domain.SiteCLABSI, Location: "icu",
+		From: midday, To: midday.AddDate(0, 0, 3), Counts: counts,
+	})
+	if rate.DeviceDays != 30 {
+		t.Fatalf("device days = %d, want all three days counted",
+			rate.DeviceDays)
+	}
+}
+
 // SRS-IPC-002. "No ventilated patients" is not "no infections".
 func TestAPeriodWithNoDeviceDaysHasNoRate(t *testing.T) {
 	from := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)

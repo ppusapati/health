@@ -26,6 +26,7 @@ import (
 	"github.com/ppusapati/health/code/gen/go/healthcare/encounter/v1/encounterv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/icu/v1/icuv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/identity_access/v1/identityaccessv1connect"
+	"github.com/ppusapati/health/code/gen/go/healthcare/infection/v1/infectionv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/materials/v1/materialsv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/medication/v1/medicationv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/nursing/v1/nursingv1connect"
@@ -72,6 +73,12 @@ import (
 	icutransport "github.com/ppusapati/health/code/internal/icu/transport"
 	identitypostgres "github.com/ppusapati/health/code/internal/identity_access/adapters/postgres"
 	identitytransport "github.com/ppusapati/health/code/internal/identity_access/transport"
+	infectionescalate "github.com/ppusapati/health/code/internal/infection/adapters/escalate"
+	infectionindicators "github.com/ppusapati/health/code/internal/infection/adapters/indicators"
+	infectionpostgres "github.com/ppusapati/health/code/internal/infection/adapters/postgres"
+	infectiontherapy "github.com/ppusapati/health/code/internal/infection/adapters/therapy"
+	infectionapp "github.com/ppusapati/health/code/internal/infection/application"
+	infectiontransport "github.com/ppusapati/health/code/internal/infection/transport"
 	materialsescalate "github.com/ppusapati/health/code/internal/materials/adapters/escalate"
 	materialspostgres "github.com/ppusapati/health/code/internal/materials/adapters/postgres"
 	materialsapp "github.com/ppusapati/health/code/internal/materials/application"
@@ -325,6 +332,31 @@ type Deps struct {
 	// than this code guessing.
 	Quality qualityapp.Config
 
+	// Infection is what a deployment has decided about its infection control:
+	// the surveillance window that decides every onset classification, the
+	// multidrug-resistant organism list, how long precautions run before
+	// review, the hand hygiene suppression threshold, how long a stewardship
+	// review stays useful, which locations escalate a failed environmental
+	// result, and which quality indicators the computed rates are filed
+	// against (SRS-IPC-001 … 010).
+	//
+	// The zero value classifies every case as indeterminate, flags no
+	// organism as resistant, leaves precautions with no review date,
+	// publishes every hand hygiene group however small, gives reviews no
+	// clock and files nothing against the indicator dictionary. Every one of
+	// those is a deployment that has not decided, and the first is the one to
+	// watch: a hospital whose cases are all indeterminate has no
+	// healthcare-associated infection rate at all. The status document names
+	// them rather than this code guessing a surveillance definition.
+	Infection infectionapp.Config
+
+	// InfectionTherapy is which ingredient codes the hospital treats as
+	// antimicrobials and which of those are reserved (SRS-IPC-008). Empty
+	// classifies nothing, so the stewardship worklist stays empty: a
+	// programme that matched on a drug's display name would miss half the
+	// formulary and invent the other half.
+	InfectionTherapy infectiontherapy.Config
+
 	// Emergency is what a deployment has decided about its emergency
 	// department: which triage scale it has approved, what must be measured at
 	// triage, and what each disposition requires (SRS-ER-002, SRS-ER-013).
@@ -352,6 +384,7 @@ type Server struct {
 	Materials    *materialsapp.Service
 	Biomedical   *biomedicalapp.Service
 	Quality      *qualityapp.Service
+	Infection    *infectionapp.Service
 	Nursing      *nursingapp.Service
 	Orders       *ordersapp.Service
 	Medication   *medicationapp.Service
@@ -831,6 +864,43 @@ func New(deps Deps) *Server {
 		Clock:  systemClock{},
 	})
 
+	// Infection control (SRS-IPC). Wired after medication because the
+	// stewardship triggers read what a patient is actually on, through an
+	// adapter that holds a prescription reader and nothing that writes: the
+	// requirement's "without autonomous medication change" is a property of
+	// this wiring as much as of the code behind it.
+	infectionRepo := infectionpostgres.New(txManager)
+	infectionService := infectionapp.NewService(infectionapp.Deps{
+		UnitOfWork:  txManager,
+		Cases:       infectionRepo,
+		DeviceDays:  infectionRepo,
+		Isolations:  infectionRepo,
+		Alerts:      infectionRepo,
+		Outbreaks:   infectionRepo,
+		Hygiene:     infectionRepo,
+		Exposures:   infectionRepo,
+		Stewardship: infectionRepo,
+		Environment: infectionRepo,
+		Therapy: infectiontherapy.New(medicationRepo, infectionRepo,
+			systemClock{}, deps.InfectionTherapy),
+		// The computed rates are filed against the quality context's
+		// versioned indicator dictionary (SRS-IPC-010, SRS-QMS-010) rather
+		// than a second one here. Two dictionaries would disagree the first
+		// time somebody changed a definition.
+		Indicators: infectionindicators.New(
+			qualitypostgres.IndicatorRepo{Repository: qualityRepo},
+			uuidGenerator{}),
+		Events:     platformStore,
+		AuditTrail: store.AuditAppenderFunc(platformStore.AppendAudit),
+		// A declared outbreak, an occupational exposure step past its window
+		// and a failed environmental result in augmented care. All three have
+		// to reach somebody rather than a screen nobody opened.
+		Escalations: infectionescalate.New(escalationStore),
+		IDs:         uuidGenerator{},
+		Clock:       systemClock{},
+		Config:      deps.Infection,
+	})
+
 	// The eMAR's seam onto the drug chart (SRS-NUR-007), which Sprint 4C left
 	// as a port with no adapter. Deps.MedicationOrders overrides it, which is
 	// how a test exercises the eMAR without the whole medication stack.
@@ -961,6 +1031,9 @@ func New(deps Deps) *Server {
 		biomedicaltransport.NewHandler(biomedicalService, time.Now), interceptors))
 	mux.Handle(qualityv1connect.NewQualityServiceHandler(
 		qualitytransport.NewHandler(qualityService, time.Now), interceptors))
+	mux.Handle(infectionv1connect.NewInfectionServiceHandler(
+		infectiontransport.NewHandler(infectionService, time.Now),
+		interceptors))
 	mux.Handle(materialsv1connect.NewMaterialsServiceHandler(
 		materialstransport.NewHandler(materialsService, time.Now), interceptors))
 	billingRepo := billingpostgres.New(txManager)
@@ -1028,6 +1101,7 @@ func New(deps Deps) *Server {
 		Materials:       materialsService,
 		Biomedical:      biomedicalService,
 		Quality:         qualityService,
+		Infection:       infectionService,
 		Nursing:         nursingService,
 		Orders:          ordersService,
 		Medication:      medicationService,

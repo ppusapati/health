@@ -15,12 +15,12 @@ test names.
 prose, because a status document whose honest summary is a fraction is one
 whose per-row claims have to be read carefully.
 
-Nine families are now built: SRS-ER the Emergency Department, SRS-ICU
+Ten families are now built: SRS-ER the Emergency Department, SRS-ICU
 critical care, SRS-OT the operating theatre, SRS-ANE anaesthesia and PACU,
 SRS-BLD blood bank and transfusion, SRS-CSSD sterile services, SRS-MAT
-materials and inventory, SRS-BIO biomedical engineering, and SRS-QMS quality
-management. Their rows are below. Three remain: SRS-IPC, SRS-MRD and the
-support services.
+materials and inventory, SRS-BIO biomedical engineering, SRS-QMS quality
+management and SRS-IPC infection prevention and control. Their rows are
+below. Two remain: SRS-MRD and the support services.
 
 `make traceability` reads a row naming a requirement as a claim about it
 unless the row says the work is not built, so the unbuilt ER requirements are
@@ -102,7 +102,7 @@ clinician, and `ValidatedInputs()` is a function rather than a convention.
 | SRS-MAT Materials and Inventory | 16 | **16 implemented** — see below |
 | SRS-BIO Biomedical Engineering | 11 | **11 implemented** — Phase 2 §9. Note the prefix collision below |
 | SRS-QMS Quality / NABH | 15 | **15 implemented** — see below |
-| SRS-IPC Infection Prevention | 10 | **Not started** |
+| SRS-IPC Infection Prevention | 10 | **10 implemented** — see below |
 | SRS-MRD Medical Records / HIM | 10 | **Not started** |
 | SRS-AMB, SRS-DIET, SRS-FAC, SRS-HKP, SRS-LND, SRS-MORT support services | 52 | **Not started** — except SRS-FAC-012 above |
 | SRS-OPSAPI / OPSNFR / OPSSEC / OPSWEB | 32 | **Partial** — the three foundations above |
@@ -871,6 +871,160 @@ report — which reads exactly like a compliant hospital. `app.Deps.Quality`
 carries `AcknowledgementRoles` and `CompetencyRoles` for that reason, and a
 deployment leaving them empty is named here rather than discovering it at a
 survey.
+
+## SRS-IPC — Infection prevention and control
+
+Ten requirements, all implemented. Surveillance cases and their onset
+classification, device-day denominators, isolation and the bed board,
+multidrug-resistant organism alerting, outbreak investigation, hand hygiene
+audit, occupational exposure, antimicrobial stewardship and environmental
+testing, in one contract (`InfectionService`) and one schema (`infection`),
+reached through `internal/infection`.
+
+This family is unusual in what it measures: every other context in the system
+records what the hospital did for a patient, and this one records the harms
+the hospital caused. That makes the edit paths matter more than the read
+paths, because each of the numbers here is one somebody has a reason to want
+lower.
+
+**Onset classification is derived, and an override is a different field.**
+`Classify()` takes the admission date, the onset date and the configured
+surveillance window and answers community-acquired, healthcare-associated or
+indeterminate. Nothing on the RPC accepts a classification. A reviewer who
+disagrees calls `OverrideOnset`, which needs its own permission
+(`ipc.onset.override`, held by the infection control lead and not the
+practitioner), a mandatory reason, and writes to columns the derivation never
+touches — and every period summary counts overrides separately, so a month in
+which eleven healthcare-associated infections became community-acquired is a
+month somebody can see. A single mutable field would have made every
+reclassification invisible, and reclassifying is not moving an infection
+between reports: it removes it from the rate.
+
+**Device-day denominators are counted daily and cannot double.** One row per
+device per location per day, held by a unique index, so re-filing a day
+corrects it rather than doubling a denominator and halving every rate that
+reads it. `device_days <= patient_days` is a CHECK. A period with no device
+days comes back `unanswerable` rather than as a rate of zero, because "no
+ventilated patients this month" and "no infections among our ventilated
+patients" are opposite facts. The period is read by calendar day for the
+denominator, which is a fix rather than a nicety: comparing a midnight census
+against a period that starts at half past two dropped that day's device days
+while keeping its infections, and inflated the rate by however the caller's
+clock happened to fall.
+
+**The bed board carries the precaution and never the reason.** `BoardEntry` is
+a value with no reason field, the proto message has none, and the mapping
+function has nothing that could fill one. A board is a screen on a wall that
+visitors and contractors walk past; what a nurse needs outside a bay is the
+precaution, the PPE and whether a side room is required. The reason is a
+diagnosis and stays in the isolation record, which infection control reads.
+`ipc.board.read` is its own permission, held by every nurse and clinician,
+separate from `ipc.record.read`.
+
+**Alert rules, stewardship triggers and environmental limits are versioned by
+(code, revision) and superseded rather than edited.** Every alert, review and
+result pins the revision it was judged under. A rule edited in place would
+make every past alert unexplainable; a limit loosened after a bad quarter
+would turn past failures into passes and the water would look as though it had
+improved. Each is approved by somebody other than its author — refused in the
+domain and by a database CHECK, so holding `ipc.rule.approve` is necessary and
+not sufficient.
+
+**A hand hygiene observation has no column, no field and no parameter naming
+the person observed.** Not a nullable one: a test reads
+`information_schema.columns` and fails if any column of
+`infection.hygiene_observation` could hold one, so a future screen cannot
+start populating it and a future report cannot start grouping by it. An audit
+that names individuals becomes a disciplinary instrument, and the moment it
+does, observed compliance goes to ninety-nine per cent and stops meaning
+anything. Groups below the configured minimum come back suppressed *with their
+counts blanked*, because "four opportunities, one performed" against a night
+shift names somebody by arithmetic. Gloves worn instead of cleaning hands is
+counted apart from a plain miss: it is the commonest failure and the training
+that fixes it is different.
+
+**An occupational exposure is restricted by construction.**
+`infection.exposure` carries `restricted boolean NOT NULL DEFAULT true CHECK
+(restricted)` — an unrestricted row is not a configuration choice but a
+mistake, so it cannot be written. Reading one needs `ipc.exposure.manage`,
+held by occupational health alone, and every read (single or list) is written
+to the audit trail before it is returned. A staff health record that can be
+read without a trace is restricted in name only, and a hospital whose exposure
+records are readable by the ward is one whose staff stop reporting exposures.
+The follow-up clocks run from the exposure rather than from the report: a
+member of staff who waited a day has a day less of prophylaxis window, not a
+fresh seventy-two hours.
+
+**A stewardship review cannot change a prescription, at four levels.** The
+port that reads therapy has no write on it; the review table has no column an
+order is written from; the proto message carries an order reference and
+nothing else; and the end-to-end test raises a review against a live
+prescription and then re-reads it to assert the status, route and version are
+untouched. `responded_by <> reviewed_by` is a CHECK and the permissions split
+it too — a pharmacist holds `ipc.stewardship.review` and not
+`ipc.stewardship.respond`, a clinician the reverse. Acceptance rate is the one
+number a stewardship programme is judged on, and a programme that could close
+its own advice as accepted would be writing it. Advice taken in part counts as
+neither accepted nor refused.
+
+**A failing environmental result closes only through a verified corrective
+action.** Verified means a repeat sample of the same point, taken after the
+work, that passed — each of those is a way a hospital otherwise ends up with
+three years of "flushed and cleared" against one outlet. The result's outcome
+is derived from the limit in force when it was reported, never typed, and a
+sample with no live limit is `unassessable` rather than a pass.
+
+**The computed rates are filed against the quality context's dictionary, not a
+second one.** SRS-IPC-010 requires versioned metric definitions and
+SRS-QMS-010 already versions them. An indicator code with no current
+definition is refused rather than defined from this side: a rate filed against
+an indicator nobody wrote down is the thing the requirement exists to prevent.
+
+| Requirement | What it asks | State |
+|---|---|---|
+| SRS-IPC-001 | Create infection surveillance case linked to patient, encounter, organism/site and onset classification; case retains criteria and reviewer | **Implemented** — the classification is derived from the dates and the configured window and appears on no request message; an override is a separate column with its own permission, a mandatory reason and its own audit entry and event; a device-associated site with no device in situ is refused; confirming or refuting requires the criteria and names the reviewer, held by a database CHECK |
+| SRS-IPC-002 | Track device-associated denominators using device days where configured; rates are reproducible | **Implemented** — one census row per device per location per day, unique index and all; more device days than patient days is refused; the numerator counts confirmed healthcare-associated cases only; the rate is integer tenths per 1000 device days and utilisation is reported beside it, so a rate falling because the ward stopped using the device is distinguishable from one falling because it got safer |
+| SRS-IPC-003 | Record isolation requirement and precautions; boards show the appropriate precaution to authorized staff | **Implemented** — the board value carries precaution, PPE and side-room need and has no field for the reason; `ipc.board.read` is separate from the record permission and held ward-wide; precautions carry a review date and lifting them needs a reason, held by a CHECK |
+| SRS-IPC-004 | Alert on configured MDRO/history at relevant encounters; alert uses the current approved rule and override is audited | **Implemented** — rules are versioned by (code, revision), approved by somebody other than the author, and superseded on approval so two cannot be live at once; an alert pins the revision it fired under and refuses a positive outside the rule's lookback; an override needs a reason, names who made it, is audited, and never exempts the patient from the next encounter |
+| SRS-IPC-005 | Manage outbreak cluster investigation with affected patients/locations/time window; membership and actions traceable | **Implemented** — membership is a row per decision rather than a list, and whether a case meets the definition is computed from the investigation: adding one that does not and removing one that does both have to say why; declaring escalates durably; a declared outbreak cannot close having changed nothing, which is what "refuted" is for |
+| SRS-IPC-006 | Track hand hygiene observations and compliance; reports aggregate by location/period without exposing unnecessary identity | **Implemented** — the observation record has no person identifier at any layer, asserted against `information_schema`; the observer is named and the observed never are; small groups are suppressed with their counts; gloves-instead-of is counted apart from a miss |
+| SRS-IPC-007 | Track needlestick/occupational exposure workflow with restricted health access; exposure case has time-sensitive tasks | **Implemented** — the row is restricted by CHECK rather than by configuration; reading needs occupational health's own permission and every read is audited; the steps are derived from the exposure and their deadlines run from it, so a late report has a shorter window rather than a fresh one; a source patient named without recorded consent is refused; an exposure cannot close while a step is still inside its window, and can close over one that has expired so late cases do not stay open for ever |
+| SRS-IPC-008 | Support antimicrobial stewardship review triggers from cultures/antibiotics/rules; review appears in the worklist without autonomous medication change | **Implemented** — six trigger kinds, versioned and approved like the alert rules; the therapy port reads and cannot write, the review table has no column an order is written from, and the end-to-end test asserts the prescription is byte-for-byte unchanged after advice; the reviewer cannot record the prescriber's response, in the permissions, the domain and the schema; a re-evaluation does not raise the same review twice, held by a partial unique index |
+| SRS-IPC-009 | Record environmental surveillance and water/air testing where used; results link to location and corrective action | **Implemented** — location and sample point are both required, because a ward's forty taps do not fail together; the outcome is derived from the versioned limit in force when the result was reported and the revision is pinned to the result; a failing result closes only through a corrective action verified by a repeat of the same point, taken after the work, that passed; sampling plans give a due list in which a point nobody has ever sampled appears immediately |
+| SRS-IPC-010 | Report HAI rates, outbreak status, isolation occupancy and stewardship indicators; metric definitions are versioned | **Implemented** — rates, hand hygiene compliance and stewardship acceptance are filed against the quality context's versioned indicator dictionary (SRS-QMS-010) rather than a second one here, and a code with no current definition is refused; every measure carries an `unanswerable` flag rather than reporting zero on an empty denominator; onset overrides are counted beside the rate they changed |
+
+### What SRS-IPC does not reach
+
+Four seams are named rather than half-built.
+
+**There is no laboratory context, so the culture-driven triggers never fire.**
+`TherapySignal.Culture` is nil, which means the bug-drug mismatch and
+de-escalation rules — two of the six, and the two a microbiologist would call
+the most valuable — are written, tested in the domain, and never triggered by
+the running system. This is visible rather than hidden: a worklist with only
+duration, restricted-agent and route reviews on it is what a deployment sees,
+not a stewardship programme that quietly believes every organism is
+susceptible. SRS-LAB is a later wave, and one adapter closes this.
+
+**Whether a patient can take oral is a ward assessment nothing here can
+answer.** `OralRouteAvailable` is false, so the intravenous-to-oral trigger
+fires only when something else sets it. Defaulting it true would raise a
+switch review on every patient who is nil by mouth, which is how a worklist
+becomes an unread one.
+
+**There is no estates role.** `ipc.environment.act` — raising and verifying
+environmental corrective actions — sits with the infection control lead
+because this system has no facilities role to give it to yet. The action names
+its owner, so the work is tracked to a person; what is missing is the role the
+person should be logging in as. SRS-FAC is in this wave's support services and
+will take it.
+
+**Days of therapy count the agents this programme reviewed, not every
+antimicrobial in the hospital.** The therapy rate divides raised reviews by
+patient days, which is honest about what it measures and is not the
+conventional DOT metric. A true DOT denominator needs every antimicrobial
+administration, which is the medication context's to expose and the laboratory
+gap's neighbour.
 
 ## What Wave 2 depends on
 
