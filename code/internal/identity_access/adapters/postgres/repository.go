@@ -14,6 +14,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/ppusapati/health/code/internal/platform/authctx"
 	"time"
 
 	"github.com/google/uuid"
@@ -287,4 +288,51 @@ func fromRoles(roles []domain.Role) []string {
 		out = append(out, string(r))
 	}
 	return out
+}
+
+// AccountsByRoles implements ports.Directory.
+//
+// Active accounts only, and one role per person: the reports that read this
+// are per role, and a person holding two of them appears under the first that
+// matches rather than twice with different answers.
+func (r *Repository) AccountsByRoles(ctx context.Context,
+	scope authctx.TenantScope, roles []string, limit int32) (
+	map[string]string, error) {
+
+	if scope.IsZero() {
+		return nil, rpcerr.Internal("IAM_NO_TENANT_SCOPE",
+			"a directory read needs a verified tenant scope")
+	}
+	parsed, err := uuid.Parse(scope.TenantID())
+	if err != nil {
+		return nil, rpcerr.Internal("IAM_TENANT_ID_INVALID",
+			"tenant_id must be a UUID").WithCause(err)
+	}
+	if len(roles) == 0 {
+		return map[string]string{}, nil
+	}
+
+	rows, err := r.queries(ctx).ListAccountsByRoles(ctx,
+		sqlcgen.ListAccountsByRolesParams{
+			TenantID: parsed, Roles: roles, RowLimit: limit,
+		})
+	if err != nil {
+		return nil, err
+	}
+
+	wanted := make(map[string]bool, len(roles))
+	for _, role := range roles {
+		wanted[role] = true
+	}
+
+	out := make(map[string]string, len(rows))
+	for _, row := range rows {
+		for _, held := range row.Roles {
+			if wanted[held] {
+				out[row.SubjectID] = held
+				break
+			}
+		}
+	}
+	return out, nil
 }

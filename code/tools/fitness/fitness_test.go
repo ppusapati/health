@@ -265,6 +265,7 @@ func TestFIT02_GeneratedQueriesImportedOnlyByAdapters(t *testing.T) {
 		"internal/sterile/adapters/postgres",
 		"internal/materials/adapters/postgres",
 		"internal/biomedical/adapters/postgres",
+		"internal/quality/adapters/postgres",
 		"internal/platform/store",
 		"internal/platform/workflow",
 		"internal/platform/rules",
@@ -344,6 +345,26 @@ func keysOf(m map[string]bool) []string {
 	return out
 }
 
+// tenantScopeExemptions are the ports whose callers cannot hold a verified
+// scope, because the scope is what they are being used to build.
+//
+// Named individually with a reason rather than matched by a pattern: an
+// exemption that a file can grant itself by containing the right identifier is
+// an exemption every file will eventually grant itself.
+var tenantScopeExemptions = map[string]string{
+	"internal/organization/ports/ports.go":    "tenant provisioning creates the tenant a scope would name",
+	"internal/identity_access/ports/ports.go": "account and federation lookups run before a session exists, so there is no scope to take",
+}
+
+// bareTenantParam matches a parameter named tenantID whatever else shares its
+// type declaration.
+//
+// The earlier form of this check was `tenantID\s+string`, which passed
+// `tenantID, subjectID string` — the commonest way the parameter is actually
+// written. It was found by a new port that happened to be written the other
+// way round, which is not a way to find things.
+var bareTenantParam = regexp.MustCompile(`\btenantID\b\s*(,\s*\w+\s*)*string\b`)
+
 // FIT-03: every tenant-owned repository method must take a verified
 // authctx.TenantScope rather than a bare tenant string.
 func TestFIT03_RepositoryPortsRequireTenantScope(t *testing.T) {
@@ -360,9 +381,11 @@ func TestFIT03_RepositoryPortsRequireTenantScope(t *testing.T) {
 
 		// A port that names tenantID as a plain string parameter has bypassed
 		// the unforgeable scope type.
-		if regexp.MustCompile(`tenantID\s+string`).MatchString(text) &&
-			!strings.Contains(text, "TenantRepository") {
-			t.Errorf("FIT-03: %s accepts a bare tenant string", f.rel)
+		rel := filepath.ToSlash(f.rel)
+		if bareTenantParam.MatchString(text) {
+			if _, exempt := tenantScopeExemptions[rel]; !exempt {
+				t.Errorf("FIT-03: %s accepts a bare tenant string", rel)
+			}
 		}
 
 		if strings.Contains(text, "FacilityRepository") &&

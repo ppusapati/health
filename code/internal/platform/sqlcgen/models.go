@@ -3269,6 +3269,388 @@ type PlatformWorkflowTimer struct {
 	CreatedAt  pgtype.Timestamptz
 }
 
+type QualityAudit struct {
+	AuditID           uuid.UUID
+	TenantID          uuid.UUID
+	Reference         string
+	Title             string
+	Scope             string
+	StandardID        pgtype.UUID
+	AuditorID         string
+	AuditeeDepartment string
+	PlannedFrom       pgtype.Timestamptz
+	PlannedTo         pgtype.Timestamptz
+	State             string
+	Summary           string
+	CreatedAt         pgtype.Timestamptz
+	CreatedBy         string
+	ClosedAt          pgtype.Timestamptz
+	ClosedBy          string
+	Version           int64
+}
+
+type QualityAuditFinding struct {
+	FindingID   uuid.UUID
+	TenantID    uuid.UUID
+	AuditID     uuid.UUID
+	ClauseID    pgtype.UUID
+	Severity    string
+	Detail      string
+	Evidence    string
+	CapaID      pgtype.UUID
+	ClosedAt    pgtype.Timestamptz
+	ClosedBy    string
+	ClosureNote string
+	RaisedAt    pgtype.Timestamptz
+	RaisedBy    string
+}
+
+type QualityCapa struct {
+	CapaID             uuid.UUID
+	TenantID           uuid.UUID
+	Reference          string
+	Kind               string
+	SourceKind         string
+	SourceID           string
+	Action             string
+	OwnerID            string
+	DueOn              pgtype.Timestamptz
+	EffectivenessDueOn pgtype.Timestamptz
+	State              string
+	ApprovedBy         string
+	ApprovedAt         pgtype.Timestamptz
+	ClosedBy           string
+	ClosedAt           pgtype.Timestamptz
+	ClosureNote        string
+	CancelledReason    string
+	Restricted         bool
+	RaisedAt           pgtype.Timestamptz
+	RaisedBy           string
+	Version            int64
+}
+
+type QualityCapaCheck struct {
+	CheckID   uuid.UUID
+	TenantID  uuid.UUID
+	CapaID    uuid.UUID
+	CheckedAt pgtype.Timestamptz
+	CheckedBy string
+	Effective bool
+	Evidence  string
+}
+
+type QualityClause struct {
+	ClauseID   uuid.UUID
+	TenantID   uuid.UUID
+	StandardID uuid.UUID
+	Reference  string
+	Chapter    string
+	ClauseText string
+	Critical   bool
+	CreatedAt  pgtype.Timestamptz
+	Version    int64
+}
+
+type QualityClauseReview struct {
+	ReviewID   uuid.UUID
+	TenantID   uuid.UUID
+	ClauseID   uuid.UUID
+	Verdict    string
+	Note       string
+	CapaID     pgtype.UUID
+	ReviewedAt pgtype.Timestamptz
+	ReviewedBy string
+}
+
+type QualityCommittee struct {
+	CommitteeID uuid.UUID
+	TenantID    uuid.UUID
+	Code        string
+	Name        string
+	Terms       string
+	QuorumSize  int32
+	Restricted  bool
+	Members     []string
+	Active      bool
+	CreatedAt   pgtype.Timestamptz
+	CreatedBy   string
+	Version     int64
+}
+
+type QualityCommitteeMeeting struct {
+	MeetingID   uuid.UUID
+	TenantID    uuid.UUID
+	CommitteeID uuid.UUID
+	ScheduledAt pgtype.Timestamptz
+	HeldAt      pgtype.Timestamptz
+	Agenda      []string
+	Attendees   []string
+	Apologies   []string
+	Minutes     string
+	Decisions   []byte
+	State       string
+	ApprovedBy  string
+	ApprovedAt  pgtype.Timestamptz
+	Restricted  bool
+	CreatedAt   pgtype.Timestamptz
+	CreatedBy   string
+	Version     int64
+}
+
+type QualityCompetency struct {
+	CompetencyID uuid.UUID
+	TenantID     uuid.UUID
+	Code         string
+	Name         string
+	DocumentID   pgtype.UUID
+	ValidMonths  int32
+	Active       bool
+	CreatedAt    pgtype.Timestamptz
+	CreatedBy    string
+	Version      int64
+}
+
+type QualityCompetencyAward struct {
+	AwardID      uuid.UUID
+	TenantID     uuid.UUID
+	CompetencyID uuid.UUID
+	PersonID     string
+	VersionID    pgtype.UUID
+	Evidence     string
+	AwardedAt    pgtype.Timestamptz
+	AwardedBy    string
+	ExpiresAt    pgtype.Timestamptz
+	RevokedAt    pgtype.Timestamptz
+	RevokedWhy   string
+}
+
+type QualityComplaint struct {
+	ComplaintID    uuid.UUID
+	TenantID       uuid.UUID
+	Reference      string
+	Kind           string
+	ComplainantRef string
+	PatientID      string
+	EncounterID    string
+	Category       string
+	Department     string
+	FacilityID     string
+	Channel        string
+	Detail         string
+	AcknowledgeBy  pgtype.Timestamptz
+	AcknowledgedAt pgtype.Timestamptz
+	AcknowledgedBy string
+	ResolveBy      pgtype.Timestamptz
+	State          string
+	Outcome        string
+	Resolution     string
+	ClosureReason  string
+	Escalated      bool
+	EscalatedAt    pgtype.Timestamptz
+	ReceivedAt     pgtype.Timestamptz
+	ReceivedBy     string
+	ClosedAt       pgtype.Timestamptz
+	ClosedBy       string
+	Version        int64
+}
+
+type QualityDocument struct {
+	DocumentID   uuid.UUID
+	TenantID     uuid.UUID
+	Code         string
+	Title        string
+	Kind         string
+	OwnerID      string
+	ReviewMonths int32
+	Department   string
+	Withdrawn    bool
+	WithdrawnAt  pgtype.Timestamptz
+	CreatedAt    pgtype.Timestamptz
+	CreatedBy    string
+	Version      int64
+}
+
+type QualityDocumentAcknowledgement struct {
+	AcknowledgementID uuid.UUID
+	TenantID          uuid.UUID
+	VersionID         uuid.UUID
+	DocumentID        uuid.UUID
+	PersonID          string
+	Role              string
+	AcknowledgedAt    pgtype.Timestamptz
+}
+
+type QualityDocumentVersion struct {
+	VersionID               uuid.UUID
+	TenantID                uuid.UUID
+	DocumentID              uuid.UUID
+	Label                   string
+	Ordinal                 int32
+	ContentRef              string
+	ChangeSummary           string
+	State                   string
+	ApprovedBy              string
+	ApprovedAt              pgtype.Timestamptz
+	EffectiveFrom           pgtype.Timestamptz
+	ObsoleteFrom            pgtype.Timestamptz
+	RequiresAcknowledgement bool
+	RequiresRetraining      bool
+	CreatedAt               pgtype.Timestamptz
+	CreatedBy               string
+	RowVersion              int64
+}
+
+type QualityEvidence struct {
+	EvidenceID  uuid.UUID
+	TenantID    uuid.UUID
+	ClauseID    uuid.UUID
+	Kind        string
+	RefID       string
+	ExternalRef string
+	Description string
+	AddedAt     pgtype.Timestamptz
+	AddedBy     string
+	RemovedAt   pgtype.Timestamptz
+	RemovedBy   string
+	RemovedWhy  string
+}
+
+type QualityIncident struct {
+	IncidentID      uuid.UUID
+	TenantID        uuid.UUID
+	Reference       string
+	Category        string
+	Subcategory     string
+	Reach           string
+	Harm            string
+	Consequence     string
+	Likelihood      string
+	RiskScore       int32
+	RiskBand        string
+	PatientID       string
+	EncounterID     string
+	AssetID         string
+	LocationID      string
+	FacilityID      string
+	Department      string
+	Narrative       string
+	ImmediateAction string
+	Sentinel        bool
+	Restricted      bool
+	Anonymous       bool
+	State           string
+	OccurredAt      pgtype.Timestamptz
+	ReportedAt      pgtype.Timestamptz
+	ReportedBy      string
+	ReviewedBy      string
+	ReviewedAt      pgtype.Timestamptz
+	ClosedBy        string
+	ClosedAt        pgtype.Timestamptz
+	ClosureReason   string
+	Version         int64
+}
+
+type QualityKpiDefinition struct {
+	DefinitionID   uuid.UUID
+	TenantID       uuid.UUID
+	Code           string
+	Name           string
+	Revision       int32
+	Numerator      string
+	Denominator    string
+	Unit           string
+	TargetPermille int32
+	Direction      string
+	Frequency      string
+	OwnerID        string
+	EffectiveFrom  pgtype.Timestamptz
+	SupersededAt   pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	CreatedBy      string
+}
+
+type QualityKpiValue struct {
+	ValueID      uuid.UUID
+	TenantID     uuid.UUID
+	DefinitionID uuid.UUID
+	Code         string
+	Revision     int32
+	PeriodFrom   pgtype.Timestamptz
+	PeriodTo     pgtype.Timestamptz
+	Numerator    int64
+	Denominator  int64
+	Permille     int32
+	Unanswerable bool
+	SourceNote   string
+	RecordedAt   pgtype.Timestamptz
+	RecordedBy   string
+}
+
+type QualityMortalityReview struct {
+	ReviewID       uuid.UUID
+	TenantID       uuid.UUID
+	PatientID      string
+	EncounterID    string
+	DiedAt         pgtype.Timestamptz
+	CommitteeID    pgtype.UUID
+	MeetingID      pgtype.UUID
+	Classification string
+	Findings       string
+	LearningPoints string
+	CapaIds        []uuid.UUID
+	State          string
+	OpenedAt       pgtype.Timestamptz
+	OpenedBy       string
+	CompletedAt    pgtype.Timestamptz
+	CompletedBy    string
+	Version        int64
+}
+
+type QualityRca struct {
+	RcaID            uuid.UUID
+	TenantID         uuid.UUID
+	IncidentID       uuid.UUID
+	Method           string
+	AccountableOwner string
+	Findings         string
+	NoActionReason   string
+	State            string
+	Restricted       bool
+	OpenedAt         pgtype.Timestamptz
+	OpenedBy         string
+	ClosedAt         pgtype.Timestamptz
+	ClosedBy         string
+	Version          int64
+}
+
+type QualityRcaFactor struct {
+	FactorID   uuid.UUID
+	TenantID   uuid.UUID
+	RcaID      uuid.UUID
+	Category   string
+	Detail     string
+	Root       bool
+	RecordedAt pgtype.Timestamptz
+}
+
+type QualityRoleCompetency struct {
+	TenantID     uuid.UUID
+	Role         string
+	CompetencyID uuid.UUID
+}
+
+type QualityStandard struct {
+	StandardID uuid.UUID
+	TenantID   uuid.UUID
+	Code       string
+	Name       string
+	Edition    string
+	Active     bool
+	CreatedAt  pgtype.Timestamptz
+	CreatedBy  string
+	Version    int64
+}
+
 type SchedulingAppointment struct {
 	AppointmentID     uuid.UUID
 	TenantID          uuid.UUID

@@ -1,0 +1,12 @@
+-- Rollback for 0038.
+--
+-- Drops every incident, root cause analysis, corrective action, controlled
+-- document and its versions and acknowledgements, competency record, internal
+-- audit and finding, committee and its minutes, accreditation standard and
+-- evidence map, indicator definition and value, complaint and peer review.
+--
+-- This is the record an accreditation survey reads and the record a coroner
+-- asks for. SRS-QMS-015 requires it be preserved against deletion subject to
+-- retention and legal hold, which this ignores by design: it is a
+-- disaster-recovery action, never a deployment step.
+DROP SCHEMA IF EXISTS quality CASCADE;

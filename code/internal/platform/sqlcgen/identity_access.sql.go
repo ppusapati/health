@@ -237,6 +237,49 @@ func (q *Queries) InsertStepUpProof(ctx context.Context, arg InsertStepUpProofPa
 	return err
 }
 
+const listAccountsByRoles = `-- name: ListAccountsByRoles :many
+SELECT subject_id, roles FROM identity_access.account
+WHERE tenant_id = $1
+  AND status = 'active'
+  AND roles && $2::text[]
+ORDER BY subject_id
+LIMIT $3
+`
+
+type ListAccountsByRolesParams struct {
+	TenantID uuid.UUID
+	Roles    []string
+	RowLimit int32
+}
+
+type ListAccountsByRolesRow struct {
+	SubjectID string
+	Roles     []string
+}
+
+// Who holds one of these roles here. Read by the quality context's competency
+// and policy-acknowledgement gap reports, which ask "who should have this and
+// does not" — a question that needs the establishment, not one account.
+func (q *Queries) ListAccountsByRoles(ctx context.Context, arg ListAccountsByRolesParams) ([]ListAccountsByRolesRow, error) {
+	rows, err := q.db.Query(ctx, listAccountsByRoles, arg.TenantID, arg.Roles, arg.RowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAccountsByRolesRow{}
+	for rows.Next() {
+		var i ListAccountsByRolesRow
+		if err := rows.Scan(&i.SubjectID, &i.Roles); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const revokeAccountSessions = `-- name: RevokeAccountSessions :execrows
 UPDATE identity_access.account
 SET not_valid_before = GREATEST(not_valid_before, $1::timestamptz),

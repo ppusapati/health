@@ -40,6 +40,7 @@ sql:
       - db/migrations/0035_sterile_instrument_history.up.sql
       - db/migrations/0036_materials.up.sql
       - db/migrations/0037_biomedical.up.sql
+      - db/migrations/0038_quality.up.sql
     gen:
       go:
         package: sqlcgen

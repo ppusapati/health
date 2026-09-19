@@ -3,6 +3,7 @@ package ports
 
 import (
 	"context"
+	"github.com/ppusapati/health/code/internal/platform/authctx"
 	"time"
 
 	"github.com/ppusapati/health/code/internal/identity_access/domain"
@@ -62,3 +63,22 @@ type RiskStore interface {
 
 // Clock supplies the current time.
 type Clock interface{ Now() time.Time }
+
+// Directory answers who works here, by role.
+//
+// Separate from AccountStore because it is a different question: AccountStore
+// resolves one authenticated caller, and this enumerates an establishment. A
+// context that needs to know who should have read a policy needs the second
+// and must not be given the first.
+type Directory interface {
+	// AccountsByRoles maps subject id to the first of the given roles that the
+	// account holds. Active accounts only: a gap report that lists people who
+	// left is a gap report nobody finishes reading.
+	//
+	// Takes a verified scope rather than a tenant id. Unlike the account
+	// lookups above, which run before a session exists and therefore cannot
+	// have one, every caller of this already holds a session — so there is no
+	// reason to accept the forgeable form (FIT-03, ADR-0001).
+	AccountsByRoles(ctx context.Context, scope authctx.TenantScope,
+		roles []string, limit int32) (map[string]string, error)
+}

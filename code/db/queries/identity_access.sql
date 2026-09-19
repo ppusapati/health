@@ -113,3 +113,14 @@ INSERT INTO identity_access.signin_risk (
 -- Feeds the "dormant account" and "new device" signals at the next sign-in.
 SELECT count(*) FROM identity_access.signin_risk
 WHERE tenant_id = @tenant_id AND subject_id = @subject_id AND occurred_at >= @since;
+
+-- name: ListAccountsByRoles :many
+-- Who holds one of these roles here. Read by the quality context's competency
+-- and policy-acknowledgement gap reports, which ask "who should have this and
+-- does not" — a question that needs the establishment, not one account.
+SELECT subject_id, roles FROM identity_access.account
+WHERE tenant_id = @tenant_id
+  AND status = 'active'
+  AND roles && @roles::text[]
+ORDER BY subject_id
+LIMIT @row_limit;
