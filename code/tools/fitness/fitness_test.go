@@ -264,6 +264,7 @@ func TestFIT02_GeneratedQueriesImportedOnlyByAdapters(t *testing.T) {
 		"internal/bloodbank/adapters/postgres",
 		"internal/sterile/adapters/postgres",
 		"internal/materials/adapters/postgres",
+		"internal/biomedical/adapters/postgres",
 		"internal/platform/store",
 		"internal/platform/workflow",
 		"internal/platform/rules",

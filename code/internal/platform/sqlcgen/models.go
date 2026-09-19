@@ -428,6 +428,176 @@ type BillingTariffLine struct {
 	UpdatedAt     pgtype.Timestamptz
 }
 
+type BiomedicalAsset struct {
+	AssetID                uuid.UUID
+	TenantID               uuid.UUID
+	Tag                    string
+	Udi                    string
+	Serial                 string
+	Make                   string
+	Model                  string
+	Category               string
+	Criticality            string
+	Status                 string
+	LocationID             string
+	Department             string
+	Capabilities           []string
+	AcquiredOn             pgtype.Date
+	AcquisitionCostMinor   int64
+	ExpectedLifeYears      int32
+	CalibrationRequired    bool
+	CalibrationDue         pgtype.Timestamptz
+	CalibrationCertificate string
+	SafetyHold             bool
+	SafetyHoldReason       string
+	Notes                  string
+	CreatedAt              pgtype.Timestamptz
+	CreatedBy              string
+	Version                int64
+}
+
+type BiomedicalDisposal struct {
+	DisposalID              uuid.UUID
+	TenantID                uuid.UUID
+	AssetID                 uuid.UUID
+	AssetTag                string
+	Method                  string
+	Reason                  string
+	RequestedBy             string
+	ApprovedBy              string
+	ApprovedAt              pgtype.Timestamptz
+	SanitisationRequired    bool
+	SanitisationMethod      string
+	SanitisationCertificate string
+	SanitisedBy             string
+	Recipient               string
+	ProceedsMinor           int64
+	DisposedAt              pgtype.Timestamptz
+	RecordedBy              string
+}
+
+type BiomedicalNoticeTask struct {
+	TaskID      uuid.UUID
+	TenantID    uuid.UUID
+	NoticeID    uuid.UUID
+	AssetID     uuid.UUID
+	AssetTag    string
+	State       string
+	Note        string
+	CompletedAt pgtype.Timestamptz
+	CompletedBy string
+}
+
+type BiomedicalPmPlan struct {
+	PlanID           uuid.UUID
+	TenantID         uuid.UUID
+	AssetID          uuid.UUID
+	Basis            string
+	IntervalDays     int32
+	RuntimeHours     int32
+	Procedure        string
+	EstimatedMinutes int32
+	LastPerformedAt  pgtype.Timestamptz
+	LastRuntimeHours int32
+	Active           bool
+	CreatedAt        pgtype.Timestamptz
+	CreatedBy        string
+	Version          int64
+}
+
+type BiomedicalReading struct {
+	ReadingID  uuid.UUID
+	TenantID   uuid.UUID
+	AssetID    uuid.UUID
+	Metric     string
+	Value      float64
+	Unit       string
+	Source     string
+	Ingested   bool
+	ObservedAt pgtype.Timestamptz
+	RecordedAt pgtype.Timestamptz
+	RecordedBy string
+}
+
+type BiomedicalSafetyNotice struct {
+	NoticeID       uuid.UUID
+	TenantID       uuid.UUID
+	Reference      string
+	Kind           string
+	Issuer         string
+	Summary        string
+	Make           string
+	Model          string
+	SerialFrom     string
+	SerialTo       string
+	AffectedUdi    string
+	HoldAffected   bool
+	RequiredAction string
+	DueBy          pgtype.Timestamptz
+	IssuedOn       pgtype.Timestamptz
+	RaisedAt       pgtype.Timestamptz
+	RaisedBy       string
+	ClosedAt       pgtype.Timestamptz
+	ClosedBy       string
+	ClosureNote    string
+	Version        int64
+}
+
+type BiomedicalServiceContract struct {
+	ContractID      uuid.UUID
+	TenantID        uuid.UUID
+	AssetID         uuid.UUID
+	Kind            string
+	Reference       string
+	VendorName      string
+	VendorContact   string
+	VendorPhone     string
+	VendorEmail     string
+	StartsOn        pgtype.Timestamptz
+	EndsOn          pgtype.Timestamptz
+	ValueMinor      int64
+	ResponseHours   int32
+	ResolutionHours int32
+	Notes           string
+	CreatedAt       pgtype.Timestamptz
+	CreatedBy       string
+	Version         int64
+}
+
+type BiomedicalTicket struct {
+	TicketID             uuid.UUID
+	TenantID             uuid.UUID
+	Number               string
+	Kind                 string
+	AssetID              uuid.UUID
+	PlanID               pgtype.UUID
+	AssetTag             string
+	LocationID           string
+	Symptom              string
+	Priority             string
+	Impact               string
+	State                string
+	OwnerID              string
+	RespondBy            pgtype.Timestamptz
+	ResolveBy            pgtype.Timestamptz
+	ContractID           pgtype.UUID
+	Diagnosis            string
+	WorkPerformed        string
+	Parts                []byte
+	DownFrom             pgtype.Timestamptz
+	DownUntil            pgtype.Timestamptz
+	AwaitingPartsMinutes int32
+	RespondedAt          pgtype.Timestamptz
+	ResolvedAt           pgtype.Timestamptz
+	ClosedAt             pgtype.Timestamptz
+	ClosedBy             string
+	ClosureNote          string
+	CancelledReason      string
+	RaisedAt             pgtype.Timestamptz
+	RaisedBy             string
+	Version              int64
+}
+
 type BloodbankCollection struct {
 	CollectionID   uuid.UUID
 	TenantID       uuid.UUID
