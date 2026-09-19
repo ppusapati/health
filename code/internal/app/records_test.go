@@ -75,10 +75,16 @@ func newMrdHarness(t *testing.T) *mrdHarness {
 		DefaultJurisdiction:     "IN",
 		RestrictedDocumentKinds: []string{"psychiatry_note"},
 		CodingSystems:           map[string]string{"icd-10": "2026"},
-	})
+	}, "mrd_physical_record")
 }
 
-func newMrdHarnessWith(t *testing.T, config recordsapp.Config) *mrdHarness {
+// newMrdHarnessWith builds the stack. heldClasses are the resource types the
+// disposition sweep asks the platform's hold store about; passing none is a
+// deployment that has not told the store what to look under, which the sweep
+// refuses rather than reads as "nothing is held".
+func newMrdHarnessWith(t *testing.T, config recordsapp.Config,
+	heldClasses ...string) *mrdHarness {
+
 	t.Helper()
 
 	pool := pgtest.New(t)
@@ -102,7 +108,7 @@ func newMrdHarnessWith(t *testing.T, config recordsapp.Config) *mrdHarness {
 		// retention law, which is configuration rather than a fact the
 		// encounter context holds.
 		RecordsJurisdictions: map[string]string{},
-		RecordsHeldClasses:   []string{"mrd_physical_record"},
+		RecordsHeldClasses:   heldClasses,
 		// No encounter in these tests had an operation, so the conditional
 		// operation-note item never applies. That is the point of it being
 		// conditional.
@@ -976,6 +982,26 @@ func TestAHeldRecordSurvivesADispositionSomebodyElseApproved(t *testing.T) {
 	}
 }
 
+// SRS-MRD-005. A deployment whose hold store it cannot read proposes nothing.
+func TestASweepThatCannotSeeTheHoldsProposesNothing(t *testing.T) {
+	h := newMrdHarnessWith(t, recordsapp.Config{DefaultJurisdiction: "IN"})
+	// newMrdHarnessWith leaves RecordsHeldClasses empty, which is a
+	// deployment that has not told the hold store what to look under.
+
+	h.liveRetentionRule(t)
+	record := h.paper(t, "MR-0201")
+	h.backdate(t, record.GetRecordId())
+
+	_, err := h.records.SweepForDisposition(context.Background(),
+		withFacility(h.officerToken(), h.facility,
+			&recordsv1.SweepForDispositionRequest{Jurisdiction: "IN"}))
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("a sweep with no hold classes = %v, want refused — an "+
+			"empty answer from a store nobody asked must not read as a "+
+			"clean sweep", err)
+	}
+}
+
 // SRS-MRD-006. A paper record goes out to one named person and comes back.
 func TestAPaperRecordGoesOutToOneNamedCustodian(t *testing.T) {
 	h := newMrdHarness(t)
@@ -1126,9 +1152,93 @@ func TestACorrectedCertificateKeepsTheOneThatWentToTheRegistrar(t *testing.T) {
 	}
 }
 
+// SRS-MRD-006, SRS-MRD-009. An archive is not a destruction, and a volume
+// somebody has in their hands is never proposed for either.
+func TestAnArchivedVolumeIsNotRecordedAsDestroyed(t *testing.T) {
+	h := newMrdHarness(t)
+	ctx := context.Background()
+
+	h.liveRuleFor(t, "OUTPATIENT-IN", "outpatient",
+		recordsv1.DispositionKind_DISPOSITION_KIND_ARCHIVE)
+
+	filed := h.paperOfClass(t, "MR-0101", "outpatient")
+	out := h.paperOfClass(t, "MR-0102", "outpatient")
+	h.backdate(t, filed.GetRecordId(), out.GetRecordId())
+
+	if _, err := h.records.CheckOutRecord(ctx,
+		withFacility(h.officerToken(), h.facility,
+			&recordsv1.CheckOutRecordRequest{
+				RecordId: out.GetRecordId(), Custodian: "doctor-1",
+				Location: "clinic", Purpose: "follow-up",
+			})); err != nil {
+		t.Fatalf("CheckOutRecord: %v", err)
+	}
+
+	// A volume in somebody's hands is not offered. Proposing it would be
+	// refused at execution and take the whole list with it, after an
+	// approver had signed for every record on it.
+	sweep, err := h.records.SweepForDisposition(ctx,
+		withFacility(h.officerToken(), h.facility,
+			&recordsv1.SweepForDispositionRequest{Jurisdiction: "IN"}))
+	if err != nil {
+		t.Fatalf("SweepForDisposition: %v", err)
+	}
+	for _, candidate := range sweep.Msg.GetEligible() {
+		if candidate.GetRecordId() == out.GetRecordId() {
+			t.Fatal("a record somebody has in their hands was proposed " +
+				"for disposition")
+		}
+	}
+
+	prepared, err := h.records.PrepareDisposition(ctx,
+		withFacility(h.officerToken(), h.facility,
+			&recordsv1.PrepareDispositionRequest{
+				Reference: "DL-ARCHIVE-1", Jurisdiction: "IN",
+				Disposition: recordsv1.DispositionKind_DISPOSITION_KIND_ARCHIVE,
+			}))
+	if err != nil {
+		t.Fatalf("PrepareDisposition: %v", err)
+	}
+	if _, err := h.records.ApproveDisposition(ctx,
+		withFacility(h.managerToken(), h.facility,
+			&recordsv1.ApproveDispositionRequest{
+				ListId: prepared.Msg.GetList().GetListId(),
+			})); err != nil {
+		t.Fatalf("ApproveDisposition: %v", err)
+	}
+	if _, err := h.records.ExecuteDisposition(ctx,
+		withFacility(h.officerToken(), h.facility,
+			&recordsv1.ExecuteDispositionRequest{
+				ListId:      prepared.Msg.GetList().GetListId(),
+				Certificate: "transfer-note-7",
+			})); err != nil {
+		t.Fatalf("ExecuteDisposition: %v", err)
+	}
+
+	// Boxed off site, not shredded. A record the hospital still has and
+	// would tell a court it destroyed is the worse of the two errors.
+	states := h.paperStates(t)
+	if states[filed.GetRecordId()] !=
+		recordsv1.PhysicalState_PHYSICAL_STATE_ARCHIVED {
+		t.Fatalf("an archived volume reads as %v",
+			states[filed.GetRecordId()])
+	}
+	if states[out.GetRecordId()] !=
+		recordsv1.PhysicalState_PHYSICAL_STATE_CHECKED_OUT {
+		t.Fatalf("the volume in somebody's hands reads as %v",
+			states[out.GetRecordId()])
+	}
+}
+
 // paper registers a paper volume whose retention has long run.
 func (h *mrdHarness) paper(t *testing.T,
 	reference string) *recordsv1.PhysicalRecord {
+
+	return h.paperOfClass(t, reference, "inpatient")
+}
+
+func (h *mrdHarness) paperOfClass(t *testing.T, reference,
+	recordClass string) *recordsv1.PhysicalRecord {
 
 	t.Helper()
 
@@ -1136,7 +1246,7 @@ func (h *mrdHarness) paper(t *testing.T,
 		withFacility(h.officerToken(), h.facility,
 			&recordsv1.RegisterPhysicalRecordRequest{
 				Reference: reference, PatientId: "patient-" + reference,
-				Volume: 1, RecordClass: "inpatient", Jurisdiction: "IN",
+				Volume: 1, RecordClass: recordClass, Jurisdiction: "IN",
 				Description: "Legacy volume", HomeLocation: "main file room",
 			}))
 	if err != nil {
@@ -1159,21 +1269,27 @@ func (h *mrdHarness) backdate(t *testing.T, recordIDs ...string) {
 	}
 }
 
-// liveRetentionRule puts a rule in force that keeps inpatient records for
-// nothing at all, so a record registered today is already due.
+// liveRetentionRule puts a rule in force for inpatient records that a volume
+// backdated thirty years has long outrun.
 func (h *mrdHarness) liveRetentionRule(t *testing.T) {
+	h.liveRuleFor(t, "INPATIENT-IN", "inpatient",
+		recordsv1.DispositionKind_DISPOSITION_KIND_DESTROY)
+}
+
+func (h *mrdHarness) liveRuleFor(t *testing.T, code, recordClass string,
+	disposition recordsv1.DispositionKind) {
+
 	t.Helper()
 	ctx := context.Background()
 
 	drafted, err := h.records.DraftRetentionRule(ctx,
 		withFacility(h.managerToken(), h.facility,
 			&recordsv1.DraftRetentionRuleRequest{
-				Code: "INPATIENT-IN", Name: "Inpatient records", Revision: 1,
-				RecordClass: "inpatient", Jurisdiction: "IN",
+				Code: code, Name: recordClass + " records", Revision: 1,
+				RecordClass: recordClass, Jurisdiction: "IN",
 				Anchor:      recordsv1.RetentionAnchor_RETENTION_ANCHOR_CREATION,
-				RetainYears: 8,
-				Disposition: recordsv1.DispositionKind_DISPOSITION_KIND_DESTROY,
-				Authority:   "Medical Council of India regulation 1.3.1",
+				RetainYears: 8, Disposition: disposition,
+				Authority: "Medical Council of India regulation 1.3.1",
 			}))
 	if err != nil {
 		t.Fatalf("DraftRetentionRule: %v", err)

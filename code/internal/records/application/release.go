@@ -220,15 +220,16 @@ func (s *Service) AssembleRelease(ctx context.Context, releaseID string) (
 // disclosure that did not get written is a release the patient cannot find
 // out about.
 func (s *Service) SendRelease(ctx context.Context, releaseID string) (
-	domain.ReleaseRequest, error) {
+	domain.ReleaseRequest, domain.Disclosure, error) {
 
 	session, scope, err := s.authorize(ctx, PermReleaseAssemble)
 	if err != nil {
-		return domain.ReleaseRequest{}, err
+		return domain.ReleaseRequest{}, domain.Disclosure{}, err
 	}
 	now := s.clock.Now()
 
 	var sent domain.ReleaseRequest
+	var filed domain.Disclosure
 	err = s.uow.WithinTx(ctx, func(ctx context.Context) error {
 		request, err := s.releases.Release(ctx, scope, releaseID)
 		if err != nil {
@@ -260,6 +261,7 @@ func (s *Service) SendRelease(ctx context.Context, releaseID string) (
 			disclosure); err != nil {
 			return err
 		}
+		filed = disclosure
 
 		if err := s.appendEvent(ctx, session, EventReleaseSent,
 			"mrd_release", request.ID, map[string]any{
@@ -279,9 +281,13 @@ func (s *Service) SendRelease(ctx context.Context, releaseID string) (
 		}, now)
 	})
 	if err != nil {
-		return domain.ReleaseRequest{}, recordsError(err)
+		return domain.ReleaseRequest{}, domain.Disclosure{},
+			recordsError(err)
 	}
-	return sent, nil
+	// Returned rather than read back. The caller is handed the entry the
+	// patient will later be shown, without a second read that would need the
+	// accounting permission this caller may not hold.
+	return sent, filed, nil
 }
 
 // RecordDisclosure files a disclosure that did not go through a release —

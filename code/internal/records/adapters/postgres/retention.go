@@ -478,6 +478,12 @@ func (r *Repository) Retained(ctx context.Context,
 		switch record.State {
 		case domain.PhysicalDestroyed, domain.PhysicalArchived:
 			continue
+		case domain.PhysicalOut, domain.PhysicalMissing:
+			// A volume somebody has in their hands, or one nobody can find,
+			// is not something to propose destroying: the destruction would
+			// be refused at execution and the whole list with it, after an
+			// approver had signed for every record on it.
+			continue
 		}
 		if jurisdiction != "" && record.Jurisdiction != jurisdiction {
 			continue

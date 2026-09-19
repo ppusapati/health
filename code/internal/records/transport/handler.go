@@ -408,22 +408,15 @@ func (h *Handler) SendRelease(ctx context.Context,
 	req *connect.Request[recordsv1.SendReleaseRequest]) (
 	*connect.Response[recordsv1.SendReleaseResponse], error) {
 
-	release, err := h.svc.SendRelease(ctx, req.Msg.GetReleaseId())
+	release, disclosure, err := h.svc.SendRelease(ctx,
+		req.Msg.GetReleaseId())
 	if err != nil {
 		return nil, err
 	}
-	response := &recordsv1.SendReleaseResponse{
-		Release: releaseToWire(release),
-	}
-	// The disclosure filed alongside it, read back so the caller has the
-	// entry the patient will later be shown.
-	disclosures, err := h.svc.Disclosures(ctx, ports.DisclosureFilter{
-		PatientID: release.PatientID, Limit: 1,
-	})
-	if err == nil && len(disclosures) > 0 {
-		response.Disclosure = disclosureToWire(disclosures[0])
-	}
-	return connect.NewResponse(response), nil
+	return connect.NewResponse(&recordsv1.SendReleaseResponse{
+		Release: releaseToWire(release), Disclosure: disclosureToWire(
+			disclosure),
+	}), nil
 }
 
 func (h *Handler) ListReleases(ctx context.Context,

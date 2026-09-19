@@ -386,7 +386,7 @@ func (s *Service) ExecuteDisposition(ctx context.Context, listID,
 			expected); err != nil {
 			return err
 		}
-		if err := s.markPhysicalDestroyed(ctx, session, scope, list,
+		if err := s.disposePhysical(ctx, session, scope, list,
 			certificate, now); err != nil {
 			return err
 		}
@@ -497,13 +497,17 @@ func (s *Service) retainedRecords(ctx context.Context,
 	return s.inventory.Retained(ctx, scope, jurisdiction, sweepPageSize)
 }
 
-// markPhysicalDestroyed moves the paper volumes on a list to destroyed
+// disposePhysical moves the paper volumes on an executed list
 // (SRS-MRD-006, SRS-MRD-009).
 //
 // A record that was shredded and still reads as filed sends somebody to the
-// shelf to look for it. Only the paper this context owns is moved; an
-// electronic record's own context is told by the event.
-func (s *Service) markPhysicalDestroyed(ctx context.Context,
+// shelf to look for it; one that was boxed off site and reads as destroyed is
+// a record the hospital will tell a court it no longer has. The list's own
+// disposition decides which, because they are not the same fact.
+//
+// Only the paper this context owns is moved; an electronic record's own
+// context is told by the event.
+func (s *Service) disposePhysical(ctx context.Context,
 	session authctx.Session, scope authctx.TenantScope,
 	list domain.DispositionList, certificate string, now time.Time) error {
 
@@ -515,8 +519,16 @@ func (s *Service) markPhysicalDestroyed(ctx context.Context,
 			continue
 		}
 		expected := record.Version
-		if err := record.MarkDestroyed(list.ID, certificate,
-			session.SubjectID, now); err != nil {
+
+		switch list.Disposition {
+		case domain.DispositionArchive:
+			err = record.Archive("archived under list "+list.ID,
+				session.SubjectID, now)
+		default:
+			err = record.MarkDestroyed(list.ID, certificate,
+				session.SubjectID, now)
+		}
+		if err != nil {
 			return err
 		}
 		if err := s.physical.UpdatePhysicalRecord(ctx, scope, record,

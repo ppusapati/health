@@ -24,6 +24,7 @@ import (
 	encounterdomain "github.com/ppusapati/health/code/internal/encounter/domain"
 	encounterports "github.com/ppusapati/health/code/internal/encounter/ports"
 	"github.com/ppusapati/health/code/internal/platform/authctx"
+	"github.com/ppusapati/health/code/internal/platform/rpcerr"
 	"github.com/ppusapati/health/code/internal/records/domain"
 	"github.com/ppusapati/health/code/internal/records/ports"
 	securitydomain "github.com/ppusapati/health/code/internal/security/domain"
@@ -235,6 +236,11 @@ func (h Holds) Held(ctx context.Context, scope authctx.TenantScope,
 // An empty recordClass means every class the deployment named, which is what
 // a sweep across a jurisdiction asks for. Asking one record at a time would
 // work and would take an hour over a hospital's holding.
+//
+// A deployment that named no classes is refused rather than answered "nothing
+// is held". The caller is about to propose destroying records; an empty map
+// from a store it never asked is the one answer that must not be mistaken for
+// a clean sweep.
 func (h Holds) HeldIDs(ctx context.Context, scope authctx.TenantScope,
 	recordClass string) (map[string]bool, error) {
 
@@ -244,6 +250,11 @@ func (h Holds) HeldIDs(ctx context.Context, scope authctx.TenantScope,
 	classes := h.classes
 	if recordClass != "" {
 		classes = []string{recordClass}
+	}
+	if len(classes) == 0 {
+		return nil, rpcerr.FailedPrecondition("MRD_NO_HELD_CLASSES",
+			"this deployment names no record classes for the legal-hold "+
+				"store, so a disposition sweep cannot see its holds")
 	}
 
 	held := map[string]bool{}

@@ -363,6 +363,13 @@ func (s *Service) CompletionSummary(ctx context.Context,
 	}
 	now := s.clock.Now()
 
+	if len(encounterIDs) > MaxPageSize {
+		// One read per encounter, so an unbounded list is an unbounded
+		// number of queries. A hospital's whole month is a report, not a
+		// request.
+		encounterIDs = encounterIDs[:MaxPageSize]
+	}
+
 	var all []domain.Deficiency
 	for _, encounterID := range encounterIDs {
 		found, err := s.deficiencies.Deficiencies(ctx, scope,

@@ -15,12 +15,13 @@ test names.
 prose, because a status document whose honest summary is a fraction is one
 whose per-row claims have to be read carefully.
 
-Ten families are now built: SRS-ER the Emergency Department, SRS-ICU
+Eleven families are now built: SRS-ER the Emergency Department, SRS-ICU
 critical care, SRS-OT the operating theatre, SRS-ANE anaesthesia and PACU,
 SRS-BLD blood bank and transfusion, SRS-CSSD sterile services, SRS-MAT
 materials and inventory, SRS-BIO biomedical engineering, SRS-QMS quality
-management and SRS-IPC infection prevention and control. Their rows are
-below. Two remain: SRS-MRD and the support services.
+management, SRS-IPC infection prevention and control and SRS-MRD medical
+records and health information management. Their rows are below. One set
+remains: the support services.
 
 `make traceability` reads a row naming a requirement as a claim about it
 unless the row says the work is not built, so the unbuilt ER requirements are
@@ -103,7 +104,7 @@ clinician, and `ValidatedInputs()` is a function rather than a convention.
 | SRS-BIO Biomedical Engineering | 11 | **11 implemented** — Phase 2 §9. Note the prefix collision below |
 | SRS-QMS Quality / NABH | 15 | **15 implemented** — see below |
 | SRS-IPC Infection Prevention | 10 | **10 implemented** — see below |
-| SRS-MRD Medical Records / HIM | 10 | **Not started** |
+| SRS-MRD Medical Records / HIM | 10 | **10 implemented** — see below |
 | SRS-AMB, SRS-DIET, SRS-FAC, SRS-HKP, SRS-LND, SRS-MORT support services | 52 | **Not started** — except SRS-FAC-012 above |
 | SRS-OPSAPI / OPSNFR / OPSSEC / OPSWEB | 32 | **Partial** — the three foundations above |
 
@@ -1025,6 +1026,86 @@ patient days, which is honest about what it measures and is not the
 conventional DOT metric. A true DOT denominator needs every antimicrobial
 administration, which is the medication context's to expose and the laboratory
 gap's neighbour.
+
+## SRS-MRD — Medical records and health information management
+
+Ten requirements, Phase 2 §11. Seventeen tables in schema `records`, fifty
+RPCs, and twenty-four permissions — held by three records roles (`him_officer`,
+`him_manager`, `clinical_coder`), with clinicians and nurses holding only the
+two they answer for: resolving a deficiency against their own documentation
+and, for a clinician, signing a statutory certificate. Fifty database rules
+and eight separation-of-duties rules were each individually weakened and
+confirmed to fail a test before being trusted.
+
+**The defining property of this context is what it cannot do.** It knows
+which clinical documents exist, who signed them and when; it records what is
+missing, what was coded, what was released and what may be destroyed. It
+holds no field that could carry clinical narrative and no port that could
+write one. SRS-MRD-003's "coder changes retain provenance and do not rewrite
+clinical text" and SRS-MRD-008's "resolved without altering signed history"
+are properties of the interface list rather than checks somebody could
+remove: there is no `ChartDocuments.Write`, and `Deficiency.Resolve` refuses
+a resolution that points back at the document complained about.
+
+**Every decision that makes something disappear or leave the hospital has a
+second person behind it, and holding the permission is never sufficient.**
+The records office raises deficiencies and cannot waive them, requests
+releases and cannot approve them, prepares a disposition list and cannot
+approve it. The manager who approves the list cannot execute it, because the
+person who signs and the person who shreds are not the same person in any
+records office that has been audited. The domain and the database each refuse
+a rule approved by its own author, so a manager holding both write and
+approve still needs a colleague.
+
+| Requirement | Summary | Status |
+|---|---|---|
+| SRS-MRD-001 | Track medical record completion against configured checklists by encounter type; checklist version recorded | **Implemented** — checklists are versioned by (code, revision), approved by somebody other than the author and superseded on approval so a chart is judged against exactly one; the more specific of specialty and class wins, then recency; gaps are derived from the clinical context's own documents through a read-only port rather than a copy, and an end-to-end test signs a note and watches the gap close; a missing document and an unsigned one are distinct gaps because they go to different people; an encounter class with no approved checklist is refused rather than reported as a complete chart |
+| SRS-MRD-002 | Manage deficiency assignment, notification, escalation and aging reports | **Implemented** — deficiencies are derived from the checklist in force and idempotent against what is open, so a sweep that runs twice raises nothing the second time; a missing document is owed by whoever the encounter made responsible; reassignment does not reset the age, so passing a deficiency on is not the fastest way to clear a worklist; escalation is durable, goes above the owner and fires once; a waiver makes an encounter incompletable and never complete, so a hospital cannot reach a hundred per cent by waiving |
+| SRS-MRD-003 | Support clinical coding workflow with code assignment, validation, query to clinician and coder productivity | **Implemented** — append-only revisions, so "what did we submit" stays answerable after a re-code; one principal diagnosis, present-on-admission required on a diagnosis and forbidden on a procedure, both held by database CHECKs; a code's system and edition are required and checked against the deployment's configured terminologies, because a grouper reading the wrong edition returns a number rather than an error; the second read is a second person, refused by the domain and by a CHECK; a query is a deficiency sent to the clinician and a queried episode cannot be finalised; `Diff` answers what a payer actually asks |
+| SRS-MRD-004 | Manage release of information with authorization, purpose, recipient and scope; disclosure log is maintained | **Implemented** — the four are required and none defaults; the authority is re-checked at approval and again at release, because a consent that expired in between authorises nothing; the approver is never the requester; the package is built only from what the approved scope covers and restricted kinds stay behind unless the scope asked for them; the manifest is hashed and retained item by item, so "what exactly did we send" has one answer a year later; the disclosure is filed in the same transaction as the release |
+| SRS-MRD-005 | Enforce retention and legal hold; held records are excluded from retention deletion | **Implemented** — holds go through the platform's own mechanism, the same one SRS-QMS-015 and SRS-DAT use, because a hold placed in one place with a purge that reads another is a hold that does nothing; the hold check runs before the rule lookup, so a held record in a class nobody wrote a rule for is still excluded and the two reasons do not mask each other; held records are excluded before the list is shown to anybody rather than at the point of destruction, because a list containing them is a list somebody approves; the holds are read again inside the execution transaction and any new one fails the whole list |
+| SRS-MRD-006 | Track physical record location/movement where legacy paper records exist | **Implemented** — one named custodian, never a department, held by a CHECK; a record already out cannot go out again, because two answers to "who has it" is the same as none; a filed record is with nobody, also a CHECK; a missing record escalates durably rather than queueing; destruction requires the disposition list that allowed it, and an executed list moves its paper volumes so a shredded record does not still read as filed |
+| SRS-MRD-007 | Generate statutory certificates (birth/death) per local format with issuer details | **Implemented** — forms are configured per jurisdiction and versioned, because a registrar's fields differ between states and a group operating in two needs two forms; a certificate is refused against a form nobody approved, against an issuer whose role the form does not name, with a required field missing or a field the form does not have; a correction adds a version and the one that went to the family and the registrar stays readable; the statutory serial is unique across certificates and shared across a certificate's own versions, which is the way round a registrar means it |
+| SRS-MRD-008 | Ensure amendments/addenda do not alter signed content; deficiencies resolved without altering signed history | **Implemented** — structural rather than checked. `Resolve` refuses a resolution whose answering document is the document complained about, and `signed_history_is_answered_not_altered` holds the same rule at the table; this context has no port that writes a clinical document, so there is nothing here that could alter one whatever a caller asked; the end-to-end test raises a coding query against a signed note, answers it with an addendum, and asserts the signed note is on the same version afterwards |
+| SRS-MRD-009 | Support record destruction workflow with approvals and certificates of destruction | **Implemented** — rules are versioned, approved by somebody else and pinned onto each candidate, so a rule revised afterwards does not change the answer to "what allowed this"; zero years with a disposing kind is refused, because that destroys on the anchor date; the sweep reports every record it passed over and why, because "why is this still here" is the question a records manager is actually asked; prepare, approve and execute are three permissions and the middle one is held by somebody who holds neither of the others |
+| SRS-MRD-010 | Maintain accounting of disclosures accessible to patients with actor, purpose, scope and recipient | **Implemented** — all four are NOT NULL with CHECKs against the empty string, so a disclosure that cannot answer the question cannot be written; the table is append-only (FIT-08); exports and prints are recorded through the same accounting as posted copies, because a patient asking who has seen their record is not asking only about the records office; reading the accounting needs its own permission and every read is itself audited, since an accounting of disclosures that can be read without a trace has a hole in exactly the shape of the thing it exists to record |
+
+### What SRS-MRD does not reach
+
+Four seams are named rather than half-built.
+
+**There is no electronic record inventory, so a disposition sweep covers the
+paper and nothing else.** `RecordInventory` is a port with one adapter, and
+that adapter lists the physical volumes this context owns. The electronic
+records belong to every other context, and a deployment that wants them swept
+supplies an adapter that knows where they are. A sweep reports what it looked
+at, so an empty result from an empty inventory is distinguishable from an
+empty result from a full one — but a records manager reading a disposition
+list today is reading a list of paper. Closing this is one adapter per
+context, not a change here.
+
+**A paper folder's only anchor is when it was registered.** The retention
+rules support discharge, last contact, death, majority and creation, and the
+paper inventory can answer only the last. A rule anchored to death reports
+every paper volume as having no anchor date, which is visible in the sweep's
+own output rather than silently treated as not due. The same inventory
+adapter closes this.
+
+**The accounting of disclosures records what this context was told about.**
+`RecordDisclosure` exists and takes an export or a print, and nothing outside
+this context calls it. A patient asking who has seen their record is answered
+for every posted copy and for anything the records office logged, and not for
+a ward that printed a summary through the clinical viewer. The mechanism is
+here and the callers are not; closing it is one call per context that renders
+or exports a record, and until those exist the accounting understates itself
+by however much the rest of the hospital prints.
+
+**The encounter's visit type stands in for a specialty.** `ChecklistFor`
+prefers a specialty-specific checklist over a general one, and the encounter
+context does not carry a specialty; the adapter passes the visit type, which
+is the nearest thing it holds. A deployment whose checklists vary by
+specialty gets the general one, which asks for more documents rather than
+fewer — the safe direction, and named here rather than presented as working.
 
 ## What Wave 2 depends on
 
