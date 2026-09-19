@@ -660,6 +660,16 @@ func TestAnAlertUsesAnApprovedRuleAndAnOverrideIsAudited(t *testing.T) {
 		t.Fatalf("override by a ward nurse = %v, want permission denied", err)
 	}
 
+	// A ward nurse may confirm they have seen it, which is the lighter act
+	// and the one that belongs with reading the board.
+	if _, err := h.infection.AcknowledgeAlert(ctx,
+		withFacility(h.wardNurseToken(), h.facility,
+			&infectionv1.AcknowledgeAlertRequest{
+				AlertId: alerts[0].GetAlertId(),
+			})); err != nil {
+		t.Fatalf("AcknowledgeAlert: %v", err)
+	}
+
 	overridden, err := h.infection.OverrideAlert(ctx,
 		withFacility(h.doctorToken(), h.facility,
 			&infectionv1.OverrideAlertRequest{

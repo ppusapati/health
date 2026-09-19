@@ -373,7 +373,11 @@ func (s *Service) OverrideAlert(ctx context.Context, alertID,
 func (s *Service) answerAlert(ctx context.Context, alertID, reason string,
 	override bool) (domain.Alert, error) {
 
-	permission := PermIsolation
+	// Acknowledging is the lighter act and belongs with reading the board:
+	// the person who sees the alert is the person who confirms they have.
+	// Overriding is the decision that it does not apply here, and that has
+	// its own permission and its own audit entry.
+	permission := PermBoard
 	if override {
 		permission = PermAlertOverride
 	}
