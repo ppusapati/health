@@ -34,6 +34,7 @@ import (
 	"github.com/ppusapati/health/code/gen/go/healthcare/organization/v1/organizationv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/platform_api/v1/platformapiv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/quality/v1/qualityv1connect"
+	"github.com/ppusapati/health/code/gen/go/healthcare/records/v1/recordsv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/scheduling/v1/schedulingv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/sterile/v1/sterilev1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/theatre/v1/theatrev1connect"
@@ -66,6 +67,7 @@ import (
 	empitransport "github.com/ppusapati/health/code/internal/empi/transport"
 	encounterpostgres "github.com/ppusapati/health/code/internal/encounter/adapters/postgres"
 	encounterapp "github.com/ppusapati/health/code/internal/encounter/application"
+	encounterdomain "github.com/ppusapati/health/code/internal/encounter/domain"
 	encountertransport "github.com/ppusapati/health/code/internal/encounter/transport"
 	icuescalate "github.com/ppusapati/health/code/internal/icu/adapters/escalate"
 	icupostgres "github.com/ppusapati/health/code/internal/icu/adapters/postgres"
@@ -109,6 +111,11 @@ import (
 	qualitypostgres "github.com/ppusapati/health/code/internal/quality/adapters/postgres"
 	qualityapp "github.com/ppusapati/health/code/internal/quality/application"
 	qualitytransport "github.com/ppusapati/health/code/internal/quality/transport"
+	recordscrosscontext "github.com/ppusapati/health/code/internal/records/adapters/crosscontext"
+	recordsescalate "github.com/ppusapati/health/code/internal/records/adapters/escalate"
+	recordspostgres "github.com/ppusapati/health/code/internal/records/adapters/postgres"
+	recordsapp "github.com/ppusapati/health/code/internal/records/application"
+	recordstransport "github.com/ppusapati/health/code/internal/records/transport"
 	schedulingpostgres "github.com/ppusapati/health/code/internal/scheduling/adapters/postgres"
 	schedulingapp "github.com/ppusapati/health/code/internal/scheduling/application"
 	schedulingports "github.com/ppusapati/health/code/internal/scheduling/ports"
@@ -357,6 +364,43 @@ type Deps struct {
 	// formulary and invent the other half.
 	InfectionTherapy infectiontherapy.Config
 
+	// Records is what a deployment has decided about its records office: how
+	// long a deficiency runs past its date before it escalates, the bands an
+	// aging report is cut into, whose retention law applies when a facility
+	// does not say, which document kinds are held back from a release unless
+	// it asked for them, and which terminologies and editions the hospital
+	// codes in (SRS-MRD-001 … 010).
+	//
+	// The zero value escalates a deficiency the moment it is overdue, reports
+	// no aging bands, finds no retention rule and so sweeps nothing, holds
+	// nothing back from a release, and accepts a code in any system. The
+	// third and the fourth are the ones to watch: a disposition sweep that
+	// finds nothing looks exactly like a hospital with nothing to destroy,
+	// and a release that holds nothing back sends the psychiatric notes with
+	// the discharge summary. The status document names them rather than this
+	// code inventing a jurisdiction.
+	Records recordsapp.Config
+
+	// RecordsJurisdictions maps a facility to whose retention law its records
+	// follow (SRS-MRD-009). Configuration rather than a fact the encounter
+	// context holds: "which country is this hospital in" is not something a
+	// clinical record answers.
+	RecordsJurisdictions map[string]string
+
+	// RecordsHeldClasses are the resource types a disposition sweep asks the
+	// platform's hold store about (SRS-MRD-005). The store indexes holds by
+	// resource type, so a batch read has to name them; a class added to the
+	// inventory and not added here would be swept with its holds invisible.
+	RecordsHeldClasses []string
+
+	// RecordsConditions derives the encounter facts a conditional checklist
+	// item turns on — whether there was an operation, whether the patient
+	// died (SRS-MRD-001). Nil answers no condition, so conditional items
+	// never apply: the safe direction is to ask for fewer documents than to
+	// raise a deficiency against every chart for an operation note nobody
+	// owed.
+	RecordsConditions func(encounterdomain.Encounter) map[string]bool
+
 	// Emergency is what a deployment has decided about its emergency
 	// department: which triage scale it has approved, what must be measured at
 	// triage, and what each disposition requires (SRS-ER-002, SRS-ER-013).
@@ -385,6 +429,7 @@ type Server struct {
 	Biomedical   *biomedicalapp.Service
 	Quality      *qualityapp.Service
 	Infection    *infectionapp.Service
+	Records      *recordsapp.Service
 	Nursing      *nursingapp.Service
 	Orders       *ordersapp.Service
 	Medication   *medicationapp.Service
@@ -901,6 +946,48 @@ func New(deps Deps) *Server {
 		Config:      deps.Infection,
 	})
 
+	// Medical records and health information management (SRS-MRD). Wired
+	// after the clinical and encounter contexts because everything here is
+	// judged against what they hold, and read through ports that cannot write
+	// to either: SRS-MRD-003's "coder changes do not rewrite clinical text"
+	// and SRS-MRD-008's "resolved without altering signed history" are
+	// properties of this wiring as much as of the code behind it.
+	recordsRepo := recordspostgres.New(txManager)
+	recordsService := recordsapp.NewService(recordsapp.Deps{
+		UnitOfWork:   txManager,
+		Checklists:   recordsRepo,
+		Deficiencies: recordsRepo,
+		Coding:       recordsRepo,
+		Releases:     recordsRepo,
+		Retention:    recordsRepo,
+		Physical:     recordsRepo,
+		Certificates: recordsRepo,
+		// Read-only seams. The chart is the clinical context's documents and
+		// the encounter context's facts, not a copy of either.
+		Documents: recordscrosscontext.NewDocuments(clinicalDocuments),
+		Encounters: recordscrosscontext.NewEncounters(
+			encounterpostgres.EncounterRepo{Repository: encounterRepo},
+			deps.RecordsJurisdictions, deps.RecordsConditions),
+		// The platform's own hold mechanism, which SRS-QMS-015 and SRS-DAT
+		// also place holds through. A hold placed in one place and a purge
+		// that reads another is a hold that does nothing.
+		Holds: recordscrosscontext.NewHolds(securityRepo, uuidGenerator{},
+			deps.RecordsHeldClasses),
+		// The paper volumes this context owns. A deployment that wants its
+		// electronic records swept supplies an inventory adapter that knows
+		// where they are; without one the sweep covers the paper and says so.
+		Inventory:  recordsRepo,
+		Events:     platformStore,
+		AuditTrail: store.AuditAppenderFunc(platformStore.AppendAudit),
+		// A deficiency past its date and its grace period, and a paper record
+		// nobody can find. Both have to reach somebody rather than a screen
+		// nobody opened.
+		Escalations: recordsescalate.New(escalationStore),
+		IDs:         uuidGenerator{},
+		Clock:       systemClock{},
+		Config:      deps.Records,
+	})
+
 	// The eMAR's seam onto the drug chart (SRS-NUR-007), which Sprint 4C left
 	// as a port with no adapter. Deps.MedicationOrders overrides it, which is
 	// how a test exercises the eMAR without the whole medication stack.
@@ -1034,6 +1121,9 @@ func New(deps Deps) *Server {
 	mux.Handle(infectionv1connect.NewInfectionServiceHandler(
 		infectiontransport.NewHandler(infectionService, time.Now),
 		interceptors))
+	mux.Handle(recordsv1connect.NewRecordsServiceHandler(
+		recordstransport.NewHandler(recordsService, time.Now),
+		interceptors))
 	mux.Handle(materialsv1connect.NewMaterialsServiceHandler(
 		materialstransport.NewHandler(materialsService, time.Now), interceptors))
 	billingRepo := billingpostgres.New(txManager)
@@ -1102,6 +1192,7 @@ func New(deps Deps) *Server {
 		Biomedical:      biomedicalService,
 		Quality:         qualityService,
 		Infection:       infectionService,
+		Records:         recordsService,
 		Nursing:         nursingService,
 		Orders:          ordersService,
 		Medication:      medicationService,

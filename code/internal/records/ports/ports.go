@@ -249,8 +249,12 @@ type CertificateRepository interface {
 // information management being unable to change what a clinician wrote, and
 // the way to mean that is to hold nothing that writes.
 type ChartDocuments interface {
+	// ForEncounter lists what exists on one encounter. The patient is named
+	// as well, because the clinical context indexes documents by patient and
+	// a seam that hid that would be one this context could not satisfy
+	// without a second index of its own.
 	ForEncounter(ctx context.Context, scope authctx.TenantScope,
-		encounterID string) ([]domain.ChartDocument, error)
+		patientID, encounterID string) ([]domain.ChartDocument, error)
 }
 
 // EncounterFacts are what a checklist is judged against (SRS-MRD-001).
@@ -264,6 +268,11 @@ type EncounterFacts struct {
 	FacilityID  string
 	Class       string
 	Specialty   string
+	// AttendingProviderID is who the encounter made responsible. It is who a
+	// missing document is owed by: a chart with no discharge summary has
+	// nobody who wrote it and somebody who should have, and a deficiency
+	// raised against nobody goes into a worklist nobody reads.
+	AttendingProviderID string
 	// EndedAt is when the encounter closed, which is what the due dates are
 	// measured from. Zero for an open encounter, and a checklist item then
 	// has no deadline rather than a deadline in 1970.
@@ -277,10 +286,17 @@ type EncounterFacts struct {
 	Jurisdiction string
 }
 
-// Encounters is the seam onto the encounter context (SRS-MRD-001).
+// Encounters is the seam onto the encounter context (SRS-MRD-001,
+// SRS-MRD-004).
 type Encounters interface {
 	Describe(ctx context.Context, scope authctx.TenantScope,
 		encounterID string) (EncounterFacts, error)
+	// ForPatient lists a patient's encounters, which is what a whole-record
+	// release has to be assembled from. Read-only like the rest of this
+	// seam: knowing that an admission happened is not the same as being able
+	// to change it.
+	ForPatient(ctx context.Context, scope authctx.TenantScope,
+		patientID string) ([]EncounterFacts, error)
 }
 
 // LegalHolds answers whether a record may be destroyed (SRS-MRD-005).

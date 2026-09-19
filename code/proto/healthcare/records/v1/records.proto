@@ -1,0 +1,1209 @@
+// Medical records and health information management: chart completion,
+// deficiency tracking, clinical coding, record release, retention and legal
+// holds, physical record tracking, statutory certificates and the accounting
+// of disclosures.
+//
+// Owning context : records  (Master Engineering Registry)
+// Owning service : RecordsService
+// Trace          : SRS-MRD-001 … SRS-MRD-010
+//
+// Five shapes in this contract are deliberate.
+//
+// Nothing here carries clinical text. A ChartDocument has an identifier, a
+// kind, a signature and a timestamp, and no body; an AssignedCode has a
+// system, a value and the identifier of the document it was read from, and no
+// narrative. SRS-MRD-003 and SRS-MRD-008 both turn on health information
+// management being unable to change what a clinician wrote, and the way to
+// mean that in a contract is to have no field that could carry it and no RPC
+// that could write one.
+//
+// A deficiency is resolved by naming the document that answered it, and for
+// an inadequate document that must be a different document. An addendum
+// answers a bad discharge summary; an edit would rewrite signed history, and
+// this contract cannot express one.
+//
+// A coded episode is a list of revisions, never a single current coding. A
+// payer asking why a claim changed is asking what the coding used to be, and
+// a contract that returned only the latest could not answer.
+//
+// A release request carries its authority, its purpose, its recipient and its
+// scope, and the package that went out is returned item by item with a
+// content hash. "We sent them the record" is not an answer to a complaint;
+// "we sent these forty-one documents, hashed thus, under this consent" is.
+//
+// Every completion figure carries an "unanswerable" flag rather than
+// reporting zero against an empty denominator, and counts waivers separately
+// from completions. A hospital that counts waived deficiencies as completed
+// charts can reach a hundred per cent by waiving.
+syntax = "proto3";
+
+package healthcare.records.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ppusapati/health/code/gen/go/healthcare/records/v1;recordsv1";
+
+// What a checklist item asks for (SRS-MRD-001).
+enum DocumentRequirement {
+  DOCUMENT_REQUIREMENT_UNSPECIFIED = 0;
+  // Present and signed. A discharge summary nobody signed is a draft.
+  DOCUMENT_REQUIREMENT_SIGNED = 1;
+  // Present is enough — a scanned consent form, a pathology report.
+  DOCUMENT_REQUIREMENT_PRESENT = 2;
+  // Required only when the encounter's facts say so: an operation note when
+  // there was an operation.
+  DOCUMENT_REQUIREMENT_CONDITIONAL = 3;
+}
+
+// What is wrong with a chart (SRS-MRD-002).
+enum DeficiencyKind {
+  DEFICIENCY_KIND_UNSPECIFIED = 0;
+  DEFICIENCY_KIND_MISSING_DOCUMENT = 1;
+  DEFICIENCY_KIND_UNSIGNED_DOCUMENT = 2;
+  // Present and signed and not good enough. Answered by an addendum, never
+  // by changing the original.
+  DEFICIENCY_KIND_INCOMPLETE_DOCUMENT = 3;
+  // A coder's question back to the clinician.
+  DEFICIENCY_KIND_CODING_QUERY = 4;
+}
+
+// Where a deficiency stands (SRS-MRD-002).
+enum DeficiencyState {
+  DEFICIENCY_STATE_UNSPECIFIED = 0;
+  DEFICIENCY_STATE_OPEN = 1;
+  DEFICIENCY_STATE_RESOLVED = 2;
+  // Written off. Never the same as resolved: the document never arrived.
+  DEFICIENCY_STATE_WAIVED = 3;
+}
+
+// What a code is doing on an episode (SRS-MRD-003).
+enum CodeRole {
+  CODE_ROLE_UNSPECIFIED = 0;
+  CODE_ROLE_PRINCIPAL_DIAGNOSIS = 1;
+  CODE_ROLE_SECONDARY_DIAGNOSIS = 2;
+  CODE_ROLE_PRINCIPAL_PROCEDURE = 3;
+  CODE_ROLE_SECONDARY_PROCEDURE = 4;
+  CODE_ROLE_EXTERNAL_CAUSE = 5;
+  CODE_ROLE_MORPHOLOGY = 6;
+}
+
+// Whether a diagnosis was there on arrival (SRS-MRD-003).
+//
+// Required on a diagnosis and forbidden on a procedure. Defaulting it would
+// bias every hospital-acquired complication rate computed from coded data, in
+// whichever direction the default fell.
+enum PresentOnAdmission {
+  PRESENT_ON_ADMISSION_UNSPECIFIED = 0;
+  PRESENT_ON_ADMISSION_YES = 1;
+  PRESENT_ON_ADMISSION_NO = 2;
+  // The record does not say. A real answer, and not the same as "no".
+  PRESENT_ON_ADMISSION_UNDETERMINED = 3;
+  // For a procedure, which was never "present".
+  PRESENT_ON_ADMISSION_NOT_APPLICABLE = 4;
+}
+
+// Where a coding stands (SRS-MRD-003).
+enum CodingState {
+  CODING_STATE_UNSPECIFIED = 0;
+  CODING_STATE_IN_PROGRESS = 1;
+  CODING_STATE_CODED = 2;
+  // A second reader has agreed. The domain refuses the coder.
+  CODING_STATE_FINAL = 3;
+  // A question is outstanding with the clinician, and a queried episode
+  // cannot be finalised.
+  CODING_STATE_QUERIED = 4;
+}
+
+// What makes a release lawful (SRS-MRD-004).
+enum AuthorityKind {
+  AUTHORITY_KIND_UNSPECIFIED = 0;
+  AUTHORITY_KIND_PATIENT_CONSENT = 1;
+  // A parent, guardian or attorney. Apart from the patient's own consent
+  // because the representative's standing is what gets checked and what
+  // expires.
+  AUTHORITY_KIND_AUTHORISED_REPRESENTATIVE = 2;
+  AUTHORITY_KIND_COURT_ORDER = 3;
+  AUTHORITY_KIND_STATUTORY_REQUIREMENT = 4;
+  AUTHORITY_KIND_CONTINUITY_OF_CARE = 5;
+  AUTHORITY_KIND_INSURANCE_CLAIM = 6;
+}
+
+// Who is receiving a record (SRS-MRD-004).
+enum RecipientKind {
+  RECIPIENT_KIND_UNSPECIFIED = 0;
+  RECIPIENT_KIND_PATIENT = 1;
+  RECIPIENT_KIND_TREATING_CLINICIAN = 2;
+  RECIPIENT_KIND_INSTITUTION = 3;
+  RECIPIENT_KIND_INSURER = 4;
+  RECIPIENT_KIND_LEGAL = 5;
+  RECIPIENT_KIND_GOVERNMENT_BODY = 6;
+}
+
+// Where a release stands (SRS-MRD-004).
+enum ReleaseState {
+  RELEASE_STATE_UNSPECIFIED = 0;
+  RELEASE_STATE_REQUESTED = 1;
+  RELEASE_STATE_APPROVED = 2;
+  RELEASE_STATE_ASSEMBLED = 3;
+  RELEASE_STATE_RELEASED = 4;
+  RELEASE_STATE_REFUSED = 5;
+}
+
+// How a record left (SRS-MRD-010).
+enum DisclosureKind {
+  DISCLOSURE_KIND_UNSPECIFIED = 0;
+  DISCLOSURE_KIND_RELEASE = 1;
+  DISCLOSURE_KIND_EXPORT = 2;
+  DISCLOSURE_KIND_PRINT = 3;
+}
+
+// What a retention period is counted from (SRS-MRD-009).
+enum RetentionAnchor {
+  RETENTION_ANCHOR_UNSPECIFIED = 0;
+  RETENTION_ANCHOR_DISCHARGE = 1;
+  RETENTION_ANCHOR_LAST_CONTACT = 2;
+  RETENTION_ANCHOR_DEATH = 3;
+  // A child's records run from the age of majority, not from the encounter.
+  RETENTION_ANCHOR_MAJORITY = 4;
+  RETENTION_ANCHOR_CREATION = 5;
+}
+
+// What happens when a retention period runs out (SRS-MRD-009).
+enum DispositionKind {
+  DISPOSITION_KIND_UNSPECIFIED = 0;
+  DISPOSITION_KIND_DESTROY = 1;
+  DISPOSITION_KIND_ARCHIVE = 2;
+  // Kept for ever, which is a decision and not the absence of one.
+  DISPOSITION_KIND_PERMANENT = 3;
+}
+
+// Where a disposition list stands (SRS-MRD-009).
+enum DispositionState {
+  DISPOSITION_STATE_UNSPECIFIED = 0;
+  DISPOSITION_STATE_DRAFT = 1;
+  DISPOSITION_STATE_APPROVED = 2;
+  DISPOSITION_STATE_EXECUTED = 3;
+  DISPOSITION_STATE_CANCELLED = 4;
+}
+
+// Where a paper volume is (SRS-MRD-006).
+enum PhysicalState {
+  PHYSICAL_STATE_UNSPECIFIED = 0;
+  PHYSICAL_STATE_FILED = 1;
+  PHYSICAL_STATE_CHECKED_OUT = 2;
+  PHYSICAL_STATE_ARCHIVED = 3;
+  PHYSICAL_STATE_MISSING = 4;
+  PHYSICAL_STATE_DESTROYED = 5;
+}
+
+// What a statutory certificate certifies (SRS-MRD-007).
+enum CertificateKind {
+  CERTIFICATE_KIND_UNSPECIFIED = 0;
+  CERTIFICATE_KIND_BIRTH = 1;
+  CERTIFICATE_KIND_DEATH = 2;
+  CERTIFICATE_KIND_STILLBIRTH = 3;
+  CERTIFICATE_KIND_MEDICAL = 4;
+  CERTIFICATE_KIND_CAUSE_OF_DEATH = 5;
+}
+
+// Whether a certificate still stands (SRS-MRD-007).
+enum CertificateState {
+  CERTIFICATE_STATE_UNSPECIFIED = 0;
+  CERTIFICATE_STATE_ISSUED = 1;
+  CERTIFICATE_STATE_VOIDED = 2;
+}
+
+// One thing a complete chart has to have (SRS-MRD-001).
+message ChecklistItem {
+  string kind = 1;
+  string label = 2;
+  DocumentRequirement requirement = 3;
+  // Seconds after the encounter ends. Zero leaves no deadline rather than a
+  // deadline in 1970.
+  int64 due_within_seconds = 4;
+  // The encounter fact that switches a conditional item on.
+  string condition_code = 5;
+}
+
+// A versioned definition of what a complete chart is (SRS-MRD-001).
+message ChartChecklist {
+  string checklist_id = 1;
+  string code = 2;
+  string name = 3;
+  int32 revision = 4;
+  string encounter_class = 5;
+  // Empty applies to every specialty; a specific one beats the general.
+  string specialty = 6;
+  repeated ChecklistItem items = 7;
+  bool approved = 8;
+  string approved_by = 9;
+  google.protobuf.Timestamp approved_at = 10;
+  google.protobuf.Timestamp effective_from = 11;
+  google.protobuf.Timestamp superseded_at = 12;
+  google.protobuf.Timestamp created_at = 13;
+  string created_by = 14;
+}
+
+// One thing a chart is missing (SRS-MRD-001).
+message Gap {
+  string kind = 1;
+  string label = 2;
+  // Missing distinguishes "there is no operation note" from "there is one and
+  // nobody signed it". They go to different people.
+  bool missing = 3;
+  // The unsigned document, where there is one.
+  string document_id = 4;
+  // Who owes it — the author of the unsigned document. Empty for a missing
+  // one, because nobody wrote it.
+  string owner_id = 5;
+  google.protobuf.Timestamp due_by = 6;
+}
+
+// What a chart is missing and which version of the rules says so
+// (SRS-MRD-001).
+message ChartStatus {
+  string encounter_id = 1;
+  string patient_id = 2;
+  string checklist_code = 3;
+  int32 checklist_revision = 4;
+  repeated Gap gaps = 5;
+  // What the chart holds, so "no gaps" and "no documents at all" are
+  // distinguishable to a reader.
+  int32 documents = 6;
+}
+
+// One outstanding item on a clinician's worklist (SRS-MRD-002).
+message Deficiency {
+  string deficiency_id = 1;
+  string patient_id = 2;
+  string encounter_id = 3;
+  string facility_id = 4;
+  DeficiencyKind kind = 5;
+  string document_kind = 6;
+  string label = 7;
+  string document_id = 8;
+  // What is inadequate, for an incomplete document or a coding query. A
+  // question, never a rewrite.
+  string detail = 9;
+  string owner_id = 10;
+  // The checklist version that raised it, pinned. Relaxing the checklist
+  // changes what happens next and nothing about what was already asked for.
+  string checklist_code = 11;
+  int32 checklist_revision = 12;
+  DeficiencyState state = 13;
+  google.protobuf.Timestamp due_by = 14;
+  google.protobuf.Timestamp raised_at = 15;
+  string raised_by = 16;
+  // The document that answered it. For an inadequate document this is never
+  // the document complained about.
+  string resolved_by_document_id = 17;
+  google.protobuf.Timestamp resolved_at = 18;
+  string resolved_by = 19;
+  string waived_reason = 20;
+  google.protobuf.Timestamp escalated_at = 21;
+  int64 version = 22;
+}
+
+// One band of an aging report (SRS-MRD-002).
+message AgeBucket {
+  int32 from_days = 1;
+  // Zero is open-ended.
+  int32 to_days = 2;
+  string label = 3;
+  int32 count = 4;
+  // Past its own date, which is not the same as being in the oldest band.
+  int32 overdue = 5;
+}
+
+// How many charts are complete (SRS-MRD-002).
+message CompletionSummary {
+  int32 encounters = 1;
+  int32 complete = 2;
+  // Encounters with a waiver on them. Never counted as complete: the
+  // document never arrived.
+  int32 incompletable = 3;
+  int32 open = 4;
+  int32 overdue = 5;
+  int32 resolved = 6;
+  int32 waived = 7;
+  // Parts per thousand, so the figure is exact rather than a rounded float.
+  int32 complete_permille = 8;
+  // True when there were no encounters to judge. "No charts to complete" and
+  // "no charts completed" are different facts.
+  bool unanswerable = 9;
+}
+
+// One code on a coded episode (SRS-MRD-003).
+message AssignedCode {
+  string system = 1;
+  // The edition. ICD-10 J18.9 and ICD-11 CA40.0 are both pneumonia and
+  // neither is the other.
+  string version = 2;
+  string code = 3;
+  // The terminology's own label, not a coder's words about the patient.
+  string display = 4;
+  CodeRole role = 5;
+  int32 sequence = 6;
+  PresentOnAdmission present_on_admission = 7;
+  // Where the code was read from. Half of the provenance SRS-MRD-003 asks
+  // for; the revision history is the other half.
+  string source_document_id = 8;
+}
+
+// One pass of coding, kept for ever (SRS-MRD-003).
+message CodingRevision {
+  int32 revision = 1;
+  repeated AssignedCode codes = 2;
+  // Required from the second revision on.
+  string reason = 3;
+  string coded_by = 4;
+  google.protobuf.Timestamp coded_at = 5;
+  CodingState state = 6;
+  string reviewed_by = 7;
+  google.protobuf.Timestamp reviewed_at = 8;
+}
+
+// An encounter's coding with its whole history (SRS-MRD-003).
+message CodedEpisode {
+  string episode_id = 1;
+  string patient_id = 2;
+  string encounter_id = 3;
+  string facility_id = 4;
+  // Oldest first. Append-only: a correction adds a revision and never edits
+  // the one that was billed on.
+  repeated CodingRevision revisions = 5;
+  CodingState state = 6;
+  google.protobuf.Timestamp created_at = 7;
+  string created_by = 8;
+  int64 version = 9;
+}
+
+// What changed between two codings (SRS-MRD-003).
+message CodingChange {
+  string system = 1;
+  string code = 2;
+  // Unspecified on one side means the code was added or removed.
+  CodeRole was = 3;
+  CodeRole now = 4;
+}
+
+// The standing on which a record leaves the hospital (SRS-MRD-004).
+message Authorisation {
+  AuthorityKind kind = 1;
+  // The consent form, the order number, the statute. A release whose
+  // authority cannot be produced later is one nobody can defend.
+  string reference = 2;
+  string signed_by = 3;
+  google.protobuf.Timestamp signed_at = 4;
+  // Unset never expires, which is right for a court order and wrong for a
+  // consent form. The contract does not guess which.
+  google.protobuf.Timestamp expires_at = 5;
+}
+
+// Who is receiving it (SRS-MRD-004).
+message Recipient {
+  RecipientKind kind = 1;
+  string name = 2;
+  // Three hospitals are called St Mary's.
+  string reference = 3;
+  string delivery_method = 4;
+}
+
+// What a release covers (SRS-MRD-004).
+message ReleaseScope {
+  google.protobuf.Timestamp from = 1;
+  google.protobuf.Timestamp to = 2;
+  repeated string record_classes = 3;
+  repeated string document_kinds = 4;
+  repeated string encounter_ids = 5;
+  // Everything ever recorded about this person. Has to be asked for rather
+  // than fallen into.
+  bool whole_record = 6;
+  // Restricted material is held back unless this says otherwise.
+  bool include_restricted = 7;
+}
+
+// One document in a package (SRS-MRD-004).
+message ReleaseItem {
+  string document_id = 1;
+  string encounter_id = 2;
+  string kind = 3;
+  string record_class = 4;
+  google.protobuf.Timestamp occurred_at = 5;
+  bool restricted = 6;
+  int32 pages = 7;
+}
+
+// Exactly what went out (SRS-MRD-004).
+message ReleasePackage {
+  repeated ReleaseItem items = 1;
+  // Over the manifest, so "what did we send" has one answer a year later.
+  string content_hash = 2;
+  int32 pages = 3;
+  google.protobuf.Timestamp assembled_at = 4;
+  string assembled_by = 5;
+  google.protobuf.Timestamp released_at = 6;
+  string released_by = 7;
+}
+
+// A request for a copy of a record (SRS-MRD-004).
+message ReleaseRequest {
+  string release_id = 1;
+  string reference = 2;
+  string patient_id = 3;
+  string purpose = 4;
+  Authorisation authorisation = 5;
+  Recipient recipient = 6;
+  ReleaseScope scope = 7;
+  ReleaseState state = 8;
+  string refusal_reason = 9;
+  google.protobuf.Timestamp requested_at = 10;
+  string requested_by = 11;
+  google.protobuf.Timestamp approved_at = 12;
+  string approved_by = 13;
+  ReleasePackage package = 14;
+  int64 version = 15;
+}
+
+// One entry in the accounting of disclosures (SRS-MRD-010).
+message Disclosure {
+  string disclosure_id = 1;
+  string patient_id = 2;
+  DisclosureKind kind = 3;
+  string release_id = 4;
+  // The four things SRS-MRD-010 names. Every one required.
+  string actor_id = 5;
+  string purpose = 6;
+  string scope_summary = 7;
+  string recipient_reference = 8;
+  string recipient_name = 9;
+  int32 items = 10;
+  int32 pages = 11;
+  google.protobuf.Timestamp occurred_at = 12;
+}
+
+// How long a class of record is kept, and under what authority
+// (SRS-MRD-009).
+message RetentionRule {
+  string rule_id = 1;
+  string code = 2;
+  string name = 3;
+  int32 revision = 4;
+  string record_class = 5;
+  string jurisdiction = 6;
+  RetentionAnchor anchor = 7;
+  int32 retain_years = 8;
+  DispositionKind disposition = 9;
+  // The statute or policy. A destruction nobody can point to a rule for is
+  // one nobody can defend.
+  string authority = 10;
+  bool approved = 11;
+  string approved_by = 12;
+  google.protobuf.Timestamp approved_at = 13;
+  google.protobuf.Timestamp effective_from = 14;
+  google.protobuf.Timestamp superseded_at = 15;
+  google.protobuf.Timestamp created_at = 16;
+  string created_by = 17;
+}
+
+// A record whose retention has run (SRS-MRD-009).
+message DispositionCandidate {
+  string record_id = 1;
+  string patient_id = 2;
+  string record_class = 3;
+  string description = 4;
+  // The rule that made it eligible, pinned. A rule revised afterwards must
+  // not change the answer to "what allowed this".
+  string rule_code = 5;
+  int32 rule_revision = 6;
+  string authority = 7;
+  DispositionKind disposition = 8;
+  google.protobuf.Timestamp anchor_date = 9;
+  google.protobuf.Timestamp eligible_from = 10;
+}
+
+// A record the sweep passed over, and why (SRS-MRD-005, SRS-MRD-009).
+message Ineligible {
+  string record_id = 1;
+  string reason = 2;
+}
+
+// A batch of records to destroy or archive (SRS-MRD-009).
+message DispositionList {
+  string list_id = 1;
+  string reference = 2;
+  string jurisdiction = 3;
+  DispositionKind disposition = 4;
+  repeated DispositionCandidate items = 5;
+  DispositionState state = 6;
+  google.protobuf.Timestamp prepared_at = 7;
+  string prepared_by = 8;
+  google.protobuf.Timestamp approved_at = 9;
+  string approved_by = 10;
+  google.protobuf.Timestamp executed_at = 11;
+  string executed_by = 12;
+  string certificate = 13;
+  string cancelled_reason = 14;
+  int64 version = 15;
+}
+
+// A paper volume the hospital holds (SRS-MRD-006).
+message PhysicalRecord {
+  string record_id = 1;
+  string reference = 2;
+  string patient_id = 3;
+  int32 volume = 4;
+  string record_class = 5;
+  string jurisdiction = 6;
+  string description = 7;
+  PhysicalState state = 8;
+  string home_location = 9;
+  string current_location = 10;
+  // One named person. "The clinic" cannot be asked where it put something.
+  string custodian = 11;
+  google.protobuf.Timestamp checked_out_at = 12;
+  string checked_out_by = 13;
+  google.protobuf.Timestamp due_back_at = 14;
+  string purpose = 15;
+  google.protobuf.Timestamp created_at = 16;
+  string created_by = 17;
+  int64 version = 18;
+}
+
+// One configured field of a statutory form (SRS-MRD-007).
+message CertificateField {
+  string code = 1;
+  string label = 2;
+  bool required = 3;
+  // Where the value comes from in the hospital's own records, so a question
+  // years later is answered from the record.
+  string source_path = 4;
+}
+
+// A jurisdiction's certificate form, versioned (SRS-MRD-007).
+message CertificateForm {
+  string form_id = 1;
+  string code = 2;
+  string name = 3;
+  int32 revision = 4;
+  CertificateKind kind = 5;
+  string jurisdiction = 6;
+  repeated CertificateField fields = 7;
+  // Who may sign. A statutory question, not a permission the hospital
+  // invents at issue time.
+  string issuer_role = 8;
+  bool approved = 9;
+  string approved_by = 10;
+  google.protobuf.Timestamp approved_at = 11;
+  google.protobuf.Timestamp effective_from = 12;
+  google.protobuf.Timestamp superseded_at = 13;
+  google.protobuf.Timestamp created_at = 14;
+  string created_by = 15;
+}
+
+// One issued version of a certificate (SRS-MRD-007).
+message CertificateVersion {
+  int32 version = 1;
+  map<string, string> values = 2;
+  map<string, string> source_refs = 3;
+  // Required on a correction.
+  string reason = 4;
+  string issuer_id = 5;
+  string issuer_name = 6;
+  string issuer_role = 7;
+  google.protobuf.Timestamp issued_at = 8;
+  string serial_number = 9;
+}
+
+// A statutory certificate and every version of it (SRS-MRD-007).
+message StatutoryCertificate {
+  string certificate_id = 1;
+  CertificateKind kind = 2;
+  string form_code = 3;
+  int32 form_revision = 4;
+  string jurisdiction = 5;
+  string patient_id = 6;
+  string encounter_id = 7;
+  // Oldest first. A correction adds a version; the one that was issued went
+  // to a family and to a registrar and stays readable.
+  repeated CertificateVersion versions = 8;
+  CertificateState state = 9;
+  string void_reason = 10;
+  string voided_by = 11;
+  google.protobuf.Timestamp voided_at = 12;
+  google.protobuf.Timestamp created_at = 13;
+  int64 version = 14;
+}
+
+// Chart completion (SRS-MRD-001).
+
+message DraftChecklistRequest {
+  string code = 1;
+  string name = 2;
+  int32 revision = 3;
+  string encounter_class = 4;
+  string specialty = 5;
+  repeated ChecklistItem items = 6;
+  google.protobuf.Timestamp effective_from = 7;
+}
+message DraftChecklistResponse {
+  ChartChecklist checklist = 1;
+}
+
+message ApproveChecklistRequest {
+  string checklist_id = 1;
+  google.protobuf.Timestamp effective_from = 2;
+}
+message ApproveChecklistResponse {
+  ChartChecklist checklist = 1;
+}
+
+message ListChecklistsRequest {
+  string encounter_class = 1;
+  bool live_only = 2;
+}
+message ListChecklistsResponse {
+  repeated ChartChecklist checklists = 1;
+}
+
+message GetChartGapsRequest {
+  string encounter_id = 1;
+}
+message GetChartGapsResponse {
+  ChartStatus status = 1;
+}
+
+// Deficiencies (SRS-MRD-002, SRS-MRD-008).
+
+message RaiseDeficienciesRequest {
+  string encounter_id = 1;
+}
+message RaiseDeficienciesResponse {
+  // Only the ones this call raised. Running the sweep twice on a chart
+  // nobody touched raises nothing the second time.
+  repeated Deficiency raised = 1;
+}
+
+message RaiseCodingQueryRequest {
+  string encounter_id = 1;
+  string document_id = 2;
+  string owner_id = 3;
+  string detail = 4;
+  google.protobuf.Timestamp due_by = 5;
+}
+message RaiseCodingQueryResponse {
+  Deficiency deficiency = 1;
+}
+
+message ResolveDeficiencyRequest {
+  string deficiency_id = 1;
+  // The document that answered it. For an inadequate document this must be a
+  // different document: an addendum answers it, an edit would rewrite signed
+  // history.
+  string document_id = 2;
+}
+message ResolveDeficiencyResponse {
+  Deficiency deficiency = 1;
+}
+
+message WaiveDeficiencyRequest {
+  string deficiency_id = 1;
+  string reason = 2;
+}
+message WaiveDeficiencyResponse {
+  Deficiency deficiency = 1;
+}
+
+message ReassignDeficiencyRequest {
+  string deficiency_id = 1;
+  string owner_id = 2;
+  string reason = 3;
+}
+message ReassignDeficiencyResponse {
+  // The age does not reset. A deficiency passed between three registrars is
+  // three weeks old, not new.
+  Deficiency deficiency = 1;
+}
+
+message ListDeficienciesRequest {
+  string owner_id = 1;
+  string encounter_id = 2;
+  string facility_id = 3;
+  DeficiencyState state = 4;
+  bool open_only = 5;
+  google.protobuf.Timestamp from = 6;
+  google.protobuf.Timestamp to = 7;
+  int32 page_size = 8;
+  int32 page_offset = 9;
+}
+message ListDeficienciesResponse {
+  repeated Deficiency deficiencies = 1;
+}
+
+message GetAgingReportRequest {
+  string owner_id = 1;
+  string facility_id = 2;
+}
+message GetAgingReportResponse {
+  repeated AgeBucket buckets = 1;
+}
+
+message GetCompletionSummaryRequest {
+  repeated string encounter_ids = 1;
+}
+message GetCompletionSummaryResponse {
+  CompletionSummary summary = 1;
+}
+
+message EscalateOverdueDeficienciesRequest {}
+message EscalateOverdueDeficienciesResponse {
+  // Escalated once each: a deficiency that escalated yesterday and is still
+  // open does not produce a second notice.
+  int32 raised = 1;
+}
+
+// Clinical coding (SRS-MRD-003).
+
+message AssignCodesRequest {
+  string encounter_id = 1;
+  repeated AssignedCode codes = 2;
+  string reason = 3;
+}
+message AssignCodesResponse {
+  CodedEpisode episode = 1;
+}
+
+message FinaliseCodingRequest {
+  string episode_id = 1;
+}
+message FinaliseCodingResponse {
+  CodedEpisode episode = 1;
+}
+
+message QueryCodingRequest {
+  string episode_id = 1;
+}
+message QueryCodingResponse {
+  CodedEpisode episode = 1;
+}
+
+message GetCodedEpisodeRequest {
+  string episode_id = 1;
+}
+message GetCodedEpisodeResponse {
+  CodedEpisode episode = 1;
+}
+
+message GetCodingDiffRequest {
+  string episode_id = 1;
+  int32 before_revision = 2;
+  int32 after_revision = 3;
+}
+message GetCodingDiffResponse {
+  repeated CodingChange changes = 1;
+}
+
+// Record release and the accounting of disclosures (SRS-MRD-004,
+// SRS-MRD-010).
+
+message RequestReleaseRequest {
+  string reference = 1;
+  string patient_id = 2;
+  string purpose = 3;
+  Authorisation authorisation = 4;
+  Recipient recipient = 5;
+  ReleaseScope scope = 6;
+}
+message RequestReleaseResponse {
+  ReleaseRequest release = 1;
+}
+
+message ApproveReleaseRequest {
+  string release_id = 1;
+}
+message ApproveReleaseResponse {
+  ReleaseRequest release = 1;
+}
+
+message RefuseReleaseRequest {
+  string release_id = 1;
+  string reason = 2;
+}
+message RefuseReleaseResponse {
+  ReleaseRequest release = 1;
+}
+
+message AssembleReleaseRequest {
+  string release_id = 1;
+}
+message AssembleReleaseResponse {
+  ReleaseRequest release = 1;
+}
+
+message SendReleaseRequest {
+  string release_id = 1;
+}
+message SendReleaseResponse {
+  ReleaseRequest release = 1;
+  // Filed in the same transaction. A release that went out with no
+  // disclosure recorded is one the patient cannot find out about.
+  Disclosure disclosure = 2;
+}
+
+message ListReleasesRequest {
+  string patient_id = 1;
+  ReleaseState state = 2;
+  bool open_only = 3;
+  google.protobuf.Timestamp from = 4;
+  google.protobuf.Timestamp to = 5;
+  int32 page_size = 6;
+  int32 page_offset = 7;
+}
+message ListReleasesResponse {
+  repeated ReleaseRequest releases = 1;
+}
+
+message RecordDisclosureRequest {
+  string patient_id = 1;
+  DisclosureKind kind = 2;
+  string purpose = 3;
+  string scope_summary = 4;
+  Recipient recipient = 5;
+  int32 items = 6;
+  int32 pages = 7;
+}
+message RecordDisclosureResponse {
+  Disclosure disclosure = 1;
+}
+
+message ListDisclosuresRequest {
+  string patient_id = 1;
+  string actor_id = 2;
+  google.protobuf.Timestamp from = 3;
+  google.protobuf.Timestamp to = 4;
+  int32 page_size = 5;
+  int32 page_offset = 6;
+}
+message ListDisclosuresResponse {
+  repeated Disclosure disclosures = 1;
+}
+
+// Retention, legal holds and disposition (SRS-MRD-005, SRS-MRD-009).
+
+message DraftRetentionRuleRequest {
+  string code = 1;
+  string name = 2;
+  int32 revision = 3;
+  string record_class = 4;
+  string jurisdiction = 5;
+  RetentionAnchor anchor = 6;
+  int32 retain_years = 7;
+  DispositionKind disposition = 8;
+  string authority = 9;
+  google.protobuf.Timestamp effective_from = 10;
+}
+message DraftRetentionRuleResponse {
+  RetentionRule rule = 1;
+}
+
+message ApproveRetentionRuleRequest {
+  string rule_id = 1;
+  google.protobuf.Timestamp effective_from = 2;
+}
+message ApproveRetentionRuleResponse {
+  RetentionRule rule = 1;
+}
+
+message ListRetentionRulesRequest {
+  string jurisdiction = 1;
+  string record_class = 2;
+  bool live_only = 3;
+}
+message ListRetentionRulesResponse {
+  repeated RetentionRule rules = 1;
+}
+
+message PlaceHoldRequest {
+  string record_class = 1;
+  string record_id = 2;
+  string reason = 3;
+}
+message PlaceHoldResponse {}
+
+message ReleaseHoldRequest {
+  string record_class = 1;
+  string record_id = 2;
+}
+message ReleaseHoldResponse {}
+
+message SweepForDispositionRequest {
+  string jurisdiction = 1;
+}
+message SweepForDispositionResponse {
+  string jurisdiction = 1;
+  repeated DispositionCandidate eligible = 2;
+  // Every record passed over and why. A sweep that reported only what it
+  // would destroy makes "why is this still here" unanswerable.
+  repeated Ineligible ineligible = 3;
+  int32 swept = 4;
+}
+
+message PrepareDispositionRequest {
+  string reference = 1;
+  string jurisdiction = 2;
+  DispositionKind disposition = 3;
+  // Empty takes everything the sweep found eligible.
+  repeated string record_ids = 4;
+}
+message PrepareDispositionResponse {
+  DispositionList list = 1;
+}
+
+message ApproveDispositionRequest {
+  string list_id = 1;
+}
+message ApproveDispositionResponse {
+  DispositionList list = 1;
+}
+
+message ExecuteDispositionRequest {
+  string list_id = 1;
+  // The destruction certificate's reference.
+  string certificate = 2;
+}
+message ExecuteDispositionResponse {
+  // The holds are read again at execution. Litigation does not wait for the
+  // records office's calendar.
+  DispositionList list = 1;
+}
+
+message CancelDispositionRequest {
+  string list_id = 1;
+  string reason = 2;
+}
+message CancelDispositionResponse {
+  DispositionList list = 1;
+}
+
+message ListDispositionListsRequest {
+  DispositionState state = 1;
+  string jurisdiction = 2;
+  int32 page_size = 3;
+  int32 page_offset = 4;
+}
+message ListDispositionListsResponse {
+  repeated DispositionList lists = 1;
+}
+
+// Physical record tracking (SRS-MRD-006).
+
+message RegisterPhysicalRecordRequest {
+  string reference = 1;
+  string patient_id = 2;
+  int32 volume = 3;
+  string record_class = 4;
+  string jurisdiction = 5;
+  string description = 6;
+  string home_location = 7;
+}
+message RegisterPhysicalRecordResponse {
+  PhysicalRecord record = 1;
+}
+
+message CheckOutRecordRequest {
+  string record_id = 1;
+  string custodian = 2;
+  string location = 3;
+  string purpose = 4;
+  google.protobuf.Timestamp due_back = 5;
+}
+message CheckOutRecordResponse {
+  PhysicalRecord record = 1;
+}
+
+message CheckInRecordRequest {
+  string record_id = 1;
+  string location = 2;
+}
+message CheckInRecordResponse {
+  PhysicalRecord record = 1;
+}
+
+message MarkRecordMissingRequest {
+  string record_id = 1;
+  string reason = 2;
+}
+message MarkRecordMissingResponse {
+  PhysicalRecord record = 1;
+}
+
+message ArchiveRecordRequest {
+  string record_id = 1;
+  string location = 2;
+}
+message ArchiveRecordResponse {
+  PhysicalRecord record = 1;
+}
+
+message ListPhysicalRecordsRequest {
+  string patient_id = 1;
+  PhysicalState state = 2;
+  bool out_only = 3;
+  bool overdue_only = 4;
+  int32 page_size = 5;
+  int32 page_offset = 6;
+}
+message ListPhysicalRecordsResponse {
+  repeated PhysicalRecord records = 1;
+}
+
+// Statutory certificates (SRS-MRD-007).
+
+message DraftCertificateFormRequest {
+  string code = 1;
+  string name = 2;
+  int32 revision = 3;
+  CertificateKind kind = 4;
+  string jurisdiction = 5;
+  repeated CertificateField fields = 6;
+  string issuer_role = 7;
+  google.protobuf.Timestamp effective_from = 8;
+}
+message DraftCertificateFormResponse {
+  CertificateForm form = 1;
+}
+
+message ApproveCertificateFormRequest {
+  string form_id = 1;
+  google.protobuf.Timestamp effective_from = 2;
+}
+message ApproveCertificateFormResponse {
+  CertificateForm form = 1;
+}
+
+message ListCertificateFormsRequest {
+  CertificateKind kind = 1;
+  string jurisdiction = 2;
+  bool live_only = 3;
+}
+message ListCertificateFormsResponse {
+  repeated CertificateForm forms = 1;
+}
+
+message IssueCertificateRequest {
+  CertificateKind kind = 1;
+  string jurisdiction = 2;
+  string patient_id = 3;
+  string encounter_id = 4;
+  map<string, string> values = 5;
+  map<string, string> source_refs = 6;
+  // Checked against the form's own issuer role. Who may sign a death
+  // certificate is a statutory question, and a permission grant is not an
+  // answer to it.
+  string issuer_role = 7;
+  string issuer_name = 8;
+  string serial_number = 9;
+}
+message IssueCertificateResponse {
+  StatutoryCertificate certificate = 1;
+}
+
+message CorrectCertificateRequest {
+  string certificate_id = 1;
+  map<string, string> values = 2;
+  map<string, string> source_refs = 3;
+  string issuer_role = 4;
+  string issuer_name = 5;
+  string reason = 6;
+  string serial_number = 7;
+}
+message CorrectCertificateResponse {
+  StatutoryCertificate certificate = 1;
+}
+
+message VoidCertificateRequest {
+  string certificate_id = 1;
+  string reason = 2;
+}
+message VoidCertificateResponse {
+  StatutoryCertificate certificate = 1;
+}
+
+message ListCertificatesRequest {
+  string patient_id = 1;
+  CertificateKind kind = 2;
+  CertificateState state = 3;
+  int32 page_size = 4;
+  int32 page_offset = 5;
+}
+message ListCertificatesResponse {
+  repeated StatutoryCertificate certificates = 1;
+}
+
+// The medical records and health information management service.
+service RecordsService {
+  // Chart completion (SRS-MRD-001).
+  rpc DraftChecklist(DraftChecklistRequest) returns (DraftChecklistResponse);
+  rpc ApproveChecklist(ApproveChecklistRequest) returns (ApproveChecklistResponse);
+  rpc ListChecklists(ListChecklistsRequest) returns (ListChecklistsResponse);
+  rpc GetChartGaps(GetChartGapsRequest) returns (GetChartGapsResponse);
+
+  // Deficiencies (SRS-MRD-002, SRS-MRD-008).
+  rpc RaiseDeficiencies(RaiseDeficienciesRequest) returns (RaiseDeficienciesResponse);
+  rpc RaiseCodingQuery(RaiseCodingQueryRequest) returns (RaiseCodingQueryResponse);
+  rpc ResolveDeficiency(ResolveDeficiencyRequest) returns (ResolveDeficiencyResponse);
+  rpc WaiveDeficiency(WaiveDeficiencyRequest) returns (WaiveDeficiencyResponse);
+  rpc ReassignDeficiency(ReassignDeficiencyRequest) returns (ReassignDeficiencyResponse);
+  rpc ListDeficiencies(ListDeficienciesRequest) returns (ListDeficienciesResponse);
+  rpc GetAgingReport(GetAgingReportRequest) returns (GetAgingReportResponse);
+  rpc GetCompletionSummary(GetCompletionSummaryRequest) returns (GetCompletionSummaryResponse);
+  rpc EscalateOverdueDeficiencies(EscalateOverdueDeficienciesRequest) returns (EscalateOverdueDeficienciesResponse);
+
+  // Clinical coding (SRS-MRD-003).
+  rpc AssignCodes(AssignCodesRequest) returns (AssignCodesResponse);
+  rpc FinaliseCoding(FinaliseCodingRequest) returns (FinaliseCodingResponse);
+  rpc QueryCoding(QueryCodingRequest) returns (QueryCodingResponse);
+  rpc GetCodedEpisode(GetCodedEpisodeRequest) returns (GetCodedEpisodeResponse);
+  rpc GetCodingDiff(GetCodingDiffRequest) returns (GetCodingDiffResponse);
+
+  // Record release and the accounting of disclosures (SRS-MRD-004,
+  // SRS-MRD-010).
+  rpc RequestRelease(RequestReleaseRequest) returns (RequestReleaseResponse);
+  rpc ApproveRelease(ApproveReleaseRequest) returns (ApproveReleaseResponse);
+  rpc RefuseRelease(RefuseReleaseRequest) returns (RefuseReleaseResponse);
+  rpc AssembleRelease(AssembleReleaseRequest) returns (AssembleReleaseResponse);
+  rpc SendRelease(SendReleaseRequest) returns (SendReleaseResponse);
+  rpc ListReleases(ListReleasesRequest) returns (ListReleasesResponse);
+  rpc RecordDisclosure(RecordDisclosureRequest) returns (RecordDisclosureResponse);
+  rpc ListDisclosures(ListDisclosuresRequest) returns (ListDisclosuresResponse);
+
+  // Retention, legal holds and disposition (SRS-MRD-005, SRS-MRD-009).
+  rpc DraftRetentionRule(DraftRetentionRuleRequest) returns (DraftRetentionRuleResponse);
+  rpc ApproveRetentionRule(ApproveRetentionRuleRequest) returns (ApproveRetentionRuleResponse);
+  rpc ListRetentionRules(ListRetentionRulesRequest) returns (ListRetentionRulesResponse);
+  rpc PlaceHold(PlaceHoldRequest) returns (PlaceHoldResponse);
+  rpc ReleaseHold(ReleaseHoldRequest) returns (ReleaseHoldResponse);
+  rpc SweepForDisposition(SweepForDispositionRequest) returns (SweepForDispositionResponse);
+  rpc PrepareDisposition(PrepareDispositionRequest) returns (PrepareDispositionResponse);
+  rpc ApproveDisposition(ApproveDispositionRequest) returns (ApproveDispositionResponse);
+  rpc ExecuteDisposition(ExecuteDispositionRequest) returns (ExecuteDispositionResponse);
+  rpc CancelDisposition(CancelDispositionRequest) returns (CancelDispositionResponse);
+  rpc ListDispositionLists(ListDispositionListsRequest) returns (ListDispositionListsResponse);
+
+  // Physical record tracking (SRS-MRD-006).
+  rpc RegisterPhysicalRecord(RegisterPhysicalRecordRequest) returns (RegisterPhysicalRecordResponse);
+  rpc CheckOutRecord(CheckOutRecordRequest) returns (CheckOutRecordResponse);
+  rpc CheckInRecord(CheckInRecordRequest) returns (CheckInRecordResponse);
+  rpc MarkRecordMissing(MarkRecordMissingRequest) returns (MarkRecordMissingResponse);
+  rpc ArchiveRecord(ArchiveRecordRequest) returns (ArchiveRecordResponse);
+  rpc ListPhysicalRecords(ListPhysicalRecordsRequest) returns (ListPhysicalRecordsResponse);
+
+  // Statutory certificates (SRS-MRD-007).
+  rpc DraftCertificateForm(DraftCertificateFormRequest) returns (DraftCertificateFormResponse);
+  rpc ApproveCertificateForm(ApproveCertificateFormRequest) returns (ApproveCertificateFormResponse);
+  rpc ListCertificateForms(ListCertificateFormsRequest) returns (ListCertificateFormsResponse);
+  rpc IssueCertificate(IssueCertificateRequest) returns (IssueCertificateResponse);
+  rpc CorrectCertificate(CorrectCertificateRequest) returns (CorrectCertificateResponse);
+  rpc VoidCertificate(VoidCertificateRequest) returns (VoidCertificateResponse);
+  rpc ListCertificates(ListCertificatesRequest) returns (ListCertificatesResponse);
+}

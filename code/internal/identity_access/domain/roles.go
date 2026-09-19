@@ -38,7 +38,54 @@ const (
 	// RoleHIMOfficer is health information management: the people who resolve
 	// duplicate identities. The Wave-1 backlog names them "Authorized HIM", and
 	// merge authority is theirs alone.
+	//
+	// From SRS-MRD this is also the records office's day-to-day work: raising
+	// and chasing chart deficiencies, logging and assembling record releases,
+	// tracking the paper, and preparing and carrying out a disposition batch.
+	//
+	// What it deliberately does not hold is every decision a second person
+	// should make: waiving a deficiency, approving a release, putting a
+	// checklist or a retention rule in force, placing a legal hold, and
+	// approving the disposition list it prepares and will itself execute.
 	RoleHIMOfficer Role = "him_officer"
+
+	// RoleHIMManager runs the records office rather than working in it
+	// (SRS-MRD-001, SRS-MRD-002, SRS-MRD-004, SRS-MRD-005, SRS-MRD-007,
+	// SRS-MRD-009).
+	//
+	// The decisions that make something disappear or leave the hospital. A
+	// waiver takes an encounter out of the completion figures; an approval
+	// sends a patient's record to an insurer; an approved disposition list is
+	// the last check before records stop existing. Each sits above the person
+	// who proposed it.
+	//
+	// Holding both mrd.checklist.write and mrd.checklist.approve, and both
+	// mrd.retention.write and mrd.retention.approve, is necessary and not
+	// sufficient: the domain and the database each refuse a rule approved by
+	// its own author, whoever they are. The same holds for a release this
+	// role both requested and approved.
+	//
+	// Deliberately no mrd.disposition.execute: the person who signs the list
+	// and the person who shreds the records are not the same person in any
+	// records office that has been audited. And deliberately no
+	// mrd.certificate.issue: a statutory certificate is signed by a clinician
+	// with the standing the form names, and a records manager who could issue
+	// one would be certifying a cause of death.
+	RoleHIMManager Role = "him_manager"
+
+	// RoleClinicalCoder assigns the codes the hospital is paid and measured
+	// on (SRS-MRD-003).
+	//
+	// Narrow on purpose. A coder reads the chart, assigns codes, sends
+	// questions back to the clinician who wrote it, and performs the second
+	// read on somebody else's coding — the domain refuses the coder their
+	// own, so holding mrd.coding.finalise is how a second coder signs off
+	// rather than a way to sign off alone.
+	//
+	// Deliberately nothing that writes a clinical document, and nothing that
+	// resolves a deficiency: a coder who could answer their own query would
+	// be writing the clinician's half of SRS-MRD-008.
+	RoleClinicalCoder Role = "clinical_coder"
 
 	// RoleClinician reads patient identity in the course of care.
 	RoleClinician Role = "clinician"
@@ -457,6 +504,34 @@ var rolePermissions = map[Role][]string{
 		// the same authority that resolves a merge.
 		"ord.order.read",
 		"ord.order.retract",
+
+		// Medical records and health information management (SRS-MRD-002,
+		// SRS-MRD-004, SRS-MRD-006, SRS-MRD-009, SRS-MRD-010).
+		"mrd.record.read",
+		"mrd.deficiency.manage",
+		"mrd.release.request",
+		"mrd.release.assemble",
+		"mrd.disclosure.read",
+		"mrd.physical.manage",
+		"mrd.disposition.prepare",
+		// Preparing a list and carrying it out, with somebody else's approval
+		// in between. That is the two-person control the requirement asks
+		// for, and it is why this role holds the shredding and not the
+		// signature.
+		"mrd.disposition.execute",
+		// Deliberately no mrd.deficiency.waive: a waiver is the one way a
+		// chart leaves the worklist without the document ever arriving, and
+		// the office that chases the worklist should not be able to empty it.
+		//
+		// Deliberately no mrd.release.approve and no
+		// mrd.disposition.approve: this role requests the release and
+		// prepares the list.
+		//
+		// Deliberately no mrd.hold.manage: a hold is what stops a
+		// destruction, and the person running the destruction should not be
+		// able to lift one.
+		//
+		// Deliberately no mrd.coding.write: coding is a coder's.
 	},
 
 	// A clinician reads identity to confirm they have the right patient in
@@ -634,6 +709,22 @@ var rolePermissions = map[Role][]string{
 		// surveillance case is counted against the hospital, and a clinician
 		// who could reclassify an infection acquired on their own ward would
 		// be marking their own homework.
+
+		// Medical records (SRS-MRD-002, SRS-MRD-007, SRS-MRD-008). A doctor
+		// answers the deficiencies raised against their own documentation
+		// and signs the statutory certificates a jurisdiction lets a
+		// registered practitioner sign.
+		"mrd.record.read",
+		"mrd.deficiency.resolve",
+		"mrd.certificate.issue",
+		// Deliberately no mrd.deficiency.waive: waiving the deficiency
+		// raised against your own discharge summary is marking your own
+		// homework, and it is the fastest way to a completion figure that
+		// means nothing.
+		//
+		// Deliberately no mrd.certificate.void: withdrawing a certificate
+		// that has gone to a family and a registrar is the records office's
+		// decision, not the signer's.
 	},
 
 	// A pharmacist checks what was prescribed and decides what is dispensed
@@ -868,6 +959,14 @@ var rolePermissions = map[Role][]string{
 		// Deliberately no ipc.case.write, no ipc.isolation.write and no
 		// ipc.alert.override: placing and lifting precautions is an infection
 		// control decision, and an alert a ward could dismiss is an alert.
+
+		// Medical records (SRS-MRD-002, SRS-MRD-008). A nursing note that
+		// nobody signed is a chart deficiency owned by the nurse who wrote
+		// it, and the person who answers it is that nurse.
+		"mrd.record.read",
+		"mrd.deficiency.resolve",
+		// Deliberately no mrd.deficiency.waive, for the same reason a
+		// clinician does not hold it.
 	},
 
 	// An anaesthetist assesses, plans, gives and records the anaesthetic, and
@@ -1213,6 +1312,65 @@ var rolePermissions = map[Role][]string{
 		// surveillance case or a bed board.
 	},
 
+	// The records manager holds the decisions that make something disappear
+	// or leave the hospital (SRS-MRD-001, SRS-MRD-002, SRS-MRD-004,
+	// SRS-MRD-005, SRS-MRD-007, SRS-MRD-009).
+	RoleHIMManager: {
+		"mrd.record.read",
+		"mrd.disclosure.read",
+		// What a complete chart is, and what happens when the retention
+		// period runs out. Writing and approving are both here and neither
+		// lets one person do both: the domain and the database refuse a rule
+		// approved by its own author.
+		"mrd.checklist.write",
+		"mrd.checklist.approve",
+		"mrd.retention.write",
+		"mrd.retention.approve",
+		"mrd.certificate.form.write",
+		"mrd.certificate.form.approve",
+		// The second signature on each of the three decisions the office
+		// proposes.
+		"mrd.deficiency.waive",
+		"mrd.release.approve",
+		"mrd.disposition.approve",
+		// What stops a destruction. Held here rather than by the office that
+		// runs the destruction.
+		"mrd.hold.manage",
+		// Withdrawing a certificate that should not have been issued. The
+		// versions stay: a voided certificate the hospital cannot produce is
+		// one it cannot explain to the registrar holding a copy.
+		"mrd.certificate.void",
+		// Deliberately no mrd.disposition.execute: the person who signs the
+		// list and the person who shreds the records are not the same.
+		//
+		// Deliberately no mrd.certificate.issue: a statutory certificate is
+		// signed by a clinician with the standing the form names.
+		//
+		// Deliberately no mrd.coding.write and no mrd.deficiency.resolve:
+		// running the records office is not writing the record.
+	},
+
+	// A clinical coder assigns the codes the hospital is paid and measured on
+	// (SRS-MRD-003).
+	RoleClinicalCoder: {
+		"mrd.record.read",
+		"mrd.coding.write",
+		// The second read. The domain refuses the coder their own coding, so
+		// this is how a second coder signs off rather than a way to sign off
+		// alone.
+		"mrd.coding.finalise",
+		// A question back to the clinician, which is the only thing coding
+		// may produce about somebody else's note.
+		"mrd.coding.query",
+		// Deliberately no mrd.deficiency.resolve: a coder who could answer
+		// their own query would be writing the clinician's half of
+		// SRS-MRD-008.
+		//
+		// Deliberately nothing in release, retention or disposition: coding
+		// an episode is not deciding what leaves the hospital or what stops
+		// existing.
+	},
+
 	// A biomedical engineer maintains the equipment and does the service work
 	// (SRS-BIO-001, SRS-BIO-003, SRS-BIO-005, SRS-BIO-006, SRS-BIO-010).
 	RoleBiomedicalEngineer: {
@@ -1383,9 +1541,15 @@ var rolePurposes = map[Role][]authctx.PurposeOfUse{
 	// their reads should be distinguishable in the audit trail from an
 	// administrator's. A nurse manager runs the ward as well as working on it,
 	// so operations is theirs too.
-	RoleNurse:        {authctx.PurposeTreatment},
-	RolePharmacist:   {authctx.PurposeTreatment},
-	RoleNurseManager: {authctx.PurposeTreatment, authctx.PurposeOperations},
+	RoleNurse:      {authctx.PurposeTreatment},
+	RolePharmacist: {authctx.PurposeTreatment},
+	// The records office reasons across records rather than treating one
+	// patient, and a coder reads a chart to code the episode. Operations for
+	// both, and treatment for the manager too because a release for
+	// continuity of care is care.
+	RoleHIMManager:    {authctx.PurposeTreatment, authctx.PurposeOperations},
+	RoleClinicalCoder: {authctx.PurposeOperations},
+	RoleNurseManager:  {authctx.PurposeTreatment, authctx.PurposeOperations},
 	// Billing acts on the financial record. Payment because that is what they
 	// are doing, and operations because a revenue-integrity report is
 	// administration rather than a bill. Never treatment: a billing read of a
