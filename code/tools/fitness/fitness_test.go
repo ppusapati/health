@@ -268,6 +268,7 @@ func TestFIT02_GeneratedQueriesImportedOnlyByAdapters(t *testing.T) {
 		"internal/quality/adapters/postgres",
 		"internal/infection/adapters/postgres",
 		"internal/records/adapters/postgres",
+		"internal/dietetics/adapters/postgres",
 		"internal/platform/store",
 		"internal/platform/workflow",
 		"internal/platform/rules",
@@ -550,6 +551,14 @@ func TestFIT08_NoDeleteOnAppendOnlyTables(t *testing.T) {
 		// A certificate version went to a family and to a registrar. Deleting
 		// one makes the hospital's account of what it issued untrue.
 		"records.certificate_version",
+		// SRS-DIET-004 asks that progress can be trended. A trend built from
+		// measurements somebody deleted shows whatever is left, and a
+		// patient losing weight looks like one holding steady.
+		"hospital_ops_diet.care_plan_progress",
+		// SRS-DIET-008 keeps the forecast and the count apart. A deleted
+		// count is wastage that never happened, and the kitchen's variance
+		// comes out at whatever the remaining rows say.
+		"hospital_ops_diet.ingredient_consumption",
 	}
 
 	for _, f := range loadGoFiles(t) {

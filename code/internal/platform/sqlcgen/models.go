@@ -1565,6 +1565,240 @@ type EncounterVisitSummary struct {
 	GeneratedAt     pgtype.Timestamptz
 }
 
+type HospitalOpsDietCarePlan struct {
+	PlanID       uuid.UUID
+	TenantID     uuid.UUID
+	PatientID    string
+	EncounterID  string
+	AssessmentID uuid.UUID
+	Plan         string
+	ReviewDue    pgtype.Timestamptz
+	State        string
+	ClosedAt     pgtype.Timestamptz
+	ClosedBy     string
+	ClosureNote  string
+	CreatedAt    pgtype.Timestamptz
+	CreatedBy    string
+	Version      int64
+}
+
+type HospitalOpsDietCarePlanGoal struct {
+	GoalID    uuid.UUID
+	TenantID  uuid.UUID
+	PlanID    uuid.UUID
+	Code      string
+	Label     string
+	Target    int32
+	Unit      string
+	Direction string
+	Tolerance int32
+	TargetBy  pgtype.Timestamptz
+}
+
+type HospitalOpsDietCarePlanProgress struct {
+	ProgressID uuid.UUID
+	TenantID   uuid.UUID
+	PlanID     uuid.UUID
+	GoalCode   string
+	Value      int32
+	Unit       string
+	Note       string
+	RecordedAt pgtype.Timestamptz
+	RecordedBy string
+}
+
+type HospitalOpsDietCensusLine struct {
+	LineID       uuid.UUID
+	TenantID     uuid.UUID
+	CensusID     uuid.UUID
+	PatientID    string
+	EncounterID  string
+	WardID       string
+	BedID        string
+	OrderID      uuid.UUID
+	Route        string
+	TextureCode  string
+	TextureLabel string
+	FluidCode    string
+	Restrictions []string
+	Supplements  []string
+	Instruction  string
+}
+
+type HospitalOpsDietDietItem struct {
+	ItemID        uuid.UUID
+	TenantID      uuid.UUID
+	Code          string
+	Name          string
+	Kind          string
+	AllergenCodes []string
+}
+
+type HospitalOpsDietDietOrder struct {
+	OrderID         uuid.UUID
+	TenantID        uuid.UUID
+	PatientID       string
+	EncounterID     string
+	FacilityID      string
+	WardID          string
+	BedID           string
+	Route           string
+	TextureCode     string
+	TextureLabel    string
+	FluidCode       string
+	Restrictions    []string
+	Supplements     []string
+	Instruction     string
+	EffectiveFrom   pgtype.Timestamptz
+	EffectiveTo     pgtype.Timestamptz
+	State           string
+	CancelledReason string
+	CancelledBy     string
+	CancelledAt     pgtype.Timestamptz
+	PlacedAt        pgtype.Timestamptz
+	PlacedBy        string
+	Version         int64
+}
+
+type HospitalOpsDietIngredientConsumption struct {
+	ConsumptionID  uuid.UUID
+	TenantID       uuid.UUID
+	CensusID       uuid.UUID
+	IngredientCode string
+	ActualG        int32
+	Note           string
+	RecordedAt     pgtype.Timestamptz
+	RecordedBy     string
+}
+
+type HospitalOpsDietMealCensus struct {
+	CensusID      uuid.UUID
+	TenantID      uuid.UUID
+	FacilityID    string
+	WardID        string
+	Cycle         string
+	ServiceDate   pgtype.Timestamptz
+	CutoffAt      pgtype.Timestamptz
+	State         string
+	CensusVersion int32
+	SupersedesID  pgtype.UUID
+	FrozenAt      pgtype.Timestamptz
+	FrozenBy      string
+	BuiltAt       pgtype.Timestamptz
+	BuiltBy       string
+}
+
+type HospitalOpsDietMealTray struct {
+	TrayID       uuid.UUID
+	TenantID     uuid.UUID
+	CensusID     uuid.UUID
+	PatientID    string
+	WardID       string
+	BedID        string
+	Cycle        string
+	OrderID      uuid.UUID
+	State        string
+	Reason       string
+	PreparedAt   pgtype.Timestamptz
+	PreparedBy   string
+	DispatchedAt pgtype.Timestamptz
+	DispatchedBy string
+	DeliveredAt  pgtype.Timestamptz
+	DeliveredBy  string
+	DueBy        pgtype.Timestamptz
+	Version      int64
+}
+
+type HospitalOpsDietMenuItem struct {
+	MenuItemID  uuid.UUID
+	TenantID    uuid.UUID
+	RecipeID    uuid.UUID
+	Cycle       string
+	TextureCode string
+	Portions    int32
+}
+
+type HospitalOpsDietNutritionAssessment struct {
+	AssessmentID     uuid.UUID
+	TenantID         uuid.UUID
+	PatientID        string
+	EncounterID      string
+	FacilityID       string
+	HeightMm         int32
+	WeightG          int32
+	MidUpperArmMm    int32
+	Estimated        bool
+	MeasuredAt       pgtype.Timestamptz
+	IntakeSummary    string
+	DiagnosisCode    string
+	Diagnosis        string
+	AllergyRefs      []string
+	EnergyKcal       int32
+	ProteinG         int32
+	FluidMl          int32
+	RequirementBasis string
+	RiskTool         string
+	RiskScore        int32
+	State            string
+	SignedBy         string
+	SignedAt         pgtype.Timestamptz
+	CreatedAt        pgtype.Timestamptz
+	CreatedBy        string
+	Version          int64
+}
+
+type HospitalOpsDietOrderConflict struct {
+	ConflictID     uuid.UUID
+	TenantID       uuid.UUID
+	OrderID        uuid.UUID
+	AllergyRef     string
+	Substance      string
+	Item           string
+	Severity       string
+	ResolvedBy     string
+	ResolvedAt     pgtype.Timestamptz
+	ResolutionNote string
+}
+
+type HospitalOpsDietRecipe struct {
+	RecipeID uuid.UUID
+	TenantID uuid.UUID
+	Code     string
+	Name     string
+}
+
+type HospitalOpsDietRecipeIngredient struct {
+	IngredientID uuid.UUID
+	TenantID     uuid.UUID
+	RecipeID     uuid.UUID
+	Code         string
+	Name         string
+	Grams        int32
+}
+
+type HospitalOpsDietSupportPlan struct {
+	PlanID           uuid.UUID
+	TenantID         uuid.UUID
+	PatientID        string
+	EncounterID      string
+	Kind             string
+	FormulaCode      string
+	FormulaName      string
+	TargetVolumeMl   int32
+	TargetEnergyKcal int32
+	TargetProteinG   int32
+	RampPlan         string
+	OrderRef         string
+	OrderContext     string
+	State            string
+	StoppedAt        pgtype.Timestamptz
+	StoppedBy        string
+	StopReason       string
+	CreatedAt        pgtype.Timestamptz
+	CreatedBy        string
+	Version          int64
+}
+
 type IcuAssessment struct {
 	AssessmentID uuid.UUID
 	TenantID     uuid.UUID

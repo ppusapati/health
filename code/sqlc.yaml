@@ -43,6 +43,7 @@ sql:
       - db/migrations/0038_quality.up.sql
       - db/migrations/0039_infection.up.sql
       - db/migrations/0040_records.up.sql
+      - db/migrations/0041_dietetics.up.sql
     gen:
       go:
         package: sqlcgen
@@ -55,6 +56,8 @@ sql:
         # would spread through every adapter that touches the table.
         rename:
           theatre_speciman: TheatreSpecimen
+          # And "census" into "Censu", which would spread the same way.
+          hospital_ops_diet_meal_censu: HospitalOpsDietMealCensus
         overrides:
           - db_type: uuid
             go_type: github.com/google/uuid.UUID
