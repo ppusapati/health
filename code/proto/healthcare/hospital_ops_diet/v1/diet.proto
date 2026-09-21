@@ -1,0 +1,882 @@
+// Dietetics and kitchen operations: nutrition assessment, diet orders and
+// their allergy conflicts, nutrition care plans, meal census and tray
+// service, enteral and parenteral nutrition planning, and ingredient
+// forecasting.
+//
+// Owning context : hospital.ops.diet  (Master Engineering Registry)
+// Owning service : DietService
+// Trace          : SRS-DIET-001 … SRS-DIET-009
+//
+// Four shapes in this contract are deliberate.
+//
+// Nothing here carries a dose, a rate or an administration. A
+// NutritionSupportPlan has targets and the identifier of the order or
+// prescription carrying them out, and the RPC that puts it into force takes
+// that identifier and resolves it. SRS-DIET-007 is explicit that this must
+// not replace medication and order controls, and the way to mean it in a
+// contract is to have nothing that could express one.
+//
+// DispatchTray takes a tray identifier and nothing else. The order in force
+// is re-read server-side at that moment rather than sent by the caller,
+// because the census was taken before the production cutoff and the tray
+// leaves afterwards — and in between is where a patient is made nil by mouth
+// for a theatre list. A contract that let the caller assert what the diet was
+// would let a stale screen send that patient breakfast. When the check stops
+// a tray it comes back withheld with the reason, so the ward is told the meal
+// was held rather than left to assume it went astray.
+//
+// A diet order with an unresolved allergy conflict comes back pending, and
+// GetCurrentDietOrder never returns one. SRS-DIET-003's acceptance is that a
+// conflict requires authorised resolution, and an order the kitchen can
+// already see is one nobody needs to resolve.
+//
+// Every measurement is an integer in a base unit: height in millimetres,
+// weight in grams, energy in kilocalories, fluid and volume in millilitres,
+// ingredients in grams. Body mass index is returned in tenths and is derived
+// from the height and weight beside it, never stored — a third number that no
+// longer agrees with them is one nobody can explain.
+syntax = "proto3";
+
+package healthcare.hospital_ops_diet.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ppusapati/health/code/gen/go/healthcare/hospital_ops_diet/v1;hospitalopsdietv1";
+
+// How nutrition reaches the patient (SRS-DIET-002).
+enum Route {
+  ROUTE_UNSPECIFIED = 0;
+  ROUTE_ORAL = 1;
+  // Tube feeding. The regimen is an order in the orders context.
+  ROUTE_ENTERAL = 2;
+  // Intravenous. The bag is a prescription in the medication context.
+  ROUTE_PARENTERAL = 3;
+  // Nil by mouth. A route rather than a flag on one, because an order
+  // saying "normal diet, and also nil by mouth" is an order two people read
+  // two ways.
+  ROUTE_NPO = 4;
+}
+
+// Where a diet order stands (SRS-DIET-002, SRS-DIET-003).
+enum OrderState {
+  ORDER_STATE_UNSPECIFIED = 0;
+  // Placed and not yet safe to cook to: an allergy conflict is open.
+  ORDER_STATE_PENDING = 1;
+  ORDER_STATE_ACTIVE = 2;
+  ORDER_STATE_SUPERSEDED = 3;
+  ORDER_STATE_CANCELLED = 4;
+}
+
+// Where an assessment stands (SRS-DIET-001).
+enum AssessmentState {
+  ASSESSMENT_STATE_UNSPECIFIED = 0;
+  ASSESSMENT_STATE_DRAFT = 1;
+  ASSESSMENT_STATE_SIGNED = 2;
+}
+
+// Which way a goal wants its measure to move (SRS-DIET-004).
+enum Direction {
+  DIRECTION_UNSPECIFIED = 0;
+  DIRECTION_INCREASE = 1;
+  DIRECTION_DECREASE = 2;
+  // Holding steady is the right goal for most inpatients, and a system that
+  // only knows increase and decrease cannot express it.
+  DIRECTION_MAINTAIN = 3;
+}
+
+// Where a care plan stands (SRS-DIET-004).
+enum PlanState {
+  PLAN_STATE_UNSPECIFIED = 0;
+  PLAN_STATE_ACTIVE = 1;
+  PLAN_STATE_CLOSED = 2;
+}
+
+// Which service a census is for (SRS-DIET-005).
+enum MealCycle {
+  MEAL_CYCLE_UNSPECIFIED = 0;
+  MEAL_CYCLE_BREAKFAST = 1;
+  MEAL_CYCLE_LUNCH = 2;
+  MEAL_CYCLE_DINNER = 3;
+  MEAL_CYCLE_SNACK = 4;
+}
+
+// Where a meal census stands (SRS-DIET-005).
+enum CensusState {
+  CENSUS_STATE_UNSPECIFIED = 0;
+  CENSUS_STATE_DRAFT = 1;
+  // The census at production cutoff: what the kitchen cooked to. Never
+  // edited after this; a change produces a new version.
+  CENSUS_STATE_FROZEN = 2;
+  CENSUS_STATE_SUPERSEDED = 3;
+}
+
+// Where one patient's tray stands (SRS-DIET-006, SRS-DIET-009).
+enum TrayState {
+  TRAY_STATE_UNSPECIFIED = 0;
+  TRAY_STATE_PLANNED = 1;
+  TRAY_STATE_PREPARED = 2;
+  TRAY_STATE_DISPATCHED = 3;
+  TRAY_STATE_DELIVERED = 4;
+  // Offered and declined.
+  TRAY_STATE_REFUSED = 5;
+  // Never reached the patient. A clinical fact rather than a logistics one:
+  // a patient who missed three meals has not eaten for a day.
+  TRAY_STATE_MISSED = 6;
+  // Stopped by the dispatch check. The reason is always set, because the
+  // common one is that the patient is now nil by mouth.
+  TRAY_STATE_WITHHELD = 7;
+}
+
+// How nutrition support is delivered (SRS-DIET-007).
+enum SupportKind {
+  SUPPORT_KIND_UNSPECIFIED = 0;
+  SUPPORT_KIND_ENTERAL = 1;
+  SUPPORT_KIND_PARENTERAL = 2;
+}
+
+// Where a support plan stands (SRS-DIET-007).
+enum SupportState {
+  SUPPORT_STATE_UNSPECIFIED = 0;
+  // The dietitian's plan with no order behind it. Nothing is running: this
+  // state exists so a plan cannot be mistaken for a feed.
+  SUPPORT_STATE_PLANNED = 1;
+  SUPPORT_STATE_ACTIVE = 2;
+  SUPPORT_STATE_STOPPED = 3;
+}
+
+// What was measured (SRS-DIET-001).
+message Anthropometry {
+  int32 height_mm = 1;
+  int32 weight_g = 2;
+  // What is measurable when a patient cannot be weighed, which in critical
+  // care is most of them.
+  int32 mid_upper_arm_mm = 3;
+  // A measurement somebody judged rather than took. A requirement computed
+  // from an estimate is an estimate.
+  bool estimated = 4;
+  google.protobuf.Timestamp measured_at = 5;
+}
+
+// What the patient needs in a day (SRS-DIET-001).
+message Requirement {
+  int32 energy_kcal = 1;
+  int32 protein_g = 2;
+  int32 fluid_ml = 3;
+  // How the numbers were arrived at. A requirement nobody can reproduce is a
+  // number, and the next dietitian has to decide whether to believe it.
+  string basis = 4;
+}
+
+// One dietitian's assessment of a patient (SRS-DIET-001).
+message NutritionAssessment {
+  string assessment_id = 1;
+  string patient_id = 2;
+  string encounter_id = 3;
+  string facility_id = 4;
+  Anthropometry anthropometry = 5;
+  // Derived from the height and weight above, never stored.
+  int32 body_mass_index_tenths = 6;
+  string intake_summary = 7;
+  string diagnosis_code = 8;
+  string diagnosis = 9;
+  // Which entries of the clinical allergy list the dietitian saw. References
+  // into the clinical record, never a copy of what the patient reacts to.
+  repeated string allergy_refs = 10;
+  Requirement requirement = 11;
+  // A score of 3 means malnourished in one tool and at risk in another, so
+  // the tool is always named.
+  string risk_tool = 12;
+  int32 risk_score = 13;
+  AssessmentState state = 14;
+  string signed_by = 15;
+  google.protobuf.Timestamp signed_at = 16;
+  google.protobuf.Timestamp created_at = 17;
+  string created_by = 18;
+  int64 version = 19;
+}
+
+// What the patient can physically manage (SRS-DIET-002).
+message Texture {
+  // Configured codes rather than an enum: the national descriptor
+  // frameworks differ and a hospital using one should not be forced through
+  // another's vocabulary.
+  string code = 1;
+  string label = 2;
+  string fluid_code = 3;
+}
+
+// A diet item against a documented allergy (SRS-DIET-003).
+message Conflict {
+  // The clinical record's own reference, which is what a later question is
+  // answered against.
+  string allergy_ref = 1;
+  // For the person reading the screen, never for answering that question.
+  string substance = 2;
+  string item = 3;
+  // A conflict against an anaphylaxis is not the same decision as one
+  // against an intolerance.
+  string severity = 4;
+  string resolved_by = 5;
+  google.protobuf.Timestamp resolved_at = 6;
+  string resolution_note = 7;
+}
+
+// What the patient is to be given (SRS-DIET-002).
+message DietOrder {
+  string order_id = 1;
+  string patient_id = 2;
+  string encounter_id = 3;
+  string facility_id = 4;
+  string ward_id = 5;
+  string bed_id = 6;
+  Route route = 7;
+  Texture texture = 8;
+  repeated string restrictions = 9;
+  repeated string supplements = 10;
+  string instruction = 11;
+  google.protobuf.Timestamp effective_from = 12;
+  // Unset runs until something supersedes it, which is the ordinary case for
+  // a diet.
+  google.protobuf.Timestamp effective_to = 13;
+  OrderState state = 14;
+  // An order with any unresolved conflict is pending and the kitchen never
+  // sees it.
+  repeated Conflict conflicts = 15;
+  string cancelled_reason = 16;
+  string cancelled_by = 17;
+  google.protobuf.Timestamp cancelled_at = 18;
+  google.protobuf.Timestamp placed_at = 19;
+  string placed_by = 20;
+  int64 version = 21;
+}
+
+// One thing a care plan is trying to achieve (SRS-DIET-004).
+message NutritionGoal {
+  string code = 1;
+  string label = 2;
+  int32 target = 3;
+  string unit = 4;
+  Direction direction = 5;
+  // How close counts as met. Exactly the target is almost never what
+  // anybody means about a body weight.
+  int32 tolerance = 6;
+  google.protobuf.Timestamp target_by = 7;
+}
+
+// The dietitian's plan and what it is aiming at (SRS-DIET-004).
+message CarePlan {
+  string plan_id = 1;
+  string patient_id = 2;
+  string encounter_id = 3;
+  // The assessment this plan was written from. A plan whose reasoning cannot
+  // be produced is one nobody can review.
+  string assessment_id = 4;
+  repeated NutritionGoal goals = 5;
+  string plan = 6;
+  google.protobuf.Timestamp review_due = 7;
+  PlanState state = 8;
+  google.protobuf.Timestamp closed_at = 9;
+  string closed_by = 10;
+  string closure_note = 11;
+  google.protobuf.Timestamp created_at = 12;
+  string created_by = 13;
+  int64 version = 14;
+}
+
+// One measurement against a goal (SRS-DIET-004).
+message Progress {
+  string progress_id = 1;
+  string plan_id = 2;
+  string goal_code = 3;
+  int32 value = 4;
+  string unit = 5;
+  string note = 6;
+  google.protobuf.Timestamp recorded_at = 7;
+  string recorded_by = 8;
+}
+
+// One point on a goal's trend (SRS-DIET-004).
+message TrendPoint {
+  int32 value = 1;
+  google.protobuf.Timestamp at = 2;
+}
+
+// A goal and its measurements over time (SRS-DIET-004).
+message Trend {
+  NutritionGoal goal = 1;
+  repeated TrendPoint points = 2;
+  bool met = 3;
+  // Reported beside met rather than instead of it: a patient moving the
+  // right way and still far from target is a different conversation from
+  // one who has arrived.
+  bool improving = 4;
+  // A goal with nothing measured against it. Reported rather than shown as a
+  // flat line at zero, which reads as a patient whose weight is nothing.
+  bool unanswerable = 5;
+}
+
+// One patient's place in a meal service (SRS-DIET-005).
+message CensusLine {
+  string patient_id = 1;
+  string encounter_id = 2;
+  string ward_id = 3;
+  string bed_id = 4;
+  // The order this line was built from. After a wrong tray that is the first
+  // thing anybody asks.
+  string order_id = 5;
+  Route route = 6;
+  string texture_code = 7;
+  string texture_label = 8;
+  string fluid_code = 9;
+  repeated string restrictions = 10;
+  repeated string supplements = 11;
+  string instruction = 12;
+}
+
+// What the kitchen produces for one ward and one service (SRS-DIET-005).
+message MealCensus {
+  string census_id = 1;
+  string facility_id = 2;
+  string ward_id = 3;
+  MealCycle cycle = 4;
+  google.protobuf.Timestamp service_date = 5;
+  // When production starts and the count stops being negotiable.
+  google.protobuf.Timestamp cutoff_at = 6;
+  repeated CensusLine lines = 7;
+  CensusState state = 8;
+  int32 census_version = 9;
+  // Chains a reissue back to the census it replaced, so the whole sequence
+  // for one service is readable.
+  string supersedes_id = 10;
+  google.protobuf.Timestamp frozen_at = 11;
+  string frozen_by = 12;
+  google.protobuf.Timestamp built_at = 13;
+  string built_by = 14;
+}
+
+// One patient's meal through preparation and delivery (SRS-DIET-006).
+message Tray {
+  string tray_id = 1;
+  string census_id = 2;
+  string patient_id = 3;
+  string ward_id = 4;
+  string bed_id = 5;
+  MealCycle cycle = 6;
+  string order_id = 7;
+  TrayState state = 8;
+  // Why the meal was held back, declined or missed. Always set for those
+  // three states.
+  string reason = 9;
+  google.protobuf.Timestamp prepared_at = 10;
+  string prepared_by = 11;
+  google.protobuf.Timestamp dispatched_at = 12;
+  string dispatched_by = 13;
+  google.protobuf.Timestamp delivered_at = 14;
+  string delivered_by = 15;
+  // When the meal stops being this meal.
+  google.protobuf.Timestamp due_by = 16;
+  int64 version = 17;
+}
+
+// What happened to a service's trays (SRS-DIET-006).
+message MealOutcome {
+  int32 planned = 1;
+  int32 delivered = 2;
+  int32 refused = 3;
+  int32 missed = 4;
+  int32 withheld = 5;
+  // Counted apart from missed: a lunch at four is a different failure from a
+  // lunch that never came.
+  int32 late = 6;
+  int32 outstanding = 7;
+}
+
+// The dietitian's plan for tube or intravenous feeding (SRS-DIET-007).
+message NutritionSupportPlan {
+  string plan_id = 1;
+  string patient_id = 2;
+  string encounter_id = 3;
+  SupportKind kind = 4;
+  // A request, not a dispense.
+  string formula_code = 5;
+  string formula_name = 6;
+  int32 target_volume_ml = 7;
+  int32 target_energy_kcal = 8;
+  int32 target_protein_g = 9;
+  // How to build up, which matters more than the target for a patient at
+  // refeeding risk.
+  string ramp_plan = 10;
+  // The order or prescription that carries the plan out, and which context
+  // owns it. Required before the plan goes active.
+  string order_ref = 11;
+  string order_context = 12;
+  SupportState state = 13;
+  google.protobuf.Timestamp stopped_at = 14;
+  string stopped_by = 15;
+  string stop_reason = 16;
+  google.protobuf.Timestamp created_at = 17;
+  string created_by = 18;
+  int64 version = 19;
+}
+
+// Something the kitchen can put on a tray, and what is in it
+// (SRS-DIET-003).
+message DietItem {
+  string code = 1;
+  string name = 2;
+  // From the same terminologies the clinical allergy list uses. Matching on
+  // names is how "groundnut oil" gets past a peanut allergy.
+  repeated string allergen_codes = 3;
+}
+
+// How much of one ingredient a portion uses (SRS-DIET-008).
+message IngredientQuantity {
+  string code = 1;
+  string name = 2;
+  int32 grams = 3;
+}
+
+// One dish and what it takes (SRS-DIET-008).
+message Recipe {
+  string code = 1;
+  string name = 2;
+  repeated IngredientQuantity ingredients = 3;
+}
+
+// A recipe on the menu for a cycle and a texture (SRS-DIET-008).
+message MenuItem {
+  MealCycle cycle = 1;
+  // A pureed lunch and a normal lunch are different dishes with different
+  // ingredients.
+  string texture_code = 2;
+  Recipe recipe = 3;
+  int32 portions = 4;
+}
+
+// One ingredient's forecast and what was used (SRS-DIET-008).
+message IngredientDemand {
+  string code = 1;
+  string name = 2;
+  int32 forecast_g = 3;
+  int32 actual_g = 4;
+  // Zero actual with this false means nobody has counted yet, which is not
+  // the same as having used none.
+  bool actual_recorded = 5;
+  int32 wastage_g = 6;
+  // Wastage is only meaningful once somebody has counted.
+  bool wastage_known = 7;
+}
+
+// What one service was expected to consume and what it did (SRS-DIET-008).
+message Forecast {
+  string census_id = 1;
+  // Which version of the census this was computed from. A reissue changes
+  // the count, and a forecast that did not say which version it came from
+  // cannot be reconciled with either.
+  int32 census_version = 2;
+  MealCycle cycle = 3;
+  google.protobuf.Timestamp service_date = 4;
+  int32 trays = 5;
+  repeated IngredientDemand demand = 6;
+  // Census lines no menu item covered. Reported rather than dropped: a
+  // forecast that silently ignored forty pureed trays is a kitchen that runs
+  // out.
+  int32 uncovered = 7;
+}
+
+// Nutrition assessment and care plans (SRS-DIET-001, SRS-DIET-004).
+
+message RecordAssessmentRequest {
+  string patient_id = 1;
+  string encounter_id = 2;
+  string facility_id = 3;
+  Anthropometry anthropometry = 4;
+  string intake_summary = 5;
+  string diagnosis_code = 6;
+  string diagnosis = 7;
+  Requirement requirement = 8;
+  string risk_tool = 9;
+  int32 risk_score = 10;
+}
+message RecordAssessmentResponse {
+  // The allergy references are filled from the clinical record rather than
+  // from the request: a later question is answered against what the
+  // dietitian actually saw.
+  NutritionAssessment assessment = 1;
+}
+
+message SignAssessmentRequest {
+  string assessment_id = 1;
+}
+message SignAssessmentResponse {
+  NutritionAssessment assessment = 1;
+}
+
+message ListAssessmentsRequest {
+  string patient_id = 1;
+  string encounter_id = 2;
+  bool signed_only = 3;
+  int32 page_size = 4;
+  int32 page_offset = 5;
+}
+message ListAssessmentsResponse {
+  repeated NutritionAssessment assessments = 1;
+}
+
+message OpenCarePlanRequest {
+  string patient_id = 1;
+  string encounter_id = 2;
+  string assessment_id = 3;
+  repeated NutritionGoal goals = 4;
+  string plan = 5;
+  google.protobuf.Timestamp review_due = 6;
+}
+message OpenCarePlanResponse {
+  CarePlan plan = 1;
+}
+
+message RecordProgressRequest {
+  string plan_id = 1;
+  string goal_code = 2;
+  int32 value = 3;
+  string note = 4;
+  google.protobuf.Timestamp measured_at = 5;
+}
+message RecordProgressResponse {
+  Progress progress = 1;
+}
+
+message CloseCarePlanRequest {
+  string plan_id = 1;
+  string note = 2;
+}
+message CloseCarePlanResponse {
+  CarePlan plan = 1;
+}
+
+message ListCarePlansRequest {
+  string patient_id = 1;
+  bool open_only = 2;
+  int32 page_size = 3;
+  int32 page_offset = 4;
+}
+message ListCarePlansResponse {
+  repeated CarePlan plans = 1;
+}
+
+message GetGoalTrendRequest {
+  string plan_id = 1;
+  string goal_code = 2;
+}
+message GetGoalTrendResponse {
+  Trend trend = 1;
+}
+
+// Diet orders (SRS-DIET-002, SRS-DIET-003, SRS-DIET-009).
+
+message PlaceDietOrderRequest {
+  string patient_id = 1;
+  string encounter_id = 2;
+  string facility_id = 3;
+  string ward_id = 4;
+  string bed_id = 5;
+  Route route = 6;
+  Texture texture = 7;
+  repeated string restrictions = 8;
+  repeated string supplements = 9;
+  string instruction = 10;
+  google.protobuf.Timestamp effective_from = 11;
+  google.protobuf.Timestamp effective_to = 12;
+}
+message PlaceDietOrderResponse {
+  // Pending when the order clashes with a documented allergy. The kitchen
+  // never sees a pending order.
+  DietOrder order = 1;
+}
+
+message ResolveConflictRequest {
+  string order_id = 1;
+  string allergy_ref = 2;
+  // Empty resolves every open conflict on that allergy.
+  string item = 3;
+  // Why this item is safe for this patient. "Resolved by Dr Rao" is not an
+  // answer, and this is what an investigation reads.
+  string note = 4;
+}
+message ResolveConflictResponse {
+  DietOrder order = 1;
+}
+
+message CancelDietOrderRequest {
+  string order_id = 1;
+  string reason = 2;
+}
+message CancelDietOrderResponse {
+  // The order stops now, not at whatever time it was going to run to: a
+  // cancellation that leaves it in force until midnight sends supper.
+  DietOrder order = 1;
+}
+
+message GetCurrentDietOrderRequest {
+  string patient_id = 1;
+}
+message GetCurrentDietOrderResponse {
+  DietOrder order = 1;
+  // False when nothing is in force, which is not the same as an empty order.
+  bool found = 2;
+}
+
+message ListDietOrdersRequest {
+  string patient_id = 1;
+}
+message ListDietOrdersResponse {
+  repeated DietOrder orders = 1;
+}
+
+// Nutrition support (SRS-DIET-007).
+
+message PlanNutritionSupportRequest {
+  string patient_id = 1;
+  string encounter_id = 2;
+  SupportKind kind = 3;
+  string formula_code = 4;
+  string formula_name = 5;
+  int32 target_volume_ml = 6;
+  int32 target_energy_kcal = 7;
+  int32 target_protein_g = 8;
+  string ramp_plan = 9;
+}
+message PlanNutritionSupportResponse {
+  // Planned, never active. Nothing is running until an order exists.
+  NutritionSupportPlan plan = 1;
+}
+
+message LinkSupportOrderRequest {
+  string plan_id = 1;
+  // The order or prescription carrying the plan out. Resolved in the context
+  // that owns it before the plan goes active.
+  string order_ref = 2;
+  string order_context = 3;
+}
+message LinkSupportOrderResponse {
+  NutritionSupportPlan plan = 1;
+}
+
+message StopSupportRequest {
+  string plan_id = 1;
+  string reason = 2;
+}
+message StopSupportResponse {
+  // Stopping the plan does not stop the feed: the order does that, in the
+  // context that owns it.
+  NutritionSupportPlan plan = 1;
+}
+
+message ListSupportPlansRequest {
+  string patient_id = 1;
+  bool active_only = 2;
+  int32 page_size = 3;
+  int32 page_offset = 4;
+}
+message ListSupportPlansResponse {
+  repeated NutritionSupportPlan plans = 1;
+}
+
+// Meal census and trays (SRS-DIET-005, SRS-DIET-006, SRS-DIET-009).
+
+message BuildCensusRequest {
+  string ward_id = 1;
+  string facility_id = 2;
+  MealCycle cycle = 3;
+  google.protobuf.Timestamp service_date = 4;
+  google.protobuf.Timestamp cutoff_at = 5;
+}
+message BuildCensusResponse {
+  MealCensus census = 1;
+}
+
+message FreezeCensusRequest {
+  string census_id = 1;
+}
+message FreezeCensusResponse {
+  MealCensus census = 1;
+}
+
+message ReissueCensusRequest {
+  string census_id = 1;
+}
+message ReissueCensusResponse {
+  // A new version. The frozen one stays readable: it is what the kitchen
+  // cooked to.
+  MealCensus census = 1;
+}
+
+message ListCensusesRequest {
+  string ward_id = 1;
+  MealCycle cycle = 2;
+  google.protobuf.Timestamp from = 3;
+  google.protobuf.Timestamp to = 4;
+  int32 page_size = 5;
+  int32 page_offset = 6;
+}
+message ListCensusesResponse {
+  repeated MealCensus censuses = 1;
+}
+
+message PlateTraysRequest {
+  string census_id = 1;
+}
+message PlateTraysResponse {
+  // Only the trays this call plated. Running it twice on a census plates
+  // nothing the second time.
+  repeated Tray trays = 1;
+}
+
+message PrepareTrayRequest {
+  string tray_id = 1;
+}
+message PrepareTrayResponse {
+  Tray tray = 1;
+}
+
+message DispatchTrayRequest {
+  // The tray, and nothing else. The order in force is re-read server-side at
+  // this moment: a contract that let the caller assert what the diet was
+  // would let a stale screen send breakfast to somebody about to be
+  // anaesthetised.
+  string tray_id = 1;
+}
+message DispatchTrayResponse {
+  // Withheld with the reason when the check stops it, so the ward is told
+  // the meal was held rather than left to assume it went astray.
+  Tray tray = 1;
+}
+
+message DeliverTrayRequest {
+  string tray_id = 1;
+}
+message DeliverTrayResponse {
+  Tray tray = 1;
+}
+
+message CloseTrayRequest {
+  string tray_id = 1;
+  // Refused or missed.
+  TrayState state = 2;
+  string reason = 3;
+}
+message CloseTrayResponse {
+  Tray tray = 1;
+}
+
+message ListTraysRequest {
+  string census_id = 1;
+  string ward_id = 2;
+  TrayState state = 3;
+  int32 page_size = 4;
+  int32 page_offset = 5;
+}
+message ListTraysResponse {
+  repeated Tray trays = 1;
+}
+
+message GetMealOutcomeRequest {
+  string census_id = 1;
+}
+message GetMealOutcomeResponse {
+  MealOutcome outcome = 1;
+}
+
+// Kitchen configuration and ingredient forecasting (SRS-DIET-003,
+// SRS-DIET-008).
+
+message ConfigureItemRequest {
+  DietItem item = 1;
+  // ingredient, supplement or dish.
+  string kind = 2;
+}
+message ConfigureItemResponse {}
+
+message ConfigureRecipeRequest {
+  Recipe recipe = 1;
+}
+message ConfigureRecipeResponse {}
+
+message ConfigureMenuItemRequest {
+  MenuItem item = 1;
+}
+message ConfigureMenuItemResponse {}
+
+message ListMenuRequest {
+  MealCycle cycle = 1;
+}
+message ListMenuResponse {
+  repeated MenuItem items = 1;
+}
+
+message RecordConsumptionRequest {
+  string census_id = 1;
+  string ingredient_code = 2;
+  int32 actual_g = 3;
+  string note = 4;
+}
+message RecordConsumptionResponse {
+  IngredientQuantity counted = 1;
+}
+
+message GetIngredientForecastRequest {
+  string census_id = 1;
+}
+message GetIngredientForecastResponse {
+  // The forecast and the counts side by side, never merged: a single
+  // variance figure cannot say whether the kitchen over-ordered or
+  // over-served.
+  Forecast forecast = 1;
+}
+
+// The dietetics and kitchen operations service.
+service DietService {
+  // Nutrition assessment and care plans (SRS-DIET-001, SRS-DIET-004).
+  rpc RecordAssessment(RecordAssessmentRequest) returns (RecordAssessmentResponse);
+  rpc SignAssessment(SignAssessmentRequest) returns (SignAssessmentResponse);
+  rpc ListAssessments(ListAssessmentsRequest) returns (ListAssessmentsResponse);
+  rpc OpenCarePlan(OpenCarePlanRequest) returns (OpenCarePlanResponse);
+  rpc RecordProgress(RecordProgressRequest) returns (RecordProgressResponse);
+  rpc CloseCarePlan(CloseCarePlanRequest) returns (CloseCarePlanResponse);
+  rpc ListCarePlans(ListCarePlansRequest) returns (ListCarePlansResponse);
+  rpc GetGoalTrend(GetGoalTrendRequest) returns (GetGoalTrendResponse);
+
+  // Diet orders (SRS-DIET-002, SRS-DIET-003, SRS-DIET-009).
+  rpc PlaceDietOrder(PlaceDietOrderRequest) returns (PlaceDietOrderResponse);
+  rpc ResolveConflict(ResolveConflictRequest) returns (ResolveConflictResponse);
+  rpc CancelDietOrder(CancelDietOrderRequest) returns (CancelDietOrderResponse);
+  rpc GetCurrentDietOrder(GetCurrentDietOrderRequest) returns (GetCurrentDietOrderResponse);
+  rpc ListDietOrders(ListDietOrdersRequest) returns (ListDietOrdersResponse);
+
+  // Nutrition support (SRS-DIET-007).
+  rpc PlanNutritionSupport(PlanNutritionSupportRequest) returns (PlanNutritionSupportResponse);
+  rpc LinkSupportOrder(LinkSupportOrderRequest) returns (LinkSupportOrderResponse);
+  rpc StopSupport(StopSupportRequest) returns (StopSupportResponse);
+  rpc ListSupportPlans(ListSupportPlansRequest) returns (ListSupportPlansResponse);
+
+  // Meal census and trays (SRS-DIET-005, SRS-DIET-006, SRS-DIET-009).
+  rpc BuildCensus(BuildCensusRequest) returns (BuildCensusResponse);
+  rpc FreezeCensus(FreezeCensusRequest) returns (FreezeCensusResponse);
+  rpc ReissueCensus(ReissueCensusRequest) returns (ReissueCensusResponse);
+  rpc ListCensuses(ListCensusesRequest) returns (ListCensusesResponse);
+  rpc PlateTrays(PlateTraysRequest) returns (PlateTraysResponse);
+  rpc PrepareTray(PrepareTrayRequest) returns (PrepareTrayResponse);
+  rpc DispatchTray(DispatchTrayRequest) returns (DispatchTrayResponse);
+  rpc DeliverTray(DeliverTrayRequest) returns (DeliverTrayResponse);
+  rpc CloseTray(CloseTrayRequest) returns (CloseTrayResponse);
+  rpc ListTrays(ListTraysRequest) returns (ListTraysResponse);
+  rpc GetMealOutcome(GetMealOutcomeRequest) returns (GetMealOutcomeResponse);
+
+  // Kitchen configuration and forecasting (SRS-DIET-003, SRS-DIET-008).
+  rpc ConfigureItem(ConfigureItemRequest) returns (ConfigureItemResponse);
+  rpc ConfigureRecipe(ConfigureRecipeRequest) returns (ConfigureRecipeResponse);
+  rpc ConfigureMenuItem(ConfigureMenuItemRequest) returns (ConfigureMenuItemResponse);
+  rpc ListMenu(ListMenuRequest) returns (ListMenuResponse);
+  rpc RecordConsumption(RecordConsumptionRequest) returns (RecordConsumptionResponse);
+  rpc GetIngredientForecast(GetIngredientForecastRequest) returns (GetIngredientForecastResponse);
+}

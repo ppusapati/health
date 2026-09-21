@@ -222,6 +222,24 @@ type Allergies interface {
 		patientID string) ([]domain.Allergen, error)
 }
 
+// OrderDirectory answers whether the order a support plan names actually
+// exists (SRS-DIET-007).
+//
+// Without this, "a plan cannot go active without an order" is defeated by
+// typing anything into the reference field, and the pharmacy check the
+// requirement exists to preserve is preserved in wording only. The plan names
+// which context owns the order — "order 4471" means one thing in orders and
+// another in medication — and this resolves it there.
+//
+// A deployment with no adapter makes this context refuse to activate a
+// support plan rather than activate one against a reference nobody can
+// resolve. A dietitian ringing pharmacy is a better failure than a feed
+// running against an order that was never placed.
+type OrderDirectory interface {
+	Exists(ctx context.Context, scope authctx.TenantScope,
+		orderContext, ref string) (bool, error)
+}
+
 // Wards lists the beds a census is built over (SRS-DIET-005).
 //
 // The ward and bed on a diet order are what the tray card carries, and a

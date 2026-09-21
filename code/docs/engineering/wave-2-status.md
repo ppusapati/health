@@ -15,13 +15,14 @@ test names.
 prose, because a status document whose honest summary is a fraction is one
 whose per-row claims have to be read carefully.
 
-Eleven families are now built: SRS-ER the Emergency Department, SRS-ICU
+Twelve families are now built: SRS-ER the Emergency Department, SRS-ICU
 critical care, SRS-OT the operating theatre, SRS-ANE anaesthesia and PACU,
 SRS-BLD blood bank and transfusion, SRS-CSSD sterile services, SRS-MAT
 materials and inventory, SRS-BIO biomedical engineering, SRS-QMS quality
-management, SRS-IPC infection prevention and control and SRS-MRD medical
-records and health information management. Their rows are below. One set
-remains: the support services.
+management, SRS-IPC infection prevention and control, SRS-MRD medical
+records and health information management and SRS-DIET dietetics and kitchen
+operations. Their rows are below. Five support-service families remain:
+SRS-AMB, SRS-FAC, SRS-HKP, SRS-LND and SRS-MORT.
 
 `make traceability` reads a row naming a requirement as a claim about it
 unless the row says the work is not built, so the unbuilt ER requirements are
@@ -105,7 +106,8 @@ clinician, and `ValidatedInputs()` is a function rather than a convention.
 | SRS-QMS Quality / NABH | 15 | **15 implemented** — see below |
 | SRS-IPC Infection Prevention | 10 | **10 implemented** — see below |
 | SRS-MRD Medical Records / HIM | 10 | **10 implemented** — see below |
-| SRS-AMB, SRS-DIET, SRS-FAC, SRS-HKP, SRS-LND, SRS-MORT support services | 52 | **Not started** — except SRS-FAC-012 above |
+| SRS-DIET Dietetics and Kitchen | 9 | **9 implemented** — see below |
+| SRS-AMB, SRS-FAC, SRS-HKP, SRS-LND, SRS-MORT support services | 43 | **Not started** — except SRS-FAC-012 above |
 | SRS-OPSAPI / OPSNFR / OPSSEC / OPSWEB | 32 | **Partial** — the three foundations above |
 
 ### A note on SRS-BIO
@@ -1106,6 +1108,76 @@ context does not carry a specialty; the adapter passes the visit type, which
 is the nearest thing it holds. A deployment whose checklists vary by
 specialty gets the general one, which asks for more documents rather than
 fewer — the safe direction, and named here rather than presented as working.
+
+## SRS-DIET — Dietetics and kitchen operations
+
+Nine requirements, Phase 2 §13. Bounded context `hospital.ops.diet`, fifteen
+tables in schema `hospital_ops_diet`, thirty-four RPCs, eleven permissions,
+and sixty-six domain refusals plus twenty-nine database rules and eight
+separation-of-duties rules each individually weakened and confirmed to fail a
+test before being trusted.
+
+**The rule this family exists for is that the order in force is re-read when
+the tray leaves the kitchen.** The census is taken before the production
+cutoff and the tray goes out afterwards, and in between is exactly where a
+patient is made nil by mouth for a theatre list, downgraded to a pureed
+texture after a swallow assessment, or discharged. `DispatchTray` takes a tray
+identifier and nothing else — the contract gives the caller no way to assert
+what the diet was, because a stale screen asserting "normal diet" is how a
+patient about to be anaesthetised gets breakfast. A tray the check stops comes
+back withheld with its reason and the ward is told, because a meal that simply
+fails to arrive looks like one that went astray. The database holds the same
+rule: `a_delivered_tray_was_dispatched` refuses a row that reads as delivered
+with no dispatch behind it.
+
+**Nothing in this context can start a feed.** SRS-DIET-007 is explicit that
+nutrition support planning must not replace medication and order controls, and
+the schema has nowhere to put a dose, a rate or an administration — asserted
+against `information_schema` rather than left to review. A plan cannot go
+active without the identifier of the order carrying it out, that identifier is
+resolved in the context that owns it before the plan is activated, and the
+dietitian who wrote the plan is not the person who activates it. Without the
+resolution the rule would be defeated by typing anything into the field.
+
+| Requirement | Summary | Status |
+|---|---|---|
+| SRS-DIET-001 | Nutrition assessment with anthropometry, intake, diagnosis, allergies and requirements; linked to encounter and signed | **Implemented** — measurements are integers in base units, so no report is accidentally about floating point; body mass index is derived from the height and weight beside it and stored nowhere, because a third number that no longer agrees with them is one nobody can explain; the allergies are pinned from the clinical record rather than typed, so a later question is answered against what the dietitian actually saw; a risk score names its tool, because 3 means malnourished in one and at risk in another; a requirement says how it was calculated; an encounter is required by CHECK; a signed assessment names its signer and has at least one measurement, with mid-upper arm alone accepted because in critical care it is often the only one there is |
+| SRS-DIET-002 | Diet order with texture, therapeutic restrictions, route and effective time; kitchen sees the current effective order only | **Implemented** — orders are effective-dated and superseded rather than edited, and `OrderInForce` returns one order for one patient because a kitchen shown two plates whichever is on top; an oral order must name the texture the patient can manage, held by a CHECK, because a dysphagic patient sent a normal tray is an aspiration; nil by mouth carries no restrictions or supplements, since an order saying both is one two people read two ways; a cancellation moves the effective-to to the moment it was made, because one that runs to midnight sends supper |
+| SRS-DIET-003 | Block/flag diet items conflicting with documented allergies; conflict requires authorised resolution | **Implemented** — the allergy list is read from the clinical context and never copied, because a copy goes stale on the one correction that matters most; matching is on codes first, since "peanut oil" and "groundnut" are the same allergen and neither string contains the other, and an uncoded item still raises a conflict somebody must resolve rather than passing silently; an order with an open conflict is pending and the kitchen's read never returns one; resolution needs a note as well as a name, and sits with clinicians — not with the dietitian who placed the order that raised it, and not with the kitchen; a deployment with no allergy source refuses to place a diet order rather than placing one nobody checked |
+| SRS-DIET-004 | Nutrition care plan and follow-up goals; progress can be trended | **Implemented** — a plan names the assessment it was written from, because one whose reasoning cannot be produced is one nobody can review; every goal states which way it wants its measure to move, since "target 60" is gain for one patient and loss for another and a trend that assumed one would report the other as deteriorating; the same measure twice is refused by a unique index; measurements are append-only (FIT-08); a goal with nothing measured reports unanswerable rather than a flat line at zero, which reads as a patient whose weight is nothing |
+| SRS-DIET-005 | Meal census by ward/bed/patient/diet for each meal cycle; census freezes/version-controls at production cutoff | **Implemented** — built from the orders in force and only the oral ones, so nil by mouth and tube feeds produce no tray; a census line for a patient who is nil by mouth is refused by CHECK whatever built it; one line per patient per service and one row per version, both by unique index; a census with no cutoff is refused, because one that never freezes is a count nobody can be held to; a reissue is a new version that names what it replaced, and the frozen one stays readable because it is what the kitchen cooked to |
+| SRS-DIET-006 | Record meal preparation, dispatch and delivery status; missed/late meal can be tracked | **Implemented** — one tray per patient per service by unique index, and plating a census twice produces nothing the second time; a tray moves one step at a time and a delivered one must have been dispatched; a withheld, refused or missed tray says why, held by CHECKs, because a patient who has not eaten needs a reason recorded and three in a row is a referral rather than a logistics note; late is counted apart from missed, since a lunch at four is a different failure from a lunch that never came, and a tray still in the kitchen past its time is counted late now so a ward can act |
+| SRS-DIET-007 | Enteral/parenteral nutrition planning links without replacing medication/order controls | **Implemented** — structural rather than checked. The schema has no dose, rate, bag or administration column, asserted against `information_schema`; the ports list has nothing that writes an order; a plan cannot go active without an order reference, held by CHECK, and the reference is resolved in the context that owns it before activation; the context is itself checked against the deployment's configured list, because "order 4471" means one thing in orders and another in medication; proposing a plan and putting it into force are separate permissions held by different people |
+| SRS-DIET-008 | Calculate ingredient demand and wastage from meal census; forecast separable from actual consumption | **Implemented** — computed from the frozen census and pinned to its version, because a forecast against a moving count is a purchase order nobody can check; the forecast and the count are two numbers side by side and never a single variance figure, which cannot say whether the kitchen over-ordered or over-served; an ingredient counted but not forecast is added rather than dropped, since that is the finding the report exists to surface; wastage reads as unknown until somebody has counted, so a forecast with no count behind it does not read as a kitchen that wasted everything; census lines no menu item covers are reported rather than ignored |
+| SRS-DIET-009 | NPO/fasting status with prominent care-team/kitchen visibility; cancelled diet is not dispatched after effective time | **Implemented** — the rule above. Nil by mouth is a route rather than a flag, so an order cannot say both; a cancelled order's effective-to moves to the moment of cancellation; the order in force is re-read at dispatch and the tray is refused when the route, texture, fluid level or restrictions have changed since it was plated; the refusal is escalated durably, because the ward needs to know the meal was held back before it goes looking for it |
+
+### What SRS-DIET does not reach
+
+Three seams are named rather than half-built.
+
+**The census is built from the diet orders alone.** `Wards` is a port with no
+adapter, so the ward and bed on a tray card are whatever the diet order
+carried. A patient who moved bed after the order was placed gets a tray
+addressed to the bed they were in. The order's ward is right often enough for
+the census to be built, and the bed on the card is not; closing this is one
+adapter onto the bed-management view, and until it exists a ward moving a
+patient should re-place the diet order.
+
+**Nothing checks that the nutrition support order is for the right patient.**
+`OrderDirectory.Exists` resolves the reference and answers whether it is real;
+it does not answer whose it is. A plan for one patient activated against
+another patient's prescription would pass. The orders and medication contexts
+both hold the patient on the order, so this is a signature change rather than
+new machinery — but as it stands the check is that the order exists, not that
+it belongs to this plan.
+
+**There is no bed-state or fasting banner outside this context.**
+SRS-DIET-009 asks for prominent care-team visibility, and what exists is the
+diet order, the withheld-tray escalation and the event stream. A ward screen
+that shows "nil by mouth" beside the patient's name is the clinical context's
+to render from these, and it is not built. The kitchen half of the requirement
+— that a cancelled diet is not dispatched — is enforced here and does not
+depend on it.
 
 ## What Wave 2 depends on
 

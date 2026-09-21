@@ -24,6 +24,7 @@ import (
 	"github.com/ppusapati/health/code/gen/go/healthcare/emergency/v1/emergencyv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/empi/v1/empiv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/encounter/v1/encounterv1connect"
+	"github.com/ppusapati/health/code/gen/go/healthcare/hospital_ops_diet/v1/hospitalopsdietv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/icu/v1/icuv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/identity_access/v1/identityaccessv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/infection/v1/infectionv1connect"
@@ -56,6 +57,11 @@ import (
 	clinicalpostgres "github.com/ppusapati/health/code/internal/clinical/adapters/postgres"
 	clinicalapp "github.com/ppusapati/health/code/internal/clinical/application"
 	clinicaltransport "github.com/ppusapati/health/code/internal/clinical/transport"
+	dietcrosscontext "github.com/ppusapati/health/code/internal/dietetics/adapters/crosscontext"
+	dietescalate "github.com/ppusapati/health/code/internal/dietetics/adapters/escalate"
+	dietpostgres "github.com/ppusapati/health/code/internal/dietetics/adapters/postgres"
+	dietapp "github.com/ppusapati/health/code/internal/dietetics/application"
+	diettransport "github.com/ppusapati/health/code/internal/dietetics/transport"
 	emergencyescalate "github.com/ppusapati/health/code/internal/emergency/adapters/escalate"
 	emergencypostgres "github.com/ppusapati/health/code/internal/emergency/adapters/postgres"
 	emergencyapp "github.com/ppusapati/health/code/internal/emergency/application"
@@ -401,6 +407,18 @@ type Deps struct {
 	// owed.
 	RecordsConditions func(encounterdomain.Encounter) map[string]bool
 
+	// Dietetics is what a deployment has decided about its kitchen: how long
+	// after dispatch a meal stops being this meal, how many consecutive
+	// missed meals reach somebody, and which contexts a nutrition support
+	// plan may name as owning its order (SRS-DIET-006 … 008).
+	//
+	// The zero value leaves trays with no due time so nothing is reported
+	// late, escalates no run of missed meals, and accepts any order context.
+	// The second is the one to watch: a patient who has not eaten for a day
+	// then appears in no worklist at all. The status document names these
+	// rather than this code inventing a hospital's meal times.
+	Dietetics dietapp.Config
+
 	// Emergency is what a deployment has decided about its emergency
 	// department: which triage scale it has approved, what must be measured at
 	// triage, and what each disposition requires (SRS-ER-002, SRS-ER-013).
@@ -430,6 +448,7 @@ type Server struct {
 	Quality      *qualityapp.Service
 	Infection    *infectionapp.Service
 	Records      *recordsapp.Service
+	Dietetics    *dietapp.Service
 	Nursing      *nursingapp.Service
 	Orders       *ordersapp.Service
 	Medication   *medicationapp.Service
@@ -946,6 +965,43 @@ func New(deps Deps) *Server {
 		Config:      deps.Infection,
 	})
 
+	// Dietetics and kitchen operations (SRS-DIET). Wired after the clinical,
+	// orders and medication contexts because everything safety-critical here
+	// reads one of them: the allergy list a diet order is checked against,
+	// and the order a nutrition support plan names. Both are read through
+	// ports that cannot write, so SRS-DIET-007's "without replacing
+	// medication/order controls" is a property of this wiring as much as of
+	// the code behind it.
+	dietRepo := dietpostgres.New(txManager)
+	dietService := dietapp.NewService(dietapp.Deps{
+		UnitOfWork:  txManager,
+		Assessments: dietRepo,
+		Orders:      dietRepo,
+		Plans:       dietRepo,
+		Censuses:    dietRepo,
+		Trays:       dietRepo,
+		Support:     dietRepo,
+		Menu:        dietRepo,
+		// What the patient reacts to belongs to the clinical record. A copy
+		// here would go stale on the one correction that matters most.
+		Allergies: dietcrosscontext.NewAllergies(
+			clinicalpostgres.RecordRepo{Repository: clinicalRepo}),
+		// And the order a support plan names is resolved where it was
+		// placed. Without this, "a plan cannot go active without an order"
+		// is defeated by typing anything into the field.
+		OrderBook: dietcrosscontext.NewOrderDirectory(
+			orderspostgres.NewOrders(ordersRepo), medicationRepo),
+		Events:     platformStore,
+		AuditTrail: store.AuditAppenderFunc(platformStore.AppendAudit),
+		// A tray held back because the patient is nil by mouth, and a run of
+		// missed meals. Both have to reach somebody rather than a screen
+		// nobody opened.
+		Escalations: dietescalate.New(escalationStore),
+		IDs:         uuidGenerator{},
+		Clock:       systemClock{},
+		Config:      deps.Dietetics,
+	})
+
 	// Medical records and health information management (SRS-MRD). Wired
 	// after the clinical and encounter contexts because everything here is
 	// judged against what they hold, and read through ports that cannot write
@@ -1124,6 +1180,9 @@ func New(deps Deps) *Server {
 	mux.Handle(recordsv1connect.NewRecordsServiceHandler(
 		recordstransport.NewHandler(recordsService, time.Now),
 		interceptors))
+	mux.Handle(hospitalopsdietv1connect.NewDietServiceHandler(
+		diettransport.NewHandler(dietService, time.Now),
+		interceptors))
 	mux.Handle(materialsv1connect.NewMaterialsServiceHandler(
 		materialstransport.NewHandler(materialsService, time.Now), interceptors))
 	billingRepo := billingpostgres.New(txManager)
@@ -1193,6 +1252,7 @@ func New(deps Deps) *Server {
 		Quality:         qualityService,
 		Infection:       infectionService,
 		Records:         recordsService,
+		Dietetics:       dietService,
 		Nursing:         nursingService,
 		Orders:          ordersService,
 		Medication:      medicationService,

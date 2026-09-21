@@ -73,6 +73,30 @@ const (
 	// one would be certifying a cause of death.
 	RoleHIMManager Role = "him_manager"
 
+	// RoleDietitian assesses patients, writes nutrition care plans, orders
+	// diets and proposes tube or intravenous feeding (SRS-DIET-001 … 004,
+	// SRS-DIET-007).
+	//
+	// What it deliberately does not hold is diet.conflict.resolve. A
+	// conflict is a diet item against an allergy on the patient's clinical
+	// record, and deciding that the allergy does not apply to this food is a
+	// clinical judgement about the record rather than about the meal. The
+	// dietitian who placed the order raising the conflict is also the person
+	// least well placed to overrule it.
+	//
+	// And no diet.support.link: the plan is not the prescription, which is
+	// the whole of SRS-DIET-007.
+	RoleDietitian Role = "dietitian"
+
+	// RoleKitchenStaff runs the meal service (SRS-DIET-005, SRS-DIET-006,
+	// SRS-DIET-008).
+	//
+	// Deliberately no diet.record.read. The kitchen needs the tray card — a
+	// texture, a restriction, a bed — and has no business reading a
+	// nutrition assessment, which carries a diagnosis. diet.service.read is
+	// the narrower read that gives it the census and the trays.
+	RoleKitchenStaff Role = "kitchen_staff"
+
 	// RoleClinicalCoder assigns the codes the hospital is paid and measured
 	// on (SRS-MRD-003).
 	//
@@ -725,6 +749,18 @@ var rolePermissions = map[Role][]string{
 		// Deliberately no mrd.certificate.void: withdrawing a certificate
 		// that has gone to a family and a registrar is the records office's
 		// decision, not the signer's.
+
+		// Dietetics (SRS-DIET-002, SRS-DIET-003, SRS-DIET-007). A doctor
+		// makes a patient nil by mouth for theatre, decides whether a
+		// documented allergy applies to a particular food, and confirms the
+		// order a nutrition support plan runs against.
+		"diet.record.read",
+		"diet.order.write",
+		"diet.conflict.resolve",
+		"diet.support.link",
+		// Deliberately nothing in the kitchen's work: a clinician who could
+		// dispatch a tray could send the meal they ordered without the
+		// dispatch check being made by anybody else.
 	},
 
 	// A pharmacist checks what was prescribed and decides what is dispensed
@@ -965,6 +1001,14 @@ var rolePermissions = map[Role][]string{
 		// it, and the person who answers it is that nurse.
 		"mrd.record.read",
 		"mrd.deficiency.resolve",
+
+		// Dietetics (SRS-DIET-006). The last few metres of a meal are a
+		// nurse's: delivering the tray, and recording the ones the patient
+		// refused or never got. A patient who has missed three meals has not
+		// eaten for a day, and the ward is where that is noticed.
+		"diet.record.read",
+		"diet.service.read",
+		"diet.write",
 		// Deliberately no mrd.deficiency.waive, for the same reason a
 		// clinician does not hold it.
 	},
@@ -1371,6 +1415,49 @@ var rolePermissions = map[Role][]string{
 		// existing.
 	},
 
+	// A dietitian assesses, plans and orders (SRS-DIET-001 … 004,
+	// SRS-DIET-007).
+	RoleDietitian: {
+		"empi.patient.read",
+		"enc.encounter.read",
+		"diet.record.read",
+		// The census and the trays, so a dietitian can see whether the
+		// patient they are worried about actually got fed.
+		"diet.service.read",
+		"diet.create",
+		"diet.order.write",
+		"diet.support.plan",
+		// Deliberately no diet.conflict.resolve: deciding that a documented
+		// allergy does not apply to this food is a clinical judgement about
+		// the record, and the person who placed the order that raised the
+		// conflict is the one least well placed to overrule it.
+		//
+		// Deliberately no diet.support.link: the plan is not the
+		// prescription.
+		//
+		// Deliberately nothing in the kitchen's own work — the census, the
+		// trays, the menu. A dietitian who could plate and dispatch could
+		// send the meal they ordered without anybody checking the order
+		// again, which is the check SRS-DIET-009 exists for.
+	},
+
+	// The kitchen builds the census, cooks to it and sends the trays
+	// (SRS-DIET-005, SRS-DIET-006, SRS-DIET-008).
+	RoleKitchenStaff: {
+		"diet.service.read",
+		"diet.manage",
+		"diet.write",
+		"diet.menu.manage",
+		"diet.count.record",
+		// Deliberately no diet.record.read: a tray card carries a texture
+		// and a restriction, and a nutrition assessment carries a diagnosis.
+		//
+		// Deliberately no diet.order.write and no diet.conflict.resolve: the
+		// kitchen cooks to the order and never writes one, and the dispatch
+		// check is only a check if the person dispatching cannot change what
+		// it checks against.
+	},
+
 	// A biomedical engineer maintains the equipment and does the service work
 	// (SRS-BIO-001, SRS-BIO-003, SRS-BIO-005, SRS-BIO-006, SRS-BIO-010).
 	RoleBiomedicalEngineer: {
@@ -1549,7 +1636,12 @@ var rolePurposes = map[Role][]authctx.PurposeOfUse{
 	// continuity of care is care.
 	RoleHIMManager:    {authctx.PurposeTreatment, authctx.PurposeOperations},
 	RoleClinicalCoder: {authctx.PurposeOperations},
-	RoleNurseManager:  {authctx.PurposeTreatment, authctx.PurposeOperations},
+	// A dietitian is delivering care. The kitchen is not: it is running a
+	// service, and an audit trail that recorded a catering read as treatment
+	// would be wrong about the one thing it exists to record.
+	RoleDietitian:    {authctx.PurposeTreatment},
+	RoleKitchenStaff: {authctx.PurposeOperations},
+	RoleNurseManager: {authctx.PurposeTreatment, authctx.PurposeOperations},
 	// Billing acts on the financial record. Payment because that is what they
 	// are doing, and operations because a revenue-integrity report is
 	// administration rather than a bill. Never treatment: a billing read of a
