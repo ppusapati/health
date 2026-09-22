@@ -1799,6 +1799,111 @@ type HospitalOpsDietSupportPlan struct {
 	Version          int64
 }
 
+type HousekeepingBedHold struct {
+	HoldID         uuid.UUID
+	TenantID       uuid.UUID
+	BedID          string
+	LocationCode   string
+	FacilityID     string
+	Zone           string
+	TaskID         uuid.UUID
+	EncounterID    string
+	State          string
+	PlacedAt       pgtype.Timestamptz
+	PlacedBy       string
+	ReleasedAt     pgtype.Timestamptz
+	ReleasedBy     string
+	OverriddenAt   pgtype.Timestamptz
+	OverriddenBy   string
+	OverrideReason string
+	Version        int64
+}
+
+type HousekeepingCleanableLocation struct {
+	LocationID         uuid.UUID
+	TenantID           uuid.UUID
+	Code               string
+	Name               string
+	Revision           int32
+	FacilityID         string
+	Zone               string
+	BedID              string
+	RiskClass          string
+	RoutineEveryHours  int32
+	RoutineSlaMinutes  int32
+	TerminalSlaMinutes int32
+	ScanCode           string
+	Approved           bool
+	ApprovedBy         string
+	ApprovedAt         pgtype.Timestamptz
+	EffectiveFrom      pgtype.Timestamptz
+	SupersededAt       pgtype.Timestamptz
+	CreatedAt          pgtype.Timestamptz
+	CreatedBy          string
+	Version            int64
+}
+
+type HousekeepingCleaningTask struct {
+	TaskID           uuid.UUID
+	TenantID         uuid.UUID
+	Kind             string
+	LocationCode     string
+	LocationName     string
+	FacilityID       string
+	Zone             string
+	BedID            string
+	RiskClass        string
+	LocationRevision int32
+	ScanCode         string
+	Restricted       bool
+	IncidentRef      string
+	Detail           string
+	AssigneeID       string
+	DueBy            pgtype.Timestamptz
+	State            string
+	StartedAt        pgtype.Timestamptz
+	StartedBy        string
+	CompletedAt      pgtype.Timestamptz
+	CompletedBy      string
+	VerifiedAt       pgtype.Timestamptz
+	VerifiedBy       string
+	VerifyNote       string
+	CancelReason     string
+	EscalatedAt      pgtype.Timestamptz
+	RaisedAt         pgtype.Timestamptz
+	RaisedBy         string
+	Version          int64
+}
+
+type HousekeepingLocationChecklistItem struct {
+	LocationID uuid.UUID
+	ItemCode   string
+	Label      string
+	Required   bool
+	Position   int32
+}
+
+type HousekeepingLocationScan struct {
+	ScanID      uuid.UUID
+	TenantID    uuid.UUID
+	TaskID      uuid.UUID
+	ScannedCode string
+	Matched     bool
+	ScannedBy   string
+	ScannedAt   pgtype.Timestamptz
+}
+
+type HousekeepingTaskChecklistItem struct {
+	TaskID    uuid.UUID
+	ItemCode  string
+	Label     string
+	Required  bool
+	Position  int32
+	Answered  bool
+	Done      bool
+	Exception string
+}
+
 type IcuAssessment struct {
 	AssessmentID uuid.UUID
 	TenantID     uuid.UUID

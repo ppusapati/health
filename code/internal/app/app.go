@@ -25,6 +25,7 @@ import (
 	"github.com/ppusapati/health/code/gen/go/healthcare/empi/v1/empiv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/encounter/v1/encounterv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/hospital_ops_diet/v1/hospitalopsdietv1connect"
+	"github.com/ppusapati/health/code/gen/go/healthcare/housekeeping/v1/housekeepingv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/icu/v1/icuv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/identity_access/v1/identityaccessv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/infection/v1/infectionv1connect"
@@ -75,6 +76,11 @@ import (
 	encounterapp "github.com/ppusapati/health/code/internal/encounter/application"
 	encounterdomain "github.com/ppusapati/health/code/internal/encounter/domain"
 	encountertransport "github.com/ppusapati/health/code/internal/encounter/transport"
+	hkpcrosscontext "github.com/ppusapati/health/code/internal/housekeeping/adapters/crosscontext"
+	hkpescalate "github.com/ppusapati/health/code/internal/housekeeping/adapters/escalate"
+	hkppostgres "github.com/ppusapati/health/code/internal/housekeeping/adapters/postgres"
+	hkpapp "github.com/ppusapati/health/code/internal/housekeeping/application"
+	hkptransport "github.com/ppusapati/health/code/internal/housekeeping/transport"
 	icuescalate "github.com/ppusapati/health/code/internal/icu/adapters/escalate"
 	icupostgres "github.com/ppusapati/health/code/internal/icu/adapters/postgres"
 	icuapp "github.com/ppusapati/health/code/internal/icu/application"
@@ -419,6 +425,18 @@ type Deps struct {
 	// rather than this code inventing a hospital's meal times.
 	Dietetics dietapp.Config
 
+	// Housekeeping is what a deployment has decided about its cleaning:
+	// whether a bed waits for a supervisor's verification before it comes
+	// back, whether a spill clean must name a resolvable incident, and
+	// whether a terminal clean must name an encounter that has actually
+	// ended (SRS-HKP-003, SRS-HKP-004, SRS-HKP-006).
+	//
+	// The zero value releases a bed on the cleaner's word, accepts a spill
+	// task with an unresolved incident reference, and raises a terminal clean
+	// on the ward's word alone. Each is a real hospital somewhere; the
+	// status document names them rather than this code deciding for one.
+	Housekeeping hkpapp.Config
+
 	// Emergency is what a deployment has decided about its emergency
 	// department: which triage scale it has approved, what must be measured at
 	// triage, and what each disposition requires (SRS-ER-002, SRS-ER-013).
@@ -449,6 +467,7 @@ type Server struct {
 	Infection    *infectionapp.Service
 	Records      *recordsapp.Service
 	Dietetics    *dietapp.Service
+	Housekeeping *hkpapp.Service
 	Nursing      *nursingapp.Service
 	Orders       *ordersapp.Service
 	Medication   *medicationapp.Service
@@ -1002,6 +1021,41 @@ func New(deps Deps) *Server {
 		Config:      deps.Dietetics,
 	})
 
+	// Housekeeping and environmental services (SRS-HKP). Wired after the
+	// encounter and quality contexts because both of its seams read one:
+	// whether the discharge a terminal clean is raised for actually
+	// happened, and whether the incident a spill clean names exists. Both
+	// are read through ports that cannot write, so housekeeping can neither
+	// close an encounter nor raise an incident — it reads what happened and
+	// cleans up afterwards.
+	hkpRepo := hkppostgres.New(txManager)
+	housekeepingService := hkpapp.NewService(hkpapp.Deps{
+		UnitOfWork: txManager,
+		Locations:  hkpRepo,
+		Tasks:      hkpRepo,
+		Scans:      hkpRepo,
+		Holds:      hkpRepo,
+		// Whether the patient has left belongs to the encounter context. A
+		// bed taken out of service with somebody still in it is a bed the
+		// ward stops trusting the board about.
+		Encounters: hkpcrosscontext.NewEncounters(
+			encounterpostgres.EncounterRepo{Repository: encounterRepo}),
+		// And the incident a spill belongs to is resolved where it was
+		// raised. Without this, "the incident link is retained" is defeated
+		// by typing anything into the field.
+		Incidents: hkpcrosscontext.NewIncidents(
+			qualitypostgres.IncidentRepo{Repository: qualityRepo}),
+		Events:     platformStore,
+		AuditTrail: store.AuditAppenderFunc(platformStore.AppendAudit),
+		// An overdue clean in a theatre, and a bed put back into service
+		// uncleaned. Both have to reach somebody rather than a screen nobody
+		// opened.
+		Escalations: hkpescalate.New(escalationStore),
+		IDs:         uuidGenerator{},
+		Clock:       systemClock{},
+		Config:      deps.Housekeeping,
+	})
+
 	// Medical records and health information management (SRS-MRD). Wired
 	// after the clinical and encounter contexts because everything here is
 	// judged against what they hold, and read through ports that cannot write
@@ -1183,6 +1237,9 @@ func New(deps Deps) *Server {
 	mux.Handle(hospitalopsdietv1connect.NewDietServiceHandler(
 		diettransport.NewHandler(dietService, time.Now),
 		interceptors))
+	mux.Handle(housekeepingv1connect.NewHousekeepingServiceHandler(
+		hkptransport.NewHandler(housekeepingService, time.Now),
+		interceptors))
 	mux.Handle(materialsv1connect.NewMaterialsServiceHandler(
 		materialstransport.NewHandler(materialsService, time.Now), interceptors))
 	billingRepo := billingpostgres.New(txManager)
@@ -1253,6 +1310,7 @@ func New(deps Deps) *Server {
 		Infection:       infectionService,
 		Records:         recordsService,
 		Dietetics:       dietService,
+		Housekeeping:    housekeepingService,
 		Nursing:         nursingService,
 		Orders:          ordersService,
 		Medication:      medicationService,

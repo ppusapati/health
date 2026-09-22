@@ -15,14 +15,15 @@ test names.
 prose, because a status document whose honest summary is a fraction is one
 whose per-row claims have to be read carefully.
 
-Twelve families are now built: SRS-ER the Emergency Department, SRS-ICU
+Thirteen families are now built: SRS-ER the Emergency Department, SRS-ICU
 critical care, SRS-OT the operating theatre, SRS-ANE anaesthesia and PACU,
 SRS-BLD blood bank and transfusion, SRS-CSSD sterile services, SRS-MAT
 materials and inventory, SRS-BIO biomedical engineering, SRS-QMS quality
 management, SRS-IPC infection prevention and control, SRS-MRD medical
-records and health information management and SRS-DIET dietetics and kitchen
-operations. Their rows are below. Five support-service families remain:
-SRS-AMB, SRS-FAC, SRS-HKP, SRS-LND and SRS-MORT.
+records and health information management, SRS-DIET dietetics and kitchen
+operations and SRS-HKP housekeeping and environmental services. Their rows
+are below. Four support-service families remain: SRS-AMB, SRS-FAC, SRS-LND
+and SRS-MORT.
 
 `make traceability` reads a row naming a requirement as a claim about it
 unless the row says the work is not built, so the unbuilt ER requirements are
@@ -107,7 +108,8 @@ clinician, and `ValidatedInputs()` is a function rather than a convention.
 | SRS-IPC Infection Prevention | 10 | **10 implemented** — see below |
 | SRS-MRD Medical Records / HIM | 10 | **10 implemented** — see below |
 | SRS-DIET Dietetics and Kitchen | 9 | **9 implemented** — see below |
-| SRS-AMB, SRS-FAC, SRS-HKP, SRS-LND, SRS-MORT support services | 43 | **Not started** — except SRS-FAC-012 above |
+| SRS-HKP Housekeeping and Environmental Services | 8 | **8 implemented** — see below |
+| SRS-AMB, SRS-FAC, SRS-LND, SRS-MORT support services | 35 | **Not started** — except SRS-FAC-012 above |
 | SRS-OPSAPI / OPSNFR / OPSSEC / OPSWEB | 32 | **Partial** — the three foundations above |
 
 ### A note on SRS-BIO
@@ -1178,6 +1180,90 @@ that shows "nil by mouth" beside the patient's name is the clinical context's
 to render from these, and it is not built. The kitchen half of the requirement
 — that a cancelled diet is not dispatched — is enforced here and does not
 depend on it.
+
+## SRS-HKP — Housekeeping and environmental services
+
+Eight requirements, Phase 2 §14. Bounded context `housekeeping`, six tables in
+schema `housekeeping`, twenty-one RPCs, ten permissions, and forty-six domain
+refusals plus twenty-eight database rules and thirteen separation-of-duties
+rules each individually weakened and confirmed to fail a test before being
+trusted.
+
+**The rule this family exists for is that a bed with an open terminal clean is
+not available.** SRS-HKP-003's acceptance is that the bed stays unavailable
+until the clean completes or somebody overrides it, and `housekeeping.bed_hold`
+is where that is held: open, released, or overridden. An override is its own
+state rather than a release with a note beside it, because the two are
+different facts — one is a bed that was cleaned and the other is a bed that
+went back into service uncleaned because the hospital was full. A schema that
+merged them would let the turnaround report say the hospital cleaned every
+bed, so `SummariseTurnaround` counts overrides apart and never averages one
+into the turnaround: a bed back in service in four minutes because nobody
+cleaned it is not a fast turnaround, and a report that said so would reward
+exactly what the hold exists to discourage. The release is not a second call
+either — it happens inside the transaction that completes or verifies the
+clean, because a bed that stayed held because the release failed separately is
+a bed the ward stops trusting the board about. Three different people are
+involved and no two of them are the same: the ward holds the bed, housekeeping
+cleans it, and only the ward manager may put it back uncleaned — under a
+permission of its own, with a reason the database requires, escalated durably
+so the ward admitting into it is told.
+
+**A location scan is evidence, never authority.** SRS-HKP-007 is explicit that
+a scan does not replace user authentication, and the way to mean it is to have
+nowhere to express the alternative. `RecordLocationScan` takes a task and a
+code and returns whether it matched; no RPC anywhere takes a scanned code
+alone, no port accepts a scan on its own, and nothing in the domain completes a
+task because a scan happened. The caller is already authenticated and already
+permitted to work on the task, and `housekeeping.location_scan` refuses a row
+with nobody behind it. A scan of the wrong door is stored as a mismatch rather
+than refused: somebody scanned the wrong label or the label on this one is
+wrong, and both are findings an audit wants to see.
+
+| Requirement | Summary | Status |
+|---|---|---|
+| SRS-HKP-001 | Cleanable location/zone master with risk class and cleaning frequency; schedules derive from active configuration | **Implemented** — a location's standard is versioned by (code, revision) and effective-dated, never edited in place, because a standard edited afterwards would change what a clean completed last month was judged against; approving one supersedes its predecessor in the same transaction, so a room never has two live standards a reader picks between; the author cannot approve it, held both by the domain and by a CHECK, and the permission to approve sits with infection control rather than with the housekeeping supervisor who wrote it — a risk class decides how often a theatre is cleaned and whether an overdue clean is escalated; the due-clean list is computed from the standards in force and the completions on the tasks, so shortening a frequency changes what is due this afternoon with nothing regenerated, and a location with no routine schedule is reported nowhere rather than overdue for ever |
+| SRS-HKP-002 | Generate routine and terminal cleaning tasks; task has location, SLA, assignee and checklist | **Implemented** — the task copies the checklist, the risk class, the scan code and the revision of the standard it was raised under rather than pointing at the location, so editing the configuration afterwards does not change what the person doing the work is judged against; the SLA is taken from the standard and produces the due time, with the terminal SLA shorter than the routine one because a bed is out of service until it is done; a task cannot be raised against a standard nobody approved; a terminal clean must be raised against a bed, held by CHECK, because one raised against a corridor would hold nothing and look like it held something |
+| SRS-HKP-003 | Trigger bed/room terminal cleaning on discharge/transfer when configured; bed remains unavailable until cleaning completion/override | **Implemented** — the rule above. `TriggerTerminalClean` raises the task and places the hold in one act, because a task raised without its hold is a bed the board still calls free; a partial unique index allows one open hold per bed, since two is a bed released once and still dirty; the hold is released inside the completing or verifying transaction and only against the task it names and only when that task is actually done; a deployment that verifies its terminal cleans holds the bed until the supervisor says so, because otherwise the verification changes nothing; an override is a separate state, a separate permission, a reason the database requires, and an escalation; and where configured, a terminal clean is refused for an encounter that has not ended — a bed taken out of service with somebody in it is a board nobody trusts |
+| SRS-HKP-004 | Record task start/complete, checklist, exceptions and supervisor verification; turnaround time is reportable | **Implemented** — every required checklist item needs an answer and an item answered "not done" needs its exception, because an unticked box with no note is indistinguishable from one nobody looked at and the difference is the whole of an audit; both halves are held by CHECKs on `task_checklist_item`, including that an unanswered item carries no answer so a count of done items cannot be fooled by a row nobody filled in; verification is refused for whoever did the work, held by the domain and by `a_clean_is_verified_by_somebody_else`, and the cleaner does not hold the permission either; turnaround is derived from the raised and completed timestamps on the tasks themselves |
+| SRS-HKP-005 | Escalate overdue critical-area cleaning; escalation follows configured SLA | **Implemented** — very-high-risk areas only, which is theatres, critical care, isolation rooms and the sterile services clean room: a channel that repeated every overdue office clean is one people filter, and the theatre goes with it; the escalated mark is written in the same transaction as the notice, so a notice raised without the mark is not one raised again on every sweep until somebody mutes the channel; the SLA comes from the standard in force rather than from a constant here, and a task somebody has finished is not overdue whatever the clock says; the notice goes through the platform's durable, acknowledged escalation mechanism rather than to a screen nobody opened |
+| SRS-HKP-006 | Record spill/biohazard cleaning with appropriate restricted category; incident/action link is retained | **Implemented** — a spill task cannot be un-restricted: `a_spill_task_is_restricted` makes it a property of the row rather than a flag an operator can clear, and the redaction lives in the application so a second client cannot be written that forgets it; the task stays on the general worklist because somebody still has to go and clean it, and what goes for a caller without `hkp.spill.read` is what was spilled and which incident it belongs to — "blood, bay 3, 14:20" is a clinical fact about whoever was in bay 3; the cleaner sent to it does hold that permission, because somebody deciding what to wear needs to know what it is; a spill task with no detail is refused, and where a deployment requires the incident link it is resolved in the quality context that owns it rather than accepted as a number somebody typed |
+| SRS-HKP-007 | QR/NFC location scan to verify task location; scan does not replace user authentication | **Implemented** — the rule above, and it is structural: there is no RPC, no port method and no column through which a scan alone could advance anything; the scan is attributed to the authenticated session rather than to a badge, held by `a_scan_names_the_person_who_made_it`; a caller without `hkp.task.work` cannot record one, because the permission decides and the scan adds evidence rather than permission; a mismatch is stored as a mismatch, and `housekeeping.location_scan` is append-only and registered with FIT-08 — a scan somebody could edit afterwards is not evidence |
+| SRS-HKP-008 | Report cleaning SLA, bed turnaround and audit compliance; reports reconcile to task timestamps | **Implemented** — every figure is derived from the tasks' and holds' own timestamps and none is stored, because a stored metric and the rows behind it disagree the first time somebody corrects a task and the stored one is the number on the board; outstanding-and-overdue-now is counted apart from completed-late, since a ward can still act on the first; verification and scan evidence are counted against completed tasks rather than raised ones, because a task nobody has finished is not an audit failure yet; a window with nothing completed reports unanswerable rather than a mean of zero, which reads as a hospital that cleans every room instantly; a window holding more rows than one report may read comes back marked truncated rather than silently summarised from part of itself |
+
+### What SRS-HKP does not reach
+
+Three seams are named rather than half-built.
+
+**This context is the only thing in the system that knows what a bed is.**
+Nothing in `internal/organization` or `internal/encounter` models a bed: an
+encounter carries a facility and an org unit, and the ward's bed numbers live
+wherever the ward keeps them. So `housekeeping.bed_hold` is the authority on
+whether a bed is clean, and `GetBedStatus` is the whole of the answer. What
+does not exist is anything that consults it before a patient is allocated to a
+bed, because there is nothing to consult it — there is no admission or
+transfer path in this system that takes a bed. When bed management is built,
+the hold is the check it has to make, and until then a ward that ignores
+`ListHeldBeds` can put a patient into a bed with an open terminal clean and
+nothing here will stop it. That is the gap, and it is named rather than
+papered over by pretending the hold blocks something it cannot see.
+
+**A bed identifier is a string this context does not validate.** The location
+master carries `bed_id` and the terminal clean holds it, but nothing resolves
+it against a register of beds, because there is no register. Two wards using
+the same bed number would collide in `bed_hold_open_idx`, which is a real
+defect and would show up as a refusal to hold the second bed. A deployment
+should namespace its bed identifiers by ward until bed management exists.
+
+**The discharge trigger is a call somebody makes, not an event this context
+subscribes to.** SRS-HKP-003 says "when configured", and what is configured
+here is whether the encounter must have ended — checked through a read-only
+port onto the encounter context. What is not built is a subscriber that raises
+the terminal clean automatically when an encounter ends. The encounter context
+publishes to the outbox and this context's use case is one call, so closing
+this is a handler rather than new machinery; as it stands the ward clerk or
+nurse triggers it, holds the permission to do so, and a discharge nobody
+followed up leaves the bed unheld rather than held for ever.
 
 ## What Wave 2 depends on
 

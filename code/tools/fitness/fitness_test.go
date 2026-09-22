@@ -141,7 +141,7 @@ func TestFIT01_DomainPackagesArePure(t *testing.T) {
 // would make these tests useless noise.
 var sqlSchemaRef = regexp.MustCompile(
 	`(?i)\b(?:from|join|into|update|delete\s+from|table)\s+` +
-		`(organization|identity_access|platform_data|platform_workflow|platform_rules|platform_edge|platform_escalation|emergency|icu|theatre|anaesthesia|bloodbank|sterile|security_platform)\.[a-z_]+`)
+		`(organization|identity_access|platform_data|platform_workflow|platform_rules|platform_edge|platform_escalation|emergency|icu|theatre|anaesthesia|bloodbank|sterile|security_platform|housekeeping)\.[a-z_]+`)
 
 // schemaOwners maps a schema to the one package path allowed to reach it.
 var schemaOwners = map[string]string{
@@ -160,6 +160,7 @@ var schemaOwners = map[string]string{
 	"sterile":             "internal/sterile/adapters/postgres",
 	"platform_blob":       "internal/platform/blobstore",
 	"platform_escalation": "internal/platform/escalation",
+	"housekeeping":        "internal/housekeeping/adapters/postgres",
 }
 
 // TestSQLSchemaRefDetectorWorks guards the guard.
@@ -185,6 +186,7 @@ func TestSQLSchemaRefDetectorWorks(t *testing.T) {
 		`SELECT * FROM theatre.case WHERE status <> 'cancelled'`,
 		`SELECT * FROM anaesthesia.record WHERE status = 'open'`,
 		`SELECT * FROM bloodbank.component WHERE status = 'available'`,
+		`SELECT * FROM housekeeping.bed_hold WHERE state = 'open'`,
 		`SELECT * FROM sterile.run WHERE stage = 'released'`,
 	}
 	for _, sample := range shouldMatch {
@@ -269,6 +271,7 @@ func TestFIT02_GeneratedQueriesImportedOnlyByAdapters(t *testing.T) {
 		"internal/infection/adapters/postgres",
 		"internal/records/adapters/postgres",
 		"internal/dietetics/adapters/postgres",
+		"internal/housekeeping/adapters/postgres",
 		"internal/platform/store",
 		"internal/platform/workflow",
 		"internal/platform/rules",
@@ -559,6 +562,12 @@ func TestFIT08_NoDeleteOnAppendOnlyTables(t *testing.T) {
 		// count is wastage that never happened, and the kitchen's variance
 		// comes out at whatever the remaining rows say.
 		"hospital_ops_diet.ingredient_consumption",
+		// SRS-HKP-007's acceptance is that a scan does not replace user
+		// authentication, and a scan is worth recording only because nobody
+		// can edit it afterwards. A deleted scan is somebody who was never
+		// in the room, and the audit-compliance figure comes out higher for
+		// it.
+		"housekeeping.location_scan",
 	}
 
 	for _, f := range loadGoFiles(t) {

@@ -97,6 +97,30 @@ const (
 	// the narrower read that gives it the census and the trays.
 	RoleKitchenStaff Role = "kitchen_staff"
 
+	// RoleHousekeeper cleans (SRS-HKP-002, SRS-HKP-004, SRS-HKP-007).
+	//
+	// It holds hkp.spill.read, because somebody sent to a biohazard task
+	// needs to know what was spilled before they decide what to wear.
+	//
+	// What it deliberately does not hold is hkp.task.verify. A clean signed
+	// off by the cleaner is the same claim made twice, and supervisor
+	// verification is SRS-HKP-004's own word for what this is. Nor
+	// hkp.bed.override: putting a patient into an uncleaned bed is a
+	// decision about the ward, not about the cleaning.
+	RoleHousekeeper Role = "housekeeper"
+
+	// RoleHousekeepingSupervisor runs the cleaning and checks the work
+	// (SRS-HKP-001, SRS-HKP-004, SRS-HKP-005, SRS-HKP-008).
+	//
+	// Deliberately no hkp.location.approve. The supervisor writes the
+	// cleaning standard; somebody else puts it in force, because a standard
+	// decides how often a theatre is cleaned and what counts as cleaning it.
+	// The domain also refuses the author their own approval, so this is the
+	// second lock rather than the only one.
+	//
+	// And deliberately no hkp.bed.override, for the reason above.
+	RoleHousekeepingSupervisor Role = "housekeeping_supervisor"
+
 	// RoleClinicalCoder assigns the codes the hospital is paid and measured
 	// on (SRS-MRD-003).
 	//
@@ -1011,6 +1035,22 @@ var rolePermissions = map[Role][]string{
 		"diet.write",
 		// Deliberately no mrd.deficiency.waive, for the same reason a
 		// clinician does not hold it.
+
+		// Housekeeping (SRS-HKP-003, SRS-HKP-006). The ward is where a
+		// discharge happens and where a spill is found, so a nurse triggers
+		// the terminal clean that takes the bed out of service and calls the
+		// clean for the spill. Reading the board comes with it: the nurse
+		// about to admit somebody needs to know whether the bed is clear.
+		"hkp.read",
+		"hkp.task.raise",
+		"hkp.bed.hold",
+		// Deliberately no hkp.bed.override: the nurse holding the bed is the
+		// one under pressure to release it, and releasing it uncleaned is a
+		// decision the ward manager makes and the system escalates.
+		//
+		// Deliberately no hkp.task.work and no hkp.task.verify: a ward that
+		// could close its own cleaning tasks is a ward whose compliance
+		// figure means nothing.
 	},
 
 	// An anaesthetist assesses, plans, gives and records the anaesthetic, and
@@ -1344,6 +1384,18 @@ var rolePermissions = map[Role][]string{
 		"ipc.rule.approve",
 		"ipc.environment.act",
 		// Still no ipc.exposure.manage and no ipc.stewardship.respond.
+
+		// A cleaning standard's risk class decides how often a theatre is
+		// cleaned and whether an overdue clean is escalated, which is an
+		// infection-control judgement rather than a housekeeping one. This
+		// is the second signature on SRS-HKP-001: housekeeping writes the
+		// standard, infection control puts it in force.
+		"hkp.read",
+		"hkp.location.approve",
+		"hkp.report.read",
+		// Deliberately no hkp.location.manage: the approver does not write
+		// what they approve, and the domain refuses the author their own
+		// approval either way.
 	},
 
 	// Occupational health works staff exposure records (SRS-IPC-007). Every
@@ -1458,6 +1510,43 @@ var rolePermissions = map[Role][]string{
 		// it checks against.
 	},
 
+	// A housekeeper does the cleaning and records it (SRS-HKP-002,
+	// SRS-HKP-004, SRS-HKP-006, SRS-HKP-007).
+	RoleHousekeeper: {
+		"hkp.read",
+		// Somebody sent to a biohazard task needs to know what was spilled
+		// before they decide what to wear.
+		"hkp.spill.read",
+		// A cleaner who walks past a spill can raise the task for it.
+		"hkp.task.raise",
+		"hkp.task.work",
+		// Deliberately no hkp.task.verify: a clean signed off by the cleaner
+		// is the same claim made twice.
+		//
+		// Deliberately no hkp.bed.override: putting a patient into an
+		// uncleaned bed is a decision about the ward.
+		//
+		// Deliberately no hkp.location.manage: the person judged against the
+		// checklist does not write it.
+	},
+
+	// A housekeeping supervisor runs the cleaning, checks the work and
+	// reports on it (SRS-HKP-001, SRS-HKP-004, SRS-HKP-005, SRS-HKP-008).
+	RoleHousekeepingSupervisor: {
+		"hkp.read",
+		"hkp.spill.read",
+		"hkp.task.raise",
+		"hkp.task.work",
+		"hkp.task.verify",
+		"hkp.location.manage",
+		"hkp.bed.hold",
+		"hkp.report.read",
+		// Deliberately no hkp.location.approve: the supervisor writes the
+		// cleaning standard and somebody else puts it in force.
+		//
+		// Deliberately no hkp.bed.override.
+	},
+
 	// A biomedical engineer maintains the equipment and does the service work
 	// (SRS-BIO-001, SRS-BIO-003, SRS-BIO-005, SRS-BIO-006, SRS-BIO-010).
 	RoleBiomedicalEngineer: {
@@ -1564,6 +1653,17 @@ var rolePermissions = map[Role][]string{
 
 		// The theatre command board and its numbers (SRS-OT-013, SRS-OT-015).
 		"ot.case.read",
+
+		// A ward manager decides whether a bed comes back uncleaned when the
+		// hospital is full (SRS-HKP-003). Its own permission, every use
+		// audited and escalated, and deliberately not held by anybody in
+		// housekeeping: the person who would benefit from the bed looking
+		// clean is not the person who decides it is.
+		"hkp.read",
+		"hkp.task.raise",
+		"hkp.bed.hold",
+		"hkp.bed.override",
+		"hkp.report.read",
 	},
 }
 

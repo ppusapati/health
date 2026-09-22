@@ -14,6 +14,7 @@ package crosscontext
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	clinicaldomain "github.com/ppusapati/health/code/internal/clinical/domain"
@@ -23,6 +24,7 @@ import (
 	medicationports "github.com/ppusapati/health/code/internal/medication/ports"
 	ordersports "github.com/ppusapati/health/code/internal/orders/ports"
 	"github.com/ppusapati/health/code/internal/platform/authctx"
+	"github.com/ppusapati/health/code/internal/platform/rpcerr"
 )
 
 // allergyPageSize bounds one patient's allergy list. A patient with more
@@ -131,7 +133,7 @@ func (d OrderDirectory) Exists(ctx context.Context, scope authctx.TenantScope,
 			return false, nil
 		}
 		if _, err := d.orders.Get(ctx, scope, ref); err != nil {
-			return false, nil
+			return false, absentOrFailed(err)
 		}
 		return true, nil
 	case "medication":
@@ -139,10 +141,27 @@ func (d OrderDirectory) Exists(ctx context.Context, scope authctx.TenantScope,
 			return false, nil
 		}
 		if _, err := d.prescriptions.Get(ctx, scope, ref); err != nil {
-			return false, nil
+			return false, absentOrFailed(err)
 		}
 		return true, nil
 	default:
 		return false, nil
 	}
+}
+
+// absentOrFailed separates "there is no such order" from "we could not ask".
+//
+// Only a NOT_FOUND is an answer. Everything else — a dropped connection, a
+// permission refusal, a timeout — is returned as the failure it is, because
+// the wave specification is explicit that a dependency outage must not be
+// reinterpreted as a valid negative result. Swallowing one here would tell a
+// dietitian that the prescription pharmacy had just dispensed against does
+// not exist.
+func absentOrFailed(err error) error {
+	var refused *rpcerr.Error
+	if errors.As(err, &refused) &&
+		refused.Category == rpcerr.CategoryNotFound {
+		return nil
+	}
+	return err
 }

@@ -1,0 +1,580 @@
+// Housekeeping and environmental services: the cleanable location master and
+// its cleaning standards, routine and terminal cleaning tasks, bed cleaning
+// holds, spill and biohazard work, location scanning, and the SLA, turnaround
+// and audit-compliance reports.
+//
+// Owning context : housekeeping  (Master Engineering Registry)
+// Owning service : HousekeepingService
+// Trace          : SRS-HKP-001 … SRS-HKP-008
+//
+// Four shapes in this contract are deliberate.
+//
+// RecordLocationScan takes a task identifier and the code that was read, and
+// returns whether it matched. It does not return a task, it does not advance
+// one, and there is no RPC anywhere here that takes a scanned code alone.
+// SRS-HKP-007 is explicit that a scan does not replace user authentication,
+// and the way to mean it in a contract is to have nothing that could express
+// it: the caller is already authenticated and already permitted to work on
+// the task, and the scan adds evidence rather than permission. A scan of the
+// wrong door comes back matched=false rather than as an error, because
+// somebody scanned the wrong label or the label is wrong and both are
+// findings.
+//
+// OverrideBedHold is its own RPC under its own permission, and an overridden
+// hold is its own state. SRS-HKP-003's acceptance is that a bed stays
+// unavailable until the clean completes or somebody overrides it, and the two
+// endings are different facts: one is a bed that was cleaned, the other is a
+// bed that went back into service uncleaned because the hospital was full. A
+// contract that expressed the second as the first would let a turnaround
+// report say the hospital cleaned every bed.
+//
+// A CleaningTask of kind spill comes back with its detail and incident
+// reference cleared for a caller without hkp.spill.read. The task stays on
+// the worklist, because somebody still has to go and clean it; what goes is
+// what was spilled and where, which is a clinical fact about whoever was in
+// that bay. SRS-HKP-006's restricted category is this, not a label.
+//
+// A cleaning task carries its own checklist and the revision of the standard
+// it was raised under, rather than a pointer to a location. SRS-HKP-001 says
+// schedules derive from the active configuration; the corollary is that a
+// configuration edited afterwards must not change what a completed clean was
+// judged against, and a contract that returned a reference would leave the
+// reader to resolve it against today's standard.
+syntax = "proto3";
+
+package healthcare.housekeeping.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ppusapati/health/code/gen/go/healthcare/housekeeping/v1;housekeepingv1";
+
+// How much a place matters when it is not clean (SRS-HKP-001).
+//
+// An enum rather than a number: a hospital that could type "7" would have
+// four wards on seven and nobody able to say what seven meant.
+enum RiskClass {
+  RISK_CLASS_UNSPECIFIED = 0;
+  // Theatres, critical care, isolation rooms, the sterile services clean
+  // room. An overdue clean here is escalated rather than queued.
+  RISK_CLASS_VERY_HIGH = 1;
+  // Inpatient wards, treatment rooms, the emergency department.
+  RISK_CLASS_HIGH = 2;
+  // Outpatient areas, corridors, waiting rooms.
+  RISK_CLASS_MODERATE = 3;
+  // Offices and non-clinical storage.
+  RISK_CLASS_LOW = 4;
+}
+
+// Why a clean is happening (SRS-HKP-002, SRS-HKP-006).
+enum TaskKind {
+  TASK_KIND_UNSPECIFIED = 0;
+  // The scheduled clean the configuration says is due.
+  TASK_KIND_ROUTINE = 1;
+  // The clean between one patient and the next. A bed is out of service
+  // until it is done.
+  TASK_KIND_TERMINAL = 2;
+  // Blood, body fluid or a chemical. Restricted.
+  TASK_KIND_SPILL = 3;
+  // A periodic deep clean, usually scheduled out of hours.
+  TASK_KIND_DEEP = 4;
+}
+
+// Where a cleaning task stands (SRS-HKP-004).
+enum TaskState {
+  TASK_STATE_UNSPECIFIED = 0;
+  TASK_STATE_OPEN = 1;
+  TASK_STATE_IN_PROGRESS = 2;
+  // The work done and the checklist answered. Not the end: a task in a place
+  // the hospital verifies is not finished until a supervisor says so.
+  TASK_STATE_COMPLETED = 3;
+  TASK_STATE_VERIFIED = 4;
+  // A task that should not have been raised.
+  TASK_STATE_CANCELLED = 5;
+}
+
+// Where a bed's cleaning hold stands (SRS-HKP-003).
+enum HoldState {
+  HOLD_STATE_UNSPECIFIED = 0;
+  // A bed out of service until the terminal clean is done.
+  HOLD_STATE_OPEN = 1;
+  // A hold the clean finished.
+  HOLD_STATE_RELEASED = 2;
+  // A hold somebody lifted without the clean finishing. Its own state, so a
+  // hospital cannot count it as a clean.
+  HOLD_STATE_OVERRIDDEN = 3;
+}
+
+// One thing a clean has to include (SRS-HKP-002).
+message ChecklistItem {
+  string code = 1;
+  string label = 2;
+  // An item a clean cannot be completed without an answer for. An optional
+  // item is one the hospital wants counted rather than insisted on.
+  bool required = 3;
+}
+
+// One checklist item's outcome (SRS-HKP-004).
+message ChecklistAnswer {
+  string code = 1;
+  bool done = 2;
+  // Why an item was not done. Required when done is false: an unticked box
+  // with no note is indistinguishable from one nobody looked at.
+  string exception = 3;
+}
+
+// A place with a cleaning standard (SRS-HKP-001).
+//
+// Versioned by (code, revision) and effective-dated, because a standard
+// edited in place would change what a clean completed last month was judged
+// against.
+message CleanableLocation {
+  string location_id = 1;
+  string code = 2;
+  string name = 3;
+  int32 revision = 4;
+  string facility_id = 5;
+  // The ward, theatre suite or floor the people who work here are organised
+  // by.
+  string zone = 6;
+  // Set for a location that is a bed. It is what a terminal clean holds.
+  string bed_id = 7;
+  RiskClass risk_class = 8;
+  // Zero means no routine schedule — a store room cleaned when somebody asks
+  // — rather than a location overdue for ever.
+  int32 routine_every_hours = 9;
+  int32 routine_sla_minutes = 10;
+  // Shorter than the routine SLA, because a bed is out of service until the
+  // terminal clean is done.
+  int32 terminal_sla_minutes = 11;
+  repeated ChecklistItem checklist = 12;
+  // The code on the label at the door.
+  string scan_code = 13;
+  bool approved = 14;
+  string approved_by = 15;
+  google.protobuf.Timestamp approved_at = 16;
+  google.protobuf.Timestamp effective_from = 17;
+  google.protobuf.Timestamp superseded_at = 18;
+  google.protobuf.Timestamp created_at = 19;
+  string created_by = 20;
+  int64 version = 21;
+}
+
+// A code read at the door (SRS-HKP-007).
+//
+// Evidence that somebody was in the room, attributed to the authenticated
+// person who scanned it. Never authority.
+message LocationScan {
+  // What came off the label, exactly as read.
+  string scanned_code = 1;
+  // Whether the code agreed with the location's own. A mismatch is the
+  // finding.
+  bool matched = 2;
+  string scanned_by = 3;
+  google.protobuf.Timestamp scanned_at = 4;
+}
+
+// One piece of cleaning work (SRS-HKP-002, SRS-HKP-004, SRS-HKP-006).
+message CleaningTask {
+  string task_id = 1;
+  TaskKind kind = 2;
+  string location_code = 3;
+  string location_name = 4;
+  string facility_id = 5;
+  string zone = 6;
+  // Set for a terminal clean on a bed, and what the hold is against.
+  string bed_id = 7;
+  RiskClass risk_class = 8;
+  // The revision of the standard this task was raised under.
+  int32 location_revision = 9;
+  // The standard's items, copied at raise time.
+  repeated ChecklistItem checklist = 10;
+  string scan_code = 11;
+  // Whether this task's detail is held out of the general worklist. Set from
+  // the kind rather than chosen.
+  bool restricted = 12;
+  // The incident this spill belongs to, in the quality context. Cleared for a
+  // caller without hkp.spill.read.
+  string incident_ref = 13;
+  // What was spilled. Cleared for a caller without hkp.spill.read.
+  string detail = 14;
+  string assignee_id = 15;
+  google.protobuf.Timestamp due_by = 16;
+  TaskState state = 17;
+  repeated ChecklistAnswer answers = 18;
+  repeated LocationScan scans = 19;
+  google.protobuf.Timestamp started_at = 20;
+  string started_by = 21;
+  google.protobuf.Timestamp completed_at = 22;
+  string completed_by = 23;
+  google.protobuf.Timestamp verified_at = 24;
+  // Never the same person as completed_by.
+  string verified_by = 25;
+  string verify_note = 26;
+  string cancel_reason = 27;
+  google.protobuf.Timestamp escalated_at = 28;
+  google.protobuf.Timestamp raised_at = 29;
+  string raised_by = 30;
+  int64 version = 31;
+}
+
+// A bed kept out of service until it has been cleaned (SRS-HKP-003).
+message BedHold {
+  string hold_id = 1;
+  string bed_id = 2;
+  string location_code = 3;
+  string facility_id = 4;
+  string zone = 5;
+  // The terminal clean that must finish.
+  string task_id = 6;
+  // The encounter whose end raised it, where there was one.
+  string encounter_id = 7;
+  HoldState state = 8;
+  google.protobuf.Timestamp placed_at = 9;
+  string placed_by = 10;
+  google.protobuf.Timestamp released_at = 11;
+  string released_by = 12;
+  google.protobuf.Timestamp overridden_at = 13;
+  string overridden_by = 14;
+  string override_reason = 15;
+  int64 version = 16;
+}
+
+// A location whose routine clean has fallen due (SRS-HKP-001).
+message DueRoutineClean {
+  CleanableLocation location = 1;
+  // Zero for a location nobody has ever cleaned, which appears first rather
+  // than never: a room with no history is the one most likely to have been
+  // missed.
+  google.protobuf.Timestamp last_cleaned_at = 2;
+  google.protobuf.Timestamp due_since = 3;
+  bool never_cleaned = 4;
+}
+
+// -------------------------------------------------- locations (SRS-HKP-001)
+
+message ConfigureLocationRequest {
+  string code = 1;
+  string name = 2;
+  string facility_id = 3;
+  string zone = 4;
+  string bed_id = 5;
+  RiskClass risk_class = 6;
+  int32 routine_every_hours = 7;
+  int32 routine_sla_minutes = 8;
+  int32 terminal_sla_minutes = 9;
+  repeated ChecklistItem checklist = 10;
+  string scan_code = 11;
+  // The revision is assigned by the server, not by the caller: two people
+  // configuring the same room at once would otherwise both write revision
+  // three.
+}
+
+message ConfigureLocationResponse {
+  CleanableLocation location = 1;
+}
+
+message ApproveLocationRequest {
+  string location_id = 1;
+  // When the standard takes effect. Empty means now.
+  google.protobuf.Timestamp effective_from = 2;
+}
+
+message ApproveLocationResponse {
+  CleanableLocation location = 1;
+}
+
+message ListLocationsRequest {
+  string facility_id = 1;
+  string zone = 2;
+  RiskClass risk_class = 3;
+  // Restrict to standards in force right now.
+  bool live_only = 4;
+  int32 page_size = 5;
+  int32 offset = 6;
+}
+
+message ListLocationsResponse {
+  repeated CleanableLocation locations = 1;
+}
+
+message GetLocationInForceRequest {
+  string code = 1;
+}
+
+message GetLocationInForceResponse {
+  CleanableLocation location = 1;
+}
+
+message ListDueRoutineCleansRequest {
+  string facility_id = 1;
+}
+
+message ListDueRoutineCleansResponse {
+  repeated DueRoutineClean due = 1;
+}
+
+// ------------------------------------------------------ tasks (SRS-HKP-002)
+
+message RaiseCleaningTaskRequest {
+  string location_code = 1;
+  TaskKind kind = 2;
+  // The incident this spill belongs to. A deployment may require it to
+  // resolve.
+  string incident_ref = 3;
+  // What was spilled. Required for a spill: a biohazard task with no detail
+  // sends somebody with the wrong equipment.
+  string detail = 4;
+  string assignee_id = 5;
+}
+
+message RaiseCleaningTaskResponse {
+  CleaningTask task = 1;
+}
+
+message AssignCleaningTaskRequest {
+  string task_id = 1;
+  string assignee_id = 2;
+}
+
+message AssignCleaningTaskResponse {
+  CleaningTask task = 1;
+}
+
+message StartCleaningTaskRequest {
+  string task_id = 1;
+}
+
+message StartCleaningTaskResponse {
+  CleaningTask task = 1;
+}
+
+message CompleteCleaningTaskRequest {
+  string task_id = 1;
+  repeated ChecklistAnswer answers = 2;
+}
+
+message CompleteCleaningTaskResponse {
+  CleaningTask task = 1;
+}
+
+message VerifyCleaningTaskRequest {
+  string task_id = 1;
+  string note = 2;
+}
+
+message VerifyCleaningTaskResponse {
+  CleaningTask task = 1;
+}
+
+message CancelCleaningTaskRequest {
+  string task_id = 1;
+  string reason = 2;
+}
+
+message CancelCleaningTaskResponse {
+  CleaningTask task = 1;
+}
+
+message GetCleaningTaskRequest {
+  string task_id = 1;
+}
+
+message GetCleaningTaskResponse {
+  CleaningTask task = 1;
+}
+
+message ListCleaningTasksRequest {
+  string facility_id = 1;
+  string zone = 2;
+  string location_code = 3;
+  string bed_id = 4;
+  TaskKind kind = 5;
+  repeated TaskState states = 6;
+  string assignee_id = 7;
+  // Only tasks somebody still has to do.
+  bool open_only = 8;
+  google.protobuf.Timestamp from = 9;
+  google.protobuf.Timestamp to = 10;
+  int32 page_size = 11;
+  int32 offset = 12;
+}
+
+message ListCleaningTasksResponse {
+  repeated CleaningTask tasks = 1;
+}
+
+message EscalateOverdueCleansRequest {
+  string facility_id = 1;
+}
+
+message EscalateOverdueCleansResponse {
+  // The tasks a notice went out for. Critical areas only, once each.
+  repeated CleaningTask escalated = 1;
+}
+
+// ------------------------------------------------------ scans (SRS-HKP-007)
+
+message RecordLocationScanRequest {
+  string task_id = 1;
+  // The code that was read, exactly as read.
+  string scanned_code = 2;
+}
+
+message RecordLocationScanResponse {
+  // The scan as recorded. A mismatch comes back here rather than as an
+  // error.
+  LocationScan scan = 1;
+}
+
+// -------------------------------------------------- bed holds (SRS-HKP-003)
+
+message TriggerTerminalCleanRequest {
+  string location_code = 1;
+  // The discharge or transfer that triggered it. A deployment may require it
+  // to name an encounter that has actually ended.
+  string encounter_id = 2;
+  string assignee_id = 3;
+  string detail = 4;
+}
+
+message TriggerTerminalCleanResponse {
+  CleaningTask task = 1;
+  BedHold hold = 2;
+}
+
+message OverrideBedHoldRequest {
+  string hold_id = 1;
+  // Why this bed is going back into service uncleaned. Required.
+  string reason = 2;
+}
+
+message OverrideBedHoldResponse {
+  BedHold hold = 1;
+}
+
+message GetBedStatusRequest {
+  string bed_id = 1;
+}
+
+message GetBedStatusResponse {
+  string bed_id = 1;
+  // False while any hold on the bed is open. A bed this context knows
+  // nothing about comes back clear.
+  bool clear = 2;
+  // The open hold, when there is one.
+  BedHold hold = 3;
+}
+
+message ListHeldBedsRequest {
+  string facility_id = 1;
+  string zone = 2;
+  int32 page_size = 3;
+  int32 offset = 4;
+}
+
+message ListHeldBedsResponse {
+  // Longest held first.
+  repeated BedHold holds = 1;
+}
+
+// ---------------------------------------------------- reports (SRS-HKP-008)
+
+message CleaningSummary {
+  int32 raised = 1;
+  int32 completed = 2;
+  int32 cancelled = 3;
+  // Tasks still to do at the moment asked about.
+  int32 outstanding = 4;
+  // Outstanding tasks already past their SLA. Counted apart from the ones
+  // completed late, because a ward can still act on these.
+  int32 overdue_now = 5;
+  int32 completed_late = 6;
+  int32 within_sla = 7;
+  // Whole minutes. A turnaround of 43.7 minutes is a figure whose decimal is
+  // noise from how many tasks there were.
+  int32 mean_turnaround_minutes = 8;
+  int32 longest_turnaround_minutes = 9;
+  // Completed tasks a supervisor signed off, and completed tasks somebody
+  // scanned the right door for. Both against completed rather than raised: a
+  // task nobody has finished is not an audit failure yet.
+  int32 verified = 10;
+  int32 scan_verified = 11;
+  // A set with nothing completed in it. Reported rather than a mean of zero,
+  // which reads as a hospital that cleans every room instantly.
+  bool unanswerable = 12;
+}
+
+message TurnaroundSummary {
+  int32 held = 1;
+  int32 released = 2;
+  // Beds out of service at the moment asked about.
+  int32 still_held = 3;
+  // Beds that went back into service without the clean finishing. Never
+  // averaged into the turnaround.
+  int32 overridden = 4;
+  int32 mean_minutes = 5;
+  int32 longest_minutes = 6;
+  bool unanswerable = 7;
+}
+
+message GetCleaningReportRequest {
+  string facility_id = 1;
+  string zone = 2;
+  google.protobuf.Timestamp from = 3;
+  google.protobuf.Timestamp to = 4;
+}
+
+message GetCleaningReportResponse {
+  CleaningSummary summary = 1;
+  // The window held more tasks than one report may read, so this summarises
+  // some of the hospital rather than all of it.
+  bool truncated = 2;
+}
+
+message GetTurnaroundReportRequest {
+  string facility_id = 1;
+  string zone = 2;
+  google.protobuf.Timestamp from = 3;
+  google.protobuf.Timestamp to = 4;
+}
+
+message GetTurnaroundReportResponse {
+  TurnaroundSummary summary = 1;
+  bool truncated = 2;
+}
+
+// Housekeeping and environmental services (SRS-HKP-001 … 008).
+service HousekeepingService {
+  // Cleanable locations and their standards (SRS-HKP-001).
+  rpc ConfigureLocation(ConfigureLocationRequest) returns (ConfigureLocationResponse);
+  rpc ApproveLocation(ApproveLocationRequest) returns (ApproveLocationResponse);
+  rpc ListLocations(ListLocationsRequest) returns (ListLocationsResponse);
+  rpc GetLocationInForce(GetLocationInForceRequest) returns (GetLocationInForceResponse);
+  rpc ListDueRoutineCleans(ListDueRoutineCleansRequest) returns (ListDueRoutineCleansResponse);
+
+  // Cleaning work (SRS-HKP-002, SRS-HKP-004, SRS-HKP-006).
+  rpc RaiseCleaningTask(RaiseCleaningTaskRequest) returns (RaiseCleaningTaskResponse);
+  rpc AssignCleaningTask(AssignCleaningTaskRequest) returns (AssignCleaningTaskResponse);
+  rpc StartCleaningTask(StartCleaningTaskRequest) returns (StartCleaningTaskResponse);
+  rpc CompleteCleaningTask(CompleteCleaningTaskRequest) returns (CompleteCleaningTaskResponse);
+  rpc VerifyCleaningTask(VerifyCleaningTaskRequest) returns (VerifyCleaningTaskResponse);
+  rpc CancelCleaningTask(CancelCleaningTaskRequest) returns (CancelCleaningTaskResponse);
+  rpc GetCleaningTask(GetCleaningTaskRequest) returns (GetCleaningTaskResponse);
+  rpc ListCleaningTasks(ListCleaningTasksRequest) returns (ListCleaningTasksResponse);
+
+  // Overdue critical-area escalation (SRS-HKP-005).
+  rpc EscalateOverdueCleans(EscalateOverdueCleansRequest) returns (EscalateOverdueCleansResponse);
+
+  // Location scanning (SRS-HKP-007).
+  rpc RecordLocationScan(RecordLocationScanRequest) returns (RecordLocationScanResponse);
+
+  // Bed cleaning holds (SRS-HKP-003).
+  rpc TriggerTerminalClean(TriggerTerminalCleanRequest) returns (TriggerTerminalCleanResponse);
+  rpc OverrideBedHold(OverrideBedHoldRequest) returns (OverrideBedHoldResponse);
+  rpc GetBedStatus(GetBedStatusRequest) returns (GetBedStatusResponse);
+  rpc ListHeldBeds(ListHeldBedsRequest) returns (ListHeldBedsResponse);
+
+  // Reporting (SRS-HKP-008).
+  rpc GetCleaningReport(GetCleaningReportRequest) returns (GetCleaningReportResponse);
+  rpc GetTurnaroundReport(GetTurnaroundReportRequest) returns (GetTurnaroundReportResponse);
+}
