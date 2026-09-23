@@ -1,0 +1,680 @@
+// Mortuary operations: the register of bodies in the mortuary's care, the
+// storage spaces and where each body has been, the belongings and their chain
+// of custody, postmortem requests and the authorities behind them, the
+// release checks and the release itself, and the occupancy board.
+//
+// Owning context : mortuary  (Master Engineering Registry)
+// Owning service : MortuaryService
+// Trace          : SRS-MORT-001 … SRS-MORT-008
+//
+// Four shapes in this contract are deliberate.
+//
+// OpenCase takes a source and refuses anything in between. An in-hospital
+// death names its encounter; a body brought in says who brought it and names
+// no encounter here. There is no field that means "linked, probably", because
+// "which death is this?" is the question a family, a registrar and a coroner
+// all ask first, and a case that answers it with an identifier somebody typed
+// is a case that can point at the wrong person.
+//
+// Release runs every check and there is no field that skips one. A
+// medico-legal case and an unidentified body are released on a named
+// authority's clearance with that authority's own reference, and no policy
+// setting turns that off — SRS-MORT-007's "cannot bypass required
+// authorization" is not a configuration option. The other checks are policy:
+// a deployment decides whether it holds a body for the death certificate,
+// whether it releases on a presumed identification, and whether the
+// belongings must be settled first. GetReleaseChecks returns the whole list
+// at once, because a mortuary told "no identity check" will do the identity
+// check and come back to be told "no death certificate".
+//
+// The cause of death and the medico-legal reference are absent from every
+// list and from every event. GetCase carries them only for a caller holding
+// mort.sensitive.read, and that read is audited each time; ListCases and the
+// occupancy board have no field for them at all. SRS-MORT-003's acceptance is
+// that unauthorised reads are denied and audited, and a board that could show
+// a cause of death is one that will, on a screen in a corridor.
+//
+// Belongings move by handover and never by edit. A handover names the
+// recipient, the document that identified them, a second member of staff and
+// a signature reference; an item an authority has taken is retained rather
+// than handed over, because the family has not got it and telling them
+// otherwise would be untrue.
+//
+// Every measurement is an integer in a base unit: hours held, quantities of
+// things.
+syntax = "proto3";
+
+package healthcare.mortuary.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ppusapati/health/code/gen/go/healthcare/mortuary/v1;mortuaryv1";
+
+// Where the body came from (SRS-MORT-001).
+enum Source {
+  SOURCE_UNSPECIFIED = 0;
+  // A death this hospital recorded. The case names the encounter.
+  SOURCE_IN_HOSPITAL = 1;
+  // Received from outside: an ambulance, the police, another hospital.
+  SOURCE_BROUGHT_IN = 2;
+}
+
+// How sure the mortuary is who this is (SRS-MORT-002, SRS-MORT-007).
+enum Identity {
+  IDENTITY_UNSPECIFIED = 0;
+  IDENTITY_UNIDENTIFIED = 1;
+  // Named from effects, a document or a circumstance rather than by
+  // somebody who knew them. A hypothesis, and handing a body to a family on
+  // one is how the wrong funeral happens.
+  IDENTITY_PRESUMED = 2;
+  // Named by a person who identified it, and the case records who and how.
+  IDENTITY_CONFIRMED = 3;
+}
+
+// Where a case stands (SRS-MORT-002, SRS-MORT-006).
+enum CaseState {
+  CASE_STATE_UNSPECIFIED = 0;
+  CASE_STATE_RECEIVED = 1;
+  CASE_STATE_STORED = 2;
+  CASE_STATE_RELEASED = 3;
+}
+
+// What sort of storage a space is (SRS-MORT-002).
+enum SpaceKind {
+  SPACE_KIND_UNSPECIFIED = 0;
+  SPACE_KIND_REFRIGERATED = 1;
+  SPACE_KIND_FREEZER = 2;
+  // A room a family is taken into. Occupied like any other space, because a
+  // body in the viewing room is a body not in its drawer.
+  SPACE_KIND_VIEWING = 3;
+  SPACE_KIND_POSTMORTEM = 4;
+}
+
+// Whether a body is still in a space (SRS-MORT-002).
+enum PlacementState {
+  PLACEMENT_STATE_UNSPECIFIED = 0;
+  PLACEMENT_STATE_CURRENT = 1;
+  PLACEMENT_STATE_ENDED = 2;
+}
+
+// What sort of belonging (SRS-MORT-004).
+enum ItemKind {
+  ITEM_KIND_UNSPECIFIED = 0;
+  // Jewellery, cash, a watch: what a family asks about and what an
+  // investigation asks about. Listed with a second person present and into
+  // a numbered seal.
+  ITEM_KIND_VALUABLE = 1;
+  ITEM_KIND_DOCUMENT = 2;
+  ITEM_KIND_CLOTHING = 3;
+  ITEM_KIND_OTHER = 4;
+}
+
+// Where one belonging stands (SRS-MORT-004).
+enum ItemState {
+  ITEM_STATE_UNSPECIFIED = 0;
+  ITEM_STATE_HELD = 1;
+  ITEM_STATE_HANDED_OVER = 2;
+  // Held back by an authority. Its own state rather than a handover: the
+  // family has not got it.
+  ITEM_STATE_RETAINED = 3;
+}
+
+// What sort of examination (SRS-MORT-005).
+enum PostmortemKind {
+  POSTMORTEM_KIND_UNSPECIFIED = 0;
+  // Asked for by the treating team with the family's consent.
+  POSTMORTEM_KIND_CLINICAL = 1;
+  // Ordered by a coroner, a magistrate or the police. The family's consent
+  // is not what authorises it, and the authorisation carries the
+  // authority's own reference.
+  POSTMORTEM_KIND_MEDICO_LEGAL = 2;
+}
+
+// Where an examination request stands (SRS-MORT-005).
+enum PostmortemState {
+  POSTMORTEM_STATE_UNSPECIFIED = 0;
+  POSTMORTEM_STATE_REQUESTED = 1;
+  POSTMORTEM_STATE_AUTHORISED = 2;
+  POSTMORTEM_STATE_PERFORMED = 3;
+  POSTMORTEM_STATE_REPORTED = 4;
+  // Asked for and refused. Kept, because "we asked and were refused" is a
+  // different record from never having asked.
+  POSTMORTEM_STATE_DECLINED = 5;
+}
+
+// One body in the mortuary's care (SRS-MORT-001).
+message Case {
+  string case_id = 1;
+  // What everybody says out loud: the number on the tag, on the register
+  // and on the paperwork the family carries away.
+  string reference = 2;
+
+  Source source = 3;
+  string encounter_id = 4;
+  string patient_id = 5;
+  // Who brought the body in. Set for a brought-in case.
+  string external_source = 6;
+
+  Identity identity = 7;
+  string identified_by = 8;
+  google.protobuf.Timestamp identified_at = 9;
+  // How it was confirmed: a relative who knew them, a dental record, a
+  // document with a photograph. Required for a confirmed identification.
+  string identified_note = 10;
+  // Blank for an unidentified body, where the reference is the only name
+  // there is.
+  string display_name = 11;
+
+  // A case an authority has an interest in. Decides whether a release needs
+  // clearance, and there is no RPC that clears it.
+  bool medico_legal = 12;
+  // The police or coroner's own number. Sensitive: carried only for a
+  // caller holding mort.sensitive.read.
+  string mlc_reference = 13;
+  // A case whose detail is not on the ordinary board. The board shows its
+  // reference and no name.
+  bool restricted = 14;
+  // Sensitive. Carried only for a caller holding mort.sensitive.read, and
+  // that read is audited each time.
+  string cause_summary = 15;
+
+  string death_certificate_ref = 16;
+  string certificate_recorded_by = 17;
+  google.protobuf.Timestamp certificate_recorded_at = 18;
+
+  CaseState state = 19;
+  string location_id = 20;
+  string storage_tag = 21;
+
+  google.protobuf.Timestamp died_at = 22;
+  google.protobuf.Timestamp received_at = 23;
+  string received_by = 24;
+  string facility_id = 25;
+  int64 version = 26;
+}
+
+// One storage space (SRS-MORT-002).
+message Location {
+  string location_id = 1;
+  // What is painted on the door.
+  string code = 2;
+  SpaceKind kind = 3;
+  string facility_id = 4;
+  string zone = 5;
+  // A broken unit is still a space, and the bodies that were in it last
+  // month were in it.
+  bool out_of_service = 6;
+  string out_of_service_reason = 7;
+  int64 version = 8;
+}
+
+// One body in one space for one period (SRS-MORT-002).
+message Placement {
+  string placement_id = 1;
+  string case_id = 2;
+  string location_id = 3;
+  // What the person opening the drawer actually reads.
+  string storage_tag = 4;
+  PlacementState state = 5;
+  // The positive identity check made at the moment of placing, and what was
+  // checked against what.
+  string identity_checked_by = 6;
+  string identity_checked_note = 7;
+  google.protobuf.Timestamp placed_at = 8;
+  string placed_by = 9;
+  google.protobuf.Timestamp ended_at = 10;
+  string ended_by = 11;
+  string ended_reason = 12;
+}
+
+// One belonging (SRS-MORT-004).
+message Item {
+  string item_id = 1;
+  string case_id = 2;
+  ItemKind kind = 3;
+  string description = 4;
+  // "Three rings" is a different listing from "a ring".
+  int32 quantity = 5;
+  ItemState state = 6;
+  // The tamper-evident bag it went into. Required for a valuable.
+  string seal_number = 7;
+  google.protobuf.Timestamp listed_at = 8;
+  string listed_by = 9;
+  // The second person present at the listing. Required for a valuable.
+  string witnessed_by = 10;
+  string handover_id = 11;
+}
+
+// One act of giving belongings to somebody (SRS-MORT-004).
+message Handover {
+  string handover_id = 1;
+  string case_id = 2;
+  string recipient_name = 3;
+  string recipient_relation = 4;
+  // The document the mortuary checked. Belongings handed to somebody nobody
+  // asked for identification from is the story that ends in a complaint.
+  string recipient_id_type = 5;
+  string recipient_id_ref = 6;
+  // A reference to the signed register page, not an image: the document
+  // lives where documents live.
+  string signature_ref = 7;
+  repeated string item_ids = 8;
+  google.protobuf.Timestamp handed_at = 9;
+  string handed_by = 10;
+  string witnessed_by = 11;
+  string note = 12;
+}
+
+// One line of the chain of custody (SRS-MORT-004).
+//
+// Append-only. A chain somebody can edit says whatever the last person to
+// touch it wanted it to say.
+message CustodyEntry {
+  string entry_id = 1;
+  string case_id = 2;
+  string event = 3;
+  // The short human line beside it. No cause of death and no medico-legal
+  // narrative: the chain is read more widely than the case.
+  string detail = 4;
+  string from_party = 5;
+  string to_party = 6;
+  google.protobuf.Timestamp recorded_at = 7;
+  string recorded_by = 8;
+}
+
+// One examination request and what became of it (SRS-MORT-005).
+message Postmortem {
+  string postmortem_id = 1;
+  string case_id = 2;
+  PostmortemKind kind = 3;
+  string reason = 4;
+  PostmortemState state = 5;
+  // The body that authorised it, and their own reference. The two travel
+  // together: a name with no reference is not something anybody can check.
+  string authority = 6;
+  string authority_reference = 7;
+  string authorised_by = 8;
+  google.protobuf.Timestamp authorised_at = 9;
+  string performed_by = 10;
+  google.protobuf.Timestamp performed_at = 11;
+  // A reference rather than the text: a postmortem report is a clinical
+  // document with its own access rules.
+  string report_ref = 12;
+  google.protobuf.Timestamp reported_at = 13;
+  string decline_reason = 14;
+  google.protobuf.Timestamp requested_at = 15;
+  string requested_by = 16;
+  int64 version = 17;
+}
+
+// An external clearance to release (SRS-MORT-006, SRS-MORT-007).
+message Authorisation {
+  string authority = 1;
+  string reference = 2;
+  string recorded_by = 3;
+  google.protobuf.Timestamp recorded_at = 4;
+  string note = 5;
+}
+
+// One thing standing between a case and the door (SRS-MORT-006).
+message ReleaseCheck {
+  // Stable and machine-readable, so a screen can show the right button
+  // beside it rather than matching on a sentence.
+  string code = 1;
+  string detail = 2;
+  // A check no policy can switch off (SRS-MORT-007).
+  bool mandatory = 3;
+}
+
+// The record of a body leaving (SRS-MORT-006).
+message Release {
+  string release_id = 1;
+  string case_id = 2;
+  string recipient_name = 3;
+  string recipient_relation = 4;
+  string recipient_id_type = 5;
+  string recipient_id_ref = 6;
+  // What was verified and against what. The acceptance asks for
+  // verification, and a tick is not one.
+  string verification_note = 7;
+  string signature_ref = 8;
+  string destination = 9;
+  string death_certificate_ref = 10;
+  bool medico_legal = 11;
+  string authority = 12;
+  string authority_reference = 13;
+  google.protobuf.Timestamp released_at = 14;
+  string released_by = 15;
+  string witnessed_by = 16;
+  string note = 17;
+}
+
+// One row of the occupancy board (SRS-MORT-003, SRS-MORT-008).
+//
+// No cause of death and no medico-legal reference: this message has no field
+// for either, which is what makes "without unnecessary clinical detail" a
+// property of the contract rather than of whoever writes the next screen.
+message BoardRow {
+  string case_id = 1;
+  string reference = 2;
+  string location_id = 3;
+  string storage_tag = 4;
+  CaseState state = 5;
+  // Blank for a restricted case. The reference is what the board shows
+  // instead.
+  string display_name = 6;
+  // A flag and not a reference: an attendant needs to know a case needs
+  // clearance before they move it.
+  bool medico_legal = 7;
+  Identity identity = 8;
+  google.protobuf.Timestamp received_at = 9;
+  // How long the body has been here, which is the number a mortuary
+  // actually manages by.
+  int32 held_hours = 10;
+  bool pending_release = 11;
+}
+
+// How full a mortuary is (SRS-MORT-008).
+message Occupancy {
+  int32 total = 1;
+  // Excludes the broken units, which is the number a mortuary actually has.
+  int32 in_service = 2;
+  int32 occupied = 3;
+  int32 free = 4;
+  // Free spaces by kind: a free viewing room does not help somebody looking
+  // for a drawer.
+  map<string, int32> free_by_kind = 5;
+  // Reported rather than hidden: a mortuary running at nine tenths because
+  // a third of its units are broken has a different problem from one that
+  // is simply full.
+  int32 out_of_service = 6;
+}
+
+message OpenCaseRequest {
+  string reference = 1;
+  Source source = 2;
+  // Required for an in-hospital death, refused for a body brought in.
+  string encounter_id = 3;
+  string patient_id = 4;
+  // Required for a body brought in.
+  string external_source = 5;
+  Identity identity = 6;
+  // How the identity was established at receipt. Required where the case
+  // arrives already confirmed.
+  string identification_note = 7;
+  string display_name = 8;
+  bool medico_legal = 9;
+  string mlc_reference = 10;
+  bool restricted = 11;
+  google.protobuf.Timestamp died_at = 12;
+  string facility_id = 13;
+  // The ward, the ambulance or the police who brought the body. Opens the
+  // chain of custody.
+  string received_from = 14;
+}
+message OpenCaseResponse { Case mortuary_case = 1; }
+
+message IdentifyRequest {
+  string case_id = 1;
+  Identity identity = 2;
+  string name = 3;
+  // How it was confirmed. Required for a confirmed identification.
+  string note = 4;
+  int64 version = 5;
+}
+message IdentifyResponse { Case mortuary_case = 1; }
+
+message RecordCauseRequest {
+  string case_id = 1;
+  string summary = 2;
+  int64 version = 3;
+}
+message RecordCauseResponse { Case mortuary_case = 1; }
+
+message RecordDeathCertificateRequest {
+  string case_id = 1;
+  string reference = 2;
+  int64 version = 3;
+}
+message RecordDeathCertificateResponse { Case mortuary_case = 1; }
+
+message MarkMedicoLegalRequest {
+  string case_id = 1;
+  string reference = 2;
+  int64 version = 3;
+}
+message MarkMedicoLegalResponse { Case mortuary_case = 1; }
+
+message GetCaseRequest { string case_id = 1; }
+message GetCaseResponse { Case mortuary_case = 1; }
+
+message GetCaseByReferenceRequest { string reference = 1; }
+message GetCaseByReferenceResponse { Case mortuary_case = 1; }
+
+message ListCasesRequest {
+  repeated CaseState states = 1;
+  repeated Identity identities = 2;
+  string facility_id = 3;
+  bool medico_legal_only = 4;
+  google.protobuf.Timestamp from = 5;
+  google.protobuf.Timestamp to = 6;
+  int32 page_size = 7;
+  int32 offset = 8;
+}
+// The sensitive fields are absent from every row, whoever asks.
+message ListCasesResponse { repeated Case cases = 1; }
+
+message AddLocationRequest {
+  string code = 1;
+  SpaceKind kind = 2;
+  string facility_id = 3;
+  string zone = 4;
+}
+message AddLocationResponse { Location location = 1; }
+
+message SetLocationServiceRequest {
+  string location_id = 1;
+  bool out_of_service = 2;
+  // Required when taking a space off the board.
+  string reason = 3;
+  int64 version = 4;
+}
+message SetLocationServiceResponse { Location location = 1; }
+
+message ListLocationsRequest {
+  string facility_id = 1;
+  repeated SpaceKind kinds = 2;
+  bool in_service_only = 3;
+  int32 page_size = 4;
+  int32 offset = 5;
+}
+message ListLocationsResponse { repeated Location locations = 1; }
+
+message PlaceBodyRequest {
+  string case_id = 1;
+  string location_id = 2;
+  string storage_tag = 3;
+  // What was checked against what. The requirement asks for positive
+  // identity checks, and a tick is not one.
+  string checked_note = 4;
+  // Why the body moved, where it was somewhere already.
+  string move_reason = 5;
+  int64 version = 6;
+}
+message PlaceBodyResponse { Placement placement = 1; }
+
+message GetPlacementHistoryRequest { string case_id = 1; }
+message GetPlacementHistoryResponse { repeated Placement placements = 1; }
+
+message ListItemRequest {
+  string case_id = 1;
+  ItemKind kind = 2;
+  string description = 3;
+  int32 quantity = 4;
+  // Required for a valuable.
+  string seal_number = 5;
+  // Required for a valuable, and somebody other than the caller.
+  string witnessed_by = 6;
+}
+message ListItemResponse { Item item = 1; }
+
+message RetainItemRequest {
+  string item_id = 1;
+  string authority = 2;
+  string reference = 3;
+}
+message RetainItemResponse { Item item = 1; }
+
+message HandOverBelongingsRequest {
+  string case_id = 1;
+  repeated string item_ids = 2;
+  string recipient_name = 3;
+  string recipient_relation = 4;
+  string recipient_id_type = 5;
+  string recipient_id_ref = 6;
+  string signature_ref = 7;
+  // A second member of staff, and somebody other than the caller.
+  string witnessed_by = 8;
+  string note = 9;
+}
+message HandOverBelongingsResponse { Handover handover = 1; }
+
+message GetBelongingsRequest { string case_id = 1; }
+message GetBelongingsResponse {
+  repeated Item items = 1;
+  repeated Handover handovers = 2;
+}
+
+message GetChainOfCustodyRequest { string case_id = 1; }
+message GetChainOfCustodyResponse { repeated CustodyEntry entries = 1; }
+
+message RequestPostmortemRequest {
+  string case_id = 1;
+  PostmortemKind kind = 2;
+  string reason = 3;
+}
+message RequestPostmortemResponse { Postmortem postmortem = 1; }
+
+message AdvancePostmortemRequest {
+  string postmortem_id = 1;
+  PostmortemState to = 2;
+  string authority = 3;
+  // Required for a medico-legal authorisation.
+  string authority_reference = 4;
+  string pathologist = 5;
+  string report_ref = 6;
+  string reason = 7;
+  int64 version = 8;
+}
+message AdvancePostmortemResponse { Postmortem postmortem = 1; }
+
+message GetPostmortemsRequest { string case_id = 1; }
+message GetPostmortemsResponse { repeated Postmortem postmortems = 1; }
+
+message RecordAuthorisationRequest {
+  string case_id = 1;
+  string authority = 2;
+  string reference = 3;
+  string note = 4;
+}
+message RecordAuthorisationResponse { Authorisation authorisation = 1; }
+
+message GetReleaseChecksRequest { string case_id = 1; }
+// The whole list at once.
+message GetReleaseChecksResponse { repeated ReleaseCheck checks = 1; }
+
+message ReleaseBodyRequest {
+  string case_id = 1;
+  string recipient_name = 2;
+  string recipient_relation = 3;
+  string recipient_id_type = 4;
+  string recipient_id_ref = 5;
+  string verification_note = 6;
+  string signature_ref = 7;
+  string death_certificate_ref = 8;
+  string destination = 9;
+  // A second member of staff, and somebody other than the caller.
+  string witnessed_by = 10;
+  string note = 11;
+  int64 version = 12;
+}
+message ReleaseBodyResponse { Release release = 1; }
+
+message GetReleaseRequest { string case_id = 1; }
+message GetReleaseResponse { Release release = 1; }
+
+message ListReleasesRequest {
+  google.protobuf.Timestamp from = 1;
+  google.protobuf.Timestamp to = 2;
+  int32 page_size = 3;
+  int32 offset = 4;
+}
+message ListReleasesResponse { repeated Release releases = 1; }
+
+message GetBoardRequest { string facility_id = 1; }
+message GetBoardResponse {
+  repeated BoardRow rows = 1;
+  Occupancy occupancy = 2;
+  // The mortuary holds more cases than one dashboard may read, so these
+  // figures come from part of it.
+  bool truncated = 3;
+}
+
+message SweepLongStayRequest { string facility_id = 1; }
+message SweepLongStayResponse { int32 raised = 1; }
+
+// Mortuary operations (SRS-MORT-001 … 008).
+service MortuaryService {
+  // SRS-MORT-001 and SRS-MORT-003.
+  rpc OpenCase(OpenCaseRequest) returns (OpenCaseResponse);
+  rpc Identify(IdentifyRequest) returns (IdentifyResponse);
+  // Its own permission, mort.cause.record. The cause is not known when the
+  // body arrives, so it is recorded when it is.
+  rpc RecordCause(RecordCauseRequest) returns (RecordCauseResponse);
+  rpc RecordDeathCertificate(RecordDeathCertificateRequest)
+      returns (RecordDeathCertificateResponse);
+  rpc MarkMedicoLegal(MarkMedicoLegalRequest)
+      returns (MarkMedicoLegalResponse);
+  rpc GetCase(GetCaseRequest) returns (GetCaseResponse);
+  rpc GetCaseByReference(GetCaseByReferenceRequest)
+      returns (GetCaseByReferenceResponse);
+  rpc ListCases(ListCasesRequest) returns (ListCasesResponse);
+
+  // SRS-MORT-002.
+  rpc AddLocation(AddLocationRequest) returns (AddLocationResponse);
+  rpc SetLocationService(SetLocationServiceRequest)
+      returns (SetLocationServiceResponse);
+  rpc ListLocations(ListLocationsRequest) returns (ListLocationsResponse);
+  rpc PlaceBody(PlaceBodyRequest) returns (PlaceBodyResponse);
+  rpc GetPlacementHistory(GetPlacementHistoryRequest)
+      returns (GetPlacementHistoryResponse);
+
+  // SRS-MORT-004.
+  rpc ListItem(ListItemRequest) returns (ListItemResponse);
+  rpc RetainItem(RetainItemRequest) returns (RetainItemResponse);
+  rpc HandOverBelongings(HandOverBelongingsRequest)
+      returns (HandOverBelongingsResponse);
+  rpc GetBelongings(GetBelongingsRequest) returns (GetBelongingsResponse);
+  rpc GetChainOfCustody(GetChainOfCustodyRequest)
+      returns (GetChainOfCustodyResponse);
+
+  // SRS-MORT-005.
+  rpc RequestPostmortem(RequestPostmortemRequest)
+      returns (RequestPostmortemResponse);
+  rpc AdvancePostmortem(AdvancePostmortemRequest)
+      returns (AdvancePostmortemResponse);
+  rpc GetPostmortems(GetPostmortemsRequest) returns (GetPostmortemsResponse);
+
+  // SRS-MORT-006 and SRS-MORT-007.
+  rpc RecordAuthorisation(RecordAuthorisationRequest)
+      returns (RecordAuthorisationResponse);
+  rpc GetReleaseChecks(GetReleaseChecksRequest)
+      returns (GetReleaseChecksResponse);
+  rpc ReleaseBody(ReleaseBodyRequest) returns (ReleaseBodyResponse);
+  rpc GetRelease(GetReleaseRequest) returns (GetReleaseResponse);
+  rpc ListReleases(ListReleasesRequest) returns (ListReleasesResponse);
+
+  // SRS-MORT-008.
+  rpc GetBoard(GetBoardRequest) returns (GetBoardResponse);
+  rpc SweepLongStay(SweepLongStayRequest) returns (SweepLongStayResponse);
+}

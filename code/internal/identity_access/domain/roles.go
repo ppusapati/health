@@ -180,6 +180,37 @@ const (
 	// a second pair of eyes on a decision somebody else has to make.
 	RoleAmbulanceManager Role = "ambulance_manager"
 
+	// RoleMortuaryAttendant runs the mortuary day to day (SRS-MORT-001,
+	// SRS-MORT-002, SRS-MORT-004).
+	//
+	// They receive bodies, put them in spaces, list belongings and keep
+	// the chain of custody. What they deliberately do not hold is
+	// mort.release: a body leaves once, and the person who put it in the
+	// drawer is not the only person involved in taking it out.
+	//
+	// And no mort.authorise: recording a coroner's clearance is not the
+	// same act as doing the work it clears, and a mortuary where one
+	// person does both is one where the clearance is whatever that person
+	// typed.
+	RoleMortuaryAttendant Role = "mortuary_attendant"
+
+	// RoleMortuaryManager releases bodies and takes the clearances
+	// (SRS-MORT-006, SRS-MORT-007, SRS-MORT-008).
+	//
+	// Deliberately no mort.sensitive.read. Running a mortuary does not
+	// require reading a cause of death: the manager needs to know a case
+	// is medico-legal, which the board shows, and not what it says.
+	RoleMortuaryManager Role = "mortuary_manager"
+
+	// RoleCoronersOfficer is the authority's own officer working inside
+	// the hospital (SRS-MORT-003, SRS-MORT-005).
+	//
+	// The one role that reads the cause and the medico-legal reference as
+	// a matter of course, and the one that authorises a medico-legal
+	// examination. Deliberately no mort.release and no mort.custody: the
+	// coroner's officer decides what may happen and does not do it.
+	RoleCoronersOfficer Role = "coroners_officer"
+
 	// RoleFleetTelematics is the integration that reports vehicle
 	// positions (SRS-AMB-005).
 	//
@@ -1762,6 +1793,74 @@ var rolePermissions = map[Role][]string{
 		"amb.location.write",
 		// And nothing else. A box that could read the feed it writes is a
 		// box somebody can ask where an ambulance has been.
+	},
+
+	// A mortuary attendant receives bodies, stores them and keeps the chain
+	// of custody (SRS-MORT-001, SRS-MORT-002, SRS-MORT-004).
+	RoleMortuaryAttendant: {
+		"mort.read",
+		"mort.case.manage",
+		"mort.storage.manage",
+		"mort.place",
+		"mort.custody",
+		// Handing a family their father's belongings has to be something
+		// the person on the desk at four in the morning can do.
+		"mort.handover",
+		"mort.postmortem.request",
+		// Deliberately no mort.release: a body leaves once, and the
+		// person who put it in the drawer is not the only person involved
+		// in taking it out.
+		//
+		// Deliberately no mort.authorise: recording a clearance is not
+		// the same act as doing the work it clears.
+		//
+		// Deliberately no mort.sensitive.read: an attendant needs to know
+		// a case is medico-legal, which the board shows, and not what the
+		// cause says.
+	},
+
+	// A mortuary manager releases bodies and reads the board
+	// (SRS-MORT-006, SRS-MORT-007, SRS-MORT-008).
+	RoleMortuaryManager: {
+		"mort.read",
+		"mort.case.manage",
+		"mort.storage.manage",
+		"mort.release",
+		"mort.postmortem.manage",
+		"mort.report.read",
+		// Deliberately no mort.authorise: the clearance to release a
+		// medico-legal case comes from outside the mortuary, and a
+		// manager who could record their own would be the whole control.
+		//
+		// Deliberately no mort.sensitive.read: running a mortuary does
+		// not require reading a cause of death.
+		//
+		// Deliberately no mort.custody and no mort.handover: the person
+		// who releases the body is not the person who lists and hands
+		// over what was in the pockets.
+	},
+
+	// A coroner's officer authorises examinations and reads the sensitive
+	// detail (SRS-MORT-003, SRS-MORT-005, SRS-MORT-007).
+	RoleCoronersOfficer: {
+		"mort.read",
+		// The one role that reads the cause and the medico-legal
+		// reference as a matter of course. Every read is audited.
+		"mort.sensitive.read",
+		// The officer certifies what the examination found.
+		"mort.cause.record",
+		"mort.postmortem.request",
+		"mort.postmortem.manage",
+		// The clearance that lets a medico-legal or unidentified case
+		// leave. This is the authority's act, recorded by their officer.
+		"mort.authorise",
+		"mort.report.read",
+		// Deliberately no mort.release: the officer decides what may
+		// happen and does not do it.
+		//
+		// Deliberately no mort.custody: evidence is retained by a
+		// recorded act of the mortuary's, not taken off the list by the
+		// person taking it.
 	},
 
 	// A biomedical engineer maintains the equipment and does the service work

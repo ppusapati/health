@@ -33,6 +33,7 @@ import (
 	"github.com/ppusapati/health/code/gen/go/healthcare/laundry/v1/laundryv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/materials/v1/materialsv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/medication/v1/medicationv1connect"
+	"github.com/ppusapati/health/code/gen/go/healthcare/mortuary/v1/mortuaryv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/nursing/v1/nursingv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/orders/v1/ordersv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/organization/v1/organizationv1connect"
@@ -113,6 +114,11 @@ import (
 	medicationpostgres "github.com/ppusapati/health/code/internal/medication/adapters/postgres"
 	medicationapp "github.com/ppusapati/health/code/internal/medication/application"
 	medicationtransport "github.com/ppusapati/health/code/internal/medication/transport"
+	mortcrosscontext "github.com/ppusapati/health/code/internal/mortuary/adapters/crosscontext"
+	mortescalate "github.com/ppusapati/health/code/internal/mortuary/adapters/escalate"
+	mortpostgres "github.com/ppusapati/health/code/internal/mortuary/adapters/postgres"
+	mortapp "github.com/ppusapati/health/code/internal/mortuary/application"
+	morttransport "github.com/ppusapati/health/code/internal/mortuary/transport"
 	"github.com/ppusapati/health/code/internal/nursing/adapters/imagestore"
 	nursingmedication "github.com/ppusapati/health/code/internal/nursing/adapters/medication"
 	nursingpostgres "github.com/ppusapati/health/code/internal/nursing/adapters/postgres"
@@ -478,6 +484,21 @@ type Deps struct {
 	// record in it.
 	Ambulance ambapp.Config
 
+	// Mortuary is what a deployment has decided about its mortuary: the
+	// release policy SRS-MORT-007 asks to be configurable, how long a body
+	// may be held before it is escalated, and whether a case must name a
+	// death and a patient that exist (SRS-MORT-001, SRS-MORT-006,
+	// SRS-MORT-007, SRS-MORT-008).
+	//
+	// The zero value applies the release floor and nothing more: a
+	// medico-legal or unidentified case still needs a named authority's
+	// clearance, because that is not a setting. What it does not do is
+	// hold a body for its death certificate, refuse a release on a
+	// presumed identification, or escalate a long stay — and the last is
+	// the one to watch, because a body nobody has claimed becomes
+	// somebody's legal problem long before anybody notices.
+	Mortuary mortapp.Config
+
 	// Emergency is what a deployment has decided about its emergency
 	// department: which triage scale it has approved, what must be measured at
 	// triage, and what each disposition requires (SRS-ER-002, SRS-ER-013).
@@ -511,6 +532,7 @@ type Server struct {
 	Housekeeping *hkpapp.Service
 	Laundry      *lndapp.Service
 	Ambulance    *ambapp.Service
+	Mortuary     *mortapp.Service
 	Nursing      *nursingapp.Service
 	Orders       *ordersapp.Service
 	Medication   *medicationapp.Service
@@ -1166,6 +1188,37 @@ func New(deps Deps) *Server {
 		Config:      deps.Ambulance,
 	})
 
+	// Mortuary operations (SRS-MORT). Wired after the encounter and patient
+	// contexts because its two seams read them: the death an in-hospital
+	// case names, and the patient it belongs to. Both are read-only, so the
+	// mortuary cannot create an encounter or register a patient — it
+	// records what arrived and links it to what is already there.
+	mortRepo := mortpostgres.New(txManager)
+	mortuaryService := mortapp.NewService(mortapp.Deps{
+		UnitOfWork:  txManager,
+		Cases:       mortRepo,
+		Storage:     mortRepo,
+		Custody:     mortRepo,
+		Postmortems: mortRepo,
+		Releases:    mortRepo,
+		// SRS-MORT-001's acceptance is that the case is linked or clearly
+		// external. One linked to an identifier nobody can resolve is
+		// neither.
+		Encounters: mortcrosscontext.NewEncounters(
+			encounterpostgres.EncounterRepo{Repository: encounterRepo}),
+		Patients: mortcrosscontext.NewPatients(
+			empipostgres.PatientRepo{Repository: empiRepo}),
+		Events:     platformStore,
+		AuditTrail: store.AuditAppenderFunc(platformStore.AppendAudit),
+		// A body held past the deployment's limit. It has to reach
+		// somebody rather than a screen nobody opened: the point at which
+		// it should have been chased is weeks before anybody notices.
+		Escalations: mortescalate.New(escalationStore),
+		IDs:         uuidGenerator{},
+		Clock:       systemClock{},
+		Config:      deps.Mortuary,
+	})
+
 	// Medical records and health information management (SRS-MRD). Wired
 	// after the clinical and encounter contexts because everything here is
 	// judged against what they hold, and read through ports that cannot write
@@ -1356,6 +1409,9 @@ func New(deps Deps) *Server {
 	mux.Handle(ambulancev1connect.NewAmbulanceServiceHandler(
 		ambtransport.NewHandler(ambulanceService, time.Now),
 		interceptors))
+	mux.Handle(mortuaryv1connect.NewMortuaryServiceHandler(
+		morttransport.NewHandler(mortuaryService, time.Now),
+		interceptors))
 	mux.Handle(materialsv1connect.NewMaterialsServiceHandler(
 		materialstransport.NewHandler(materialsService, time.Now), interceptors))
 	billingRepo := billingpostgres.New(txManager)
@@ -1429,6 +1485,7 @@ func New(deps Deps) *Server {
 		Housekeeping:    housekeepingService,
 		Laundry:         laundryService,
 		Ambulance:       ambulanceService,
+		Mortuary:        mortuaryService,
 		Nursing:         nursingService,
 		Orders:          ordersService,
 		Medication:      medicationService,

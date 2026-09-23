@@ -1422,6 +1422,88 @@ and the attachment is real and queryable — what is missing is the other
 direction, which belongs to the encounter context's own read model rather
 than here.
 
+## SRS-MORT — Mortuary operations
+
+Eight requirements, all implemented. Two shapes here are the ones the family
+exists for, and both are held by the database rather than by the application
+remembering.
+
+**The first is that a body an authority has an interest in does not leave on
+the mortuary's own say-so.** `mortuary.release` carries `case_medico_legal`
+beside `case_id`, held by a composite foreign key `ON UPDATE CASCADE` onto
+`mortuary.case (case_id, medico_legal)`, with a CHECK that a medico-legal
+release names both an authority and that authority's own reference.
+SRS-MORT-007's acceptance is that the case cannot bypass required
+authorization, and a rule the application alone enforces is one a migration, a
+backfill or a second client walks straight past. The cascade is the point:
+marking a case medico-legal after a release was written without a clearance
+fails against the CHECK rather than quietly leaving a body released under no
+authority at all. The same floor applies to an unidentified body, and neither
+is a policy setting — a deployment configures whether it holds a body for the
+death certificate and whether it releases on a presumed identification, and
+does not configure this.
+
+Above the database the same rule is three people. The attendant who received
+the body cannot release it; the manager who releases it cannot record the
+clearance; the coroner's officer who records the clearance cannot release.
+No single role can take a medico-legal body out of the building.
+
+**The second is that a body is in one place at a time.**
+`mortuary.placement` carries three partial unique indexes — one body per
+space, one space per body, one tag per body — all on `WHERE state =
+'current'`. Two cases in one refrigerated unit is one body somebody will not
+find, and a mortuary discovers that with a family standing in the corridor.
+The adapter names which of the three a write broke, because "internal error"
+tells an attendant nothing and what they need to know is that the space or the
+tag is already taken. A move closes the old placement and opens the new one in
+one transaction, so the body is never in two drawers and never in none.
+
+The cause of death lives in one column with nothing derived from it. It is
+written by its own permission and read by another, every read audited; the
+register list strips it for everybody, and the occupancy board has no field
+for it at all. A dashboard that could show a cause of death is one that will,
+on a screen in a corridor.
+
+| Requirement | Summary | Status |
+|---|---|---|
+| SRS-MORT-001 | Create mortuary case from recorded death or external receipt with identity, source and time | **Implemented** — a case is linked to a death this hospital recorded or plainly marked as external, and the constructor produces nothing in between: an in-hospital case names its encounter, a brought-in body says who brought it and names no encounter here, and all three are CHECKs as well as domain rules; "which death is this?" is the first question a registrar asks, and a case that answers it with an identifier somebody typed can point at the wrong person; identity is three states rather than a boolean, because a body named from a wallet is not a body named by somebody who knew them and a release checked against the first is a release to the wrong family; a case received as identified says how it was confirmed, so "confirmed" is never a word somebody typed; and an unidentified body carries no name, because a guess on the tag reads afterwards as something somebody established |
+| SRS-MORT-002 | Assign body storage location with unique tag and positive identity checks | **Implemented** — the rule above. The identity check is recorded at the moment of placing and says what was checked against what, because a body put in the wrong drawer is found by the next person who opens it and by then nobody remembers; the tag is unique while in use, since two bodies with the same tag cannot be told apart at the point where telling them apart is the whole job; a space taken off the board keeps what was in it, because a broken refrigeration unit is still a space and the bodies that were in it last month were in it; a space cannot be taken off the board with a body still in it, or the board stops offering it and nobody comes back for it; and every move says why, so "where was it on Tuesday" is a question the history answers |
+| SRS-MORT-003 | Restrict mortuary access and sensitive cause/MLC information by role | **Implemented** — the cause summary and the medico-legal reference are stripped by the service rather than by each caller, so a second read path cannot be written that forgets; the register list carries them for nobody, which closes the gap where somebody who may not read one case reads two hundred instead; a single-case read by a caller who may hold them is audited every time, because "unauthorized reads are denied and audited" only means something if the authorised ones are recorded too — otherwise the trail shows only the attempts that failed; writing a cause is its own permission and its own act, recorded when the cause is known rather than guessed at the door; and the audit line says a cause was written and never what it said, or the trail would be a second copy of the most sensitive field under weaker controls; the medico-legal flag is never redacted, because an attendant needs to know a case needs clearance before they move it and does not need the police number to know that |
+| SRS-MORT-004 | Record belongings/document handover and chain of custody | **Implemented** — a valuable is listed with a second person present and into a numbered seal, and the witness is somebody other than the person listing, because a list of what was in somebody's pockets made by one person alone is a list nobody can stand behind; a quantity is required, since "three rings" is a different listing from "a ring" and a family that gets two back needs the first to have been written down; what an authority took is retained rather than handed over, because the family has not got it and telling them otherwise would be untrue; a handover names the recipient, the document that identified them, a second member of staff and a signature reference, which the acceptance asks for by name and is the only part a family can be shown afterwards; and the chain of custody is append-only and registered with FIT-08, because a chain somebody can edit is not one |
+| SRS-MORT-005 | Manage postmortem request/status and external authority references | **Implemented** — an examination follows an authorisation and never a request alone, held by the domain and by CHECK: a body opened on a request is one somebody answers for; a medico-legal authorisation carries the authority's own reference, because "authorised by the coroner" with no reference is a sentence and the question asked at the inquest is which order; a medico-legal request is refused on a case nobody marked medico-legal, which catches both the missing flag and the wrong case; a declined request is kept, since "we asked and were refused" is a different record from never having asked; the report is a reference rather than the text, because a postmortem report is a clinical document with its own access rules and copying it here would put it behind the mortuary's instead; and the workflow is the deployment's to configure in which authority must clear what, while which step may follow which is the domain's |
+| SRS-MORT-006 | Release body only after required identity/document/authorization checks | **Implemented** — the rule above. The checks are computed into a list and returned whole, because a mortuary told "no identity check" will do the identity check and come back to be told "no death certificate"; each carries a stable code so a screen shows the right button beside it rather than matching on a sentence; the release records the recipient, what was verified against what, a signature reference and a second member of staff, and the witness is somebody other than the person releasing — a body leaving on one person's word is the case every mortuary inquiry turns out to be about; a body leaves once, held by a unique key; and the body leaves its space in the same transaction, since a placement left open is a drawer the board never offers again |
+| SRS-MORT-007 | Support unidentified/decomposed/MLC restricted workflows as policy configuration | **Implemented** — the policy is configuration with a floor. A deployment decides whether it holds a body for the death certificate, whether it releases on a presumed identification, whether the belongings must be settled first and whether the recipient must produce a document; it does not decide whether a medico-legal case or an unidentified body needs a named authority's clearance with that authority's own reference. Every field on the policy makes the checks stricter and none makes them looser, which is why the zero value is safe to start from: it applies the floor and nothing else. The mandatory checks sort first in the list, so a mortuary clears the ones no policy can waive before the ones somebody might |
+| SRS-MORT-008 | Provide occupancy and pending-release dashboard without unnecessary clinical detail | **Implemented** — the board is a projection with no field for a cause of death, which makes "without unnecessary clinical detail" a property of the type rather than of whoever writes the next screen; a restricted case shows its reference and no name, because the board is read in a corridor and on a shared screen; pending release is computed from the checks rather than from a flag, since a flag set when the paperwork arrived goes stale the moment a coroner takes an interest; the longest-held case leads, because a mortuary's problem is the body that has been there three weeks and a list in arrival order puts it at the bottom where it stays; occupancy counts the spaces that are usable and reports the broken ones apart, as a mortuary running at nine tenths because a third of its units are broken has a different problem from one that is simply full; and a body held past the deployment's limit is escalated durably rather than left on a screen nobody opened |
+
+### What SRS-MORT does not reach
+
+Three seams are named rather than half-built.
+
+**The viewing room is a space and not an appointment.** A body moved into the
+viewing room occupies it like any other space, which is right, but nothing
+books it, nothing records who the family were or that the viewing happened,
+and nothing puts the body back afterwards. A mortuary running viewings from a
+paper diary will keep doing so; what this gives them is that the board shows
+where the body actually is. Closing it is a small scheduling use case against
+`SRS-SCH`, and it is not built.
+
+**Nothing links a release to the funeral director who collected.** The release
+records a recipient name, a relation and an identifying document, which is
+what SRS-MORT-006 asks for, but a funeral director is an organisation the
+hospital deals with repeatedly and this treats each collection as a stranger
+at the desk. A directory of them would let a mortuary see that one director
+has collected four bodies this month and signed for none of them. The seam is
+a read-only port of the kind this context already has for encounters; it is
+named here rather than guessed at.
+
+**The death certificate is a reference and nothing validates it.** A case
+carries `death_certificate_ref` and the release policy can require it, but
+nothing resolves it against the records context that issues certificates, so a
+deployment requiring one is requiring that somebody typed something. The
+records context has `records.certificate_version` and the port would be one
+method; it is not built, and a deployment should know that the check is a
+presence check rather than a real one.
+
 ## What Wave 2 depends on
 
 The wave specification's §12 names four cross-wave dependencies, and its

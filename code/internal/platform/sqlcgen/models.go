@@ -3390,6 +3390,163 @@ type MedicationTherapyChange struct {
 	Reason         string
 }
 
+type MortuaryAuthorisation struct {
+	AuthorisationID uuid.UUID
+	TenantID        uuid.UUID
+	CaseID          uuid.UUID
+	Authority       string
+	Reference       string
+	RecordedAt      pgtype.Timestamptz
+	RecordedBy      string
+	Note            string
+}
+
+type MortuaryBelonging struct {
+	ItemID      uuid.UUID
+	TenantID    uuid.UUID
+	CaseID      uuid.UUID
+	Kind        string
+	Description string
+	Quantity    int32
+	State       string
+	SealNumber  string
+	ListedAt    pgtype.Timestamptz
+	ListedBy    string
+	WitnessedBy string
+	HandoverID  pgtype.UUID
+}
+
+type MortuaryCase struct {
+	CaseID                uuid.UUID
+	TenantID              uuid.UUID
+	Reference             string
+	Source                string
+	EncounterID           pgtype.UUID
+	PatientID             pgtype.UUID
+	ExternalSource        string
+	Identity              string
+	IdentifiedBy          string
+	IdentifiedAt          pgtype.Timestamptz
+	IdentifiedNote        string
+	DisplayName           string
+	MedicoLegal           bool
+	MlcReference          string
+	Restricted            bool
+	CauseSummary          string
+	DeathCertificateRef   string
+	CertificateRecordedBy string
+	CertificateRecordedAt pgtype.Timestamptz
+	State                 string
+	LocationID            pgtype.UUID
+	StorageTag            string
+	DiedAt                pgtype.Timestamptz
+	ReceivedAt            pgtype.Timestamptz
+	ReceivedBy            string
+	FacilityID            pgtype.UUID
+	CreatedAt             pgtype.Timestamptz
+	CreatedBy             string
+	Version               int64
+}
+
+type MortuaryCustodyEntry struct {
+	EntryID    uuid.UUID
+	TenantID   uuid.UUID
+	CaseID     uuid.UUID
+	Event      string
+	Detail     string
+	FromParty  string
+	ToParty    string
+	RecordedAt pgtype.Timestamptz
+	RecordedBy string
+}
+
+type MortuaryHandover struct {
+	HandoverID        uuid.UUID
+	TenantID          uuid.UUID
+	CaseID            uuid.UUID
+	RecipientName     string
+	RecipientRelation string
+	RecipientIDType   string
+	RecipientIDRef    string
+	SignatureRef      string
+	HandedAt          pgtype.Timestamptz
+	HandedBy          string
+	WitnessedBy       string
+	Note              string
+}
+
+type MortuaryLocation struct {
+	LocationID         uuid.UUID
+	TenantID           uuid.UUID
+	Code               string
+	Kind               string
+	FacilityID         pgtype.UUID
+	Zone               string
+	OutOfService       bool
+	OutOfServiceReason string
+	CreatedAt          pgtype.Timestamptz
+	CreatedBy          string
+	Version            int64
+}
+
+type MortuaryPlacement struct {
+	PlacementID         uuid.UUID
+	TenantID            uuid.UUID
+	CaseID              uuid.UUID
+	LocationID          uuid.UUID
+	StorageTag          string
+	State               string
+	IdentityCheckedBy   string
+	IdentityCheckedNote string
+	PlacedAt            pgtype.Timestamptz
+	PlacedBy            string
+	EndedAt             pgtype.Timestamptz
+	EndedBy             string
+	EndedReason         string
+}
+
+type MortuaryPostmortem struct {
+	PostmortemID       uuid.UUID
+	TenantID           uuid.UUID
+	CaseID             uuid.UUID
+	Kind               string
+	Reason             string
+	State              string
+	Authority          string
+	AuthorityReference string
+	AuthorisedBy       string
+	AuthorisedAt       pgtype.Timestamptz
+	PerformedBy        string
+	PerformedAt        pgtype.Timestamptz
+	ReportRef          string
+	ReportedAt         pgtype.Timestamptz
+	DeclineReason      string
+	RequestedAt        pgtype.Timestamptz
+	RequestedBy        string
+	Version            int64
+}
+
+type MortuaryRelease struct {
+	ReleaseID           uuid.UUID
+	TenantID            uuid.UUID
+	CaseID              uuid.UUID
+	CaseMedicoLegal     bool
+	RecipientName       string
+	RecipientRelation   string
+	RecipientIDType     string
+	RecipientIDRef      string
+	VerificationNote    string
+	SignatureRef        string
+	Destination         string
+	DeathCertificateRef string
+	Authority           string
+	AuthorityReference  string
+	ReleasedAt          pgtype.Timestamptz
+	ReleasedBy          string
+	WitnessedBy         string
+	Note                string
+}
+
 type NursingAcuityWeight struct {
 	TenantID    uuid.UUID
 	UnitID      string
