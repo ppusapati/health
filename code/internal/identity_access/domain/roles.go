@@ -142,6 +142,52 @@ const (
 	// only one.
 	RoleLaundryManager Role = "laundry_manager"
 
+	// RoleAmbulanceCrew is the people on the vehicle (SRS-AMB-003,
+	// SRS-AMB-004, SRS-AMB-006).
+	//
+	// They check the vehicle, record the timeline and write the clinical
+	// account, because they are the only people who know when they arrived
+	// and what they gave.
+	//
+	// What it deliberately does not hold is amb.check.override: somebody
+	// who found the oxygen empty and then waved it through is one person
+	// deciding both. The domain refuses whoever made the check either way,
+	// so this is the second lock rather than the only one.
+	//
+	// And no amb.handover.accept: a handover accepted by the crew who gave
+	// it is the same claim made twice, and the patient is standing between
+	// two people neither of whom has taken responsibility.
+	RoleAmbulanceCrew Role = "ambulance_crew"
+
+	// RoleAmbulanceDispatcher takes the calls and sends the vehicles
+	// (SRS-AMB-001, SRS-AMB-003).
+	//
+	// Deliberately no amb.dispatch.override. Sending a vehicle that failed
+	// its check, whose crew is off duty or that does not carry what the
+	// call needs is a decision somebody is accountable for, not a busy
+	// dispatcher's fourth click.
+	//
+	// And no amb.prehospital.read or amb.prehospital.write: a dispatch
+	// board is read in a room full of people, and what the crew gave the
+	// patient is not on it.
+	RoleAmbulanceDispatcher Role = "ambulance_dispatcher"
+
+	// RoleAmbulanceManager runs the fleet and carries the overrides
+	// (SRS-AMB-002, SRS-AMB-006, SRS-AMB-008).
+	//
+	// Deliberately no amb.dispatch. The person who may wave a failed
+	// vehicle onto the run is not the person sending it, so an override is
+	// a second pair of eyes on a decision somebody else has to make.
+	RoleAmbulanceManager Role = "ambulance_manager"
+
+	// RoleFleetTelematics is the integration that reports vehicle
+	// positions (SRS-AMB-005).
+	//
+	// A machine account, and it holds exactly one permission. It cannot
+	// read the feed it writes: a box that could ask where every ambulance
+	// has been is a box somebody can ask.
+	RoleFleetTelematics Role = "fleet_telematics"
+
 	// RoleClinicalCoder assigns the codes the hospital is paid and measured
 	// on (SRS-MRD-003).
 	//
@@ -637,6 +683,16 @@ var rolePermissions = map[Role][]string{
 		// them; the read is separately audited every time.
 		"enc.restricted.read",
 
+		// Ambulance (SRS-AMB-004, SRS-AMB-007). The receiving clinician
+		// takes the patient at the door, which is the moment
+		// responsibility moves and the crew's account attaches to the
+		// encounter. Reading that account is the point of it: it says
+		// what the patient was given on the way in.
+		"amb.prehospital.read",
+		"amb.handover.accept",
+		"amb.read",
+		"amb.request",
+
 		// The clinical record: write it, sign it, read it back.
 		"cln.record.read",
 		"cln.record.write",
@@ -1068,6 +1124,14 @@ var rolePermissions = map[Role][]string{
 		"lnd.receive",
 		"lnd.loss.report",
 		"lnd.track.scan",
+
+		// Ambulance (SRS-AMB-001). The ward books the transfer and the
+		// discharge transport, and watches the queue it put the patient
+		// in. Deliberately no amb.dispatch: a ward that could send the
+		// vehicle to its own call is a ward whose patients always go
+		// first.
+		"amb.read",
+		"amb.request",
 
 		// Housekeeping (SRS-HKP-003, SRS-HKP-006). The ward is where a
 		// discharge happens and where a spill is found, so a nurse triggers
@@ -1631,6 +1695,73 @@ var rolePermissions = map[Role][]string{
 		//
 		// Deliberately no lnd.receive, for the same reason the operator
 		// does not hold it.
+	},
+
+	// An ambulance crew checks the vehicle, runs the job and writes up what
+	// they did (SRS-AMB-003, SRS-AMB-004, SRS-AMB-006).
+	RoleAmbulanceCrew: {
+		"amb.read",
+		// The person who looks in the vehicle is the person who records
+		// what they found.
+		"amb.check",
+		// A call raised by a crew who found somebody in the street has to
+		// be as easy as this or it goes unrecorded.
+		"amb.request",
+		"amb.timeline",
+		"amb.prehospital.write",
+		"amb.prehospital.read",
+		// Deliberately no amb.check.override: whoever found the oxygen
+		// empty does not wave it through.
+		//
+		// Deliberately no amb.handover.accept: a handover accepted by the
+		// crew who gave it is the same claim made twice.
+		//
+		// Deliberately no amb.location.read: a crew does not need the map
+		// of where every other vehicle has been.
+	},
+
+	// A dispatcher takes the calls and sends the vehicles (SRS-AMB-001,
+	// SRS-AMB-003).
+	RoleAmbulanceDispatcher: {
+		"amb.read",
+		"amb.request",
+		"amb.dispatch",
+		// A dispatcher marks a vehicle mobile when the crew radios it in,
+		// which is how most timelines are actually filled.
+		"amb.timeline",
+		// Where the vehicles are is the dispatch board's whole job.
+		"amb.location.read",
+		"amb.report.read",
+		// Deliberately no amb.dispatch.override: sending a vehicle a rule
+		// would have refused is somebody else's decision.
+		//
+		// Deliberately no amb.prehospital.read: a dispatch board is read
+		// in a room full of people.
+	},
+
+	// An ambulance manager runs the fleet and carries the overrides
+	// (SRS-AMB-002, SRS-AMB-006, SRS-AMB-008).
+	RoleAmbulanceManager: {
+		"amb.read",
+		"amb.fleet.manage",
+		"amb.check",
+		"amb.check.override",
+		"amb.dispatch.override",
+		"amb.location.read",
+		"amb.report.read",
+		// Deliberately no amb.dispatch: the person who may wave a failed
+		// vehicle onto the run is not the person sending it.
+		//
+		// Deliberately no amb.prehospital.read: running a fleet does not
+		// require reading what a paramedic gave a patient.
+	},
+
+	// The telematics integration reports where the vehicles are
+	// (SRS-AMB-005).
+	RoleFleetTelematics: {
+		"amb.location.write",
+		// And nothing else. A box that could read the feed it writes is a
+		// box somebody can ask where an ambulance has been.
 	},
 
 	// A biomedical engineer maintains the equipment and does the service work

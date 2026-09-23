@@ -1341,6 +1341,87 @@ report the full par as short for ever. The master read is one call and the
 schema could carry the key; it is not built, and a deployment should set its
 item master before its pars.
 
+## SRS-AMB — Ambulance and fleet operations
+
+Eight requirements, all implemented. Two shapes here are the ones the family
+exists for, and both are held by the database rather than by the application
+remembering.
+
+**The first is that a patient transport vehicle is never sent to an
+emergency.** Every other dispatch blocker — a vehicle off the run, a lapsed
+readiness check, a crew not on duty, a missing capability — is overridable by
+a named person with a reason, because on a bad night the alternative is
+nothing at all. This one is not. `ambulance.trip` carries `vehicle_kind`
+beside `vehicle_id` and `priority` beside `request_id`, each held by a
+composite foreign key `ON UPDATE CASCADE` onto `ambulance.vehicle
+(vehicle_id, kind)` and `ambulance.request (request_id, priority)`, with a
+CHECK that an emergency priority is not answered by a `transport` vehicle. A
+van with no defibrillator in it does not acquire one because a duty officer
+typed a sentence. The cascade is what keeps the carried columns honest: an
+attempt to reclassify a vehicle as `transport` while it holds emergency trips
+fails against the CHECK rather than quietly leaving those trips attached to a
+van. The same shape binds a trip's crew to the trip's vehicle — without it a
+trip can name Alpha 1 and the crew of Bravo 3, and the prehospital record
+hanging off that trip names people who were never in the vehicle.
+
+**The second is that a trip's timeline cannot be rewritten.**
+`ambulance.trip_milestone` takes inserts only, is registered with FIT-08, and
+carries a partial unique index allowing exactly one original record per point.
+A correction is a further row carrying `amends_at`, `amend_reason` and
+`amended_at`, so "the arrival time was changed three weeks after the
+complaint" is a question the table answers. The rows are read back in
+insertion order rather than by the time each claims, held by a `bigserial`:
+a correction carries an earlier time than the record it supersedes, and a
+timeline read back by `occurred_at` would put the correction first and the
+superseded value last — the value a report took as current would be the one
+that was corrected away. Every response and turnaround figure derives from
+these milestones, and a trip whose timeline has a gap is excluded from the
+figure it cannot support and counted in `IncompleteTimelines` beside it,
+because a service whose worst calls have incomplete timelines would otherwise
+report the best response times in the region.
+
+| Requirement | Summary | Status |
+|---|---|---|
+| SRS-AMB-001 | Ambulance request with patient, source, destination, priority, clinical need; request enters dispatch queue with timestamp | **Implemented** — the queue is priority first and then the oldest call waiting, because arrival order sends the next vehicle to a booked discharge while a cardiac arrest waits, and priority alone leaves the oldest urgent call there all afternoon; the request timestamp is the clock every response-time figure is measured from and is set once at the moment the call is taken; a patient identifier is optional and deliberately so, since most emergency calls are taken before anybody knows who the patient is, but a destination or an origin is not — a crew cannot be sent to nowhere, held by CHECK; an interfacility transfer names both hospitals and they are not the same hospital, also by CHECK; and a cancellation says who and why, because "we cancelled a fifth of our calls" and "a fifth of our calls stood down after we arrived" are different problems and the summary counts them apart |
+| SRS-AMB-002 | Vehicle, crew and equipment availability; an unavailable vehicle or crew cannot be assigned without override | **Implemented** — a vehicle starts out of service, because one that appeared as available the moment somebody typed its plate is one a dispatcher can send before anybody looked inside it; it goes on the run only on a passed readiness check that is read back rather than asserted on the call, and the expiry is carried on the vehicle so a check that lapsed overnight makes it unready without anybody remembering to say so; a shift names its crew and one person cannot appear on it twice, held by the primary key — a crew of two that is really a crew of one is a vehicle that looks staffed; the override is one thing rather than two flags, a named person and a reason together or not at all, held by CHECK, and it sits under its own permission that the dispatcher does not hold; the one blocker no override covers is the rule above |
+| SRS-AMB-003 | Assign vehicle/crew and record dispatch, arrival, departure and handover timestamps; trip timeline is complete and auditable | **Implemented** — the rule above. The timeline is forward-only and each point is recorded once, so a crew cannot leave a scene before arriving and a report cannot find two arrival times; going clear finishes the trip and puts the vehicle back on the board in the same transaction, and only while its check is still in date — a vehicle left reading `on_trip` is one the board never offers again; an aborted trip says why, puts the call back in the dispatch queue and is asked only for the points up to where it stopped, since a crew stood down before arriving is not expected to have reached the destination and the patient still needs an ambulance; one running trip per call is held by a partial unique index rather than an absolute one, because a call answered by a vehicle that broke down and then by another is two trips and both happened; and the gaps are reported rather than filled in, which is what makes "complete" checkable rather than assumed |
+| SRS-AMB-004 | Prehospital observations, interventions, medications and handover; data attaches to the emergency encounter on arrival | **Implemented** — the caller is resolved against the crew that went on that trip rather than against the roster as it stands now, so a drug recorded as given by a paramedic who was not on the vehicle is refused; a driver records nothing clinical, held by the domain and by CHECK on the entry's pinned role — not about competence, but the person recorded as having given a drug has to be somebody the service says may give it; the role is pinned at the time, so a paramedic who becomes a manager next year still gave that drug as a paramedic; when it happened and when somebody typed it are kept apart, because a record written up two hours later is a different thing from one written at the time; the handover is accepted by somebody other than whoever gave it, held by the domain, by CHECK and by the permissions — the crew do not hold `amb.handover.accept` at all — and acceptance is what sets the encounter, which an accepted record cannot be without, held by CHECK |
+| SRS-AMB-005 | GPS/ETA where provider is available; location feed is permissioned and retention-configurable | **Implemented** — `ambulance.location_ping` has no patient column, deliberately: a map of an ambulance's day is a list of the addresses somebody was ill at, and the link to a patient is through the trip behind its own permission; every ping carries `retain_until` as a NOT NULL column set from the deployment's retention period, and a deployment that has not set one records no feed at all — a map kept because nobody set a period is worse than no map; reads apply the horizon themselves rather than trusting the purge job, so a trail does not come back because a job is behind; the feed sits under its own permission and every read of it is audited, the telematics account that writes it cannot read it, and a crew cannot read the map of where the rest of the fleet went; an ETA is the provider's and is never computed here, because a straight-line guess looks like an ETA and a dispatcher would hold a bed against it, and an absent estimate reports as unknown rather than as zero |
+| SRS-AMB-006 | Equipment and oxygen readiness checklist; a missing critical item blocks ready state or requires override | **Implemented** — the checklist and its answers are stored together with the label and criticality pinned beside each answer, so a checklist edited next month does not change what this check asked; every item must be answered, and a missing one must say why, because an item with no note is indistinguishable from one nobody looked for; oxygen is a level against a minimum rather than a tick, since "present" is true of a cylinder with forty bar left in it and that cylinder will not finish a long transfer; a check must say how long it holds for, as one that never lapses is a vehicle checked once in March; the override is its own state rather than a pass, so a fleet where every check is overridden does not read as one that passes every check, and it is made by somebody other than whoever did the check — held by the domain, by CHECK and by the permissions, since the crew do not hold `amb.check.override` |
+| SRS-AMB-007 | Interfacility transfer with sending and receiving handover; transfer documents and acceptance are linked | **Implemented** — a transfer names both hospitals and they differ, held by CHECK; the referral and transfer documents travel as references rather than copies, because a second copy goes stale the first time somebody corrects one, and the same reference twice is refused by the primary key; the receiving handover is the same act as SRS-AMB-004's and carries the same separation — the sending crew cannot accept it, and acceptance links the crew's account to the receiving encounter; a crew standing in a corridor with a patient nobody has accepted is escalated durably rather than left on a screen, because that is also an ambulance not answering calls |
+| SRS-AMB-008 | Report response time, turnaround, utilisation and cancellation; metrics derive from trip milestones | **Implemented** — the rule above. Response is measured from the moment the call was taken rather than from the dispatch, which is the figure a patient experiences; each interval reports mean, median, P90 and longest, because a mean handover time hides the sixty-minute wait and the centile does not; a set with nothing measurable reports unanswerable rather than a mean of zero, which reads as a service that arrives instantly; cancellations before and after dispatch are counted apart, overridden dispatches are counted, and a window holding more rows than one report may read comes back marked truncated rather than silently summarised from part of itself |
+
+### What SRS-AMB does not reach
+
+Three seams are named rather than half-built.
+
+**Utilisation is a numerator without a denominator.** `ServiceSummary`
+reports `UtilisationSeconds` — the total time vehicles spent on trips in the
+window — and the number of vehicles seen. What it does not do is divide that
+by the hours the fleet was actually rostered, because that means reading the
+shifts for the window and deciding what to do with a shift that straddles its
+edge. A service that rosters four vehicles and runs two has a different
+problem from one that rosters two and runs them ragged, and this report
+cannot yet tell them apart. The shifts are there; the arithmetic and the
+edge-handling are not.
+
+**Nothing reconciles a vehicle's state against its trips.** The vehicle moves
+to `on_trip` when it is dispatched and back when the crew goes clear, both
+inside the dispatching transaction. What has no cover is a trip that is
+neither completed nor aborted and whose crew has gone home — the vehicle sits
+at `on_trip` and the board never offers it again. A sweep of the kind
+`SweepWaitingHandovers` already is would close it; until it exists, a stuck
+vehicle needs a manager to take it out of service and put it back.
+
+**The crew's account is not readable from the encounter side.** Acceptance
+sets `encounter_id` on the prehospital record and the record can be listed by
+it, but nothing in the encounter context points back: a clinician opening the
+chart sees no prehospital section unless they know to look in the ambulance
+service. SRS-AMB-004's acceptance is "attaches to the emergency encounter",
+and the attachment is real and queryable — what is missing is the other
+direction, which belongs to the encounter context's own read model rather
+than here.
+
 ## What Wave 2 depends on
 
 The wave specification's §12 names four cross-wave dependencies, and its

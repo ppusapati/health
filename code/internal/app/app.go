@@ -16,6 +16,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/ppusapati/health/code/gen/go/healthcare/ambulance/v1/ambulancev1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/anaesthesia/v1/anaesthesiav1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/billing/v1/billingv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/biomedical/v1/biomedicalv1connect"
@@ -41,6 +42,11 @@ import (
 	"github.com/ppusapati/health/code/gen/go/healthcare/scheduling/v1/schedulingv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/sterile/v1/sterilev1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/theatre/v1/theatrev1connect"
+	ambcrosscontext "github.com/ppusapati/health/code/internal/ambulance/adapters/crosscontext"
+	ambescalate "github.com/ppusapati/health/code/internal/ambulance/adapters/escalate"
+	ambpostgres "github.com/ppusapati/health/code/internal/ambulance/adapters/postgres"
+	ambapp "github.com/ppusapati/health/code/internal/ambulance/application"
+	ambtransport "github.com/ppusapati/health/code/internal/ambulance/transport"
 	anaesthesiapostgres "github.com/ppusapati/health/code/internal/anaesthesia/adapters/postgres"
 	anaesthesiaapp "github.com/ppusapati/health/code/internal/anaesthesia/application"
 	anaesthesiatransport "github.com/ppusapati/health/code/internal/anaesthesia/transport"
@@ -456,6 +462,22 @@ type Deps struct {
 	// up for somewhere nobody can go and look.
 	Laundry lndapp.Config
 
+	// Ambulance is what a deployment has decided about its ambulance
+	// service: how long a vehicle position is kept and when it reads as
+	// stale, how long a handover may sit unaccepted, and whether a request
+	// or a handover must name a patient, an encounter and a facility that
+	// exist (SRS-AMB-001, SRS-AMB-004, SRS-AMB-005).
+	//
+	// The zero value records no location feed at all, marks no position
+	// stale, escalates no waiting handover, and accepts any identifier. The
+	// first is deliberate and is the safe direction: a map of where patients
+	// were collected from, kept because nobody set a retention period, is
+	// worse than no map. The others are the ones to watch — a handover
+	// attached to an encounter nobody can resolve has not attached to
+	// anything, and the receiving doctor reads a chart with no prehospital
+	// record in it.
+	Ambulance ambapp.Config
+
 	// Emergency is what a deployment has decided about its emergency
 	// department: which triage scale it has approved, what must be measured at
 	// triage, and what each disposition requires (SRS-ER-002, SRS-ER-013).
@@ -488,6 +510,7 @@ type Server struct {
 	Dietetics    *dietapp.Service
 	Housekeeping *hkpapp.Service
 	Laundry      *lndapp.Service
+	Ambulance    *ambapp.Service
 	Nursing      *nursingapp.Service
 	Orders       *ordersapp.Service
 	Medication   *medicationapp.Service
@@ -1106,6 +1129,43 @@ func New(deps Deps) *Server {
 		Config:      deps.Laundry,
 	})
 
+	// Ambulance and fleet operations (SRS-AMB). Wired after the encounter,
+	// patient and organisation contexts because all three of its seams read
+	// them: the encounter a handover attaches to, the patient a call names,
+	// and the facilities a transfer runs between. All three are read-only,
+	// so the ambulance service cannot create an encounter, register a
+	// patient or open a facility.
+	ambRepo := ambpostgres.New(txManager)
+	ambulanceService := ambapp.NewService(ambapp.Deps{
+		UnitOfWork: txManager,
+		Vehicles:   ambRepo,
+		Shifts:     ambRepo,
+		Readiness:  ambRepo,
+		Requests:   ambRepo,
+		Trips:      ambRepo,
+		Records:    ambRepo,
+		Locations:  ambRepo,
+		// SRS-AMB-004's acceptance is that the crew's account attaches to
+		// the emergency encounter. One that attaches to an identifier
+		// nobody can resolve has not attached to anything.
+		Encounters: ambcrosscontext.NewEncounters(
+			encounterpostgres.EncounterRepo{Repository: encounterRepo}),
+		Patients: ambcrosscontext.NewPatients(
+			empipostgres.PatientRepo{Repository: empiRepo}),
+		// And a transfer booked to a facility nobody can find is a crew
+		// driving somewhere with a patient in the back.
+		Units:      ambcrosscontext.NewUnits(repo),
+		Events:     platformStore,
+		AuditTrail: store.AuditAppenderFunc(platformStore.AppendAudit),
+		// A vehicle sent that a rule would have refused, and a crew
+		// standing in a corridor with a patient nobody has accepted.
+		// Neither can wait for somebody to open a screen.
+		Escalations: ambescalate.New(escalationStore),
+		IDs:         uuidGenerator{},
+		Clock:       systemClock{},
+		Config:      deps.Ambulance,
+	})
+
 	// Medical records and health information management (SRS-MRD). Wired
 	// after the clinical and encounter contexts because everything here is
 	// judged against what they hold, and read through ports that cannot write
@@ -1293,6 +1353,9 @@ func New(deps Deps) *Server {
 	mux.Handle(laundryv1connect.NewLaundryServiceHandler(
 		lndtransport.NewHandler(laundryService, time.Now),
 		interceptors))
+	mux.Handle(ambulancev1connect.NewAmbulanceServiceHandler(
+		ambtransport.NewHandler(ambulanceService, time.Now),
+		interceptors))
 	mux.Handle(materialsv1connect.NewMaterialsServiceHandler(
 		materialstransport.NewHandler(materialsService, time.Now), interceptors))
 	billingRepo := billingpostgres.New(txManager)
@@ -1365,6 +1428,7 @@ func New(deps Deps) *Server {
 		Dietetics:       dietService,
 		Housekeeping:    housekeepingService,
 		Laundry:         laundryService,
+		Ambulance:       ambulanceService,
 		Nursing:         nursingService,
 		Orders:          ordersService,
 		Medication:      medicationService,

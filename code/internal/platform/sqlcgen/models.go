@@ -9,6 +9,208 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AmbulanceEtum struct {
+	EtaID          uuid.UUID
+	TenantID       uuid.UUID
+	VehicleID      uuid.UUID
+	TripID         pgtype.UUID
+	Seconds        int32
+	DistanceMetres int32
+	Source         string
+	OccurredAt     pgtype.Timestamptz
+}
+
+type AmbulanceLocationPing struct {
+	PingID         uuid.UUID
+	TenantID       uuid.UUID
+	VehicleID      uuid.UUID
+	TripID         pgtype.UUID
+	LatitudeMicro  int32
+	LongitudeMicro int32
+	SpeedKph       int32
+	HeadingDegrees int32
+	AccuracyMetres int32
+	Source         string
+	OccurredAt     pgtype.Timestamptz
+	RetainUntil    pgtype.Timestamptz
+}
+
+type AmbulancePrehospitalDocument struct {
+	RecordID    uuid.UUID
+	DocumentRef string
+	AttachedAt  pgtype.Timestamptz
+}
+
+type AmbulancePrehospitalEntry struct {
+	EntryID      uuid.UUID
+	TenantID     uuid.UUID
+	RecordID     uuid.UUID
+	Kind         string
+	Code         string
+	Label        string
+	Value        string
+	Unit         string
+	DoseAmount   int32
+	DoseUnit     string
+	Route        string
+	Narrative    string
+	RecordedBy   string
+	RecordedRole string
+	RecordedAt   pgtype.Timestamptz
+	EnteredAt    pgtype.Timestamptz
+}
+
+type AmbulancePrehospitalRecord struct {
+	RecordID            uuid.UUID
+	TenantID            uuid.UUID
+	TripID              uuid.UUID
+	RequestID           pgtype.UUID
+	PatientID           pgtype.UUID
+	EncounterID         pgtype.UUID
+	FacilityID          pgtype.UUID
+	PresentingComplaint string
+	Impression          string
+	State               string
+	SendingSummary      string
+	GivenBy             string
+	GivenRole           string
+	GivenAt             pgtype.Timestamptz
+	AcceptedBy          string
+	AcceptedAt          pgtype.Timestamptz
+	AcceptedNote        string
+	CreatedAt           pgtype.Timestamptz
+	CreatedBy           string
+	Version             int64
+}
+
+type AmbulanceReadinessCheck struct {
+	CheckID          uuid.UUID
+	TenantID         uuid.UUID
+	VehicleID        uuid.UUID
+	ShiftID          pgtype.UUID
+	FacilityID       pgtype.UUID
+	OxygenBar        int32
+	OxygenMinimumBar int32
+	State            string
+	Missing          []string
+	OverrideBy       string
+	OverrideReason   string
+	OverrideAt       pgtype.Timestamptz
+	CheckedBy        string
+	ValidUntil       pgtype.Timestamptz
+	CheckedAt        pgtype.Timestamptz
+	Version          int64
+}
+
+type AmbulanceReadinessOutcome struct {
+	CheckID  uuid.UUID
+	ItemCode string
+	Label    string
+	Critical bool
+	Present  bool
+	Note     string
+}
+
+type AmbulanceRequest struct {
+	RequestID             uuid.UUID
+	TenantID              uuid.UUID
+	Kind                  string
+	Priority              string
+	PatientID             pgtype.UUID
+	EncounterID           pgtype.UUID
+	OriginName            string
+	OriginAddress         string
+	OriginFacilityID      pgtype.UUID
+	DestinationName       string
+	DestinationAddress    string
+	DestinationFacilityID pgtype.UUID
+	ClinicalNeed          string
+	RequiredCapabilities  []string
+	State                 string
+	TripID                pgtype.UUID
+	CancelReason          string
+	CancelledBy           string
+	CancelledAt           pgtype.Timestamptz
+	RequestedAt           pgtype.Timestamptz
+	RequestedBy           string
+	Version               int64
+}
+
+type AmbulanceShift struct {
+	ShiftID    uuid.UUID
+	TenantID   uuid.UUID
+	VehicleID  uuid.UUID
+	FacilityID pgtype.UUID
+	State      string
+	StartsAt   pgtype.Timestamptz
+	EndsAt     pgtype.Timestamptz
+	StartedAt  pgtype.Timestamptz
+	EndedAt    pgtype.Timestamptz
+	CreatedAt  pgtype.Timestamptz
+	CreatedBy  string
+	Version    int64
+}
+
+type AmbulanceShiftCrew struct {
+	ShiftID            uuid.UUID
+	SubjectID          string
+	DisplayName        string
+	Role               string
+	RegistrationNumber string
+}
+
+type AmbulanceTrip struct {
+	TripID         uuid.UUID
+	TenantID       uuid.UUID
+	RequestID      uuid.UUID
+	VehicleID      uuid.UUID
+	ShiftID        uuid.UUID
+	FacilityID     pgtype.UUID
+	Priority       string
+	VehicleKind    string
+	ShiftVehicleID uuid.UUID
+	CrewSubjects   []string
+	OverrideBy     string
+	OverrideReason string
+	State          string
+	AbortReason    string
+	StartedAt      pgtype.Timestamptz
+	StartedBy      string
+	EndedAt        pgtype.Timestamptz
+	Version        int64
+}
+
+type AmbulanceTripMilestone struct {
+	MilestoneID uuid.UUID
+	Seq         int64
+	TenantID    uuid.UUID
+	TripID      uuid.UUID
+	Milestone   string
+	OccurredAt  pgtype.Timestamptz
+	RecordedBy  string
+	Note        string
+	AmendsAt    pgtype.Timestamptz
+	AmendReason string
+	AmendedAt   pgtype.Timestamptz
+}
+
+type AmbulanceVehicle struct {
+	VehicleID          uuid.UUID
+	TenantID           uuid.UUID
+	Registration       string
+	CallSign           string
+	Kind               string
+	FacilityID         pgtype.UUID
+	BaseID             string
+	Capabilities       []string
+	State              string
+	ReadyUntil         pgtype.Timestamptz
+	OutOfServiceReason string
+	CreatedAt          pgtype.Timestamptz
+	CreatedBy          string
+	Version            int64
+}
+
 type AnaesthesiaAirwayEvent struct {
 	AirwayID      uuid.UUID
 	TenantID      uuid.UUID

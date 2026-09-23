@@ -1,0 +1,927 @@
+// Ambulance and fleet operations: the vehicle fleet and its crew rosters,
+// readiness checks and the overrides that pass them, the dispatch queue and
+// the trips that answer it, the crew's account of a journey and the handover
+// that attaches it to an encounter, the location feed, and the response and
+// turnaround figures derived from trip milestones.
+//
+// Owning context : ambulance  (Master Engineering Registry)
+// Owning service : AmbulanceService
+// Trace          : SRS-AMB-001 … SRS-AMB-008
+//
+// Four shapes in this contract are deliberate.
+//
+// Dispatch takes an override reason and no override flag. Sending a vehicle
+// that is off the run, whose readiness check has lapsed, whose crew is not on
+// duty, or that does not carry what the call needs is possible — on a bad
+// night the alternative is nothing at all — but only as a named person with a
+// reason, under its own permission, and it raises a notice somebody has to
+// acknowledge. There is one exception with no override at all: a patient
+// transport vehicle is never sent to an emergency. A van with no
+// defibrillator in it does not acquire one because a duty officer typed a
+// sentence, and the database holds the same rule through composite foreign
+// keys onto the vehicle's kind and the request's priority.
+//
+// A trip's timeline is append-only. RecordTripMilestone adds a point and
+// refuses one already recorded or out of order; AmendTripMilestone corrects a
+// time by adding a further record that carries what it superseded, why, and
+// when the correction was made. There is no RPC that edits a milestone, and
+// the table takes no UPDATE and no DELETE. "The arrival time was changed
+// three weeks after the complaint" is a question somebody asks, and a
+// timeline holding one value per point could not answer it.
+//
+// AcceptHandover is its own RPC under its own permission and is refused for
+// whoever gave the handover. A handover accepted by the person who gave it is
+// the same claim made twice, and the patient is standing between two people
+// neither of whom has taken responsibility. Accepting it is also what
+// attaches the crew's account to the emergency encounter, which is what
+// SRS-AMB-004 asks for.
+//
+// The location feed carries no patient identifier. A map of an ambulance's
+// day is a list of the addresses somebody was ill at; the link to a patient
+// is through the trip, behind its own permission. Every ping carries the
+// moment it stops being kept, set from the deployment's retention period, and
+// a deployment that has not set one records no feed at all. Reads apply the
+// horizon themselves rather than trusting a purge job, and every read is
+// audited.
+//
+// Every measurement is an integer in a base unit: coordinates in
+// micro-degrees, distances in metres, durations in seconds, oxygen in bar,
+// doses in the unit named beside them.
+syntax = "proto3";
+
+package healthcare.ambulance.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ppusapati/health/code/gen/go/healthcare/ambulance/v1;ambulancev1";
+
+// What an ambulance can do (SRS-AMB-002).
+enum VehicleKind {
+  VEHICLE_KIND_UNSPECIFIED = 0;
+  // Advanced life support: a paramedic crew, a monitor, a defibrillator and
+  // drugs.
+  VEHICLE_KIND_ALS = 1;
+  VEHICLE_KIND_BLS = 2;
+  // Carries a stable patient between sites. Not a response vehicle, and no
+  // override sends one to an emergency.
+  VEHICLE_KIND_TRANSPORT = 3;
+  // An incubator transport.
+  VEHICLE_KIND_NEONATAL = 4;
+}
+
+// Where a vehicle stands (SRS-AMB-002).
+enum VehicleState {
+  VEHICLE_STATE_UNSPECIFIED = 0;
+  // Off the run: maintenance, repair, or not staffed. Where a vehicle
+  // starts, because one that appeared as available the moment somebody
+  // typed its plate is one a dispatcher can send before anybody looked
+  // inside it.
+  VEHICLE_STATE_OUT_OF_SERVICE = 1;
+  VEHICLE_STATE_AVAILABLE = 2;
+  VEHICLE_STATE_ON_TRIP = 3;
+  // Sold or scrapped. Kept, because the trips it ran are still trips.
+  VEHICLE_STATE_RETIRED = 4;
+}
+
+// What somebody on the vehicle is qualified to do (SRS-AMB-002).
+enum CrewRole {
+  CREW_ROLE_UNSPECIFIED = 0;
+  // Not a clinical role here. Not about competence — plenty of drivers are
+  // trained — but the person recorded as having given a drug has to be
+  // somebody the service says may give it.
+  CREW_ROLE_DRIVER = 1;
+  CREW_ROLE_EMT = 2;
+  CREW_ROLE_PARAMEDIC = 3;
+  CREW_ROLE_NURSE = 4;
+  CREW_ROLE_DOCTOR = 5;
+}
+
+// Where a crew shift stands (SRS-AMB-002).
+enum ShiftState {
+  SHIFT_STATE_UNSPECIFIED = 0;
+  SHIFT_STATE_PLANNED = 1;
+  SHIFT_STATE_ON_DUTY = 2;
+  SHIFT_STATE_ENDED = 3;
+}
+
+// How a readiness check came out (SRS-AMB-006).
+enum CheckState {
+  CHECK_STATE_UNSPECIFIED = 0;
+  CHECK_STATE_PASSED = 1;
+  CHECK_STATE_FAILED = 2;
+  // Failed and waved through by a second person. Its own state rather than
+  // a pass, so a readiness report cannot count it as one.
+  CHECK_STATE_OVERRIDDEN = 3;
+}
+
+// How soon the ambulance is needed (SRS-AMB-001).
+enum Priority {
+  PRIORITY_UNSPECIFIED = 0;
+  PRIORITY_IMMEDIATE = 1;
+  PRIORITY_URGENT = 2;
+  PRIORITY_ROUTINE = 3;
+}
+
+// Why the ambulance is wanted (SRS-AMB-001, SRS-AMB-007).
+enum RequestKind {
+  REQUEST_KIND_UNSPECIFIED = 0;
+  REQUEST_KIND_EMERGENCY = 1;
+  // Between two hospitals. Both ends are named and they are not the same
+  // hospital.
+  REQUEST_KIND_INTERFACILITY = 2;
+  REQUEST_KIND_DISCHARGE = 3;
+}
+
+// Where a call stands (SRS-AMB-001).
+enum RequestState {
+  REQUEST_STATE_UNSPECIFIED = 0;
+  REQUEST_STATE_QUEUED = 1;
+  REQUEST_STATE_ASSIGNED = 2;
+  REQUEST_STATE_COMPLETED = 3;
+  REQUEST_STATE_CANCELLED = 4;
+}
+
+// A point on a trip's timeline (SRS-AMB-003).
+//
+// In order. A timeline that accepted them out of order would have a crew
+// leaving a scene before it arrived, and an on-scene time below zero.
+enum Milestone {
+  MILESTONE_UNSPECIFIED = 0;
+  MILESTONE_DISPATCHED = 1;
+  MILESTONE_MOBILE = 2;
+  MILESTONE_AT_SCENE = 3;
+  MILESTONE_WITH_PATIENT = 4;
+  MILESTONE_LEFT_SCENE = 5;
+  MILESTONE_AT_DESTINATION = 6;
+  MILESTONE_HANDOVER = 7;
+  // Going clear finishes the trip and puts the vehicle back on the run.
+  MILESTONE_CLEAR = 8;
+}
+
+// Where a trip stands (SRS-AMB-003).
+enum TripState {
+  TRIP_STATE_UNSPECIFIED = 0;
+  TRIP_STATE_ACTIVE = 1;
+  TRIP_STATE_COMPLETED = 2;
+  // Stood down before it finished. Counted apart from a completed trip: a
+  // service cancelling calls after arriving has a different problem from
+  // one cancelling them before.
+  TRIP_STATE_ABORTED = 3;
+}
+
+// What kind of line the crew recorded (SRS-AMB-004).
+enum EntryKind {
+  ENTRY_KIND_UNSPECIFIED = 0;
+  ENTRY_KIND_OBSERVATION = 1;
+  ENTRY_KIND_INTERVENTION = 2;
+  ENTRY_KIND_MEDICATION = 3;
+  ENTRY_KIND_NOTE = 4;
+}
+
+// Where a handover stands (SRS-AMB-004, SRS-AMB-007).
+enum HandoverState {
+  HANDOVER_STATE_UNSPECIFIED = 0;
+  HANDOVER_STATE_DRAFT = 1;
+  // Given by the crew and not yet taken. A crew standing in a corridor with
+  // a patient nobody has accepted is an ambulance not answering calls.
+  HANDOVER_STATE_GIVEN = 2;
+  HANDOVER_STATE_ACCEPTED = 3;
+}
+
+// One ambulance (SRS-AMB-002).
+message Vehicle {
+  string vehicle_id = 1;
+  string registration = 2;
+  string call_sign = 3;
+  VehicleKind kind = 4;
+  string facility_id = 5;
+  string base_id = 6;
+  repeated string capabilities = 7;
+  VehicleState state = 8;
+  // When the readiness check that put it on the run expires. Derived rather
+  // than stored as a flag, so a check that lapsed overnight makes the
+  // vehicle unready without anybody remembering to say so.
+  google.protobuf.Timestamp ready_until = 9;
+  string out_of_service_reason = 10;
+  google.protobuf.Timestamp created_at = 11;
+  string created_by = 12;
+  int64 version = 13;
+}
+
+// One person rostered to a vehicle (SRS-AMB-002).
+message CrewMember {
+  string subject_id = 1;
+  string display_name = 2;
+  CrewRole role = 3;
+  // Their professional registration where the role has one, so a
+  // prehospital record names a registrant rather than a login.
+  string registration_number = 4;
+}
+
+// A crew on a vehicle for a period (SRS-AMB-002).
+message Shift {
+  string shift_id = 1;
+  string vehicle_id = 2;
+  string facility_id = 3;
+  repeated CrewMember crew = 4;
+  ShiftState state = 5;
+  google.protobuf.Timestamp starts_at = 6;
+  google.protobuf.Timestamp ends_at = 7;
+  google.protobuf.Timestamp started_at = 8;
+  google.protobuf.Timestamp ended_at = 9;
+  int64 version = 10;
+}
+
+// One thing a readiness check asks about (SRS-AMB-006).
+message ChecklistItem {
+  string code = 1;
+  string label = 2;
+  // A missing critical item fails the check. A missing blanket does not.
+  bool critical = 3;
+}
+
+// The answer (SRS-AMB-006).
+message ItemOutcome {
+  string code = 1;
+  bool present = 2;
+  // Required when the item is not there: a missing item with no note is
+  // indistinguishable from one nobody looked for.
+  string note = 3;
+}
+
+// A readiness check made against a vehicle (SRS-AMB-006).
+message ReadinessCheck {
+  string check_id = 1;
+  string vehicle_id = 2;
+  string shift_id = 3;
+  string facility_id = 4;
+  repeated ChecklistItem items = 5;
+  repeated ItemOutcome outcomes = 6;
+  // Oxygen is a level rather than a tick: "present" is true of a cylinder
+  // with forty bar left in it, and that cylinder will not finish a long
+  // transfer.
+  int32 oxygen_bar = 7;
+  int32 oxygen_minimum_bar = 8;
+  CheckState state = 9;
+  // The critical items that were not there, so a service can see what to
+  // buy rather than only that a vehicle failed.
+  repeated string missing = 10;
+  string override_by = 11;
+  string override_reason = 12;
+  google.protobuf.Timestamp override_at = 13;
+  google.protobuf.Timestamp valid_until = 14;
+  google.protobuf.Timestamp checked_at = 15;
+  string checked_by = 16;
+  int64 version = 17;
+}
+
+// A call for an ambulance (SRS-AMB-001).
+message Request {
+  string request_id = 1;
+  RequestKind kind = 2;
+  Priority priority = 3;
+  // Empty for a call to a street with nobody identified yet, which is most
+  // emergency calls at the moment they are taken.
+  string patient_id = 4;
+  string encounter_id = 5;
+  string origin_name = 6;
+  string origin_address = 7;
+  string origin_facility_id = 8;
+  string destination_name = 9;
+  string destination_address = 10;
+  string destination_facility_id = 11;
+  string clinical_need = 12;
+  repeated string required_capabilities = 13;
+  RequestState state = 14;
+  string trip_id = 15;
+  string cancel_reason = 16;
+  string cancelled_by = 17;
+  google.protobuf.Timestamp cancelled_at = 18;
+  // The clock every response-time figure is measured from.
+  google.protobuf.Timestamp requested_at = 19;
+  string requested_by = 20;
+  int64 version = 21;
+}
+
+// One point on a trip's timeline (SRS-AMB-003).
+message MilestoneRecord {
+  Milestone milestone = 1;
+  google.protobuf.Timestamp occurred_at = 2;
+  string recorded_by = 3;
+  string note = 4;
+  // Set on a correction: the value this record supersedes, why, and when
+  // the correction was made. Both records are kept.
+  google.protobuf.Timestamp amends_at = 5;
+  string amend_reason = 6;
+  google.protobuf.Timestamp amended_at = 7;
+}
+
+// A vehicle answering a call (SRS-AMB-003).
+message Trip {
+  string trip_id = 1;
+  string request_id = 2;
+  string vehicle_id = 3;
+  string shift_id = 4;
+  string facility_id = 5;
+  // Who was on board, pinned at dispatch. A crew list read back off the
+  // shift next month is the crew the shift has then.
+  repeated string crew_subjects = 6;
+  string override_by = 7;
+  string override_reason = 8;
+  TripState state = 9;
+  repeated MilestoneRecord milestones = 10;
+  string abort_reason = 11;
+  google.protobuf.Timestamp started_at = 12;
+  string started_by = 13;
+  google.protobuf.Timestamp ended_at = 14;
+  int64 version = 15;
+}
+
+// One line the crew recorded (SRS-AMB-004).
+message Entry {
+  string entry_id = 1;
+  EntryKind kind = 2;
+  string code = 3;
+  string label = 4;
+  string value = 5;
+  string unit = 6;
+  // In the unit named beside it, as an integer: 5 mg is 5, not 4.999999.
+  int32 dose_amount = 7;
+  string dose_unit = 8;
+  string route = 9;
+  string narrative = 10;
+  string recorded_by = 11;
+  // Pinned at the time. A paramedic who becomes a manager next year still
+  // gave that drug as a paramedic.
+  CrewRole recorded_role = 12;
+  // When it happened, and when somebody typed it. A record written up two
+  // hours later is a different thing from one written at the time.
+  google.protobuf.Timestamp recorded_at = 13;
+  google.protobuf.Timestamp entered_at = 14;
+}
+
+// The crew's account of a journey (SRS-AMB-004, SRS-AMB-007).
+message PrehospitalRecord {
+  string record_id = 1;
+  string trip_id = 2;
+  string request_id = 3;
+  string patient_id = 4;
+  // Set when the receiving clinician accepts the handover. This is the
+  // attachment SRS-AMB-004 asks for.
+  string encounter_id = 5;
+  string facility_id = 6;
+  string presenting_complaint = 7;
+  string impression = 8;
+  repeated Entry entries = 9;
+  HandoverState state = 10;
+  string sending_summary = 11;
+  string given_by = 12;
+  CrewRole given_role = 13;
+  google.protobuf.Timestamp given_at = 14;
+  string accepted_by = 15;
+  google.protobuf.Timestamp accepted_at = 16;
+  string accepted_note = 17;
+  // References, not copies: a second copy of a referral goes stale the
+  // first time somebody corrects one.
+  repeated string document_refs = 18;
+  int64 version = 19;
+}
+
+// Where a vehicle was at a moment (SRS-AMB-005).
+//
+// No patient identifier, deliberately: the link is through the trip.
+message Ping {
+  string ping_id = 1;
+  string vehicle_id = 2;
+  string trip_id = 3;
+  // Micro-degrees as integers. 13.082680 is 13082680 and stays that way.
+  int32 latitude_micro = 4;
+  int32 longitude_micro = 5;
+  int32 speed_kph = 6;
+  int32 heading_degrees = 7;
+  int32 accuracy_metres = 8;
+  // Which box or provider said so. A position with no provenance is one
+  // nobody can question when it is wrong.
+  string source = 9;
+  google.protobuf.Timestamp occurred_at = 10;
+  // When this ping stops being kept. A property of the row rather than of
+  // whatever the purge job was last told.
+  google.protobuf.Timestamp retain_until = 11;
+}
+
+// Where a vehicle is now (SRS-AMB-005).
+message Position {
+  string vehicle_id = 1;
+  int32 latitude_micro = 2;
+  int32 longitude_micro = 3;
+  int32 speed_kph = 4;
+  int32 accuracy_metres = 5;
+  string source = 6;
+  google.protobuf.Timestamp occurred_at = 7;
+  // The last position is older than the deployment's staleness threshold. A
+  // dispatcher who can see the vehicle was last heard from eleven minutes
+  // ago knows something a blank screen does not tell them.
+  bool stale = 8;
+  // False when nothing is in retention for this vehicle. Reported rather
+  // than defaulting to its base, which would put an ambulance somewhere it
+  // is not.
+  bool known = 9;
+}
+
+// A provider's estimate (SRS-AMB-005).
+//
+// Never computed here. A straight-line guess looks like an ETA and is not
+// one, and a dispatcher would hold a bed against it.
+message ETA {
+  string vehicle_id = 1;
+  string trip_id = 2;
+  int32 seconds = 3;
+  int32 distance_metres = 4;
+  string source = 5;
+  google.protobuf.Timestamp occurred_at = 6;
+  bool known = 7;
+}
+
+// How long one trip took at each stage (SRS-AMB-008).
+//
+// Each figure carries whether it is known. A trip whose timeline has a gap
+// has a response time nobody can compute, and the figure is withheld rather
+// than reported as zero.
+message TripMetrics {
+  string trip_id = 1;
+  int32 response_seconds = 2;
+  bool response_known = 3;
+  int32 on_scene_seconds = 4;
+  bool on_scene_known = 5;
+  int32 transport_seconds = 6;
+  bool transport_known = 7;
+  int32 handover_seconds = 8;
+  bool handover_known = 9;
+  int32 turnaround_seconds = 10;
+  bool turnaround_known = 11;
+  int32 total_seconds = 12;
+  bool total_known = 13;
+  // The points this trip never recorded.
+  repeated Milestone gaps = 14;
+}
+
+// A distribution over one interval (SRS-AMB-008).
+message Interval {
+  int32 measured = 1;
+  int32 mean_seconds = 2;
+  int32 median_seconds = 3;
+  // A mean handover time hides the sixty-minute wait; the centile does not.
+  int32 p90_seconds = 4;
+  int32 longest_seconds = 5;
+  // Nothing in the window could be measured. Reported rather than a mean of
+  // zero, which reads as a service that arrives instantly.
+  bool unanswerable = 6;
+}
+
+// What a service reports about itself (SRS-AMB-008).
+message ServiceSummary {
+  int32 requests = 1;
+  int32 dispatched = 2;
+  int32 completed = 3;
+  int32 aborted = 4;
+  int32 cancelled = 5;
+  // "We cancelled a fifth of our calls" and "a fifth of our calls stood
+  // down after we arrived" are different problems.
+  int32 cancelled_after_dispatch = 6;
+  int32 overridden = 7;
+  // Trips whose timeline has a gap. Reported beside the figures rather than
+  // hidden, because a service whose worst calls have incomplete timelines
+  // would otherwise report the best response times in the region.
+  int32 incomplete_timelines = 8;
+  int32 vehicles_seen = 9;
+  // Total time vehicles spent on trips in the window. Divided by the hours
+  // the fleet was rostered, this is utilisation; the two are kept apart
+  // because a service that rosters four vehicles and runs two has a
+  // different problem from one that rosters two and runs them ragged.
+  int64 utilisation_seconds = 10;
+  Interval response = 11;
+  Interval on_scene = 12;
+  Interval handover = 13;
+  Interval turnaround = 14;
+}
+
+// How a fleet is doing its readiness checks (SRS-AMB-006).
+message ReadinessSummary {
+  int32 checked = 1;
+  int32 passed = 2;
+  int32 failed = 3;
+  // Counted apart from a pass. A fleet where every check is overridden
+  // would otherwise read as a fleet that passes every check.
+  int32 overridden = 4;
+  // Which critical items were missing, and how often. The number that tells
+  // a service what to buy.
+  map<string, int32> missing_by_item = 5;
+  bool unanswerable = 6;
+}
+
+message RegisterVehicleRequest {
+  string registration = 1;
+  string call_sign = 2;
+  VehicleKind kind = 3;
+  string facility_id = 4;
+  string base_id = 5;
+  repeated string capabilities = 6;
+}
+message RegisterVehicleResponse { Vehicle vehicle = 1; }
+
+message SetVehicleStateRequest {
+  string vehicle_id = 1;
+  VehicleState state = 2;
+  // The passed readiness check the vehicle goes on the run behind.
+  // Required for AVAILABLE, and the check is read back rather than trusted.
+  string check_id = 3;
+  // Required for OUT_OF_SERVICE and RETIRED: a vehicle off the run for no
+  // recorded reason is one nobody can chase back on.
+  string reason = 4;
+  int64 version = 5;
+}
+message SetVehicleStateResponse { Vehicle vehicle = 1; }
+
+message GetVehicleRequest { string vehicle_id = 1; }
+message GetVehicleResponse { Vehicle vehicle = 1; }
+
+message ListVehiclesRequest {
+  repeated VehicleState states = 1;
+  repeated VehicleKind kinds = 2;
+  string facility_id = 3;
+  int32 page_size = 4;
+  int32 offset = 5;
+}
+message ListVehiclesResponse { repeated Vehicle vehicles = 1; }
+
+message RosterShiftRequest {
+  string vehicle_id = 1;
+  string facility_id = 2;
+  repeated CrewMember crew = 3;
+  google.protobuf.Timestamp starts_at = 4;
+  google.protobuf.Timestamp ends_at = 5;
+}
+message RosterShiftResponse { Shift shift = 1; }
+
+message SetShiftStateRequest {
+  string shift_id = 1;
+  ShiftState state = 2;
+  int64 version = 3;
+}
+message SetShiftStateResponse { Shift shift = 1; }
+
+message GetShiftRequest { string shift_id = 1; }
+message GetShiftResponse { Shift shift = 1; }
+
+message ListShiftsRequest {
+  string vehicle_id = 1;
+  string facility_id = 2;
+  repeated ShiftState states = 3;
+  google.protobuf.Timestamp from = 4;
+  google.protobuf.Timestamp to = 5;
+  int32 page_size = 6;
+  int32 offset = 7;
+}
+message ListShiftsResponse { repeated Shift shifts = 1; }
+
+message RecordReadinessCheckRequest {
+  string vehicle_id = 1;
+  string shift_id = 2;
+  string facility_id = 3;
+  repeated ChecklistItem items = 4;
+  repeated ItemOutcome outcomes = 5;
+  int32 oxygen_bar = 6;
+  int32 oxygen_minimum_bar = 7;
+  // How long the check holds for. A check that never lapses is a vehicle
+  // checked once in March.
+  int32 valid_for_seconds = 8;
+}
+message RecordReadinessCheckResponse { ReadinessCheck check = 1; }
+
+message OverrideReadinessCheckRequest {
+  string check_id = 1;
+  string reason = 2;
+  int64 version = 3;
+}
+message OverrideReadinessCheckResponse { ReadinessCheck check = 1; }
+
+message GetReadinessCheckRequest { string check_id = 1; }
+message GetReadinessCheckResponse { ReadinessCheck check = 1; }
+
+message ListReadinessChecksRequest {
+  string vehicle_id = 1;
+  string facility_id = 2;
+  repeated CheckState states = 3;
+  google.protobuf.Timestamp from = 4;
+  google.protobuf.Timestamp to = 5;
+  int32 page_size = 6;
+  int32 offset = 7;
+}
+message ListReadinessChecksResponse { repeated ReadinessCheck checks = 1; }
+
+message GetReadinessSummaryRequest {
+  string vehicle_id = 1;
+  string facility_id = 2;
+  google.protobuf.Timestamp from = 3;
+  google.protobuf.Timestamp to = 4;
+}
+message GetReadinessSummaryResponse { ReadinessSummary summary = 1; }
+
+message RaiseRequestRequest {
+  RequestKind kind = 1;
+  Priority priority = 2;
+  string patient_id = 3;
+  string encounter_id = 4;
+  string origin_name = 5;
+  string origin_address = 6;
+  string origin_facility_id = 7;
+  string destination_name = 8;
+  string destination_address = 9;
+  string destination_facility_id = 10;
+  string clinical_need = 11;
+  repeated string required_capabilities = 12;
+}
+message RaiseRequestResponse { Request request = 1; }
+
+message CancelRequestRequest {
+  string request_id = 1;
+  string reason = 2;
+  int64 version = 3;
+}
+message CancelRequestResponse { Request request = 1; }
+
+message GetRequestRequest { string request_id = 1; }
+message GetRequestResponse { Request request = 1; }
+
+message ListRequestsRequest {
+  repeated RequestState states = 1;
+  repeated Priority priorities = 2;
+  repeated RequestKind kinds = 3;
+  string facility_id = 4;
+  string patient_id = 5;
+  google.protobuf.Timestamp from = 6;
+  google.protobuf.Timestamp to = 7;
+  int32 page_size = 8;
+  int32 offset = 9;
+}
+message ListRequestsResponse { repeated Request requests = 1; }
+
+message GetDispatchQueueRequest { string facility_id = 1; }
+// Priority first, then the oldest call waiting.
+message GetDispatchQueueResponse { repeated Request requests = 1; }
+
+message DispatchRequest {
+  string request_id = 1;
+  string vehicle_id = 2;
+  string shift_id = 3;
+  // Required when a rule would refuse the dispatch, and refused without the
+  // override permission. The overriding person is the caller.
+  string override_reason = 4;
+}
+message DispatchResponse { Trip trip = 1; }
+
+message RecordTripMilestoneRequest {
+  string trip_id = 1;
+  Milestone milestone = 2;
+  // Defaults to now.
+  google.protobuf.Timestamp occurred_at = 3;
+  string note = 4;
+  int64 version = 5;
+}
+message RecordTripMilestoneResponse { Trip trip = 1; }
+
+message AmendTripMilestoneRequest {
+  string trip_id = 1;
+  Milestone milestone = 2;
+  google.protobuf.Timestamp occurred_at = 3;
+  string reason = 4;
+}
+message AmendTripMilestoneResponse { Trip trip = 1; }
+
+message AbortTripRequest {
+  string trip_id = 1;
+  string reason = 2;
+  int64 version = 3;
+}
+message AbortTripResponse { Trip trip = 1; }
+
+message GetTripRequest { string trip_id = 1; }
+message GetTripResponse { Trip trip = 1; }
+
+message ListTripsRequest {
+  repeated TripState states = 1;
+  string vehicle_id = 2;
+  string facility_id = 3;
+  google.protobuf.Timestamp from = 4;
+  google.protobuf.Timestamp to = 5;
+  int32 page_size = 6;
+  int32 offset = 7;
+}
+message ListTripsResponse { repeated Trip trips = 1; }
+
+message GetTimelineGapsRequest { string trip_id = 1; }
+message GetTimelineGapsResponse { repeated Milestone gaps = 1; }
+
+message OpenPrehospitalRecordRequest {
+  string trip_id = 1;
+  string patient_id = 2;
+  string facility_id = 3;
+  string presenting_complaint = 4;
+  repeated string document_refs = 5;
+}
+message OpenPrehospitalRecordResponse { PrehospitalRecord record = 1; }
+
+message RecordPrehospitalEntryRequest {
+  string record_id = 1;
+  EntryKind kind = 2;
+  string code = 3;
+  string label = 4;
+  string value = 5;
+  string unit = 6;
+  int32 dose_amount = 7;
+  string dose_unit = 8;
+  string route = 9;
+  string narrative = 10;
+  // When it happened. Defaults to now.
+  google.protobuf.Timestamp recorded_at = 11;
+}
+message RecordPrehospitalEntryResponse { PrehospitalRecord record = 1; }
+
+message AttachTransferDocumentRequest {
+  string record_id = 1;
+  string document_ref = 2;
+}
+message AttachTransferDocumentResponse { PrehospitalRecord record = 1; }
+
+message GiveHandoverRequest {
+  string record_id = 1;
+  string summary = 2;
+  string impression = 3;
+  int64 version = 4;
+}
+message GiveHandoverResponse { PrehospitalRecord record = 1; }
+
+message AcceptHandoverRequest {
+  string record_id = 1;
+  // The encounter the crew's account attaches to.
+  string encounter_id = 2;
+  string note = 3;
+  int64 version = 4;
+}
+message AcceptHandoverResponse { PrehospitalRecord record = 1; }
+
+message GetPrehospitalRecordRequest { string record_id = 1; }
+message GetPrehospitalRecordResponse { PrehospitalRecord record = 1; }
+
+message ListPrehospitalRecordsRequest {
+  repeated HandoverState states = 1;
+  string facility_id = 2;
+  string patient_id = 3;
+  google.protobuf.Timestamp from = 4;
+  google.protobuf.Timestamp to = 5;
+  int32 page_size = 6;
+  int32 offset = 7;
+}
+message ListPrehospitalRecordsResponse {
+  repeated PrehospitalRecord records = 1;
+}
+
+message RecordPingRequest {
+  string vehicle_id = 1;
+  string trip_id = 2;
+  int32 latitude_micro = 3;
+  int32 longitude_micro = 4;
+  int32 speed_kph = 5;
+  int32 heading_degrees = 6;
+  int32 accuracy_metres = 7;
+  string source = 8;
+  google.protobuf.Timestamp occurred_at = 9;
+}
+message RecordPingResponse { Ping ping = 1; }
+
+message RecordETARequest {
+  string vehicle_id = 1;
+  string trip_id = 2;
+  int32 seconds = 3;
+  int32 distance_metres = 4;
+  string source = 5;
+}
+message RecordETAResponse { ETA eta = 1; }
+
+message GetVehiclePositionRequest {
+  string vehicle_id = 1;
+  string trip_id = 2;
+}
+message GetVehiclePositionResponse {
+  Position position = 1;
+  ETA eta = 2;
+}
+
+message ListPingsRequest {
+  string vehicle_id = 1;
+  string trip_id = 2;
+  google.protobuf.Timestamp from = 3;
+  google.protobuf.Timestamp to = 4;
+  int32 page_size = 5;
+}
+message ListPingsResponse { repeated Ping pings = 1; }
+
+message PurgeExpiredPingsRequest {}
+message PurgeExpiredPingsResponse { int64 removed = 1; }
+
+message GetTripMetricsRequest { string trip_id = 1; }
+message GetTripMetricsResponse { TripMetrics metrics = 1; }
+
+message GetServiceSummaryRequest {
+  repeated TripState states = 1;
+  string vehicle_id = 2;
+  string facility_id = 3;
+  google.protobuf.Timestamp from = 4;
+  google.protobuf.Timestamp to = 5;
+}
+message GetServiceSummaryResponse {
+  ServiceSummary summary = 1;
+  // The window held more rows than one report may read, so these figures
+  // come from part of it.
+  bool truncated = 2;
+}
+
+message SweepWaitingHandoversRequest { string facility_id = 1; }
+message SweepWaitingHandoversResponse { int32 raised = 1; }
+
+// Ambulance and fleet operations (SRS-AMB-001 … 008).
+service AmbulanceService {
+  // SRS-AMB-002.
+  rpc RegisterVehicle(RegisterVehicleRequest)
+      returns (RegisterVehicleResponse);
+  rpc SetVehicleState(SetVehicleStateRequest)
+      returns (SetVehicleStateResponse);
+  rpc GetVehicle(GetVehicleRequest) returns (GetVehicleResponse);
+  rpc ListVehicles(ListVehiclesRequest) returns (ListVehiclesResponse);
+  rpc RosterShift(RosterShiftRequest) returns (RosterShiftResponse);
+  rpc SetShiftState(SetShiftStateRequest) returns (SetShiftStateResponse);
+  rpc GetShift(GetShiftRequest) returns (GetShiftResponse);
+  rpc ListShifts(ListShiftsRequest) returns (ListShiftsResponse);
+
+  // SRS-AMB-006.
+  rpc RecordReadinessCheck(RecordReadinessCheckRequest)
+      returns (RecordReadinessCheckResponse);
+  rpc OverrideReadinessCheck(OverrideReadinessCheckRequest)
+      returns (OverrideReadinessCheckResponse);
+  rpc GetReadinessCheck(GetReadinessCheckRequest)
+      returns (GetReadinessCheckResponse);
+  rpc ListReadinessChecks(ListReadinessChecksRequest)
+      returns (ListReadinessChecksResponse);
+  rpc GetReadinessSummary(GetReadinessSummaryRequest)
+      returns (GetReadinessSummaryResponse);
+
+  // SRS-AMB-001.
+  rpc RaiseRequest(RaiseRequestRequest) returns (RaiseRequestResponse);
+  rpc CancelRequest(CancelRequestRequest) returns (CancelRequestResponse);
+  rpc GetRequest(GetRequestRequest) returns (GetRequestResponse);
+  rpc ListRequests(ListRequestsRequest) returns (ListRequestsResponse);
+  rpc GetDispatchQueue(GetDispatchQueueRequest)
+      returns (GetDispatchQueueResponse);
+
+  // SRS-AMB-003.
+  rpc Dispatch(DispatchRequest) returns (DispatchResponse);
+  rpc RecordTripMilestone(RecordTripMilestoneRequest)
+      returns (RecordTripMilestoneResponse);
+  rpc AmendTripMilestone(AmendTripMilestoneRequest)
+      returns (AmendTripMilestoneResponse);
+  rpc AbortTrip(AbortTripRequest) returns (AbortTripResponse);
+  rpc GetTrip(GetTripRequest) returns (GetTripResponse);
+  rpc ListTrips(ListTripsRequest) returns (ListTripsResponse);
+  rpc GetTimelineGaps(GetTimelineGapsRequest)
+      returns (GetTimelineGapsResponse);
+
+  // SRS-AMB-004 and SRS-AMB-007.
+  rpc OpenPrehospitalRecord(OpenPrehospitalRecordRequest)
+      returns (OpenPrehospitalRecordResponse);
+  rpc RecordPrehospitalEntry(RecordPrehospitalEntryRequest)
+      returns (RecordPrehospitalEntryResponse);
+  rpc AttachTransferDocument(AttachTransferDocumentRequest)
+      returns (AttachTransferDocumentResponse);
+  rpc GiveHandover(GiveHandoverRequest) returns (GiveHandoverResponse);
+  rpc AcceptHandover(AcceptHandoverRequest) returns (AcceptHandoverResponse);
+  rpc GetPrehospitalRecord(GetPrehospitalRecordRequest)
+      returns (GetPrehospitalRecordResponse);
+  rpc ListPrehospitalRecords(ListPrehospitalRecordsRequest)
+      returns (ListPrehospitalRecordsResponse);
+  rpc SweepWaitingHandovers(SweepWaitingHandoversRequest)
+      returns (SweepWaitingHandoversResponse);
+
+  // SRS-AMB-005.
+  rpc RecordPing(RecordPingRequest) returns (RecordPingResponse);
+  rpc RecordETA(RecordETARequest) returns (RecordETAResponse);
+  rpc GetVehiclePosition(GetVehiclePositionRequest)
+      returns (GetVehiclePositionResponse);
+  rpc ListPings(ListPingsRequest) returns (ListPingsResponse);
+  rpc PurgeExpiredPings(PurgeExpiredPingsRequest)
+      returns (PurgeExpiredPingsResponse);
+
+  // SRS-AMB-008.
+  rpc GetTripMetrics(GetTripMetricsRequest) returns (GetTripMetricsResponse);
+  rpc GetServiceSummary(GetServiceSummaryRequest)
+      returns (GetServiceSummaryResponse);
+}
