@@ -141,7 +141,7 @@ func TestFIT01_DomainPackagesArePure(t *testing.T) {
 // would make these tests useless noise.
 var sqlSchemaRef = regexp.MustCompile(
 	`(?i)\b(?:from|join|into|update|delete\s+from|table)\s+` +
-		`(organization|identity_access|platform_data|platform_workflow|platform_rules|platform_edge|platform_escalation|emergency|icu|theatre|anaesthesia|bloodbank|sterile|security_platform|housekeeping)\.[a-z_]+`)
+		`(organization|identity_access|platform_data|platform_workflow|platform_rules|platform_edge|platform_escalation|emergency|icu|theatre|anaesthesia|bloodbank|sterile|security_platform|housekeeping|laundry)\.[a-z_]+`)
 
 // schemaOwners maps a schema to the one package path allowed to reach it.
 var schemaOwners = map[string]string{
@@ -161,6 +161,7 @@ var schemaOwners = map[string]string{
 	"platform_blob":       "internal/platform/blobstore",
 	"platform_escalation": "internal/platform/escalation",
 	"housekeeping":        "internal/housekeeping/adapters/postgres",
+	"laundry":             "internal/laundry/adapters/postgres",
 }
 
 // TestSQLSchemaRefDetectorWorks guards the guard.
@@ -187,6 +188,7 @@ func TestSQLSchemaRefDetectorWorks(t *testing.T) {
 		`SELECT * FROM anaesthesia.record WHERE status = 'open'`,
 		`SELECT * FROM bloodbank.component WHERE status = 'available'`,
 		`SELECT * FROM housekeeping.bed_hold WHERE state = 'open'`,
+		`SELECT * FROM laundry.wash_batch WHERE state = 'passed'`,
 		`SELECT * FROM sterile.run WHERE stage = 'released'`,
 	}
 	for _, sample := range shouldMatch {
@@ -272,6 +274,7 @@ func TestFIT02_GeneratedQueriesImportedOnlyByAdapters(t *testing.T) {
 		"internal/records/adapters/postgres",
 		"internal/dietetics/adapters/postgres",
 		"internal/housekeeping/adapters/postgres",
+		"internal/laundry/adapters/postgres",
 		"internal/platform/store",
 		"internal/platform/workflow",
 		"internal/platform/rules",
@@ -568,6 +571,11 @@ func TestFIT08_NoDeleteOnAppendOnlyTables(t *testing.T) {
 		// in the room, and the audit-compliance figure comes out higher for
 		// it.
 		"housekeeping.location_scan",
+		// SRS-LND-007's acceptance is that a tracked item has a last known
+		// custody. A deleted movement is a garment that was never where it
+		// was, and the trail still reads cleanly — which is exactly what
+		// somebody removing one would be after.
+		"laundry.tracked_movement",
 	}
 
 	for _, f := range loadGoFiles(t) {

@@ -15,15 +15,15 @@ test names.
 prose, because a status document whose honest summary is a fraction is one
 whose per-row claims have to be read carefully.
 
-Thirteen families are now built: SRS-ER the Emergency Department, SRS-ICU
+Fourteen families are now built: SRS-ER the Emergency Department, SRS-ICU
 critical care, SRS-OT the operating theatre, SRS-ANE anaesthesia and PACU,
 SRS-BLD blood bank and transfusion, SRS-CSSD sterile services, SRS-MAT
 materials and inventory, SRS-BIO biomedical engineering, SRS-QMS quality
 management, SRS-IPC infection prevention and control, SRS-MRD medical
 records and health information management, SRS-DIET dietetics and kitchen
-operations and SRS-HKP housekeeping and environmental services. Their rows
-are below. Four support-service families remain: SRS-AMB, SRS-FAC, SRS-LND
-and SRS-MORT.
+operations, SRS-HKP housekeeping and environmental services and SRS-LND
+laundry and linen. Their rows are below. Three support-service families
+remain: SRS-AMB, SRS-FAC and SRS-MORT.
 
 `make traceability` reads a row naming a requirement as a claim about it
 unless the row says the work is not built, so the unbuilt ER requirements are
@@ -109,7 +109,8 @@ clinician, and `ValidatedInputs()` is a function rather than a convention.
 | SRS-MRD Medical Records / HIM | 10 | **10 implemented** — see below |
 | SRS-DIET Dietetics and Kitchen | 9 | **9 implemented** — see below |
 | SRS-HKP Housekeeping and Environmental Services | 8 | **8 implemented** — see below |
-| SRS-AMB, SRS-FAC, SRS-LND, SRS-MORT support services | 35 | **Not started** — except SRS-FAC-012 above |
+| SRS-LND Laundry and Linen | 7 | **7 implemented** — see below |
+| SRS-AMB, SRS-FAC, SRS-MORT support services | 28 | **Not started** — except SRS-FAC-012 above |
 | SRS-OPSAPI / OPSNFR / OPSSEC / OPSWEB | 32 | **Partial** — the three foundations above |
 
 ### A note on SRS-BIO
@@ -1264,6 +1265,81 @@ publishes to the outbox and this context's use case is one call, so closing
 this is a handler rather than new machinery; as it stands the ward clerk or
 nurse triggers it, holds the permission to do so, and a discharge nobody
 followed up leaves the bed unheld rather than held for ever.
+
+## SRS-LND — Laundry and linen
+
+Seven requirements, Phase 2 §15. Bounded context `laundry`, twelve tables in
+schema `laundry`, thirty-seven RPCs, twelve permissions, and ninety-six domain
+refusals plus thirty-two database rules and thirteen separation-of-duties
+rules each individually weakened and confirmed to fail a test before being
+trusted.
+
+**The first rule this family exists for is that infected linen cannot reach an
+ordinary wash.** A standard programme does not dissolve the water-soluble
+inner bag and does not reach disinfection temperature, so the load comes out
+contaminated and indistinguishable from clean — and the people who sort it
+afterwards are the ones who find out. The rule holds in three places. The
+domain refuses the load. The database refuses the row, through a composite
+foreign key: `laundry.collection` carries `batch_cycle` beside `batch_id` with
+a key onto `laundry.wash_batch (batch_id, cycle)` and a CHECK that an infected
+collection is either unbatched or in a barrier cycle, and the batch carries
+the same rule from its own side. And the handling instruction travels on the
+collection, derived from the soil class rather than typed beside it, so the
+worklist a porter reads and the cycle the machine runs cannot disagree. The
+corollary is `RecountCollection`, which is refused outright for a sealed
+class: re-counting infected linen means opening the bag, the declaration made
+at the bedside is the only count anybody is going to get, and a system that
+offered the correction would be one where somebody was asked to make it.
+
+**The second is that linen from a wash that did not pass never reaches a
+ward.** A failed wash produces linen that looks exactly like clean linen, and
+the ward it reaches cannot tell by looking. `laundry.linen_issue` carries
+`batch_state` with a composite foreign key onto
+`laundry.wash_batch (batch_id, state)` `ON UPDATE CASCADE` and a CHECK that the
+state is `passed`. The cascade is the point: the carried column cannot go
+stale, and a later attempt to move a batch out of `passed` fails against the
+CHECK rather than quietly leaving issued linen attached to a failed wash. When
+a batch does fail, the chain SRS-LND-002 asks to be retained is what answers
+"whose" — the units whose linen was in it are named and the failure escalates
+durably, because that linen may already be on its way back.
+
+| Requirement | Summary | Status |
+|---|---|---|
+| SRS-LND-001 | Linen item/category master and par levels by unit; par configuration is effective-dated | **Implemented** — pars are versioned by (unit, revision) and effective-dated, never edited, so a par changed this morning does not restate what last month's shortfall was measured against; approving one supersedes its predecessor in the same transaction, because two live pars for one ward is a ward stocked to whichever the reader opened; the author cannot approve it and neither can anybody else in the laundry — a par is a standing purchasing commitment, so `lnd.par.approve` sits with materials; a reorder level above par is refused by CHECK, since it would fire on every read and put the whole ward on the top-up sheet every morning; the shortfall is computed from the par in force and the derived balance, and an item sitting exactly at par is absent from it rather than present with a zero |
+| SRS-LND-002 | Record soiled linen collection by source and quantity/weight; chain to laundry batch is retained | **Implemented** — the chain is held on both sides and by the database: the collection names its batch and the cycle it went into, with CHECKs that a batched collection has both and an unbatched one has neither; a cancelled collection is kept rather than deleted, because a unit's loss is computed from what went out and what came back and a deleted collection reads as linen the ward never returned; the declared count is cross-checked against the weighed bag and reported as a finding rather than enforced, since linen is wet and the tolerance is a hospital's to set; a bag with nothing declared reports unanswerable rather than a variance of everything, which would put every sealed bag on the exception list and take the list with it |
+| SRS-LND-003 | Track wash/process batch and status; batch outcome and exceptions are recorded | **Implemented** — a batch names the machine it ran in, because "one washer fails every third load" is the finding a laundry most needs and least expects; an empty batch cannot be started, since one that later read as passed is a batch somebody could issue linen from without any linen having been washed; a failed wash must say what went wrong, held by the domain, and a completed one must say how it went, held by CHECK; a rewash is a new batch that names the failed one and the failure stays on the record in its own state, so a hospital cannot turn a failure into a pass by washing it again; the report counts exceptions apart from failures, because a load that passed with the probe out of calibration is the one that tells a hospital its next load will not |
+| SRS-LND-004 | Record clean linen issue to unit; unit stock/par balance can be derived | **Implemented** — the balance is derived from the movements and stored nowhere, which is the acceptance in one line: a stored balance and the delivery notes behind it disagree the first time somebody corrects one, and the stored one is what the ward is judged on; an unreceived issue still counts, because linen that left the laundry is linen the ward has; the balance never goes negative, since reporting minus four sheets reads as a ward that owes the laundry linen it never had; sealed returns are reported apart rather than dropped, or a ward whose linen all comes back in sealed bags would look like one that never returns anything; and a delivery is signed for by somebody other than whoever issued it, held by the domain and by CHECK — the laundry does not hold `lnd.receive` at all |
+| SRS-LND-005 | Handle infected/isolation linen with separate workflow/flag; staff worklist visibly identifies required handling | **Implemented** — the rule above. The soil class is an enum rather than a flag, because "infected" is not a degree of "soiled": it decides which bag the linen goes into at the bedside, whether anybody may open it again, and which cycle it is allowed into; the handling instruction is derived from the class and copied onto the collection, so it cannot be edited apart from what the machine enforces; the pending worklist puts infected linen first, because it is the load nobody wants sitting in a corridor and a list in arrival order leaves it there behind a trolley of towels |
+| SRS-LND-006 | Record condemned/lost/damaged linen with approval where required; loss/condemnation is reportable | **Implemented** — a write-off says why, held by CHECK, because a reportable loss is one that says what happened; the replacement value is pinned from the master at report time rather than computed on read, so a price list changed in March does not restate what January's losses cost; the approval is a second person, held by the domain and by CHECK — a ward sister writing off her own ward's linen and approving it herself is the whole of what "with approval where required" is for, and the laundry operator does not hold the permission because one who could write off the linen they lost is one whose losses are always nil; only approved records move the totals, since a reported loss nobody has decided on is not yet a loss; missing linen that turns up is recovered rather than deleted, so the figure can say "we lost four hundred and found sixty"; the approval queue is largest first, because a hundred sheets matters more than four and a queue in report order buries it |
+| SRS-LND-007 | RFID/barcode tracking for high-value linen/uniforms; tracked item has last known custody/location | **Implemented** — a tag goes on a tracked item and nothing else, held by a composite foreign key onto `(tenant, code, tracked)` and by a CHECK that catches the caller who would declare the item untracked to get round it; a custody trail for one sheet out of four thousand reads as a system that lost the rest; movements are append-only and registered with FIT-08, and each is attributed to the authenticated caller rather than to the reader — a movement with nobody behind it is one anybody walking past can create; the last known custody is the latest scan by time rather than the last one written, so a reader that uploads late does not rewrite where something is; and the stale report names what nobody has seen and writes nothing off, because a uniform unscanned for a month is usually one somebody wore past a reader that was switched off |
+
+### What SRS-LND does not reach
+
+Three seams are named rather than half-built.
+
+**Nothing reconciles the laundry's stock against the wards'.** `GetUnitStock`
+derives what a ward holds from what the laundry issued, what came back and
+what was written off. What it cannot see is linen a ward moved to another
+ward, linen a patient took home, or a physical count somebody did on the
+shelf. The balance is therefore the laundry's view of the ward rather than the
+ward's, and the two diverge quietly. Closing this is a stock-count use case of
+the kind SRS-MAT already has; until it exists, a ward that disagrees with the
+figure has no way to say so except by reporting the difference as a loss.
+
+**The weight check has no tolerance and raises nothing.**
+`CheckCollectionWeight` returns the declared count, the expected weight and
+the variance, and stops there. A hospital that wants "flag any collection
+more than 30% over" has to compute that itself from the response. That is
+deliberate — linen is wet and the tolerance is a hospital's to set — but the
+consequence is that the one honest cross-check on a bag nobody opens is a
+figure somebody has to go and look at rather than one that reaches them.
+
+**The par level names item codes the master need not have.** A par line
+carries an item code and nothing resolves it against `laundry.linen_item`, so
+a par can be set for an item that does not exist and the shortfall for it will
+report the full par as short for ever. The master read is one call and the
+schema could carry the key; it is not built, and a deployment should set its
+item master before its pars.
 
 ## What Wave 2 depends on
 

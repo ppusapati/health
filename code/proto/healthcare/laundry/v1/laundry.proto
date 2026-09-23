@@ -1,0 +1,921 @@
+// Laundry and linen: the linen item master and unit par levels, soiled
+// collection and its chain to the wash, wash batches and their outcomes,
+// clean linen issue and the balance derived from it, condemned, damaged and
+// missing linen, and tagged high-value linen and uniforms.
+//
+// Owning context : laundry  (Master Engineering Registry)
+// Owning service : LaundryService
+// Trace          : SRS-LND-001 … SRS-LND-007
+//
+// Four shapes in this contract are deliberate.
+//
+// IssueLinen takes a batch identifier and refuses one that did not pass.
+// There is no field on the request that could assert the wash was fine, and
+// no RPC that issues linen without naming a batch. A wash that failed — the
+// temperature never held, the machine aborted, the disinfection stage was
+// skipped — produces linen that looks exactly like clean linen, and the ward
+// it reaches cannot tell by looking. The database holds the same rule through
+// a composite foreign key that cannot go stale: a batch cannot be moved out
+// of "passed" while linen issued from it exists.
+//
+// RecountCollection is refused for a collection of soil class INFECTED, and
+// no other RPC touches its declared lines. SRS-LND-005 asks that the worklist
+// visibly identify the required handling; what makes that real is that the
+// handling is derived from the class and travels on the collection, and that
+// re-counting means opening a bag nobody is going to open. The declaration
+// made at the bedside is the only count anybody is going to get, and a
+// contract that offered a correction would be a contract where somebody was
+// asked to make one.
+//
+// LoadBatch refuses infected linen into anything but a barrier cycle, on both
+// sides: the collection carries the cycle it went into and the batch carries
+// whether it holds infected linen. A standard programme does not dissolve the
+// water-soluble inner bag and does not reach disinfection temperature, so the
+// load comes out contaminated and indistinguishable from clean.
+//
+// A write-off moves no balance until somebody other than its reporter
+// approves it. ApproveLinenLoss is its own RPC under its own permission, and
+// GetUnitStock counts only approved records — a reported loss nobody has
+// decided on is not yet a loss, and counting it as one would let a ward's
+// shortfall be cleared by anybody who can type a number.
+//
+// Every measurement is an integer in a base unit: weights in grams,
+// temperatures in whole degrees, values in the tenant's minor currency units.
+syntax = "proto3";
+
+package healthcare.laundry.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ppusapati/health/code/gen/go/healthcare/laundry/v1;laundryv1";
+
+// What kind of linen an item is (SRS-LND-001).
+enum LinenCategory {
+  LINEN_CATEGORY_UNSPECIFIED = 0;
+  LINEN_CATEGORY_BEDDING = 1;
+  LINEN_CATEGORY_PATIENT = 2;
+  // Drapes, gowns and wraps. Kept apart because a theatre item that failed
+  // its wash is a different conversation.
+  LINEN_CATEGORY_THEATRE = 3;
+  // Staff uniforms and scrubs, which is where the tagged items mostly are.
+  LINEN_CATEGORY_UNIFORM = 4;
+  LINEN_CATEGORY_OTHER = 5;
+}
+
+// How a bag of linen has to be handled (SRS-LND-002, SRS-LND-005).
+//
+// An enum rather than a flag, because "infected" is not a degree of
+// "soiled". It decides which bag the linen goes into at the bedside, whether
+// anybody may open it again, and which cycle it is allowed into.
+enum SoilClass {
+  SOIL_CLASS_UNSPECIFIED = 0;
+  // Linen that was on a bed and is not wet.
+  SOIL_CLASS_USED = 1;
+  // Blood or body fluid. Gloves and a hot wash; not a barrier load.
+  SOIL_CLASS_FOULED = 2;
+  // From a patient on transmission-based precautions. Bagged at the
+  // bedside, sealed, never opened again, washed in a barrier cycle.
+  SOIL_CLASS_INFECTED = 3;
+}
+
+// A wash programme (SRS-LND-003, SRS-LND-005).
+enum WashCycle {
+  WASH_CYCLE_UNSPECIFIED = 0;
+  WASH_CYCLE_STANDARD = 1;
+  // Thermal disinfection, used for fouled linen.
+  WASH_CYCLE_HOT = 2;
+  // Rated to take sealed infected linen: the bag dissolves in the drum and
+  // nobody handles the contents.
+  WASH_CYCLE_BARRIER = 3;
+  // For theatre drapes and anything that cannot take a hot wash.
+  WASH_CYCLE_DELICATE = 4;
+}
+
+// Where a soiled collection stands (SRS-LND-002).
+enum CollectionState {
+  COLLECTION_STATE_UNSPECIFIED = 0;
+  COLLECTION_STATE_OPEN = 1;
+  // In a wash batch. The chain SRS-LND-002 asks to be retained.
+  COLLECTION_STATE_BATCHED = 2;
+  // Recorded in error. Kept, because a unit's loss is computed from what
+  // went out and what came back.
+  COLLECTION_STATE_CANCELLED = 3;
+}
+
+// Where a wash batch stands (SRS-LND-003).
+enum BatchState {
+  BATCH_STATE_UNSPECIFIED = 0;
+  BATCH_STATE_LOADING = 1;
+  BATCH_STATE_PROCESSING = 2;
+  // Completed its cycle. The only state linen may be issued from.
+  BATCH_STATE_PASSED = 3;
+  // The cycle did not hold. Its linen looks exactly like clean linen and is
+  // not.
+  BATCH_STATE_FAILED = 4;
+  // A failed batch whose load went back through. Its own state, so a report
+  // cannot count the second pass as though the first had never happened.
+  BATCH_STATE_REWASHED = 5;
+}
+
+// How linen left the system other than by being washed (SRS-LND-006).
+enum LossKind {
+  LOSS_KIND_UNSPECIFIED = 0;
+  // Deliberately taken out of service: torn, worn through, stained past
+  // use.
+  LOSS_KIND_CONDEMNED = 1;
+  // Ruined by something identifiable. Kept apart from condemnation because
+  // the follow-up is an incident rather than a laundry cycle.
+  LOSS_KIND_DAMAGED = 2;
+  // Did not come back.
+  LOSS_KIND_MISSING = 3;
+}
+
+// Where a loss record stands (SRS-LND-006).
+enum LossState {
+  LOSS_STATE_UNSPECIFIED = 0;
+  LOSS_STATE_REPORTED = 1;
+  // Authorised. Only an approved record comes off the unit's balance.
+  LOSS_STATE_APPROVED = 2;
+  LOSS_STATE_REJECTED = 3;
+  // Missing linen that turned up. Its own state, so an annual loss figure
+  // is not quietly reduced by records somebody reopened.
+  LOSS_STATE_RECOVERED = 4;
+}
+
+// How a tracked item is read (SRS-LND-007).
+enum TagKind {
+  TAG_KIND_UNSPECIFIED = 0;
+  TAG_KIND_RFID = 1;
+  TAG_KIND_BARCODE = 2;
+}
+
+// Where a tagged item stands (SRS-LND-007).
+enum TrackedState {
+  TRACKED_STATE_UNSPECIFIED = 0;
+  TRACKED_STATE_IN_SERVICE = 1;
+  TRACKED_STATE_RETIRED = 2;
+}
+
+// One thing the hospital launders (SRS-LND-001).
+message LinenItem {
+  string item_id = 1;
+  string code = 2;
+  string name = 3;
+  LinenCategory category = 4;
+  // The dry weight of one piece, used to reconcile a declared count against
+  // a weighed bag. Zero means nobody has weighed one.
+  int32 unit_weight_g = 5;
+  // Minor currency units.
+  int32 replacement_cost_minor = 6;
+  // Carries an RFID or barcode tag (SRS-LND-007).
+  bool tracked = 7;
+  bool active = 8;
+  google.protobuf.Timestamp created_at = 9;
+  string created_by = 10;
+  int64 version = 11;
+}
+
+// One item's par for one unit (SRS-LND-001).
+message ParLine {
+  string item_code = 1;
+  // The number of pieces the unit should hold.
+  int32 quantity = 2;
+  // The level at which a top-up is raised. Zero means top up whenever the
+  // unit is below par.
+  int32 reorder_at = 3;
+}
+
+// A unit's linen holding, effective-dated (SRS-LND-001).
+message ParLevel {
+  string par_id = 1;
+  string unit_id = 2;
+  string unit_name = 3;
+  string facility_id = 4;
+  int32 revision = 5;
+  repeated ParLine lines = 6;
+  bool approved = 7;
+  string approved_by = 8;
+  google.protobuf.Timestamp approved_at = 9;
+  google.protobuf.Timestamp effective_from = 10;
+  google.protobuf.Timestamp superseded_at = 11;
+  google.protobuf.Timestamp created_at = 12;
+  string created_by = 13;
+  int64 version = 14;
+}
+
+// One item's declared count in a collection (SRS-LND-002).
+message CollectionLine {
+  string item_code = 1;
+  // What the source unit counted. For an infected collection it is a
+  // declaration and stays one.
+  int32 quantity = 2;
+}
+
+// Soiled linen taken from one unit (SRS-LND-002).
+message LinenCollection {
+  string collection_id = 1;
+  string unit_id = 2;
+  string unit_name = 3;
+  string facility_id = 4;
+  SoilClass soil_class = 5;
+  // The instruction the worklist has to show, derived from the class rather
+  // than typed beside it (SRS-LND-005).
+  string handling = 6;
+  // How many sealed bags came over.
+  int32 bag_count = 7;
+  // What the bags weighed. The laundry's own number, taken without opening
+  // anything.
+  int32 weight_g = 8;
+  // Empty is ordinary for an infected collection recorded by bag and weight
+  // alone.
+  repeated CollectionLine lines = 9;
+  CollectionState state = 10;
+  string batch_id = 11;
+  string cancel_reason = 12;
+  google.protobuf.Timestamp collected_at = 13;
+  string collected_by = 14;
+  int64 version = 15;
+}
+
+// Something that went wrong in a wash (SRS-LND-003).
+message BatchException {
+  string code = 1;
+  string detail = 2;
+}
+
+// One wash load (SRS-LND-003).
+message WashBatch {
+  string batch_id = 1;
+  string reference = 2;
+  string facility_id = 3;
+  string machine_id = 4;
+  WashCycle cycle = 5;
+  // Whether the load carries sealed infected linen. Derived from what went
+  // in rather than set.
+  bool infected = 6;
+  // Which units' linen is in this load, and therefore who to tell when it
+  // fails.
+  repeated string collection_ids = 7;
+  int32 weight_g = 8;
+  BatchState state = 9;
+  string outcome = 10;
+  // Recorded on a pass as well as a failure: a load that passed with the
+  // probe out of calibration is one somebody wants to know about.
+  repeated BatchException exceptions = 11;
+  // Whole degrees.
+  int32 peak_temperature_c = 12;
+  int32 hold_minutes = 13;
+  string rewash_batch_id = 14;
+  string rewash_of_batch_id = 15;
+  google.protobuf.Timestamp started_at = 16;
+  string started_by = 17;
+  google.protobuf.Timestamp completed_at = 18;
+  string completed_by = 19;
+  google.protobuf.Timestamp created_at = 20;
+  string created_by = 21;
+  int64 version = 22;
+}
+
+// One item's count in a clean-linen issue (SRS-LND-004).
+message IssueLine {
+  string item_code = 1;
+  int32 quantity = 2;
+}
+
+// Clean linen going back to a unit (SRS-LND-004).
+message LinenIssue {
+  string issue_id = 1;
+  string unit_id = 2;
+  string unit_name = 3;
+  string facility_id = 4;
+  // The wash this came out of. That link is what makes "which wards got
+  // linen from the load that failed" answerable.
+  string batch_id = 5;
+  string batch_reference = 6;
+  repeated IssueLine lines = 7;
+  google.protobuf.Timestamp issued_at = 8;
+  string issued_by = 9;
+  // Empty until the unit signs for it, and never the same person who issued
+  // it.
+  google.protobuf.Timestamp received_at = 10;
+  string received_by = 11;
+  int64 version = 12;
+}
+
+// Linen written off or gone missing (SRS-LND-006).
+message LossRecord {
+  string loss_id = 1;
+  string unit_id = 2;
+  string facility_id = 3;
+  string item_code = 4;
+  int32 quantity = 5;
+  LossKind kind = 6;
+  string reason = 7;
+  // The replacement cost at the time, in minor units. Pinned rather than
+  // computed on read.
+  int32 value_minor = 8;
+  LossState state = 9;
+  // Whether the value crosses the hospital's threshold. Every write-off
+  // still needs a second person; this decides which ones are chased.
+  bool approval_required = 10;
+  string approved_by = 11;
+  google.protobuf.Timestamp approved_at = 12;
+  string decision_note = 13;
+  google.protobuf.Timestamp reported_at = 14;
+  string reported_by = 15;
+  int64 version = 16;
+}
+
+// One scan of a tagged item (SRS-LND-007).
+message TrackedMovement {
+  string location = 1;
+  // Empty for a location read, which is most of them: a portal scan at the
+  // laundry door says where, not who.
+  string holder_id = 2;
+  string note = 3;
+  // The authenticated caller, never the reader.
+  string recorded_by = 4;
+  google.protobuf.Timestamp occurred_at = 5;
+}
+
+// A tagged piece of linen or a uniform (SRS-LND-007).
+message TrackedItem {
+  string tracked_id = 1;
+  string tag_id = 2;
+  TagKind tag_kind = 3;
+  string item_code = 4;
+  // The person a uniform belongs to. Separate from whoever currently has it.
+  string assigned_to = 5;
+  string facility_id = 6;
+  TrackedState state = 7;
+  // Append-only, oldest first.
+  repeated TrackedMovement movements = 8;
+  string retired_reason = 9;
+  google.protobuf.Timestamp registered_at = 10;
+  string registered_by = 11;
+  int64 version = 12;
+}
+
+// Where a tagged item was last seen (SRS-LND-007).
+message Custody {
+  string location = 1;
+  string holder_id = 2;
+  string recorded_by = 3;
+  google.protobuf.Timestamp occurred_at = 4;
+  // False for an item nobody has scanned since it was registered. Reported
+  // rather than defaulting to the laundry.
+  bool known = 5;
+}
+
+// --------------------------------------------- linen master (SRS-LND-001)
+
+message ConfigureLinenItemRequest {
+  string code = 1;
+  string name = 2;
+  LinenCategory category = 3;
+  int32 unit_weight_g = 4;
+  int32 replacement_cost_minor = 5;
+  bool tracked = 6;
+}
+
+message ConfigureLinenItemResponse {
+  LinenItem item = 1;
+}
+
+message RetireLinenItemRequest {
+  string item_id = 1;
+}
+
+message RetireLinenItemResponse {
+  LinenItem item = 1;
+}
+
+message ListLinenItemsRequest {
+  LinenCategory category = 1;
+  bool tracked_only = 2;
+  bool active_only = 3;
+  int32 page_size = 4;
+  int32 offset = 5;
+}
+
+message ListLinenItemsResponse {
+  repeated LinenItem items = 1;
+}
+
+message SetParLevelRequest {
+  string unit_id = 1;
+  string unit_name = 2;
+  string facility_id = 3;
+  repeated ParLine lines = 4;
+  // The revision is assigned by the server: two people setting the same
+  // ward's par at once would otherwise both write revision three.
+}
+
+message SetParLevelResponse {
+  ParLevel par = 1;
+}
+
+message ApproveParLevelRequest {
+  string par_id = 1;
+  // When the par takes effect. Empty means now.
+  google.protobuf.Timestamp effective_from = 2;
+}
+
+message ApproveParLevelResponse {
+  ParLevel par = 1;
+}
+
+message GetParInForceRequest {
+  string unit_id = 1;
+}
+
+message GetParInForceResponse {
+  ParLevel par = 1;
+}
+
+message ListParLevelsRequest {
+  string facility_id = 1;
+  string unit_id = 2;
+  bool live_only = 3;
+  int32 page_size = 4;
+  int32 offset = 5;
+}
+
+message ListParLevelsResponse {
+  repeated ParLevel pars = 1;
+}
+
+// ---------------------------------------------- collections (SRS-LND-002)
+
+message RecordCollectionRequest {
+  string unit_id = 1;
+  string unit_name = 2;
+  string facility_id = 3;
+  SoilClass soil_class = 4;
+  int32 bag_count = 5;
+  int32 weight_g = 6;
+  // Leave empty for an infected collection recorded by bag and weight.
+  repeated CollectionLine lines = 7;
+}
+
+message RecordCollectionResponse {
+  LinenCollection collection = 1;
+}
+
+message RecountCollectionRequest {
+  string collection_id = 1;
+  repeated CollectionLine lines = 2;
+}
+
+message RecountCollectionResponse {
+  LinenCollection collection = 1;
+}
+
+message CancelCollectionRequest {
+  string collection_id = 1;
+  string reason = 2;
+}
+
+message CancelCollectionResponse {
+  LinenCollection collection = 1;
+}
+
+message ListCollectionsRequest {
+  string facility_id = 1;
+  string unit_id = 2;
+  SoilClass soil_class = 3;
+  repeated CollectionState states = 4;
+  string batch_id = 5;
+  // Only what is waiting to be washed. Comes back infected-first.
+  bool pending_only = 6;
+  google.protobuf.Timestamp from = 7;
+  google.protobuf.Timestamp to = 8;
+  int32 page_size = 9;
+  int32 offset = 10;
+}
+
+message ListCollectionsResponse {
+  repeated LinenCollection collections = 1;
+}
+
+message CheckCollectionWeightRequest {
+  string collection_id = 1;
+}
+
+message CheckCollectionWeightResponse {
+  int32 declared_pieces = 1;
+  int32 expected_g = 2;
+  int32 actual_g = 3;
+  int32 variance_g = 4;
+  // A collection with nothing declared, or items whose unit weight nobody
+  // has recorded. Reported rather than a variance of everything.
+  bool unanswerable = 5;
+}
+
+// --------------------------------------------- wash batches (SRS-LND-003)
+
+message OpenWashBatchRequest {
+  string reference = 1;
+  string facility_id = 2;
+  string machine_id = 3;
+  WashCycle cycle = 4;
+  string rewash_of_batch_id = 5;
+}
+
+message OpenWashBatchResponse {
+  WashBatch batch = 1;
+}
+
+message LoadWashBatchRequest {
+  string batch_id = 1;
+  string collection_id = 2;
+}
+
+message LoadWashBatchResponse {
+  WashBatch batch = 1;
+}
+
+message StartWashBatchRequest {
+  string batch_id = 1;
+}
+
+message StartWashBatchResponse {
+  WashBatch batch = 1;
+}
+
+message CompleteWashBatchRequest {
+  string batch_id = 1;
+  bool passed = 2;
+  string outcome = 3;
+  int32 peak_temperature_c = 4;
+  int32 hold_minutes = 5;
+  // Required when the wash did not pass.
+  repeated BatchException exceptions = 6;
+}
+
+message CompleteWashBatchResponse {
+  WashBatch batch = 1;
+}
+
+message RewashBatchRequest {
+  string failed_batch_id = 1;
+  string into_batch_id = 2;
+}
+
+message RewashBatchResponse {
+  // The replacement batch. The failed one keeps its failure.
+  WashBatch batch = 1;
+}
+
+message GetWashBatchRequest {
+  string batch_id = 1;
+}
+
+message GetWashBatchResponse {
+  WashBatch batch = 1;
+}
+
+message ListWashBatchesRequest {
+  string facility_id = 1;
+  string machine_id = 2;
+  WashCycle cycle = 3;
+  repeated BatchState states = 4;
+  google.protobuf.Timestamp from = 5;
+  google.protobuf.Timestamp to = 6;
+  int32 page_size = 7;
+  int32 offset = 8;
+}
+
+message ListWashBatchesResponse {
+  repeated WashBatch batches = 1;
+}
+
+message ListAffectedUnitsRequest {
+  string batch_id = 1;
+}
+
+message ListAffectedUnitsResponse {
+  // Empty unless the batch failed: the question only arises then.
+  repeated string unit_ids = 1;
+}
+
+// --------------------------------------------------- issues (SRS-LND-004)
+
+message IssueLinenRequest {
+  // The wash the linen came out of. Refused unless it passed.
+  string batch_id = 1;
+  string unit_id = 2;
+  string unit_name = 3;
+  string facility_id = 4;
+  repeated IssueLine lines = 5;
+}
+
+message IssueLinenResponse {
+  LinenIssue issue = 1;
+}
+
+message ReceiveLinenRequest {
+  string issue_id = 1;
+}
+
+message ReceiveLinenResponse {
+  LinenIssue issue = 1;
+}
+
+message ListLinenIssuesRequest {
+  string facility_id = 1;
+  string unit_id = 2;
+  string batch_id = 3;
+  bool outstanding_only = 4;
+  google.protobuf.Timestamp from = 5;
+  google.protobuf.Timestamp to = 6;
+  int32 page_size = 7;
+  int32 offset = 8;
+}
+
+message ListLinenIssuesResponse {
+  repeated LinenIssue issues = 1;
+}
+
+message ItemCount {
+  string item_code = 1;
+  int32 quantity = 2;
+}
+
+message Shortfall {
+  string item_code = 1;
+  int32 par = 2;
+  int32 on_hand = 3;
+  int32 short = 4;
+}
+
+message GetUnitStockRequest {
+  string unit_id = 1;
+}
+
+message GetUnitStockResponse {
+  // Issued minus returned minus written off, derived from the movements.
+  repeated ItemCount on_hand = 1;
+  repeated ItemCount issued = 2;
+  repeated ItemCount returned = 3;
+  repeated ItemCount written_off = 4;
+  // Returns the laundry could not attribute to an item, which is every
+  // sealed infected bag recorded by weight alone.
+  int32 unreconciled_returns = 5;
+  // Empty when the unit is at or above par on everything, rather than a
+  // list of zeroes.
+  repeated Shortfall shortfalls = 6;
+  ParLevel par_in_force = 7;
+  // A unit nobody has set a par for. Reported rather than an empty
+  // shortfall list, which reads as a ward that has everything it needs.
+  bool no_par = 8;
+  bool truncated = 9;
+}
+
+// --------------------------------------------------- losses (SRS-LND-006)
+
+message ReportLinenLossRequest {
+  string unit_id = 1;
+  string facility_id = 2;
+  string item_code = 3;
+  int32 quantity = 4;
+  LossKind kind = 5;
+  // Required. A write-off with no reason is a number in an annual report
+  // that nobody can act on.
+  string reason = 6;
+}
+
+message ReportLinenLossResponse {
+  LossRecord loss = 1;
+}
+
+message ApproveLinenLossRequest {
+  string loss_id = 1;
+  // False refuses the write-off, which needs a note saying why.
+  bool approve = 2;
+  string note = 3;
+}
+
+message ApproveLinenLossResponse {
+  LossRecord loss = 1;
+}
+
+message RecoverLinenLossRequest {
+  string loss_id = 1;
+  string note = 2;
+}
+
+message RecoverLinenLossResponse {
+  LossRecord loss = 1;
+}
+
+message ListLinenLossesRequest {
+  string facility_id = 1;
+  string unit_id = 2;
+  string item_code = 3;
+  LossKind kind = 4;
+  repeated LossState states = 5;
+  google.protobuf.Timestamp from = 6;
+  google.protobuf.Timestamp to = 7;
+  int32 page_size = 8;
+  int32 offset = 9;
+}
+
+message ListLinenLossesResponse {
+  repeated LossRecord losses = 1;
+}
+
+message ListPendingLossApprovalsRequest {
+  string facility_id = 1;
+}
+
+message ListPendingLossApprovalsResponse {
+  // Largest first: a hundred sheets matters more than four, and a queue in
+  // report order buries it.
+  repeated LossRecord losses = 1;
+}
+
+// -------------------------------------------- tracked items (SRS-LND-007)
+
+message RegisterTagRequest {
+  string tag_id = 1;
+  TagKind tag_kind = 2;
+  // Refused unless the master calls this item tracked.
+  string item_code = 3;
+  string assigned_to = 4;
+  string facility_id = 5;
+}
+
+message RegisterTagResponse {
+  TrackedItem item = 1;
+}
+
+message RecordTagScanRequest {
+  // What came off the reader. A scan arrives as a tag, not an identifier.
+  string tag_id = 1;
+  string location = 2;
+  string holder_id = 3;
+  string note = 4;
+}
+
+message RecordTagScanResponse {
+  TrackedItem item = 1;
+}
+
+message RetireTagRequest {
+  string tracked_id = 1;
+  string reason = 2;
+}
+
+message RetireTagResponse {
+  TrackedItem item = 1;
+}
+
+message GetTagCustodyRequest {
+  string tag_id = 1;
+}
+
+message GetTagCustodyResponse {
+  TrackedItem item = 1;
+  Custody custody = 2;
+}
+
+message ListTrackedItemsRequest {
+  string facility_id = 1;
+  string item_code = 2;
+  string assigned_to = 3;
+  bool in_service_only = 4;
+  int32 page_size = 5;
+  int32 offset = 6;
+}
+
+message ListTrackedItemsResponse {
+  repeated TrackedItem items = 1;
+}
+
+message StaleTrackedItem {
+  TrackedItem item = 1;
+  Custody custody = 2;
+  int32 quiet_days = 3;
+  // Nobody has scanned it at all since registration. Appears first: a tag
+  // that never read once is more likely to be a tag that does not work than
+  // a garment in a cupboard.
+  bool never_seen = 4;
+}
+
+message ListStaleTrackedItemsRequest {
+  string facility_id = 1;
+}
+
+message ListStaleTrackedItemsResponse {
+  // A report and nothing else. Nothing here writes an item off.
+  repeated StaleTrackedItem items = 1;
+}
+
+// -------------------------------------------------- reports (SRS-LND-003)
+
+message WashSummary {
+  int32 run = 1;
+  int32 passed = 2;
+  int32 failed = 3;
+  int32 rewashed = 4;
+  int32 in_flight = 5;
+  int32 infected = 6;
+  int32 weight_kg = 7;
+  // Batches that recorded an exception, passed or failed. Counted apart
+  // from the failures: a load that passed with a probe fault is the one
+  // that tells a hospital its next load will not.
+  int32 with_exceptions = 8;
+  bool unanswerable = 9;
+}
+
+message GetWashReportRequest {
+  string facility_id = 1;
+  google.protobuf.Timestamp from = 2;
+  google.protobuf.Timestamp to = 3;
+}
+
+message GetWashReportResponse {
+  WashSummary summary = 1;
+  bool truncated = 2;
+}
+
+message LinenLossSummary {
+  int32 reported = 1;
+  // Approved write-offs only.
+  int32 pieces = 2;
+  int32 value_minor = 3;
+  int32 condemned = 4;
+  int32 damaged = 5;
+  int32 missing = 6;
+  int32 recovered = 7;
+  // Reported beside the totals rather than folded in, because a large
+  // figure here means the totals are understated.
+  int32 awaiting_approval = 8;
+  int32 rejected = 9;
+}
+
+message GetLinenLossReportRequest {
+  string facility_id = 1;
+  google.protobuf.Timestamp from = 2;
+  google.protobuf.Timestamp to = 3;
+}
+
+message GetLinenLossReportResponse {
+  LinenLossSummary summary = 1;
+  bool truncated = 2;
+}
+
+// Laundry and linen (SRS-LND-001 … 007).
+service LaundryService {
+  // Linen item master and unit par levels (SRS-LND-001).
+  rpc ConfigureLinenItem(ConfigureLinenItemRequest) returns (ConfigureLinenItemResponse);
+  rpc RetireLinenItem(RetireLinenItemRequest) returns (RetireLinenItemResponse);
+  rpc ListLinenItems(ListLinenItemsRequest) returns (ListLinenItemsResponse);
+  rpc SetParLevel(SetParLevelRequest) returns (SetParLevelResponse);
+  rpc ApproveParLevel(ApproveParLevelRequest) returns (ApproveParLevelResponse);
+  rpc GetParInForce(GetParInForceRequest) returns (GetParInForceResponse);
+  rpc ListParLevels(ListParLevelsRequest) returns (ListParLevelsResponse);
+
+  // Soiled collection (SRS-LND-002, SRS-LND-005).
+  rpc RecordCollection(RecordCollectionRequest) returns (RecordCollectionResponse);
+  rpc RecountCollection(RecountCollectionRequest) returns (RecountCollectionResponse);
+  rpc CancelCollection(CancelCollectionRequest) returns (CancelCollectionResponse);
+  rpc ListCollections(ListCollectionsRequest) returns (ListCollectionsResponse);
+  rpc CheckCollectionWeight(CheckCollectionWeightRequest) returns (CheckCollectionWeightResponse);
+
+  // Wash batches (SRS-LND-003, SRS-LND-005).
+  rpc OpenWashBatch(OpenWashBatchRequest) returns (OpenWashBatchResponse);
+  rpc LoadWashBatch(LoadWashBatchRequest) returns (LoadWashBatchResponse);
+  rpc StartWashBatch(StartWashBatchRequest) returns (StartWashBatchResponse);
+  rpc CompleteWashBatch(CompleteWashBatchRequest) returns (CompleteWashBatchResponse);
+  rpc RewashBatch(RewashBatchRequest) returns (RewashBatchResponse);
+  rpc GetWashBatch(GetWashBatchRequest) returns (GetWashBatchResponse);
+  rpc ListWashBatches(ListWashBatchesRequest) returns (ListWashBatchesResponse);
+  rpc ListAffectedUnits(ListAffectedUnitsRequest) returns (ListAffectedUnitsResponse);
+
+  // Clean linen issue and unit stock (SRS-LND-004).
+  rpc IssueLinen(IssueLinenRequest) returns (IssueLinenResponse);
+  rpc ReceiveLinen(ReceiveLinenRequest) returns (ReceiveLinenResponse);
+  rpc ListLinenIssues(ListLinenIssuesRequest) returns (ListLinenIssuesResponse);
+  rpc GetUnitStock(GetUnitStockRequest) returns (GetUnitStockResponse);
+
+  // Condemned, damaged and missing linen (SRS-LND-006).
+  rpc ReportLinenLoss(ReportLinenLossRequest) returns (ReportLinenLossResponse);
+  rpc ApproveLinenLoss(ApproveLinenLossRequest) returns (ApproveLinenLossResponse);
+  rpc RecoverLinenLoss(RecoverLinenLossRequest) returns (RecoverLinenLossResponse);
+  rpc ListLinenLosses(ListLinenLossesRequest) returns (ListLinenLossesResponse);
+  rpc ListPendingLossApprovals(ListPendingLossApprovalsRequest) returns (ListPendingLossApprovalsResponse);
+
+  // Tagged linen and uniforms (SRS-LND-007).
+  rpc RegisterTag(RegisterTagRequest) returns (RegisterTagResponse);
+  rpc RecordTagScan(RecordTagScanRequest) returns (RecordTagScanResponse);
+  rpc RetireTag(RetireTagRequest) returns (RetireTagResponse);
+  rpc GetTagCustody(GetTagCustodyRequest) returns (GetTagCustodyResponse);
+  rpc ListTrackedItems(ListTrackedItemsRequest) returns (ListTrackedItemsResponse);
+  rpc ListStaleTrackedItems(ListStaleTrackedItemsRequest) returns (ListStaleTrackedItemsResponse);
+
+  // Reporting (SRS-LND-003, SRS-LND-006).
+  rpc GetWashReport(GetWashReportRequest) returns (GetWashReportResponse);
+  rpc GetLinenLossReport(GetLinenLossReportRequest) returns (GetLinenLossReportResponse);
+}

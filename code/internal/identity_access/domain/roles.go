@@ -121,6 +121,27 @@ const (
 	// And deliberately no hkp.bed.override, for the reason above.
 	RoleHousekeepingSupervisor Role = "housekeeping_supervisor"
 
+	// RoleLaundryOperator runs the machines (SRS-LND-002, SRS-LND-003,
+	// SRS-LND-004).
+	//
+	// What it deliberately does not hold is lnd.receive: a delivery signed
+	// for by whoever brought it is the same claim made twice, and a ward
+	// that never got its linen would have no way to say so.
+	//
+	// And no lnd.loss.approve: an operator who could write off the linen
+	// they lost is an operator whose losses are always nil.
+	RoleLaundryOperator Role = "laundry_operator"
+
+	// RoleLaundryManager runs the laundry and decides its write-offs
+	// (SRS-LND-001, SRS-LND-006, SRS-LND-007).
+	//
+	// Deliberately no lnd.par.approve. The manager drafts the par — how much
+	// linen each ward may hold, and therefore what the laundry buys — and
+	// somebody else puts it in force. The domain refuses the author their
+	// own approval either way, so this is the second lock rather than the
+	// only one.
+	RoleLaundryManager Role = "laundry_manager"
+
 	// RoleClinicalCoder assigns the codes the hospital is paid and measured
 	// on (SRS-MRD-003).
 	//
@@ -1036,6 +1057,18 @@ var rolePermissions = map[Role][]string{
 		// Deliberately no mrd.deficiency.waive, for the same reason a
 		// clinician does not hold it.
 
+		// Laundry (SRS-LND-002, SRS-LND-004, SRS-LND-006). The ward counts
+		// and bags its own soiled linen — for infected linen that count is
+		// made at the bedside and never made again — signs for what comes
+		// back, and reports what is torn or missing. Deliberately no
+		// lnd.wash and no lnd.issue: a ward that could sign a delivery it
+		// also issued is a ward whose linen always arrives.
+		"lnd.read",
+		"lnd.collect",
+		"lnd.receive",
+		"lnd.loss.report",
+		"lnd.track.scan",
+
 		// Housekeeping (SRS-HKP-003, SRS-HKP-006). The ward is where a
 		// discharge happens and where a spill is found, so a nurse triggers
 		// the terminal clean that takes the bed out of service and calls the
@@ -1240,6 +1273,17 @@ var rolePermissions = map[Role][]string{
 		// approver is the counter, so a manager who counted a store still
 		// cannot sign off their own variance.
 		"mat.count.approve",
+		// A linen par is a standing purchasing commitment — how much of
+		// each item every ward may hold — so it is signed off where the
+		// buying is. Laundry drafts it, materials puts it in force
+		// (SRS-LND-001).
+		"lnd.read",
+		"lnd.par.approve",
+		"lnd.report.read",
+		// Deliberately no lnd.master.manage: the approver does not write
+		// what they approve, and the domain refuses the author their own
+		// approval either way.
+
 		// The block that stops a lot being issued anywhere, and the recall
 		// list that names who it reached.
 		"mat.lot.block",
@@ -1545,6 +1589,48 @@ var rolePermissions = map[Role][]string{
 		// cleaning standard and somebody else puts it in force.
 		//
 		// Deliberately no hkp.bed.override.
+	},
+
+	// A laundry operator collects, washes and sends the linen back
+	// (SRS-LND-002 … 004).
+	RoleLaundryOperator: {
+		"lnd.read",
+		"lnd.collect",
+		"lnd.wash",
+		"lnd.issue",
+		// Reporting a torn sheet has to be as easy as this or it does not
+		// happen, and the linen quietly disappears instead.
+		"lnd.loss.report",
+		// Every reader in the building records a movement.
+		"lnd.track.scan",
+		// Deliberately no lnd.receive: a delivery signed for by whoever
+		// brought it is the same claim made twice.
+		//
+		// Deliberately no lnd.loss.approve: an operator who could write off
+		// the linen they lost is an operator whose losses are always nil.
+		//
+		// Deliberately no lnd.master.manage: the person judged against the
+		// par does not write it.
+	},
+
+	// A laundry manager runs the service and decides its write-offs
+	// (SRS-LND-001, SRS-LND-006, SRS-LND-007).
+	RoleLaundryManager: {
+		"lnd.read",
+		"lnd.master.manage",
+		"lnd.collect",
+		"lnd.wash",
+		"lnd.issue",
+		"lnd.loss.report",
+		"lnd.loss.approve",
+		"lnd.track.manage",
+		"lnd.track.scan",
+		"lnd.report.read",
+		// Deliberately no lnd.par.approve: the manager drafts the par and
+		// somebody else puts it in force.
+		//
+		// Deliberately no lnd.receive, for the same reason the operator
+		// does not hold it.
 	},
 
 	// A biomedical engineer maintains the equipment and does the service work

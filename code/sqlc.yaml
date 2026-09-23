@@ -45,6 +45,7 @@ sql:
       - db/migrations/0040_records.up.sql
       - db/migrations/0041_dietetics.up.sql
       - db/migrations/0042_housekeeping.up.sql
+      - db/migrations/0043_laundry.up.sql
     gen:
       go:
         package: sqlcgen

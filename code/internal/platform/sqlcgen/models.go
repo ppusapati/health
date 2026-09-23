@@ -2533,6 +2533,173 @@ type InfectionSurveillanceCase struct {
 	Version            int64
 }
 
+type LaundryBatchException struct {
+	BatchID  uuid.UUID
+	Code     string
+	Detail   string
+	Position int32
+}
+
+type LaundryCollection struct {
+	CollectionID uuid.UUID
+	TenantID     uuid.UUID
+	UnitID       string
+	UnitName     string
+	FacilityID   string
+	SoilClass    string
+	Handling     string
+	BagCount     int32
+	WeightG      int32
+	State        string
+	BatchID      pgtype.UUID
+	BatchCycle   *string
+	CancelReason string
+	CollectedAt  pgtype.Timestamptz
+	CollectedBy  string
+	Version      int64
+}
+
+type LaundryCollectionLine struct {
+	CollectionID uuid.UUID
+	ItemCode     string
+	Quantity     int32
+	Position     int32
+}
+
+type LaundryIssueLine struct {
+	IssueID  uuid.UUID
+	ItemCode string
+	Quantity int32
+	Position int32
+}
+
+type LaundryLinenIssue struct {
+	IssueID        uuid.UUID
+	TenantID       uuid.UUID
+	UnitID         string
+	UnitName       string
+	FacilityID     string
+	BatchID        uuid.UUID
+	BatchState     string
+	BatchReference string
+	IssuedAt       pgtype.Timestamptz
+	IssuedBy       string
+	ReceivedAt     pgtype.Timestamptz
+	ReceivedBy     string
+	Version        int64
+}
+
+type LaundryLinenItem struct {
+	ItemID               uuid.UUID
+	TenantID             uuid.UUID
+	Code                 string
+	Name                 string
+	Category             string
+	UnitWeightG          int32
+	ReplacementCostMinor int32
+	Tracked              bool
+	Active               bool
+	CreatedAt            pgtype.Timestamptz
+	CreatedBy            string
+	Version              int64
+}
+
+type LaundryLossRecord struct {
+	LossID           uuid.UUID
+	TenantID         uuid.UUID
+	UnitID           string
+	FacilityID       string
+	ItemCode         string
+	Quantity         int32
+	Kind             string
+	Reason           string
+	ValueMinor       int32
+	State            string
+	ApprovalRequired bool
+	ApprovedBy       string
+	ApprovedAt       pgtype.Timestamptz
+	DecisionNote     string
+	ReportedAt       pgtype.Timestamptz
+	ReportedBy       string
+	Version          int64
+}
+
+type LaundryParLevel struct {
+	ParID         uuid.UUID
+	TenantID      uuid.UUID
+	UnitID        string
+	UnitName      string
+	FacilityID    string
+	Revision      int32
+	Approved      bool
+	ApprovedBy    string
+	ApprovedAt    pgtype.Timestamptz
+	EffectiveFrom pgtype.Timestamptz
+	SupersededAt  pgtype.Timestamptz
+	CreatedAt     pgtype.Timestamptz
+	CreatedBy     string
+	Version       int64
+}
+
+type LaundryParLine struct {
+	ParID     uuid.UUID
+	ItemCode  string
+	Quantity  int32
+	ReorderAt int32
+	Position  int32
+}
+
+type LaundryTrackedItem struct {
+	TrackedID     uuid.UUID
+	TenantID      uuid.UUID
+	TagID         string
+	TagKind       string
+	ItemCode      string
+	ItemTracked   bool
+	AssignedTo    string
+	FacilityID    string
+	State         string
+	RetiredReason string
+	RegisteredAt  pgtype.Timestamptz
+	RegisteredBy  string
+	Version       int64
+}
+
+type LaundryTrackedMovement struct {
+	MovementID uuid.UUID
+	TenantID   uuid.UUID
+	TrackedID  uuid.UUID
+	Location   string
+	HolderID   string
+	Note       string
+	RecordedBy string
+	OccurredAt pgtype.Timestamptz
+}
+
+type LaundryWashBatch struct {
+	BatchID          uuid.UUID
+	TenantID         uuid.UUID
+	Reference        string
+	FacilityID       string
+	MachineID        string
+	Cycle            string
+	Infected         bool
+	WeightG          int32
+	State            string
+	Outcome          string
+	PeakTemperatureC int32
+	HoldMinutes      int32
+	RewashBatchID    pgtype.UUID
+	RewashOfBatchID  pgtype.UUID
+	StartedAt        pgtype.Timestamptz
+	StartedBy        string
+	CompletedAt      pgtype.Timestamptz
+	CompletedBy      string
+	CreatedAt        pgtype.Timestamptz
+	CreatedBy        string
+	Version          int64
+}
+
 type MaterialsApprovalRule struct {
 	ApprovalRuleID uuid.UUID
 	TenantID       uuid.UUID

@@ -29,6 +29,7 @@ import (
 	"github.com/ppusapati/health/code/gen/go/healthcare/icu/v1/icuv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/identity_access/v1/identityaccessv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/infection/v1/infectionv1connect"
+	"github.com/ppusapati/health/code/gen/go/healthcare/laundry/v1/laundryv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/materials/v1/materialsv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/medication/v1/medicationv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/nursing/v1/nursingv1connect"
@@ -93,6 +94,11 @@ import (
 	infectiontherapy "github.com/ppusapati/health/code/internal/infection/adapters/therapy"
 	infectionapp "github.com/ppusapati/health/code/internal/infection/application"
 	infectiontransport "github.com/ppusapati/health/code/internal/infection/transport"
+	lndcrosscontext "github.com/ppusapati/health/code/internal/laundry/adapters/crosscontext"
+	lndescalate "github.com/ppusapati/health/code/internal/laundry/adapters/escalate"
+	lndpostgres "github.com/ppusapati/health/code/internal/laundry/adapters/postgres"
+	lndapp "github.com/ppusapati/health/code/internal/laundry/application"
+	lndtransport "github.com/ppusapati/health/code/internal/laundry/transport"
 	materialsescalate "github.com/ppusapati/health/code/internal/materials/adapters/escalate"
 	materialspostgres "github.com/ppusapati/health/code/internal/materials/adapters/postgres"
 	materialsapp "github.com/ppusapati/health/code/internal/materials/application"
@@ -437,6 +443,19 @@ type Deps struct {
 	// status document names them rather than this code deciding for one.
 	Housekeeping hkpapp.Config
 
+	// Laundry is what a deployment has decided about its linen: the value at
+	// which a write-off goes on somebody's approval worklist, whether a
+	// record must name a unit the organisation has, and how long a tagged
+	// item may go unscanned before it is reported (SRS-LND-001, SRS-LND-006,
+	// SRS-LND-007).
+	//
+	// The zero value flags every write-off for approval, accepts a record
+	// against any unit identifier, and produces no stale-tag report. The
+	// first is the safe direction; the second is the one to watch, because
+	// linen recorded against a ward that is not there is a balance that adds
+	// up for somewhere nobody can go and look.
+	Laundry lndapp.Config
+
 	// Emergency is what a deployment has decided about its emergency
 	// department: which triage scale it has approved, what must be measured at
 	// triage, and what each disposition requires (SRS-ER-002, SRS-ER-013).
@@ -468,6 +487,7 @@ type Server struct {
 	Records      *recordsapp.Service
 	Dietetics    *dietapp.Service
 	Housekeeping *hkpapp.Service
+	Laundry      *lndapp.Service
 	Nursing      *nursingapp.Service
 	Orders       *ordersapp.Service
 	Medication   *medicationapp.Service
@@ -1056,6 +1076,36 @@ func New(deps Deps) *Server {
 		Config:      deps.Housekeeping,
 	})
 
+	// Laundry and linen (SRS-LND). Wired after the organisation context
+	// because its one seam reads it: whether the ward a par level or a
+	// collection names is a ward the hospital has. Read-only, so the laundry
+	// cannot create one.
+	lndRepo := lndpostgres.New(txManager)
+	laundryService := lndapp.NewService(lndapp.Deps{
+		UnitOfWork:  txManager,
+		Items:       lndRepo,
+		Pars:        lndRepo,
+		Collections: lndRepo,
+		Batches:     lndRepo,
+		Issues:      lndRepo,
+		Losses:      lndRepo,
+		Tracked:     lndRepo,
+		// Which wards exist belongs to the organisation context. A copy
+		// here would drift the first time one was renamed, leaving a
+		// balance that adds up for somewhere nobody can go and look.
+		Units: lndcrosscontext.NewUnits(
+			repo),
+		Events:     platformStore,
+		AuditTrail: store.AuditAppenderFunc(platformStore.AppendAudit),
+		// A wash that failed, whose linen the wards in it may already be
+		// making beds with. It has to reach somebody rather than a screen
+		// nobody opened.
+		Escalations: lndescalate.New(escalationStore),
+		IDs:         uuidGenerator{},
+		Clock:       systemClock{},
+		Config:      deps.Laundry,
+	})
+
 	// Medical records and health information management (SRS-MRD). Wired
 	// after the clinical and encounter contexts because everything here is
 	// judged against what they hold, and read through ports that cannot write
@@ -1240,6 +1290,9 @@ func New(deps Deps) *Server {
 	mux.Handle(housekeepingv1connect.NewHousekeepingServiceHandler(
 		hkptransport.NewHandler(housekeepingService, time.Now),
 		interceptors))
+	mux.Handle(laundryv1connect.NewLaundryServiceHandler(
+		lndtransport.NewHandler(laundryService, time.Now),
+		interceptors))
 	mux.Handle(materialsv1connect.NewMaterialsServiceHandler(
 		materialstransport.NewHandler(materialsService, time.Now), interceptors))
 	billingRepo := billingpostgres.New(txManager)
@@ -1311,6 +1364,7 @@ func New(deps Deps) *Server {
 		Records:         recordsService,
 		Dietetics:       dietService,
 		Housekeeping:    housekeepingService,
+		Laundry:         laundryService,
 		Nursing:         nursingService,
 		Orders:          ordersService,
 		Medication:      medicationService,
