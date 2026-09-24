@@ -357,6 +357,12 @@ func TestMalformedTokensAreRefused(t *testing.T) {
 
 // SRS-IAM-006 through the verifier: a revoked session is refused even though
 // the token is valid and unexpired.
+// SRS-IAM-011's verification clause: a revoked session is rejected at its next
+// validation, even though the token it carries is still signed and unexpired.
+// Revocation is a watermark on the account rather than a list of tokens, so it
+// cannot be outrun by a credential already issued. The self-service half of
+// the requirement — a user seeing their own sessions and ending one — has no
+// surface yet; see docs/engineering/wave-0-status.md.
 func TestRevokedSessionIsRefusedDespiteAValidToken(t *testing.T) {
 	h := newHarness(t, oidc.Config{})
 	ctx := context.Background()
@@ -424,6 +430,9 @@ func TestAuthTimeBeatsIssuedAtForRevocation(t *testing.T) {
 }
 
 // SRS-IAM-010: a tenant that requires MFA gets it enforced.
+// SRS-IAM-001's verification clause: a session is established only after the
+// required factors. The policy is configurable by role, so the same token is
+// enough for one holder and not for another.
 func TestMFARequirementIsEnforced(t *testing.T) {
 	h := newHarness(t, oidc.Config{RequiredACRValues: []string{"mfa", "urn:mace:incommon:iap:silver"}})
 	ctx := context.Background()

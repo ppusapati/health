@@ -78,6 +78,11 @@ func TestChainIsBuiltAndVerifies(t *testing.T) {
 }
 
 // The point of the chain: an operator editing history is detected.
+// SRS-SEC-012's verification clause: privileged changes generate immutable
+// security events. Immutability is not a permission here — the events are hash
+// chained, so an edit that a database superuser is entitled to make is still
+// one the chain reports. SRS-IAM-008's audit is the same chain read by actor,
+// time and tenant.
 func TestEditingARowBreaksVerification(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()

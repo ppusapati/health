@@ -21,6 +21,10 @@ func samples(n int, outcome slo.Outcome, at time.Time) []slo.Sample {
 
 // SRS-NFR-001's verification clause: the dashboard computes monthly
 // availability from the agreed indicator.
+// SRS-NFR-006's verification clause: an operator can identify a failing
+// dependency or workflow from what the system exposes. Availability is
+// computed from real served requests rather than from a probe, so a service
+// that answers a health check while failing its callers is not reported up.
 func TestMonthlyAvailabilityFromRealRequests(t *testing.T) {
 	good := samples(9995, slo.OutcomeGood, monthStart)
 	bad := samples(5, slo.OutcomeBad, monthStart.Add(time.Hour))

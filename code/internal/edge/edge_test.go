@@ -114,6 +114,9 @@ func op(id string, offset time.Duration) edge.Operation {
 
 // P0-13 exit criterion: a WAN-loss scenario retains approved local functions
 // and reconciles safely on recovery.
+// SRS-NFR-013's verification clause: a reconnect reconciles exactly once. The
+// ward keeps working through the outage and the queue drains afterwards
+// without repeating an effect the cloud already applied.
 func TestWanLossRetainsLocalFunctionAndReconciles(t *testing.T) {
 	ctx := context.Background()
 	queue := newQueue(t)

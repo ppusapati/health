@@ -34,6 +34,9 @@ func TestExportStartsPendingApproval(t *testing.T) {
 
 // SRS-IAM-012: a bulk export is a high-risk action, so step-up must already
 // have happened before the request is even recorded.
+// SRS-SEC-008's verification clause: a bulk export is authorized, stepped up,
+// justified, watermarked and downloadable only through a grant that expires.
+// This is the step-up; the rest of the file is the others.
 func TestExportRequiresStepUp(t *testing.T) {
 	_, err := domain.NewExportRequest("exp-1", "tenant-a", "analyst-1",
 		"Quarterly regulatory submission", "PHI", "", nil, at)
@@ -125,6 +128,8 @@ func TestCompletionRequiresApprovalFirst(t *testing.T) {
 
 // A permanent URL to a PHI export is a standing breach waiting for someone to
 // find the link.
+// SRS-SEC-008 again: the download grant expires, so an export that leaked a
+// link does not stay fetchable for as long as the link survives.
 func TestDownloadGrantExpires(t *testing.T) {
 	e := newExport(t)
 	if err := e.Approve("officer-1", at); err != nil {

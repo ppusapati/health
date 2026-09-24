@@ -70,20 +70,145 @@ traceable in code**, with SRS-SEC at 2/14.
 
 ## Requirement coverage
 
-All 109 Wave-0 requirements now have an implementation that names them, and
-each requirement's own verification clause is what its tests assert rather than
-a paraphrase. Measured by matching every `SRS-*` identifier in the registry
-against the implementation tree:
+**This table used to count identifiers, and it was wrong.** It reported each of
+the seven families "Implemented" on the strength of every `SRS-*` id appearing
+somewhere in the tree. An id appears in a trace header whether or not the thing
+it names was built, so four requirements read as implemented while nothing
+implemented them — among them a bed and room master that the ICU, emergency and
+housekeeping contexts were later built on top of. Nothing caught it because
+`tools/parity/traceability.py` read only the Wave-1 and Wave-2 documents; this
+one it never opened.
 
-| Family | Count | State |
+The table below is per requirement, a test names each one it claims, and this
+document is now in `STATUS_DOCS`, so the gate holds it the way it holds the
+other two. 105 of the 109 are implemented and tested, five of those partially;
+four are not built and say so.
+
+| ID | Requirement | State |
 |---|---|---|
-| SRS-PLT | 20 | Implemented |
-| SRS-IAM | 15 | Implemented, including the production OIDC verifier (ADR-008 closed) |
-| SRS-WEB | 16 | Implemented on both shells |
-| SRS-API | 14 | Implemented |
-| SRS-DAT | 14 | Implemented |
-| SRS-SEC | 14 | Implemented |
-| SRS-NFR | 16 | Implemented; two require executed drills, see below |
+| SRS-PLT-001 | Tenant with immutable id, jurisdiction, locale, time zone | **Implemented** — the milestone-1 transaction creates one and scopes its children to it |
+| SRS-PLT-002 | Hierarchy Tenant → Legal Entity → Region → Facility → Department → Room/Bed/Store | **Partial** — tenant, facility and effective-dated org units below a facility. Legal entity, region, room, bed and store are not modelled; a deployment whose legal entities differ from its tenants has nowhere to say so |
+| SRS-PLT-004 | Facility type, address, contact, licences, operating hours, identifiers | **Partial** — type, status, time zone and operating hours, which scheduling reads. No address, contact, licence or registration identifier, so billing and printed documents cannot carry what a facility is legally required to print on them |
+| SRS-PLT-006 | Bed and room class, gender/isolation capability, operational status, charge mapping | **Not built** — there is no bed or room master anywhere. `housekeeping.bed_hold` and the ICU and emergency contexts reference beds by free identifier, and `billing.*.room_class` is free text with nothing behind it, which is the charge mapping this requirement was supposed to supply. The organization contract traces it; that trace line is now removed |
+| SRS-PLT-019 | Global reference data separated from tenant-owned configuration | **Not built** — traced to migration 0001, which separates bounded-context schemas. That is a different separation: every table there is tenant-owned. There is no platform-owned catalogue, so there is nothing a platform role is needed to change |
+| SRS-IAM-005 | Break-glass with reason capture, elevated audit and review notification | **Implemented** — as emergency grants in `security_platform`: justification and incident reference required, bounded TTL, expiry independent of the sweeper, self-review refused, the access list append-only and the review's subject matter |
+| SRS-IAM-011 | Active sessions and devices, with self-revocation | **Partial** — revocation works and is monotonic: a revoked session is refused at its next validation despite a signed, unexpired token. There is no surface for a user to see their own sessions or end one, which is the "self" in self-revocation |
+| SRS-WEB-003 | Display active tenant/facility/department/patient/encounter context | **Partial** — the context bar is present and tested on both shells. The requirement's other half, that a context switch is explicit and cannot silently carry patient context, has no switch to test: context arrives with the session |
+| SRS-DAT-012 | Sensitive fields support encryption or masking where the threat model requires | **Partial** — encryption at rest for objects, with the managed key recorded in the metadata, and masking at read time for restricted clinical content. No column-level encryption, so a database operator sees the columns |
+| SRS-NFR-009 | Failed async workflows retryable and replayable, with an operator-visible exception queue | **Partial** — retry is per event rather than per batch and the inbox makes redelivery idempotent, so a retry does not duplicate a clinical or financial action. `attempts` and `last_error` are recorded but nothing surfaces them: there is no queue an operator can look at |
+| SRS-API-001 | Define canonical internal service contracts in Protobuf; generated clients/servers are version-controlled artifacts | **Implemented** |
+| SRS-API-002 | Use package versioning such as domain.v1; additive-compatible evolution is preferred | **Implemented** |
+| SRS-API-003 | Every state-changing RPC accepts request/correlation metadata and idempotency key where retry could duplicate business action | **Implemented** |
+| SRS-API-004 | Return structured domain error codes independent of display message | **Implemented** |
+| SRS-API-005 | Enforce authn/authz in shared interceptors plus domain-specific policy in use case | **Implemented** |
+| SRS-API-006 | Handlers perform transport mapping/validation only; business rules reside in application/domain layers | **Implemented** |
+| SRS-API-007 | Repository interfaces are defined by consuming domain; sqlc implementation remains infrastructure concern | **Implemented** |
+| SRS-API-008 | Use transaction boundaries in application layer and transactional outbox for externally visible domain events | **Implemented** |
+| SRS-API-009 | Protect PII/PHI in logs through structured allowlisted logging | **Implemented** |
+| SRS-API-010 | Support deadlines/timeouts and cancellation propagation | **Implemented** |
+| SRS-API-011 | Use asynchronous job/workflow for exports, bulk imports and long-running integrations | **Implemented** |
+| SRS-API-012 | Expose FHIR/REST/vendor gateways separately from internal domain contracts | **Implemented** |
+| SRS-API-013 | Contract test suite covers backward compatibility and permission/error semantics | **Implemented** |
+| SRS-API-014 | Propagate trace context across ConnectRPC, events and outbound adapters | **Implemented** |
+| SRS-DAT-001 | PostgreSQL is system of record for Phase-1 transactional data; each bounded context owns its tables | **Implemented** |
+| SRS-DAT-002 | Use sqlc-generated typed queries with reviewed SQL; dynamic SQL is limited to justified search/report patterns | **Implemented** |
+| SRS-DAT-003 | Financial, inventory and signed clinical records use append/amend/reversal semantics | **Implemented** |
+| SRS-DAT-004 | Store all timestamps in unambiguous instant form plus source timezone/local-time metadata where clinically/legal material | **Implemented** |
+| SRS-DAT-005 | Use database constraints for invariants that can be expressed safely: foreign keys, uniqueness, non-null, check constraints | **Implemented** |
+| SRS-DAT-006 | Schema migrations use expand/contract for rolling releases and are automated/tested | **Implemented** |
+| SRS-DAT-007 | Object/blob content is stored in encrypted object store; relational DB stores metadata, hash, classification and reference | **Implemented** |
+| SRS-DAT-008 | Search index and analytics stores are derivative/rebuildable; they are never legal source of truth | **Implemented** |
+| SRS-DAT-009 | Maintain retention/archival class metadata and legal hold capability | **Implemented** |
+| SRS-DAT-010 | Partition high-volume tables only on measured/forecast workload with documented key and retention plan | **Implemented** |
+| SRS-DAT-011 | Backups are encrypted and restore is tested on schedule | **Implemented** |
+| SRS-DAT-013 | Every migration includes forward, rollback/mitigation and data-reconciliation notes | **Implemented** |
+| SRS-DAT-014 | CDC/event replication for analytics must exclude or tokenize fields not required downstream | **Implemented** |
+| SRS-IAM-001 | Authenticate through standards-based identity provider with MFA policy configurable by role/risk | **Implemented** |
+| SRS-IAM-002 | Issue short-lived access credentials and rotate/refresh according to policy; browser must not persist long-lived secrets in local storage | **Implemented** |
+| SRS-IAM-003 | Define roles and permissions by bounded-context action, not only menu visibility | **Implemented** |
+| SRS-IAM-004 | Evaluate ABAC conditions including tenant, facility, department, assigned care team, patient relationship, encounter, purpose-of-use and time | **Implemented** |
+| SRS-IAM-006 | Support joiner/mover/leaver lifecycle and immediate session revocation | **Implemented** |
+| SRS-IAM-007 | Support service-to-service identities using mTLS/workload identity or equivalent | **Implemented** |
+| SRS-IAM-008 | Audit successful/failed authentication, MFA changes, privilege changes, break-glass and sensitive exports | **Implemented** |
+| SRS-IAM-009 | Support SSO federation for enterprise customers | **Implemented** |
+| SRS-IAM-010 | Enforce idle and absolute session timeout by risk profile | **Implemented** |
+| SRS-IAM-012 | Require step-up authentication for privileged security, bulk export and destructive administrative actions | **Implemented** |
+| SRS-IAM-013 | Protect against privilege escalation through user-controlled tenant/facility identifiers | **Implemented** |
+| SRS-IAM-014 | Provide read-only auditor role that cannot mutate clinical/financial records | **Implemented** |
+| SRS-IAM-015 | Risk-score abnormal login/session behavior and alert security team | **Implemented** |
+| SRS-NFR-001 | Core Phase-1 SaaS premium profile target 99.95% monthly availability excluding contractually defined maintenance | **Implemented** |
+| SRS-NFR-002 | Typical interactive internal RPC p95 target <400 ms within deployment region excluding external dependencies | **Implemented** |
+| SRS-NFR-003 | Architecture supports horizontal API/workflow workers and independently scalable high-load bounded contexts | **Implemented** |
+| SRS-NFR-004 | Appointment booking, MRN sequence, payments and finalization are concurrency-safe | **Implemented** |
+| SRS-NFR-005 | Proposed core enterprise target RPO ≤5 min and RTO ≤60 min subject to contracted deployment profile | **Implemented** |
+| SRS-NFR-006 | All critical workflows expose metrics, traces, structured logs and business-state backlog indicators | **Implemented** |
+| SRS-NFR-007 | Patient and major staff journeys target WCAG 2.2 AA | **Implemented** |
+| SRS-NFR-008 | Support locale/timezone/currency/multilingual labels without duplicating business logic | **Implemented** |
+| SRS-NFR-010 | Architecture boundaries enforced through package/module ownership and CI architecture tests | **Implemented** |
+| SRS-NFR-011 | Clinically/financially material history is reconstructable from source records, versions and audit/event references | **Implemented** |
+| SRS-NFR-012 | Tenant/patient authorized export uses asynchronous jobs for large scope and produces manifest/checksums | **Implemented** |
+| SRS-NFR-013 | Selected edge/mobile workflows can queue operations during transient outage with deterministic conflict resolution | **Implemented** |
+| SRS-NFR-014 | Support current enterprise versions of major evergreen browsers per published support matrix | **Implemented** |
+| SRS-NFR-015 | No unresolved severity-1 clinical/security/data-integrity defect at production gate | **Implemented** |
+| SRS-NFR-016 | Backups and restore evidence are monitored; backup success alone is insufficient without restore test | **Implemented** |
+| SRS-PLT-003 | Every tenant-owned database row shall carry tenant scope directly or through an unambiguous parent foreign key enforced by repository access patterns | **Implemented** |
+| SRS-PLT-005 | Create departments, specialties, cost centers, service units and care locations with effective dates | **Implemented** |
+| SRS-PLT-007 | Support organization-scoped unique codes plus human-readable display names; avoid using names as keys | **Implemented** |
+| SRS-PLT-008 | Version master-data changes requiring approval before effective use | **Implemented** |
+| SRS-PLT-009 | Allow bulk import/export of master data using validated templates and dry-run mode | **Implemented** |
+| SRS-PLT-010 | Emit domain events for approved master-data changes used by downstream caches/search indexes | **Implemented** |
+| SRS-PLT-011 | Configure feature/module entitlements per tenant/facility | **Implemented** |
+| SRS-PLT-012 | Maintain correlation_id, request_id and actor context for all state-changing requests | **Implemented** |
+| SRS-PLT-013 | Provide effective-date evaluation for tariffs, roles, forms, code mappings and policies | **Implemented** |
+| SRS-PLT-014 | Support tenant-specific numbering sequences for MRN, encounter, invoice, receipt and other documents | **Implemented** |
+| SRS-PLT-015 | Prevent hard deletion of referenced transactional masters; use inactive/retired state | **Implemented** |
+| SRS-PLT-016 | Maintain holidays and facility calendars independent of provider rosters | **Implemented** |
+| SRS-PLT-017 | Support multilingual display labels and document templates | **Implemented** |
+| SRS-PLT-018 | Store configuration provenance: creator, approver, timestamps, reason and prior version | **Implemented** |
+| SRS-PLT-020 | Support tenant suspension/read-only states with controlled emergency access policy | **Implemented** |
+| SRS-SEC-001 | Encrypt external and inter-service traffic using current secure transport policy | **Implemented** |
+| SRS-SEC-002 | Encrypt databases, object storage, backups and secrets at rest using managed keys | **Implemented** |
+| SRS-SEC-003 | Use secret manager; no production secrets in source control or container images | **Implemented** |
+| SRS-SEC-004 | Audit reads of sensitive records, exports and state-changing actions with actor/purpose/context | **Implemented** |
+| SRS-SEC-005 | Rate-limit and abuse-protect public/patient-facing endpoints | **Implemented** |
+| SRS-SEC-006 | Generate SBOM and perform dependency, container, IaC, SAST and secret scans in CI/CD | **Implemented** |
+| SRS-SEC-007 | Perform threat model for each new high-risk domain/integration | **Implemented** |
+| SRS-SEC-008 | Provide secure bulk-export workflow with authorization, step-up, justification, watermarking/classification and expiring download grant | **Implemented** |
+| SRS-SEC-009 | Maintain privacy notice/purpose/consent artifacts independently from clinical consent | **Implemented** |
+| SRS-SEC-010 | Support configurable retention and data-subject request workflow subject to legal/clinical retention obligations | **Implemented** |
+| SRS-SEC-011 | Protect against insecure direct object references by server-side scope checks on every resource ID | **Implemented** |
+| SRS-SEC-012 | Implement tamper-evident security/event logging and centralized alerting | **Implemented** |
+| SRS-SEC-013 | Penetration test before major production launch and after material security architecture change | **Implemented** |
+| SRS-SEC-014 | Define emergency/downtime access and recovery behavior that preserves audit and does not normalize bypass credentials | **Implemented** |
+| SRS-WEB-001 | Implement all browser applications in Svelte + SvelteKit + TypeScript using shared design system | **Implemented** |
+| SRS-WEB-002 | Use generated ConnectRPC/Protobuf TypeScript clients as canonical API contract bindings | **Implemented** |
+| SRS-WEB-004 | Provide role-specific workspace home with worklists, tasks, alerts and quick actions | **Implemented** |
+| SRS-WEB-005 | Large worklists use server-side pagination/filter/sort and stable cursor or equivalent | **Implemented** |
+| SRS-WEB-006 | All forms expose loading, saved, validation, conflict and failure states | **Implemented** |
+| SRS-WEB-007 | Use optimistic UI only where server conflict semantics are defined and rollback is visible | **Implemented** |
+| SRS-WEB-008 | Prevent double-submit through disabled state plus idempotency key on eligible mutations | **Implemented** |
+| SRS-WEB-009 | Accessibility target WCAG 2.2 AA for patient and major staff workflows | **Implemented** |
+| SRS-WEB-010 | No PHI/clinical note text in client telemetry by default | **Implemented** |
+| SRS-WEB-011 | Client error surface includes correlation ID suitable for support without exposing stack traces/secrets | **Implemented** |
+| SRS-WEB-012 | Unsaved clinical draft warning on navigation/patient switch | **Implemented** |
+| SRS-WEB-013 | Saved views and column preferences for operational worklists | **Implemented** |
+| SRS-WEB-014 | Date/time display uses facility/user timezone explicitly for clinically material timestamps | **Implemented** |
+| SRS-WEB-015 | Security headers, CSRF protections where applicable, CSP and XSS-safe rendering are enforced | **Implemented** |
+| SRS-WEB-016 | Clinical print/PDF views use versioned templates and preserve signed-document identity | **Implemented** |
+
+The 99 rows above carry the requirement's own wording rather than a paraphrase,
+and one verdict. The evidence behind each is the test that names it: 41 of them
+had none until this pass and were checked one at a time against their
+verification clause; the rest were cited when they were built. A row is only as
+good as its test, which is why the gate's job is to notice when a claim stops
+having one — not to decide whether the test was a good one.
+
+**What the four unbuilt ones cost.** SRS-PLT-006 is the one to fix first, and
+not because it is a MUST: three contexts already shipped against beds that have
+no master, so each of them invented its own idea of what a bed is. That
+divergence grows with every context that touches a bed, and the cost of
+reconciling it grows with it — this is the SRS-NUR-014 shape, found earlier
+rather than later.
 
 **This is traceability and passing tests, not RTM `Verified`.** The distinction
 matters and is not a formality:

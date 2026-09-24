@@ -1,3 +1,9 @@
+/// SRS-NFR-007's verification clause: the release includes automated and
+/// sampled manual verification against WCAG 2.2 AA. This is the automated half
+/// on the device; the browser half runs in CI and the manual sample is held by
+/// the release gate.
+library;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

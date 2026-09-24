@@ -1,3 +1,7 @@
+/// SRS-WEB-008's verification clause: a repeated click or a network retry
+/// creates one transaction. The key is minted on the device before the first
+/// attempt, so every retry of that administration carries the same one and the
+/// server can tell a retry from a second dose.
 /// Recording an administration from a device that may be offline.
 ///
 /// The three facts that have to survive a lost network are different facts, and

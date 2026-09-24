@@ -72,6 +72,11 @@ func TestTruncatedContentIsRejected(t *testing.T) {
 	}
 }
 
+// SRS-DAT-012 in part: the metadata records which managed key the backend
+// encrypted an object under, so an operator can say what protects it without
+// reading it. Encryption here is at rest and at the object; column-level
+// encryption of sensitive fields is not built — see
+// docs/engineering/wave-0-status.md.
 func TestMetadataMustLeaveTheObjectVerifiable(t *testing.T) {
 	content := []byte("%PDF-1.7")
 

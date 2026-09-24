@@ -67,6 +67,11 @@ func TestActivityIsJudgedAtEventTimeNotNow(t *testing.T) {
 
 // Closing retroactively would invalidate transactions legitimately accepted
 // while the unit was open.
+// SRS-PLT-002 in part: the hierarchy below a facility is effective-dated, so a
+// unit that closed last month cannot be made to have closed last year and
+// invalidate what was recorded in between. The levels the requirement names
+// above and below this one — legal entity, region, room, bed, store — are not
+// modelled; see docs/engineering/wave-0-status.md.
 func TestUnitCannotBeClosedRetroactively(t *testing.T) {
 	u := unit(t, mdDay(2024, time.January, 1), time.Time{}, false)
 	if err := u.Close(mdDay(2026, time.January, 1), mdNow); !errors.Is(err, domain.ErrInvalidOrgUnit) {

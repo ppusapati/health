@@ -238,6 +238,11 @@ func calendarEntry(t *testing.T, entryType domain.CalendarEntryType, from, to ti
 
 // SRS-PLT-016's verification clause: scheduling respects facility closure
 // unless an override is authorised.
+// SRS-PLT-004 in part: a facility's operating hours are effective configuration
+// that scheduling reads, rather than a note somebody keeps elsewhere. The rest
+// of the requirement — address, contact, licences and identifiers, which
+// billing and printed documents need — is not modelled; see
+// docs/engineering/wave-0-status.md.
 func TestSchedulingRespectsClosure(t *testing.T) {
 	diwali := calendarEntry(t, domain.EntryHoliday,
 		mdDay(2026, time.November, 8), mdDay(2026, time.November, 8), "Diwali", false)
@@ -372,6 +377,9 @@ func label(t *testing.T, locale, display, short string) domain.DisplayLabel {
 
 // SRS-PLT-017's verification clause: the selected locale renders configured
 // labels without altering canonical codes.
+// SRS-NFR-008's verification clause: changing locale does not change canonical
+// codes or calculations. A label is rendered for a reader; the code underneath
+// is what the rest of the system stores, compares and bills on.
 func TestRenderingNeverAltersTheCanonicalCode(t *testing.T) {
 	labels := []domain.DisplayLabel{
 		label(t, "en", "Cardiology", "Cardio"),

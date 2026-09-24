@@ -26,6 +26,10 @@ func newGrant(t *testing.T) domain.EmergencyGrant {
 	return g
 }
 
+// SRS-IAM-005's verification clause: break-glass creates a security event
+// and expires automatically. The reason is captured here as a justification
+// and an incident reference, because a review with neither has nothing to
+// check the access against.
 func TestEmergencyGrantRequiresJustificationAndIncident(t *testing.T) {
 	cases := map[string]struct{ incident, justification string }{
 		"no incident reference": {"", "unconscious patient in resus"},
@@ -73,6 +77,9 @@ func TestEmergencyGrantTTLIsBounded(t *testing.T) {
 
 // A grant the sweeper has not yet marked expired must still be unusable.
 // Otherwise the bound is only as tight as the background job's schedule.
+// The other half of SRS-IAM-005: it expires by itself. Expiry is a property
+// of the grant rather than of the sweeper that tidies it up, so access ends
+// on time whether or not the sweeper has run.
 func TestExpiredGrantIsUnusableBeforeTheSweeperRuns(t *testing.T) {
 	g := newGrant(t)
 	if err := g.Authorize("clinical.read", base.Add(30*time.Minute)); err != nil {

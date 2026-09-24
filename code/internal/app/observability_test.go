@@ -32,8 +32,10 @@ func captureSpans(t *testing.T) *tracetest.InMemoryExporter {
 	return exporter
 }
 
-// Gate A6: a trace must cross the client, RPC, database and event boundary and
-// carry the correlation identifiers that join it to an audit record.
+// Gate A6, and SRS-API-014's verification clause: one trace and correlation
+// identifier follows an end-to-end transaction. The trace must cross the
+// client, RPC, database and event boundary and carry the identifiers that join
+// it to an audit record.
 func TestTraceCrossesRequestAndCarriesCorrelation(t *testing.T) {
 	exporter := captureSpans(t)
 	h := newHarness(t)

@@ -17,6 +17,11 @@ func session() authctx.Session {
 	}
 }
 
+// SRS-IAM-004's verification clause asks for policy tests covering allow and
+// deny across the ABAC conditions: tenant, facility, purpose of use and the
+// tenant's own lifecycle state. This file is that coverage, and it starts from
+// deny-by-default because an allow that happens when no rule matched is not a
+// decision.
 func TestDenyByDefaultWithNoPermissions(t *testing.T) {
 	d := policy.Evaluate(authctx.Session{TenantID: "tenant-a"}, policy.Request{
 		Permission: "organization.facility.create",

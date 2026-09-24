@@ -108,6 +108,10 @@ func loadGoFiles(t *testing.T) []goFile {
 // FIT-01: domain packages must not import SQL, network, transport or cloud SDK
 // packages. The domain is the one layer that has to stay portable and
 // deterministic.
+//
+// This is also SRS-API-007's verification clause: the domain package has no
+// sqlc or pgx dependency, so the repository interface belongs to the domain
+// that consumes it and the generated implementation stays infrastructure.
 func TestFIT01_DomainPackagesArePure(t *testing.T) {
 	forbidden := []string{
 		"database/sql",
@@ -325,6 +329,9 @@ func TestFIT02_GeneratedQueriesImportedOnlyByAdapters(t *testing.T) {
 
 // db/queries must not reach across schema ownership within a single file, which
 // would smuggle a cross-context join past the Go-level checks.
+// SRS-DAT-001's verification clause: each bounded context owns its tables, and
+// a cross-domain write goes through a contract rather than a direct table
+// write. A query file that reaches into a second schema is that direct write.
 func TestFIT02_QueryFilesStayWithinOneSchema(t *testing.T) {
 	root := repoRoot(t)
 	files, err := filepath.Glob(filepath.Join(root, "db", "queries", "*.sql"))
@@ -382,6 +389,12 @@ var bareTenantParam = regexp.MustCompile(`\btenantID\b\s*(,\s*\w+\s*)*string\b`)
 
 // FIT-03: every tenant-owned repository method must take a verified
 // authctx.TenantScope rather than a bare tenant string.
+//
+// SRS-API-005's verification clause: a handler cannot bypass authorization by
+// calling a repository directly. It cannot, because it has no way to produce
+// the scope the repository demands — the type has no exported constructor
+// (ADR-0001), so the only scope in existence is one the interceptor derived
+// from a verified credential.
 func TestFIT03_RepositoryPortsRequireTenantScope(t *testing.T) {
 	for _, f := range loadGoFiles(t) {
 		if !strings.HasSuffix(filepath.ToSlash(f.rel), "ports/ports.go") {
@@ -625,6 +638,10 @@ func TestFIT08_NoDeleteOnAppendOnlyTables(t *testing.T) {
 // Checked against db/queries rather than against Go source, because that is
 // where such a statement would actually be written — sqlc generates the method
 // and the adapter calls it, so the query file is the door.
+// SRS-DAT-003's verification clause: financial, inventory and signed clinical
+// records use append, amend and reversal rather than update-in-place, so the
+// audit can reconstruct what a row said before and who changed it. A ledger
+// with a DELETE has thrown that away.
 func TestFIT08_FinancialLedgersAreAppendOnly(t *testing.T) {
 	root := repoRoot(t)
 	path := filepath.Join(root, "db", "queries", "billing.sql")
@@ -686,7 +703,9 @@ func TestFIT08_AuditTableHasNoDeleteQuery(t *testing.T) {
 }
 
 // The application layer owns transactions; handlers must never begin one
-// (Blueprint §4.2).
+// (Blueprint §4.2). SRS-API-006's verification clause asks an architecture
+// test to detect a handler that has taken on work belonging to the layers
+// below it, and a transaction is the first such thing a handler reaches for.
 func TestTransportDoesNotOpenTransactions(t *testing.T) {
 	for _, f := range loadGoFiles(t) {
 		rel := filepath.ToSlash(f.rel)

@@ -149,6 +149,11 @@ func TestPublisherDrainsAndMarksPublished(t *testing.T) {
 }
 
 // A broker failure must not lose the event or stall the rest of the batch.
+// SRS-NFR-009's verification clause: a retry does not duplicate a financial or
+// clinical action. Retry is per event rather than per batch, so one poisonous
+// event does not hold up the queue behind it, and the inbox below makes the
+// redelivery idempotent. The operator-visible exception queue the requirement
+// also asks for is not built — see docs/engineering/wave-0-status.md.
 func TestPublisherRetriesFailedEventWithoutBlockingOthers(t *testing.T) {
 	pool := pgtest.New(t)
 	tx := pgtx.NewManager(pool)

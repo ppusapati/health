@@ -35,6 +35,10 @@ void main() {
 
     // Context first: the user must know which tenant and facility they are
     // acting in before they act.
+    // SRS-WEB-003, first half: the active tenant and facility are displayed
+    // prominently. The requirement's other half — that a context switch is
+    // explicit and cannot silently carry patient context — has no switch to
+    // test yet; see docs/engineering/wave-0-status.md.
     testWidgets('shows tenant and facility context when signed in', (tester) async {
       await tester.pumpWidget(wrap(AppShell(
         config: const AppConfig(apiBaseUrl: 'http://x', environment: Environment.production),

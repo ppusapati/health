@@ -43,7 +43,7 @@ const (
 //
 // The requirement names five and asks for them to be "idempotent/versioned".
 // Idempotency comes from the outbox: each carries an event id and downstream
-// consumers deduplicate on it (SRS-PLT-006). Versioning is the schema version
+// consumers deduplicate on it (SRS-API-003). Versioning is the schema version
 // the envelope already carries.
 const (
 	EventAppointmentBooked      = "appointment.booked"

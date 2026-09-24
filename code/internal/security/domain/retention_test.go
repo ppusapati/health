@@ -37,6 +37,9 @@ func TestRetentionClassValidation(t *testing.T) {
 
 // The central SRS-DAT-009 guarantee: a deletion job must skip held records,
 // whatever the retention period says.
+// SRS-SEC-010's first half: retention is configurable but subject to legal and
+// clinical obligations, so a hold outranks an expired period rather than the
+// other way round.
 func TestLegalHoldBeatsAnExpiredRetentionPeriod(t *testing.T) {
 	class, err := domain.NewRetentionClass("rc-1", "tenant-a", "clinical", "PHI", days(30), nil, at)
 	if err != nil {

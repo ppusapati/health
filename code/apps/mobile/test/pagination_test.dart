@@ -1,3 +1,11 @@
+/// Server-side pagination over a stable cursor (SRS-WEB-005).
+///
+/// The verification clause is that a production-scale list is never fetched
+/// whole. A page is asked for by cursor rather than by offset, so a row
+/// inserted while somebody is reading does not shift the page under them into
+/// showing a row twice or skipping one.
+library;
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:health_mobile/src/api/pagination.dart';

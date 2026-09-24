@@ -128,6 +128,10 @@ jobs:
       # Schema change rules: expand/contract, rollback and reconciliation
       # notes, and the partitioning register (SRS-DAT-006, 010, 013).
       - run: make test-migrations
+      # Every requirement a status document claims is a real programme id and is
+      # named by a test. This ran only in `make verify` until a Wave-0 table was
+      # found claiming four requirements nothing had built.
+      - run: make traceability
 
   test:
     name: Tests with PostgreSQL

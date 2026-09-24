@@ -28,12 +28,17 @@ PATTERN = (
     r"|ER|ICU|OT|ANE|BLD|CSSD|MAT|BIO|QMS|IPC|MRD"
     r"|AMB|DIET|FAC|HKP|LND|MORT"
     r"|OPSAPI|OPSNFR|OPSSEC|OPSWEB"
+    # Wave 0: the platform families. Added when wave-0-status.md joined the
+    # documents below — until then this gate had never opened it, and the
+    # family table inside claimed four requirements nothing had built.
+    r"|PLT|IAM|WEB|API|DAT|SEC|NFR"
     r")-[0-9]{3}"
 )
 
 # Each status document and what it claims. A gate that reads the finished wave
 # and not the one being written is a gate pointed at the past.
 STATUS_DOCS = [
+    "docs/engineering/wave-0-status.md",
     "docs/engineering/wave-1-status.md",
     "docs/engineering/wave-2-status.md",
 ]

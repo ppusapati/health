@@ -222,6 +222,10 @@ func TestMalformedPageTokenIsInvalidArgument(t *testing.T) {
 
 // The database constraint, not just the application pre-check, must hold the
 // per-tenant uniqueness line under concurrency.
+// SRS-DAT-005's verification clause: an invalid row cannot bypass the domain,
+// because the constraint is in the database as well. This is the pattern the
+// rest of the repository tests follow — every domain refusal that can be
+// expressed as a key, a foreign key, a NOT NULL or a CHECK is written twice.
 func TestDuplicateCodeHitsUniqueConstraint(t *testing.T) {
 	f := newRepoFixture(t)
 	ctx := context.Background()

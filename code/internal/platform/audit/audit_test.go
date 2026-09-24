@@ -22,6 +22,10 @@ func valid() audit.Record {
 	}
 }
 
+// SRS-NFR-011's verification clause: an audit scenario reproduces who did what
+// and when. The mandatory fields are the ones that make that reconstruction
+// possible, which is why a record missing any of them is refused rather than
+// stored as a partial answer.
 func TestValidRecordPasses(t *testing.T) {
 	if err := valid().Validate(); err != nil {
 		t.Fatalf("valid record rejected: %v", err)

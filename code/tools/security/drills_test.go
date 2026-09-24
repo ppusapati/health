@@ -57,6 +57,10 @@ type drill struct {
 
 // requirementsNeedingDrills maps each requirement to how often its drill must
 // run. Quarterly for all three, per the runbooks.
+// The backup-restore drill is SRS-NFR-016's and SRS-DAT-011's at once: one
+// restore into a scratch database, producing the integrity and reconciliation
+// evidence both ask for. Listed once, because two rows would be one drill
+// recorded twice and the register would disagree with itself.
 var requirementsNeedingDrills = map[string]string{
 	"SRS-SEC-002": "credential-rotation",
 	"SRS-NFR-005": "disaster-recovery",

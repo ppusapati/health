@@ -53,6 +53,9 @@ func TestWithdrawableePurposeAcceptsWithdrawal(t *testing.T) {
 
 // Pretending to honour a withdrawal that cannot lawfully be honoured is worse
 // than refusing it.
+// The rest of SRS-SEC-009: withdrawal affects future optional processing and
+// nothing else. A purpose the hospital processes under a legal obligation is
+// not one a withdrawal can switch off.
 func TestNonWithdrawablePurposeRefusesWithdrawal(t *testing.T) {
 	_, err := domain.NewPurposeGrant("g-1", "tenant-a", "patient-1", "desk-1",
 		carePurpose(t), 3, false, at)
@@ -67,6 +70,10 @@ func TestNonWithdrawablePurposeRefusesWithdrawal(t *testing.T) {
 	}
 }
 
+// SRS-SEC-009's verification clause: privacy notices, purposes and consent
+// artifacts are kept independently of clinical consent, and a grant names the
+// notice version it was given against — without it, nobody can say what the
+// subject was actually told.
 func TestGrantRequiresANoticeVersion(t *testing.T) {
 	if _, err := domain.NewPurposeGrant("g-1", "tenant-a", "patient-1", "desk-1",
 		marketingPurpose(t), 0, true, at); err == nil {
@@ -121,6 +128,9 @@ func TestPartialFulfilmentRequiresABasis(t *testing.T) {
 }
 
 // "We did it" without a reference is not evidence.
+// SRS-SEC-010's verification clause, second half: a data-subject request
+// carries a status, a reviewer, a decision and evidence. A fulfilment with no
+// evidence is a claim that something was done.
 func TestFulfilmentRequiresEvidence(t *testing.T) {
 	r, _ := domain.NewSubjectRequest("r-1", "tenant-a", "patient-1", domain.RequestAccess, at, 0)
 

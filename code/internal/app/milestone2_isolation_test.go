@@ -301,6 +301,10 @@ func TestSuspendedTenantIsReadOnly(t *testing.T) {
 
 // A tenant-scoped admin must not be able to reach cross-tenant provisioning
 // authority, however many facility permissions it holds.
+// SRS-IAM-003's verification clause: an unauthorized direct RPC returns
+// permission denied. Permissions are bounded-context actions rather than menu
+// entries, so hiding the button is not what stops this call — the absent
+// permission is.
 func TestTenantAdminCannotProvisionTenants(t *testing.T) {
 	h := newHarness(t)
 	fx := setupTwoTenants(t, h)
