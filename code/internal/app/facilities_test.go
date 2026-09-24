@@ -1232,3 +1232,73 @@ func TestAVersionFromOneCallIsGoodForTheNext(t *testing.T) {
 		t.Fatalf("want a version conflict, got %v", err)
 	}
 }
+
+// SRS-FAC-004: one manager cannot sign their own shutdown permit.
+//
+// The role holds both fac.outage.request and fac.outage.approve, which is
+// deliberate — a facilities manager does ask for shutdowns. What makes that
+// safe is a rule about the record rather than about the role: the domain
+// refuses an outage approved by whoever asked for it, so the pair means two
+// managers per shutdown and not one doing both. The other shutdown test
+// cannot show this, because there a technician requests and a manager
+// approves, and they were never the same person.
+func TestOneManagerCannotSignTheirOwnShutdownPermit(t *testing.T) {
+	h := newFacHarness(t)
+	ctx := context.Background()
+
+	from := time.Now().UTC().Add(7 * 24 * time.Hour)
+	planned, err := h.facilities.PlanOutage(ctx,
+		as(h.managerToken(), &facilitiesv1.PlanOutageRequest{
+			Reference: "SD-2026-052", FacilityId: h.facility,
+			System: facilitiesv1.System_SYSTEM_HVAC,
+			Title:  "AHU belt change", Reason: "belt at wear limit",
+			PlannedFrom: timestamppb.New(from),
+			PlannedTo:   timestamppb.New(from.Add(2 * time.Hour)),
+			Contingency: "theatre list moved to the afternoon",
+			Areas: []*facilitiesv1.AreaInput{
+				{Name: "Theatres", Critical: true},
+			},
+		}))
+	if err != nil {
+		t.Fatalf("PlanOutage: %v", err)
+	}
+	outage := planned.Msg.GetOutage()
+
+	_, err = h.facilities.ApproveOutage(ctx,
+		as(h.managerToken(), &facilitiesv1.ApproveOutageRequest{
+			OutageId: outage.GetOutageId(), PermitRef: "PTW-52"}))
+	if err == nil || !strings.Contains(err.Error(), "other than fac-mgr-1") {
+		t.Fatalf("want a refusal naming the requester, got %v", err)
+	}
+
+	// A second manager signs it, which is the arrangement the permit
+	// exists to produce.
+	if _, err := h.facilities.ApproveOutage(ctx,
+		as(h.otherManagerToken(), &facilitiesv1.ApproveOutageRequest{
+			OutageId:  outage.GetOutageId(),
+			PermitRef: "PTW-52"})); err != nil {
+		t.Fatalf("ApproveOutage by a second manager: %v", err)
+	}
+}
+
+// SRS-FAC-005: the gateway account cannot push a hand-typed alarm either.
+//
+// The permission stops a person calling IngestAlarm. This stops the one
+// account that may call it from claiming a plant event was typed by
+// somebody — which is the shape a fabricated alarm would actually take,
+// since whoever wanted one would use the credential that is allowed to
+// speak. The record the command centre trusts is trusted because it came
+// off the plant.
+func TestAGatewayCannotPushAHandTypedAlarm(t *testing.T) {
+	h := newFacHarness(t)
+	ctx := context.Background()
+
+	req := h.alarmRequest("evt-typed-1", "")
+	req.Source = facilitiesv1.Source_SOURCE_MANUAL
+
+	_, err := h.facilities.IngestAlarm(ctx, as(h.gatewayToken(), req))
+	if err == nil ||
+		!strings.Contains(err.Error(), "from plant, not people") {
+		t.Fatalf("want a refusal naming the origin, got %v", err)
+	}
+}
