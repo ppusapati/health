@@ -166,10 +166,12 @@ func (s *Service) ApproveOutage(ctx context.Context,
 			session.SubjectID, now); err != nil {
 			return facilitiesError(err)
 		}
+		versionSeen := expected(in.Version, outage.Version)
 		if err := s.outages.UpdateOutage(ctx, scope, outage,
-			expected(in.Version, outage.Version)); err != nil {
+			versionSeen); err != nil {
 			return facilitiesError(err)
 		}
+		outage.Version = applied(versionSeen)
 
 		// Re-read: approving cascaded the new state onto every area
 		// row through the composite key, so the copies held here are
@@ -182,10 +184,15 @@ func (s *Service) ApproveOutage(ctx context.Context,
 			if err := areas[i].Notify(now); err != nil {
 				return facilitiesError(err)
 			}
+			seen := areas[i].Version
 			if err := s.outages.UpdateArea(ctx, scope, areas[i],
-				areas[i].Version); err != nil {
+				seen); err != nil {
 				return facilitiesError(err)
 			}
+			// The caller acknowledges against these, so they carry
+			// the version the write produced rather than the one it
+			// consumed.
+			areas[i].Version = applied(seen)
 		}
 
 		out.Outage, out.Areas = outage, areas
@@ -238,10 +245,12 @@ func (s *Service) AcknowledgeOutage(ctx context.Context,
 				in.Objection, now); err != nil {
 				return facilitiesError(err)
 			}
+			versionSeen := expected(in.Version, areas[i].Version)
 			if err := s.outages.UpdateArea(ctx, scope, areas[i],
-				expected(in.Version, areas[i].Version)); err != nil {
+				versionSeen); err != nil {
 				return facilitiesError(err)
 			}
+			areas[i].Version = applied(versionSeen)
 			out = areas[i]
 			return s.appendAudit(ctx, session, audit.Record{
 				Action:       "facilities.outage.acknowledged",
@@ -297,10 +306,12 @@ func (s *Service) StartOutage(ctx context.Context, in StartOutageInput) (
 		if err := outage.TakeEffect(areas, now); err != nil {
 			return facilitiesError(err)
 		}
+		versionSeen := expected(in.Version, outage.Version)
 		if err := s.outages.UpdateOutage(ctx, scope, outage,
-			expected(in.Version, outage.Version)); err != nil {
+			versionSeen); err != nil {
 			return facilitiesError(err)
 		}
+		outage.Version = applied(versionSeen)
 		out = outage
 		if err := s.appendAudit(ctx, session, audit.Record{
 			Action:       "facilities.outage.in_effect",
@@ -350,10 +361,12 @@ func (s *Service) RestoreOutage(ctx context.Context,
 		if err := outage.Restore(session.SubjectID, now); err != nil {
 			return facilitiesError(err)
 		}
+		versionSeen := expected(in.Version, outage.Version)
 		if err := s.outages.UpdateOutage(ctx, scope, outage,
-			expected(in.Version, outage.Version)); err != nil {
+			versionSeen); err != nil {
 			return facilitiesError(err)
 		}
+		outage.Version = applied(versionSeen)
 		out = outage
 		if err := s.appendAudit(ctx, session, audit.Record{
 			Action:       "facilities.outage.restored",
@@ -402,10 +415,12 @@ func (s *Service) CancelOutage(ctx context.Context, in CancelOutageInput) (
 		if err := outage.CancelOutage(in.Reason, now); err != nil {
 			return facilitiesError(err)
 		}
+		versionSeen := expected(in.Version, outage.Version)
 		if err := s.outages.UpdateOutage(ctx, scope, outage,
-			expected(in.Version, outage.Version)); err != nil {
+			versionSeen); err != nil {
 			return facilitiesError(err)
 		}
+		outage.Version = applied(versionSeen)
 		out = outage
 		return s.appendAudit(ctx, session, audit.Record{
 			Action:       "facilities.outage.cancelled",

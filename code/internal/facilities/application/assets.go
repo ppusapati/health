@@ -120,10 +120,12 @@ func (s *Service) SetAssetStatus(ctx context.Context,
 			in.Reason, now); err != nil {
 			return facilitiesError(err)
 		}
+		versionSeen := expected(in.Version, asset.Version)
 		if err := s.assets.UpdateAssetStatus(ctx, scope, asset,
-			expected(in.Version, asset.Version)); err != nil {
+			versionSeen); err != nil {
 			return facilitiesError(err)
 		}
+		asset.Version = applied(versionSeen)
 		out = asset
 		return s.appendAudit(ctx, session, audit.Record{
 			Action:       "facilities.asset.status_changed",

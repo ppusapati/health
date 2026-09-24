@@ -190,11 +190,13 @@ func (s *Service) MitigateDeficiency(ctx context.Context,
 			now); err != nil {
 			return facilitiesError(err)
 		}
+		versionSeen := expected(in.Version, deficiency.Version)
 		if err := s.deficiencies.UpdateDeficiency(ctx, scope,
 			deficiency,
-			expected(in.Version, deficiency.Version)); err != nil {
+			versionSeen); err != nil {
 			return facilitiesError(err)
 		}
+		deficiency.Version = applied(versionSeen)
 		out = deficiency
 		return s.appendAudit(ctx, session, audit.Record{
 			Action:       "facilities.deficiency.mitigated",
@@ -238,11 +240,13 @@ func (s *Service) CloseDeficiency(ctx context.Context,
 			session.SubjectID, now); err != nil {
 			return facilitiesError(err)
 		}
+		versionSeen := expected(in.Version, deficiency.Version)
 		if err := s.deficiencies.UpdateDeficiency(ctx, scope,
 			deficiency,
-			expected(in.Version, deficiency.Version)); err != nil {
+			versionSeen); err != nil {
 			return facilitiesError(err)
 		}
+		deficiency.Version = applied(versionSeen)
 		out = deficiency
 		return s.appendAudit(ctx, session, audit.Record{
 			Action:       "facilities.deficiency.closed",

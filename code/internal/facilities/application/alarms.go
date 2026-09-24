@@ -248,10 +248,12 @@ func (s *Service) LinkAlarmWork(ctx context.Context,
 			now); err != nil {
 			return facilitiesError(err)
 		}
+		versionSeen := expected(in.Version, alarm.Version)
 		if err := s.alarms.UpdateAlarm(ctx, scope, alarm,
-			expected(in.Version, alarm.Version)); err != nil {
+			versionSeen); err != nil {
 			return facilitiesError(err)
 		}
+		alarm.Version = applied(versionSeen)
 		out = alarm
 		return s.appendAudit(ctx, session, audit.Record{
 			Action:       "facilities.alarm.linked",
@@ -288,10 +290,12 @@ func (s *Service) mutateAlarm(ctx context.Context, alarmID string,
 		if err != nil {
 			return err
 		}
+		versionSeen := expected(version, alarm.Version)
 		if err := s.alarms.UpdateAlarm(ctx, scope, alarm,
-			expected(version, alarm.Version)); err != nil {
+			versionSeen); err != nil {
 			return facilitiesError(err)
 		}
+		alarm.Version = applied(versionSeen)
 		out = alarm
 		return s.appendAudit(ctx, session, audit.Record{
 			Action:       action,

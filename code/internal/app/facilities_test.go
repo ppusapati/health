@@ -1157,3 +1157,78 @@ func TestAContractorOnPermitWorkCarriesTheirInduction(t *testing.T) {
 		t.Fatalf("SignOutVendor: %v", err)
 	}
 }
+
+// SRS-FAC-004, and the optimistic-concurrency contract underneath it: a
+// client that round-trips the version it was given can keep working.
+//
+// Every mutating request in this contract carries a version, so a client is
+// invited to send back the one the last response gave it. If a response
+// carried the version the row had *before* the write, the second call in any
+// sequence would be refused as a concurrent edit — and the caller would have
+// no way to tell that from somebody genuinely editing underneath them. The
+// three-step shutdown is where it bites first, because a permit is approved
+// and then taken into effect by the same screen.
+func TestAVersionFromOneCallIsGoodForTheNext(t *testing.T) {
+	h := newFacHarness(t)
+	ctx := context.Background()
+
+	from := time.Now().UTC().Add(7 * 24 * time.Hour)
+	planned, err := h.facilities.PlanOutage(ctx,
+		as(h.technicianToken(), &facilitiesv1.PlanOutageRequest{
+			Reference: "SD-2026-044", FacilityId: h.facility,
+			System: facilitiesv1.System_SYSTEM_WATER,
+			Title:  "RO plant isolation", Reason: "membrane change",
+			PlannedFrom: timestamppb.New(from),
+			PlannedTo:   timestamppb.New(from.Add(3 * time.Hour)),
+			Contingency: "dialysis on the backup loop",
+			Areas: []*facilitiesv1.AreaInput{
+				{Name: "Dialysis", Critical: true},
+			},
+		}))
+	if err != nil {
+		t.Fatalf("PlanOutage: %v", err)
+	}
+	outage := planned.Msg.GetOutage()
+
+	approved, err := h.facilities.ApproveOutage(ctx,
+		as(h.managerToken(), &facilitiesv1.ApproveOutageRequest{
+			OutageId: outage.GetOutageId(), PermitRef: "PTW-44",
+			// The version the plan handed back.
+			Version: outage.GetVersion(),
+		}))
+	if err != nil {
+		t.Fatalf("ApproveOutage with the planned version: %v", err)
+	}
+
+	area := approved.Msg.GetAreas()[0]
+	if _, err := h.facilities.AcknowledgeOutage(ctx,
+		as(h.wardManagerToken(), &facilitiesv1.AcknowledgeOutageRequest{
+			OutageId: outage.GetOutageId(),
+			AreaId:   area.GetAreaId(),
+			// And the version the approval handed back, for a row
+			// the approval itself wrote.
+			Version: area.GetVersion(),
+		})); err != nil {
+		t.Fatalf("AcknowledgeOutage with the approved version: %v", err)
+	}
+
+	if _, err := h.facilities.StartOutage(ctx,
+		as(h.managerToken(), &facilitiesv1.StartOutageRequest{
+			OutageId: outage.GetOutageId(),
+			Version:  approved.Msg.GetOutage().GetVersion(),
+		})); err != nil {
+		t.Fatalf("StartOutage with the approved version: %v", err)
+	}
+
+	// And a genuinely stale version is still refused, or the check above
+	// would pass just as well with the rule switched off.
+	_, err = h.facilities.RestoreOutage(ctx,
+		as(h.managerToken(), &facilitiesv1.RestoreOutageRequest{
+			OutageId: outage.GetOutageId(),
+			Version:  outage.GetVersion(),
+		}))
+	if err == nil ||
+		!strings.Contains(err.Error(), "somebody else changed this record") {
+		t.Fatalf("want a version conflict, got %v", err)
+	}
+}

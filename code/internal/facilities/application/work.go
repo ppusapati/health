@@ -241,10 +241,12 @@ func (s *Service) StartWork(ctx context.Context, in StartWorkInput) (
 			in.LOTORef, in.LOTOAppliedBy, now); err != nil {
 			return facilitiesError(err)
 		}
+		versionSeen := expected(in.Version, order.Version)
 		if err := s.work.UpdateWorkOrder(ctx, scope, order,
-			expected(in.Version, order.Version)); err != nil {
+			versionSeen); err != nil {
 			return facilitiesError(err)
 		}
+		order.Version = applied(versionSeen)
 		out = order
 		return s.appendAudit(ctx, session, audit.Record{
 			Action:       "facilities.work_order.started",
@@ -340,10 +342,12 @@ func (s *Service) CloseWork(ctx context.Context, in CloseWorkInput) (
 		if err := order.Close(session.SubjectID, now); err != nil {
 			return facilitiesError(err)
 		}
+		versionSeen := expected(in.Version, order.Version)
 		if err := s.work.UpdateWorkOrder(ctx, scope, order,
-			expected(in.Version, order.Version)); err != nil {
+			versionSeen); err != nil {
 			return facilitiesError(err)
 		}
+		order.Version = applied(versionSeen)
 		out = order
 		if err := s.appendAudit(ctx, session, audit.Record{
 			Action:       "facilities.work_order.closed",
@@ -421,10 +425,12 @@ func (s *Service) mutateWork(ctx context.Context, permission, workOrderID string
 		if err != nil {
 			return err
 		}
+		versionSeen := expected(version, order.Version)
 		if err := s.work.UpdateWorkOrder(ctx, scope, order,
-			expected(version, order.Version)); err != nil {
+			versionSeen); err != nil {
 			return facilitiesError(err)
 		}
+		order.Version = applied(versionSeen)
 		out = order
 		return s.appendAudit(ctx, session, audit.Record{
 			Action:       action,

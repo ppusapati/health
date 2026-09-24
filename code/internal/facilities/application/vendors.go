@@ -134,10 +134,12 @@ func (s *Service) SignOutVendor(ctx context.Context,
 		}, session.SubjectID, now); err != nil {
 			return facilitiesError(err)
 		}
+		versionSeen := expected(in.Version, visit.Version)
 		if err := s.visits.UpdateVisit(ctx, scope, visit,
-			expected(in.Version, visit.Version)); err != nil {
+			versionSeen); err != nil {
 			return facilitiesError(err)
 		}
+		visit.Version = applied(versionSeen)
 		out = visit
 		return s.appendAudit(ctx, session, audit.Record{
 			Action:       "facilities.vendor_visit.signed_out",

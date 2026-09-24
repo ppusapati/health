@@ -36,6 +36,17 @@ func expected(supplied, current int64) int64 {
 	return supplied
 }
 
+// applied is the version a successful update produced.
+//
+// Every UPDATE in the adapter is "version = version + 1 WHERE version =
+// @expected_version", so a write that succeeded produced exactly expected+1.
+// Without putting it back on the entity, every mutating response carries the
+// version the row had *before* the call — and a client that round-trips it,
+// which the contract invites since every mutating request has a version
+// field, gets a conflict on its second call with no way to tell that from a
+// real concurrent edit.
+func applied(expectedVersion int64) int64 { return expectedVersion + 1 }
+
 func boolText(value bool) string {
 	if value {
 		return "true"

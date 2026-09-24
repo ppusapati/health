@@ -222,10 +222,12 @@ func (s *Service) CompleteTask(ctx context.Context, in CompleteTaskInput) (
 		}, session.SubjectID, now); err != nil {
 			return facilitiesError(err)
 		}
+		versionSeen := expected(in.Version, task.Version)
 		if err := s.maintenance.UpdateTask(ctx, scope, task,
-			expected(in.Version, task.Version)); err != nil {
+			versionSeen); err != nil {
 			return facilitiesError(err)
 		}
+		task.Version = applied(versionSeen)
 
 		hours := int(in.RuntimeHours)
 		if task.AssetID != "" && hours == 0 {
@@ -290,10 +292,12 @@ func (s *Service) WaiveTask(ctx context.Context, in WaiveTaskInput) (
 			now); err != nil {
 			return facilitiesError(err)
 		}
+		versionSeen := expected(in.Version, task.Version)
 		if err := s.maintenance.UpdateTask(ctx, scope, task,
-			expected(in.Version, task.Version)); err != nil {
+			versionSeen); err != nil {
 			return facilitiesError(err)
 		}
+		task.Version = applied(versionSeen)
 		out = task
 		return s.appendAudit(ctx, session, audit.Record{
 			Action:       "facilities.task.waived",
