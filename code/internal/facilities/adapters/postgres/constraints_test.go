@@ -372,6 +372,11 @@ func TestTheDatabaseRefusesAMeterTheDomainWouldRefuse(t *testing.T) {
 		with(base, map[string]string{"utility": "'electric'"}))
 	f.refuses(t, "a_meter_source_is_known", table,
 		with(base, map[string]string{"source": "'somewhere'"}))
+	// An automated meter with no reference cannot be traced back to the
+	// gateway that reads it, which is what makes an automated reading
+	// worth more than a typed one in the first place.
+	f.refuses(t, "an_automated_meter_names_its_source", table,
+		with(base, map[string]string{"source": "'ami'"}))
 	f.refuses(t, "a_register_maximum_is_not_negative", table,
 		with(base, map[string]string{"register_max": "-1"}))
 }
