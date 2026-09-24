@@ -22,7 +22,9 @@ import (
 // transaction and an outbox event. (The OpenTelemetry span and CI pipeline are
 // covered separately in observability_test.go and the workflow.)
 //
-// Gate A1.
+// Gate A1. SRS-PLT-001's verification clause: a tenant exists with a unique
+// id and every child record created is scoped to it — here the facility, its
+// audit record and its outbox event.
 func TestMilestone1_EndToEndTransaction(t *testing.T) {
 	h := newHarness(t)
 	ctx := context.Background()

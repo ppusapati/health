@@ -77,6 +77,9 @@ func TestFacilityRequiresTenant(t *testing.T) {
 	}
 }
 
+// SRS-PLT-007's verification clause: renaming a display name does not break
+// references. The code is the key and the name is a label, so a rename moves
+// the label and nothing that points at the facility notices.
 func TestRenameKeepsCodeStable(t *testing.T) {
 	f := newFacility(t)
 	original := f.Code

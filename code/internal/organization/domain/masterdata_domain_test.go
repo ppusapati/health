@@ -150,6 +150,44 @@ func TestApprovedChangeIsOnlyInForceFromItsEffectiveDate(t *testing.T) {
 	}
 }
 
+// SRS-PLT-018's verification clause: the audit reveals the full configuration
+// history, which means a change records all five of creator, approver,
+// timestamps, reason and the state it was proposed against. A record missing
+// any one of them cannot answer "who changed this, when, why, and from what".
+func TestAConfigurationChangeRecordsItsProvenance(t *testing.T) {
+	c := change(t, mdDay(2026, time.January, 1))
+	if err := c.Approve("checker-1", "agreed with the clinical director", 3,
+		mdNow.Add(time.Hour)); err != nil {
+		t.Fatalf("Approve: %v", err)
+	}
+
+	for _, missing := range []struct {
+		what  string
+		empty bool
+	}{
+		{"the proposer", c.ProposedBy == ""},
+		{"when it was proposed", c.ProposedAt.IsZero()},
+		{"the approver", c.DecidedBy == ""},
+		{"when it was decided", c.DecidedAt.IsZero()},
+		{"the reason it was proposed", c.Justification == ""},
+		{"the reason it was approved", c.DecisionNote == ""},
+		{"the state it was proposed against", c.BaseVersion == 0},
+		{"the state it proposes", len(c.Proposed) == 0},
+	} {
+		if missing.empty {
+			t.Errorf("the change does not record %s", missing.what)
+		}
+	}
+
+	// The prior version is the one the proposer saw, not the one approval
+	// happened to find. Recording the latter would make the history read as
+	// though the proposer had seen a row they never saw.
+	if c.BaseVersion != 3 {
+		t.Errorf("base version = %d, want the version the proposer saw",
+			c.BaseVersion)
+	}
+}
+
 func TestSelfApprovalIsRefused(t *testing.T) {
 	c := change(t, mdDay(2026, time.January, 1))
 	if err := c.Approve("maker-1", "looks fine to me", 3, mdNow); !errors.Is(err, domain.ErrSelfApproval) {

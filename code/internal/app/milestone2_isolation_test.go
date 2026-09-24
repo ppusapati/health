@@ -113,7 +113,8 @@ func TestCrossTenantListReturnsNothing(t *testing.T) {
 }
 
 // Two tenants may legitimately use the same facility code; uniqueness is
-// per-tenant, so this must succeed rather than collide.
+// per-tenant, so this must succeed rather than collide. The other half of
+// SRS-PLT-007: codes are organization-scoped, not global.
 func TestSameFacilityCodeAllowedInDifferentTenants(t *testing.T) {
 	h := newHarness(t)
 	fx := setupTwoTenants(t, h)
