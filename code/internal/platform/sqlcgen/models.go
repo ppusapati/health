@@ -1767,6 +1767,311 @@ type EncounterVisitSummary struct {
 	GeneratedAt     pgtype.Timestamptz
 }
 
+type FacilitiesAlarm struct {
+	ID             uuid.UUID
+	TenantID       uuid.UUID
+	GatewayID      string
+	PointRef       string
+	ExternalID     string
+	AssetID        pgtype.UUID
+	FacilityID     pgtype.UUID
+	System         string
+	Severity       string
+	Message        string
+	Source         string
+	RaisedAt       pgtype.Timestamptz
+	ClearedAt      pgtype.Timestamptz
+	State          string
+	AcknowledgedAt pgtype.Timestamptz
+	AcknowledgedBy string
+	WorkOrderID    pgtype.UUID
+	LinkedAt       pgtype.Timestamptz
+	LinkedBy       string
+	CreatedAt      pgtype.Timestamptz
+	Version        int64
+}
+
+type FacilitiesAlarmRule struct {
+	ID          uuid.UUID
+	TenantID    uuid.UUID
+	FacilityID  pgtype.UUID
+	System      string
+	MinSeverity string
+	Priority    string
+	ClassCode   string
+	OwnerTeam   string
+	Active      bool
+	CreatedAt   pgtype.Timestamptz
+	CreatedBy   string
+}
+
+type FacilitiesAsset struct {
+	ID             uuid.UUID
+	TenantID       uuid.UUID
+	Tag            string
+	Name           string
+	System         string
+	Criticality    string
+	ParentID       pgtype.UUID
+	FacilityID     pgtype.UUID
+	LocationID     pgtype.UUID
+	LocationNote   string
+	Status         string
+	StatusReason   string
+	StatusAt       pgtype.Timestamptz
+	Manufacturer   string
+	Model          string
+	SerialNumber   string
+	CommissionedAt pgtype.Timestamptz
+	RuntimeHours   int32
+	RuntimeAt      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	CreatedBy      string
+	Version        int64
+}
+
+type FacilitiesDeficiency struct {
+	ID                 uuid.UUID
+	TenantID           uuid.UUID
+	TaskID             pgtype.UUID
+	AssetID            pgtype.UUID
+	FacilityID         pgtype.UUID
+	LocationID         pgtype.UUID
+	LocationNote       string
+	System             string
+	Severity           string
+	Finding            string
+	Standard           string
+	State              string
+	RaisedAt           pgtype.Timestamptz
+	RaisedBy           string
+	DueAt              pgtype.Timestamptz
+	WorkOrderID        pgtype.UUID
+	MitigationNote     string
+	MitigatedAt        pgtype.Timestamptz
+	MitigatedBy        string
+	ClosedAt           pgtype.Timestamptz
+	ClosedBy           string
+	ClosureEvidenceRef string
+	CreatedAt          pgtype.Timestamptz
+	Version            int64
+}
+
+type FacilitiesMeter struct {
+	ID          uuid.UUID
+	TenantID    uuid.UUID
+	Code        string
+	Name        string
+	Utility     string
+	Unit        string
+	FacilityID  pgtype.UUID
+	LocationID  pgtype.UUID
+	AssetID     pgtype.UUID
+	Source      string
+	SourceRef   string
+	Cumulative  bool
+	RegisterMax int32
+	Active      bool
+	CreatedAt   pgtype.Timestamptz
+	CreatedBy   string
+	Version     int64
+}
+
+type FacilitiesMeterReading struct {
+	ID         uuid.UUID
+	TenantID   uuid.UUID
+	MeterID    uuid.UUID
+	Value      int32
+	ReadAt     pgtype.Timestamptz
+	Source     string
+	SourceRef  string
+	RecordedBy string
+	RolledOver bool
+	Note       string
+	CreatedAt  pgtype.Timestamptz
+}
+
+type FacilitiesOutage struct {
+	ID           uuid.UUID
+	TenantID     uuid.UUID
+	Reference    string
+	FacilityID   pgtype.UUID
+	System       string
+	Title        string
+	Reason       string
+	PlannedFrom  pgtype.Timestamptz
+	PlannedTo    pgtype.Timestamptz
+	ActualFrom   pgtype.Timestamptz
+	ActualTo     pgtype.Timestamptz
+	State        string
+	RequestedBy  string
+	RequestedAt  pgtype.Timestamptz
+	ApprovedBy   string
+	ApprovedAt   pgtype.Timestamptz
+	PermitRef    string
+	Contingency  string
+	RestoredBy   string
+	CancelReason string
+	CreatedAt    pgtype.Timestamptz
+	Version      int64
+}
+
+type FacilitiesOutageArea struct {
+	ID             uuid.UUID
+	TenantID       uuid.UUID
+	OutageID       uuid.UUID
+	OrgUnitID      pgtype.UUID
+	Name           string
+	Critical       bool
+	OutageSystem   string
+	OutageState    string
+	NotifiedAt     pgtype.Timestamptz
+	AcknowledgedAt pgtype.Timestamptz
+	AcknowledgedBy string
+	Objection      string
+	CreatedAt      pgtype.Timestamptz
+	Version        int64
+}
+
+type FacilitiesRuntimeReading struct {
+	ID              uuid.UUID
+	TenantID        uuid.UUID
+	AssetID         uuid.UUID
+	Hours           int32
+	ReadAt          pgtype.Timestamptz
+	Source          string
+	SourceRef       string
+	RecordedBy      string
+	CounterReplaced bool
+	Note            string
+	CreatedAt       pgtype.Timestamptz
+}
+
+type FacilitiesSchedule struct {
+	ID                   uuid.UUID
+	TenantID             uuid.UUID
+	AssetID              pgtype.UUID
+	FacilityID           pgtype.UUID
+	Title                string
+	Kind                 string
+	TriggerKind          string
+	IntervalDays         int32
+	IntervalRuntimeHours int32
+	Authority            string
+	RequiresEvidence     bool
+	WorkClassCode        string
+	GraceDays            int32
+	Active               bool
+	LastDoneAt           pgtype.Timestamptz
+	LastDoneHours        int32
+	CreatedAt            pgtype.Timestamptz
+	CreatedBy            string
+	Version              int64
+}
+
+type FacilitiesTask struct {
+	ID                       uuid.UUID
+	TenantID                 uuid.UUID
+	ScheduleID               uuid.UUID
+	AssetID                  pgtype.UUID
+	FacilityID               pgtype.UUID
+	Title                    string
+	ScheduleKind             string
+	ScheduleRequiresEvidence bool
+	DueAt                    pgtype.Timestamptz
+	DueRuntimeHours          int32
+	TriggeredBy              string
+	State                    string
+	DoneAt                   pgtype.Timestamptz
+	DoneBy                   string
+	Findings                 string
+	EvidenceRef              string
+	CertificateRef           string
+	CertificateExpiresAt     pgtype.Timestamptz
+	WaivedReason             string
+	WorkOrderID              pgtype.UUID
+	CreatedAt                pgtype.Timestamptz
+	Version                  int64
+}
+
+type FacilitiesVendorVisit struct {
+	ID                 uuid.UUID
+	TenantID           uuid.UUID
+	VendorName         string
+	VendorRef          string
+	ContactName        string
+	Technicians        []string
+	FacilityID         pgtype.UUID
+	WorkOrderID        pgtype.UUID
+	AssetID            pgtype.UUID
+	TaskID             pgtype.UUID
+	WorkRequiresPermit bool
+	InductionRef       string
+	Purpose            string
+	State              string
+	SignedInAt         pgtype.Timestamptz
+	SignedInBy         string
+	SignedOutAt        pgtype.Timestamptz
+	SignedOutBy        string
+	ServiceReportRef   string
+	ReportSummary      string
+	PartsUsed          []string
+	FollowUp           string
+	CreatedAt          pgtype.Timestamptz
+	Version            int64
+}
+
+type FacilitiesWorkClass struct {
+	TenantID       uuid.UUID
+	Code           string
+	Name           string
+	RequiresPermit bool
+	RequiresLoto   bool
+	Active         bool
+	Note           string
+	CreatedAt      pgtype.Timestamptz
+}
+
+type FacilitiesWorkOrder struct {
+	ID                  uuid.UUID
+	TenantID            uuid.UUID
+	Number              string
+	FacilityID          pgtype.UUID
+	AssetID             pgtype.UUID
+	System              string
+	LocationID          pgtype.UUID
+	LocationNote        string
+	Fault               string
+	Impact              string
+	Priority            string
+	ClassCode           string
+	ClassRequiresPermit bool
+	ClassRequiresLoto   bool
+	OwnerTeam           string
+	OwnerUserID         string
+	State               string
+	RaisedAt            pgtype.Timestamptz
+	RaisedBy            string
+	RespondBy           pgtype.Timestamptz
+	ResolveBy           pgtype.Timestamptz
+	RespondedAt         pgtype.Timestamptz
+	StartedAt           pgtype.Timestamptz
+	ResolvedAt          pgtype.Timestamptz
+	ClosedAt            pgtype.Timestamptz
+	ClosedBy            string
+	PermitRef           string
+	PermitIssuedBy      string
+	LotoRef             string
+	LotoAppliedBy       string
+	CompletionNote      string
+	RootCause           string
+	DowntimeMinutes     int32
+	HoldReason          string
+	CancelReason        string
+	CreatedAt           pgtype.Timestamptz
+	Version             int64
+}
+
 type HospitalOpsDietCarePlan struct {
 	PlanID       uuid.UUID
 	TenantID     uuid.UUID

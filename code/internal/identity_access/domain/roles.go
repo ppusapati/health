@@ -211,6 +211,54 @@ const (
 	// coroner's officer decides what may happen and does not do it.
 	RoleCoronersOfficer Role = "coroners_officer"
 
+	// RoleFacilitiesTechnician does the estates work (SRS-FAC-002,
+	// SRS-FAC-003, SRS-FAC-007, SRS-FAC-009).
+	//
+	// Deliberately no fac.work.close: a repair signed off by the person
+	// who made it is the same claim twice, and the domain refuses it
+	// anyway — holding the permission would only make the refusal look
+	// like a bug.
+	//
+	// Deliberately no fac.permit: "may do maintenance" and "may isolate
+	// an eleven-kilovolt panel" are different questions with different
+	// answers, and a hospital that conflates them has a permit system on
+	// paper only.
+	RoleFacilitiesTechnician Role = "facilities_technician"
+
+	// RoleFacilitiesManager runs the estates function (SRS-FAC-001,
+	// SRS-FAC-004, SRS-FAC-010, SRS-FAC-011).
+	//
+	// Holds both fac.outage.request and fac.outage.approve, which is safe
+	// because the control is per-record rather than per-role: the domain
+	// refuses an outage approved by whoever asked for it, so two managers
+	// are needed for one shutdown and one manager cannot sign their own.
+	//
+	// Deliberately no fac.safety.close: certifying a fire door repaired
+	// is the fire safety officer's act, and a facilities manager under
+	// pressure to clear a backlog is exactly the person it should not be.
+	RoleFacilitiesManager Role = "facilities_manager"
+
+	// RoleFireSafetyOfficer inspects and signs off life safety
+	// (SRS-FAC-008).
+	//
+	// Holds both fac.safety.raise and fac.safety.close for the same
+	// reason the facilities manager holds both outage permissions: the
+	// domain refuses a critical finding closed by whoever raised it, so
+	// the pair means two officers rather than one doing both.
+	//
+	// Deliberately no fac.work.close and no fac.permit: the officer says
+	// what is wrong and whether it is fixed, and does not run the work.
+	RoleFireSafetyOfficer Role = "fire_safety_officer"
+
+	// RolePlantGateway is the integration that reports facility alarms
+	// (SRS-FAC-005).
+	//
+	// A machine account, and it holds exactly one permission. It cannot
+	// read the alarms it writes and cannot raise, assign or close work:
+	// a gateway that could close a work order is a gateway that will,
+	// when somebody restarts it.
+	RolePlantGateway Role = "plant_gateway"
+
 	// RoleFleetTelematics is the integration that reports vehicle
 	// positions (SRS-AMB-005).
 	//
@@ -991,6 +1039,11 @@ var rolePermissions = map[Role][]string{
 		"empi.patient.read",
 		// Nursing happens inside an encounter and needs to know it is open.
 		"enc.encounter.read",
+		// Anybody who can see a leak should be able to report it
+		// (SRS-FAC-002). Held very widely, which is why the work order
+		// records impact and priority rather than assuming them.
+		"fac.read",
+		"fac.work.raise",
 		// The nursing note is a clinical document; writing one is nursing work
 		// and signing it is not the same act (SRS-CLN-009).
 		"cln.record.read",
@@ -1863,6 +1916,88 @@ var rolePermissions = map[Role][]string{
 		// person taking it.
 	},
 
+	// A facilities technician does the estates work (SRS-FAC-002,
+	// SRS-FAC-003, SRS-FAC-007, SRS-FAC-009, SRS-FAC-011).
+	RoleFacilitiesTechnician: {
+		"fac.read",
+		"fac.work.raise",
+		"fac.work.manage",
+		"fac.maintenance.complete",
+		"fac.runtime.write",
+		"fac.meter.write",
+		"fac.alarm.manage",
+		// Requests a shutdown; somebody else signs it.
+		"fac.outage.request",
+		"fac.vendor.manage",
+		// An engineer who finds a wedged fire door reports it. Closing
+		// it is somebody else's.
+		"fac.safety.raise",
+		// Deliberately no fac.work.close: the engineer who did the work
+		// does not also certify it was done.
+		//
+		// Deliberately no fac.permit: isolating high-voltage switchgear
+		// is a shorter list of people than "may do maintenance".
+		//
+		// Deliberately no fac.asset.manage: registering plant and
+		// deciding how critical it is is a decision about the hospital,
+		// not about today's job.
+	},
+
+	// A facilities manager runs the estates function (SRS-FAC-001,
+	// SRS-FAC-002, SRS-FAC-004, SRS-FAC-010, SRS-FAC-011).
+	RoleFacilitiesManager: {
+		"fac.read",
+		"fac.asset.manage",
+		"fac.work.raise",
+		"fac.work.manage",
+		// Signs work off. The domain refuses it to whoever did the work.
+		"fac.work.close",
+		// Decides which classes of work need a permit, and may start
+		// that work. Both, because the two are one decision: somebody
+		// who can turn the flag off has no permit system either way.
+		"fac.permit",
+		"fac.maintenance.manage",
+		"fac.outage.request",
+		// The domain refuses an outage approved by its requester, so
+		// holding both is two managers per shutdown, not one.
+		"fac.outage.approve",
+		"fac.alarm.manage",
+		"fac.vendor.manage",
+		"fac.meter.write",
+		"fac.report.read",
+		// Deliberately no fac.safety.close: certifying a fire door
+		// repaired belongs to the fire safety officer, not to the person
+		// whose backlog it is.
+		//
+		// Deliberately no fac.alarm.ingest: alarms come from plant.
+	},
+
+	// A fire safety officer inspects and certifies life safety
+	// (SRS-FAC-003, SRS-FAC-008).
+	RoleFireSafetyOfficer: {
+		"fac.read",
+		// Does the fire and life-safety inspections.
+		"fac.maintenance.complete",
+		"fac.safety.raise",
+		// The domain refuses a critical finding closed by whoever raised
+		// it, so holding both means two officers rather than one.
+		"fac.safety.close",
+		// A deficiency needs work raised against it.
+		"fac.work.raise",
+		"fac.report.read",
+		// Deliberately no fac.work.close and no fac.permit: the officer
+		// says what is wrong and whether it is fixed, and does not run
+		// the work that fixes it.
+	},
+
+	// A plant gateway reports facility alarms (SRS-FAC-005).
+	RolePlantGateway: {
+		"fac.alarm.ingest",
+		// And nothing else. A gateway that could read its own alarms is
+		// a gateway somebody can ask what the hospital's plant has been
+		// doing, and one that could close work is one that will.
+	},
+
 	// A biomedical engineer maintains the equipment and does the service work
 	// (SRS-BIO-001, SRS-BIO-003, SRS-BIO-005, SRS-BIO-006, SRS-BIO-010).
 	RoleBiomedicalEngineer: {
@@ -1946,6 +2081,16 @@ var rolePermissions = map[Role][]string{
 		"empi.patient.read",
 		"enc.encounter.read",
 		"nur.record.read",
+		// The person who runs a ward answers for it when estates want to
+		// take the power off (SRS-FAC-004). Held here rather than by
+		// facilities on purpose: the acceptance is that the impacted
+		// department receives the notification and answers it, and a
+		// facilities manager acknowledging on the ward's behalf is the
+		// notification not happening.
+		"fac.outage.acknowledge",
+		// And a ward manager reports a fault like anybody else.
+		"fac.read",
+		"fac.work.raise",
 		// Assignment and the acuity dashboard (SRS-NUR-016, SRS-NUR-017).
 		"nur.assignment.manage",
 		// Note what is absent: no nur.medication.administer. A manager who is

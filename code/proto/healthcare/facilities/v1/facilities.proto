@@ -1,0 +1,1348 @@
+// Facilities engineering operations: the non-biomedical plant register, work
+// orders and the safety paperwork that makes dangerous work safe, preventive
+// and statutory maintenance, planned utility shutdowns and who they reach,
+// alarms from plant gateways, fire and life-safety deficiencies, utility
+// metering and downtime, and contractor attendance.
+//
+// Owning context : facilities  (Master Engineering Registry)
+// Owning service : FacilitiesService
+// Trace          : SRS-FAC-001 … SRS-FAC-011
+//
+// SRS-FAC-012's escalation matrix belongs to the platform escalation
+// mechanism and is not repeated here. Six shapes in this contract are
+// deliberate.
+//
+// StartWork takes the permit-to-work and lockout-tagout references, and
+// CloseWork takes none. The paperwork exists to make the work safe, so it is
+// demanded before the panel is opened rather than after it is back together
+// — an engineer asked for a permit number at the end will find one. There is
+// no field anywhere that waives it: which classes of work need a permit is
+// configured once, in writing, usually after an incident, and is not re-made
+// by whoever is raising the ticket.
+//
+// Alarm and WorkOrder are separate messages with separate lifecycles, and
+// neither carries the other's state. ClearAlarm does not close work and
+// CloseWork does not clear an alarm: a chiller whose alarm stopped because
+// somebody cycled the power has not been repaired, and a completed job does
+// not make the plant stop shouting. The link is one field on Alarm, written
+// once, and there is no unlink.
+//
+// ListDeficiencies has no time window, and OpenCriticalDeficiencies has no
+// paging cursor. SRS-FAC-008's acceptance is that open critical findings
+// remain visible until closure, and a window is how a hospital stops seeing
+// the stairwell it never unblocked. MitigateDeficiency exists and does not
+// close anything: a fire watch is not a repair.
+//
+// Every reading carries its own source and source reference rather than
+// inheriting the meter's, because the night the gateway was down somebody
+// read the dial, and a consumption figure built partly on that says so.
+//
+// A contractor visit names the work order, asset or task it is for, and one
+// against permit work carries the site induction. Contractors are the people
+// least likely to know the building and most likely to be the ones isolating
+// something.
+//
+// Every measurement is an integer in a base unit: minutes for response and
+// downtime, days for intervals, hours for runtime counters, and the meter's
+// own declared unit for a reading. No floats: a consumption figure that
+// disagrees with the bill in the third decimal place is a conversation
+// nobody wins.
+syntax = "proto3";
+
+package healthcare.facilities.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ppusapati/health/code/gen/go/healthcare/facilities/v1;facilitiesv1";
+
+// The engineering system an asset, work order or alarm belongs to
+// (SRS-FAC-001).
+//
+// An enum rather than free text, because the system decides who is called at
+// three in the morning and what the escalation matrix resolves to.
+enum System {
+  SYSTEM_UNSPECIFIED = 0;
+  SYSTEM_ELECTRICAL = 1;
+  SYSTEM_HVAC = 2;
+  SYSTEM_PLUMBING = 3;
+  // Detection, suppression and the passive measures.
+  SYSTEM_FIRE = 4;
+  // The one system on this list whose failure reaches a patient in minutes.
+  SYSTEM_MEDICAL_GAS = 5;
+  SYSTEM_LIFTS = 6;
+  // RO, softeners and the dialysis loop.
+  SYSTEM_WATER = 7;
+  // STP and ETP.
+  SYSTEM_EFFLUENT = 8;
+  SYSTEM_POWER = 9;
+  SYSTEM_OTHER = 10;
+}
+
+// What happens to the hospital when an asset stops (SRS-FAC-001).
+enum Criticality {
+  CRITICALITY_UNSPECIFIED = 0;
+  // Failure threatens somebody within the hour.
+  CRITICALITY_LIFE = 1;
+  // Failure stops a service.
+  CRITICALITY_HIGH = 2;
+  CRITICALITY_NORMAL = 3;
+  CRITICALITY_LOW = 4;
+}
+
+// Where an asset stands (SRS-FAC-001).
+enum AssetStatus {
+  ASSET_STATUS_UNSPECIFIED = 0;
+  ASSET_STATUS_IN_SERVICE = 1;
+  // Running and not right. Its own state, because "working" and "working for
+  // now" lead to different decisions.
+  ASSET_STATUS_DEGRADED = 2;
+  ASSET_STATUS_DOWN = 3;
+  ASSET_STATUS_DECOMMISSIONED = 4;
+}
+
+// How fast a work order needs somebody (SRS-FAC-002).
+enum Priority {
+  PRIORITY_UNSPECIFIED = 0;
+  PRIORITY_EMERGENCY = 1;
+  PRIORITY_URGENT = 2;
+  PRIORITY_ROUTINE = 3;
+  PRIORITY_PLANNED = 4;
+}
+
+// Where a work order stands (SRS-FAC-002).
+enum WorkState {
+  WORK_STATE_UNSPECIFIED = 0;
+  WORK_STATE_RAISED = 1;
+  WORK_STATE_ASSIGNED = 2;
+  WORK_STATE_IN_PROGRESS = 3;
+  // Waiting on something outside the team. A state rather than a flag,
+  // because an order sitting on hold for a fortnight and one being worked on
+  // look identical otherwise.
+  WORK_STATE_ON_HOLD = 4;
+  // The engineer says it is fixed. Somebody else checks.
+  WORK_STATE_RESOLVED = 5;
+  WORK_STATE_CLOSED = 6;
+  WORK_STATE_CANCELLED = 7;
+}
+
+// Work a hospital chose to do, or is required to do (SRS-FAC-003).
+enum MaintenanceKind {
+  MAINTENANCE_KIND_UNSPECIFIED = 0;
+  MAINTENANCE_KIND_PREVENTIVE = 1;
+  // An inspection somebody outside the hospital requires. Closes with a
+  // certificate rather than a note, and cannot be waived.
+  MAINTENANCE_KIND_STATUTORY = 2;
+}
+
+// What makes a schedule due (SRS-FAC-003, SRS-FAC-007).
+enum Trigger {
+  TRIGGER_UNSPECIFIED = 0;
+  TRIGGER_CALENDAR = 1;
+  // Every N running hours, for plant whose wear follows use.
+  TRIGGER_RUNTIME = 2;
+  // Whichever comes first.
+  TRIGGER_EITHER = 3;
+}
+
+// Where one occurrence of a schedule stands (SRS-FAC-003).
+enum TaskState {
+  TASK_STATE_UNSPECIFIED = 0;
+  TASK_STATE_PLANNED = 1;
+  TASK_STATE_DONE = 2;
+  // The window closed. Kept rather than deleted: the reportable fact is the
+  // inspection that did not happen.
+  TASK_STATE_MISSED = 3;
+  TASK_STATE_WAIVED = 4;
+}
+
+// Where a number came from (SRS-FAC-009).
+enum Source {
+  SOURCE_UNSPECIFIED = 0;
+  SOURCE_MANUAL = 1;
+  SOURCE_SCADA = 2;
+  SOURCE_BMS = 3;
+  SOURCE_AMI = 4;
+  SOURCE_VENDOR = 5;
+  // Derived rather than measured. Its own source because a calculated figure
+  // inherits every error in its inputs.
+  SOURCE_CALCULATED = 6;
+}
+
+// What a meter measures (SRS-FAC-009).
+enum Utility {
+  UTILITY_UNSPECIFIED = 0;
+  UTILITY_ELECTRICITY = 1;
+  UTILITY_WATER = 2;
+  UTILITY_DIESEL = 3;
+  UTILITY_OXYGEN = 4;
+  UTILITY_LPG = 5;
+  UTILITY_STEAM = 6;
+  // What leaves rather than what arrives, metered because the consent to
+  // discharge has a number in it.
+  UTILITY_EFFLUENT = 7;
+}
+
+// Where a planned shutdown stands (SRS-FAC-004).
+enum OutageState {
+  OUTAGE_STATE_UNSPECIFIED = 0;
+  OUTAGE_STATE_PLANNED = 1;
+  OUTAGE_STATE_APPROVED = 2;
+  OUTAGE_STATE_IN_EFFECT = 3;
+  OUTAGE_STATE_RESTORED = 4;
+  OUTAGE_STATE_CANCELLED = 5;
+}
+
+// How loud an alarm or a finding is (SRS-FAC-005, SRS-FAC-008).
+enum Severity {
+  SEVERITY_UNSPECIFIED = 0;
+  SEVERITY_CRITICAL = 1;
+  SEVERITY_MAJOR = 2;
+  SEVERITY_MINOR = 3;
+  // Worth recording and not worth telling anybody about.
+  SEVERITY_INFO = 4;
+}
+
+// What the plant is currently saying (SRS-FAC-005).
+//
+// Two states, and acknowledgement is deliberately not one of them: an alarm
+// still sounding that somebody has seen is a real situation, and a single
+// state field forces it to be misfiled.
+enum AlarmState {
+  ALARM_STATE_UNSPECIFIED = 0;
+  ALARM_STATE_ACTIVE = 1;
+  ALARM_STATE_CLEARED = 2;
+}
+
+// Where a fire or life-safety finding stands (SRS-FAC-008).
+enum DeficiencyState {
+  DEFICIENCY_STATE_UNSPECIFIED = 0;
+  DEFICIENCY_STATE_OPEN = 1;
+  // An interim measure is in place. Explicitly not closure: a mitigation
+  // recorded as a fix is a fire watch nobody stands down.
+  DEFICIENCY_STATE_MITIGATED = 2;
+  DEFICIENCY_STATE_CLOSED = 3;
+}
+
+// Where a contractor visit stands (SRS-FAC-011).
+enum VisitState {
+  VISIT_STATE_UNSPECIFIED = 0;
+  VISIT_STATE_ON_SITE = 1;
+  VISIT_STATE_DEPARTED = 2;
+}
+
+// ------------------------------------------------------ assets (SRS-FAC-001)
+
+// One piece of facilities plant (SRS-FAC-001).
+message Asset {
+  string asset_id = 1;
+  // What is stencilled on the machine.
+  string tag = 2;
+  string name = 3;
+  System system = 4;
+  Criticality criticality = 5;
+  // The asset this one is part of. The hierarchy is this field and nothing
+  // else: a second tree would disagree with it.
+  string parent_id = 6;
+  string facility_id = 7;
+  string location_id = 8;
+  // Where it actually is when the org unit is not precise enough.
+  string location_note = 9;
+  AssetStatus status = 10;
+  string status_reason = 11;
+  google.protobuf.Timestamp status_at = 12;
+  string manufacturer = 13;
+  string model = 14;
+  string serial_number = 15;
+  google.protobuf.Timestamp commissioned_at = 16;
+  // Derived from the readings rather than typed, so it cannot disagree with
+  // them.
+  int32 runtime_hours = 17;
+  google.protobuf.Timestamp runtime_at = 18;
+  google.protobuf.Timestamp created_at = 19;
+  string created_by = 20;
+  int64 version = 21;
+}
+
+message RegisterAssetRequest {
+  string tag = 1;
+  string name = 2;
+  System system = 3;
+  Criticality criticality = 4;
+  string parent_id = 5;
+  string facility_id = 6;
+  string location_id = 7;
+  string location_note = 8;
+  string manufacturer = 9;
+  string model = 10;
+  string serial_number = 11;
+  google.protobuf.Timestamp commissioned_at = 12;
+}
+
+message RegisterAssetResponse { Asset asset = 1; }
+
+message SetAssetStatusRequest {
+  string asset_id = 1;
+  AssetStatus status = 2;
+  // Required for anything other than in service. A machine marked down for no
+  // recorded reason is one nobody can chase.
+  string reason = 3;
+  int64 version = 4;
+}
+
+message SetAssetStatusResponse { Asset asset = 1; }
+
+message GetAssetRequest { string asset_id = 1; }
+message GetAssetResponse { Asset asset = 1; }
+
+message ListAssetsRequest {
+  string facility_id = 1;
+  System system = 2;
+  AssetStatus status = 3;
+  string parent_id = 4;
+  int32 page_size = 5;
+}
+
+message ListAssetsResponse { repeated Asset assets = 1; }
+
+message GetAssetTreeRequest { string root_id = 1; }
+message GetAssetTreeResponse { repeated Asset assets = 1; }
+
+message ListDownAssetsRequest { string facility_id = 1; }
+// Most critical first, then longest down. A list in tag order puts the oxygen
+// manifold below the car park barrier.
+message ListDownAssetsResponse { repeated Asset assets = 1; }
+
+// ------------------------------------- work orders and permits (SRS-FAC-002)
+
+// A configured kind of maintenance work (SRS-FAC-010).
+message WorkClass {
+  string code = 1;
+  string name = 2;
+  // No work of this class starts without a permit to work.
+  bool requires_permit = 3;
+  // The energy source is isolated, locked and tagged, and the tag recorded.
+  // Separate from the permit because they are separate controls.
+  bool requires_loto = 4;
+  bool active = 5;
+  // Required when either flag is set. A class marked unsafe without a reason
+  // is one the next person to review the list will quietly unmark.
+  string note = 6;
+}
+
+message SetWorkClassRequest {
+  string code = 1;
+  string name = 2;
+  bool requires_permit = 3;
+  bool requires_loto = 4;
+  bool active = 5;
+  string note = 6;
+}
+
+message SetWorkClassResponse { WorkClass work_class = 1; }
+
+message ListWorkClassesRequest {}
+message ListWorkClassesResponse { repeated WorkClass work_classes = 1; }
+
+// One piece of facilities work (SRS-FAC-002).
+message WorkOrder {
+  string work_order_id = 1;
+  // The human reference a ward quotes on the phone.
+  string number = 2;
+  string facility_id = 3;
+  // The plant this is about, where there is one. A ceiling leaking into a
+  // ward is real work with no asset behind it.
+  string asset_id = 4;
+  System system = 5;
+  string location_id = 6;
+  string location_note = 7;
+  // What is wrong.
+  string fault = 8;
+  // What it is stopping. The field that decides priority honestly.
+  string impact = 9;
+  Priority priority = 10;
+  string class_code = 11;
+  // Copied from the class and held to it by the database, so that "an unsafe
+  // class cannot close without its paperwork" is a rule about one row.
+  bool class_requires_permit = 12;
+  bool class_requires_loto = 13;
+  // Resolved when the order is raised, so a ticket always has an owner.
+  string owner_team = 14;
+  string owner_user_id = 15;
+  WorkState state = 16;
+  google.protobuf.Timestamp raised_at = 17;
+  string raised_by = 18;
+  google.protobuf.Timestamp respond_by = 19;
+  google.protobuf.Timestamp resolve_by = 20;
+  google.protobuf.Timestamp responded_at = 21;
+  google.protobuf.Timestamp started_at = 22;
+  google.protobuf.Timestamp resolved_at = 23;
+  google.protobuf.Timestamp closed_at = 24;
+  string closed_by = 25;
+  string permit_ref = 26;
+  string permit_issued_by = 27;
+  string loto_ref = 28;
+  string loto_applied_by = 29;
+  string completion_note = 30;
+  string root_cause = 31;
+  // How long the asset was unavailable. A KPI input rather than something
+  // derived from the timestamps: an order raised on Friday and worked on
+  // Monday did not have the chiller down all weekend.
+  int32 downtime_minutes = 32;
+  string hold_reason = 33;
+  string cancel_reason = 34;
+  int64 version = 35;
+}
+
+// What a work order has missed (SRS-FAC-002).
+message Breach {
+  bool response = 1;
+  bool resolution = 2;
+  int32 response_late_minutes = 3;
+  int32 resolution_late_minutes = 4;
+}
+
+message RaiseWorkRequest {
+  // Left empty, the service mints one.
+  string number = 1;
+  string facility_id = 2;
+  string asset_id = 3;
+  // Ignored when asset_id is set: the asset knows its own system, and taking
+  // it from the caller would let a ticket about the oxygen manifold be filed
+  // as plumbing and escalate to nobody.
+  System system = 4;
+  string location_id = 5;
+  string location_note = 6;
+  string fault = 7;
+  string impact = 8;
+  Priority priority = 9;
+  string class_code = 10;
+}
+
+message RaiseWorkResponse { WorkOrder work_order = 1; }
+
+message AssignWorkRequest {
+  string work_order_id = 1;
+  string user_id = 2;
+  string team = 3;
+  int64 version = 4;
+}
+
+message AssignWorkResponse { WorkOrder work_order = 1; }
+
+// Begins the work, with the paperwork that makes it safe (SRS-FAC-010).
+//
+// A class that needs a permit additionally needs fac.permit, which is a
+// different question from "may do maintenance" with a shorter answer.
+message StartWorkRequest {
+  string work_order_id = 1;
+  string permit_ref = 2;
+  string permit_issued_by = 3;
+  string loto_ref = 4;
+  string loto_applied_by = 5;
+  int64 version = 6;
+}
+
+message StartWorkResponse { WorkOrder work_order = 1; }
+
+message HoldWorkRequest {
+  string work_order_id = 1;
+  // What the work is waiting for. An order on hold for no recorded reason
+  // never comes off hold, because nobody knows what to chase.
+  string reason = 2;
+  int64 version = 3;
+}
+
+message HoldWorkResponse { WorkOrder work_order = 1; }
+
+message ResolveWorkRequest {
+  string work_order_id = 1;
+  string note = 2;
+  string root_cause = 3;
+  int32 downtime_minutes = 4;
+  int64 version = 5;
+}
+
+message ResolveWorkResponse { WorkOrder work_order = 1; }
+
+// Signs off resolved work. It takes no permit fields: the paperwork was
+// demanded at StartWork, and asking again here would be asking after it could
+// have helped.
+message CloseWorkRequest {
+  string work_order_id = 1;
+  int64 version = 2;
+}
+
+message CloseWorkResponse { WorkOrder work_order = 1; }
+
+message CancelWorkRequest {
+  string work_order_id = 1;
+  string reason = 2;
+  int64 version = 3;
+}
+
+message CancelWorkResponse { WorkOrder work_order = 1; }
+
+message GetWorkRequest { string work_order_id = 1; }
+message GetWorkResponse {
+  WorkOrder work_order = 1;
+  Breach breach = 2;
+}
+
+message ListWorkRequest {
+  string facility_id = 1;
+  string asset_id = 2;
+  System system = 3;
+  WorkState state = 4;
+  bool open_only = 5;
+  google.protobuf.Timestamp from = 6;
+  google.protobuf.Timestamp to = 7;
+  int32 page_size = 8;
+}
+
+message ListWorkResponse { repeated WorkOrder work_orders = 1; }
+
+message GetWorklistRequest { string facility_id = 1; }
+// Breaches first, then by priority, then oldest.
+message GetWorklistResponse { repeated WorkOrder work_orders = 1; }
+
+// ----------------------------- preventive maintenance (SRS-FAC-003/007)
+
+// A recurring maintenance or inspection obligation (SRS-FAC-003).
+message Schedule {
+  string schedule_id = 1;
+  string asset_id = 2;
+  string facility_id = 3;
+  string title = 4;
+  MaintenanceKind kind = 5;
+  Trigger trigger = 6;
+  int32 interval_days = 7;
+  int32 interval_runtime_hours = 8;
+  // Who requires a statutory inspection. Required for one: "statutory" with
+  // nobody named is a schedule that will be deferred like any other.
+  string authority = 9;
+  bool requires_evidence = 10;
+  string work_class_code = 11;
+  int32 grace_days = 12;
+  bool active = 13;
+  int64 version = 14;
+}
+
+// One occurrence of a schedule (SRS-FAC-003, SRS-FAC-007).
+message Task {
+  string task_id = 1;
+  string schedule_id = 2;
+  string asset_id = 3;
+  string facility_id = 4;
+  string title = 5;
+  // Copied from the schedule and held to it, so that "a completed statutory
+  // inspection carries a certificate" is a rule about one row.
+  MaintenanceKind schedule_kind = 6;
+  bool schedule_requires_evidence = 7;
+  google.protobuf.Timestamp due_at = 8;
+  int32 due_runtime_hours = 9;
+  // Which trigger brought it due. SRS-FAC-007's evidence that a runtime
+  // trigger works.
+  Trigger triggered_by = 10;
+  TaskState state = 11;
+  google.protobuf.Timestamp done_at = 12;
+  string done_by = 13;
+  string findings = 14;
+  string evidence_ref = 15;
+  string certificate_ref = 16;
+  google.protobuf.Timestamp certificate_expires_at = 17;
+  string waived_reason = 18;
+  string work_order_id = 19;
+  int64 version = 20;
+}
+
+message AddScheduleRequest {
+  string asset_id = 1;
+  string facility_id = 2;
+  string title = 3;
+  MaintenanceKind kind = 4;
+  Trigger trigger = 5;
+  int32 interval_days = 6;
+  int32 interval_runtime_hours = 7;
+  string authority = 8;
+  bool requires_evidence = 9;
+  string work_class_code = 10;
+  int32 grace_days = 11;
+}
+
+message AddScheduleResponse { Schedule schedule = 1; }
+
+message ListSchedulesRequest {
+  string asset_id = 1;
+  string facility_id = 2;
+  int32 page_size = 3;
+}
+
+message ListSchedulesResponse { repeated Schedule schedules = 1; }
+
+// Plans an occurrence for every schedule that has come round.
+message PlanDueRequest { string facility_id = 1; }
+message PlanDueResponse { repeated Task tasks = 1; }
+
+message CompleteTaskRequest {
+  string task_id = 1;
+  string findings = 2;
+  string evidence_ref = 3;
+  // Both required for a statutory inspection. A certificate with no expiry is
+  // one nobody renews.
+  string certificate_ref = 4;
+  google.protobuf.Timestamp certificate_expires_at = 5;
+  string work_order_id = 6;
+  // Left zero, the asset's own counter is used: the two disagreeing is how
+  // the next service fires at the wrong time.
+  int32 runtime_hours = 7;
+  int64 version = 8;
+}
+
+message CompleteTaskResponse { Task task = 1; }
+
+// A statutory inspection cannot be waived, and there is no field here that
+// changes that. If it genuinely cannot happen, the schedule is what changes.
+message WaiveTaskRequest {
+  string task_id = 1;
+  string reason = 2;
+  int64 version = 3;
+}
+
+message WaiveTaskResponse { Task task = 1; }
+
+message ListTasksRequest {
+  string schedule_id = 1;
+  string asset_id = 2;
+  string facility_id = 3;
+  TaskState state = 4;
+  MaintenanceKind kind = 5;
+  int32 page_size = 6;
+}
+
+message ListTasksResponse { repeated Task tasks = 1; }
+
+// The due/overdue picture (SRS-FAC-003).
+message MaintenanceReport {
+  int32 planned = 1;
+  int32 overdue = 2;
+  int32 done = 3;
+  int32 missed = 4;
+  int32 waived = 5;
+  // Counted separately because it is a different kind of problem: the rest is
+  // housekeeping, this is an operating licence.
+  int32 statutory_overdue = 6;
+  int32 evidence_missing = 7;
+  // Statutory first, then oldest.
+  repeated Task overdue_tasks = 8;
+}
+
+message GetMaintenanceReportRequest { string facility_id = 1; }
+message GetMaintenanceReportResponse { MaintenanceReport report = 1; }
+
+// One reading of an asset's hour counter (SRS-FAC-007).
+message RuntimeReading {
+  string reading_id = 1;
+  string asset_id = 2;
+  // The counter as read, not hours since the last reading.
+  int32 hours = 3;
+  google.protobuf.Timestamp read_at = 4;
+  Source source = 5;
+  string source_ref = 6;
+  string recorded_by = 7;
+  // The one legitimate reason a cumulative reading goes backwards.
+  bool counter_replaced = 8;
+  string note = 9;
+}
+
+message RecordRuntimeRequest {
+  string asset_id = 1;
+  int32 hours = 2;
+  google.protobuf.Timestamp read_at = 3;
+  Source source = 4;
+  string source_ref = 5;
+  bool counter_replaced = 6;
+  string note = 7;
+}
+
+message RecordRuntimeResponse { RuntimeReading reading = 1; }
+
+// ----------------------------------------- planned outages (SRS-FAC-004)
+
+// A utility shutdown permit and the interruption it covers (SRS-FAC-004).
+message Outage {
+  string outage_id = 1;
+  // The permit number the estates office writes in its book.
+  string reference = 2;
+  string facility_id = 3;
+  System system = 4;
+  string title = 5;
+  // Why the supply has to go off. The part a ward asks about when it objects.
+  string reason = 6;
+  google.protobuf.Timestamp planned_from = 7;
+  google.protobuf.Timestamp planned_to = 8;
+  google.protobuf.Timestamp actual_from = 9;
+  google.protobuf.Timestamp actual_to = 10;
+  OutageState state = 11;
+  string requested_by = 12;
+  google.protobuf.Timestamp requested_at = 13;
+  string approved_by = 14;
+  google.protobuf.Timestamp approved_at = 15;
+  // The safety permit the isolation is done under, which is not the same as
+  // this outage's own reference.
+  string permit_ref = 16;
+  // What covers the affected areas while the supply is off.
+  string contingency = 17;
+  string restored_by = 18;
+  string cancel_reason = 19;
+  int64 version = 20;
+}
+
+// One department a shutdown reaches (SRS-FAC-004).
+message OutageArea {
+  string area_id = 1;
+  string outage_id = 2;
+  string org_unit_id = 3;
+  string name = 4;
+  // An area that cannot simply be told. A critical area has to answer before
+  // the supply goes off.
+  bool critical = 5;
+  google.protobuf.Timestamp notified_at = 6;
+  google.protobuf.Timestamp acknowledged_at = 7;
+  string acknowledged_by = 8;
+  // What the area said if it said no. Recorded rather than enforced: a ward
+  // cannot veto a statutory shutdown, but the objection on the record changes
+  // how the conversation goes.
+  string objection = 9;
+  int64 version = 10;
+}
+
+message AreaInput {
+  string org_unit_id = 1;
+  string name = 2;
+  bool critical = 3;
+}
+
+// The areas are declared with the outage, because the permit is approved
+// against a set of consequences and adding one afterwards would mean it was
+// approved against a different set.
+message PlanOutageRequest {
+  string reference = 1;
+  string facility_id = 2;
+  System system = 3;
+  string title = 4;
+  string reason = 5;
+  google.protobuf.Timestamp planned_from = 6;
+  google.protobuf.Timestamp planned_to = 7;
+  string contingency = 8;
+  repeated AreaInput areas = 9;
+}
+
+message PlanOutageResponse {
+  Outage outage = 1;
+  repeated OutageArea areas = 2;
+  // Live shutdowns of the same system whose windows cross this one. A warning
+  // rather than a refusal: two isolations of one system over different wards
+  // are perfectly reasonable.
+  repeated Outage overlapping = 3;
+}
+
+// Signs the permit and notifies every declared area, in one call. A permit
+// signed today with the telling left for tomorrow is a permit signed without
+// it.
+message ApproveOutageRequest {
+  string outage_id = 1;
+  string permit_ref = 2;
+  int64 version = 3;
+}
+
+message ApproveOutageResponse {
+  Outage outage = 1;
+  repeated OutageArea areas = 2;
+}
+
+message AcknowledgeOutageRequest {
+  string outage_id = 1;
+  string area_id = 2;
+  string objection = 3;
+  int64 version = 4;
+}
+
+message AcknowledgeOutageResponse { OutageArea area = 1; }
+
+// Records the supply going off. Every critical area must have answered.
+message StartOutageRequest {
+  string outage_id = 1;
+  int64 version = 2;
+}
+
+message StartOutageResponse { Outage outage = 1; }
+
+message RestoreOutageRequest {
+  string outage_id = 1;
+  int64 version = 2;
+}
+
+message RestoreOutageResponse { Outage outage = 1; }
+
+message CancelOutageRequest {
+  string outage_id = 1;
+  string reason = 2;
+  int64 version = 3;
+}
+
+message CancelOutageResponse { Outage outage = 1; }
+
+message GetOutageRequest { string outage_id = 1; }
+message GetOutageResponse {
+  Outage outage = 1;
+  repeated OutageArea areas = 2;
+}
+
+message ListOutagesRequest {
+  string facility_id = 1;
+  System system = 2;
+  bool live_only = 3;
+  google.protobuf.Timestamp from = 4;
+  google.protobuf.Timestamp to = 5;
+  int32 page_size = 6;
+}
+
+message ListOutagesResponse { repeated Outage outages = 1; }
+
+// ------------------------------------------- SCADA alarms (SRS-FAC-005)
+
+// One event from a facility gateway (SRS-FAC-005).
+//
+// There is no work order state on this message and no assignee. The alarm and
+// the maintenance lifecycle stay distinct because neither can express the
+// other's.
+message Alarm {
+  string alarm_id = 1;
+  string gateway_id = 2;
+  string point_ref = 3;
+  // The gateway's own identifier. A gateway reconnecting after a network drop
+  // replays its buffer, and this is what recognises it.
+  string external_id = 4;
+  string asset_id = 5;
+  string facility_id = 6;
+  System system = 7;
+  Severity severity = 8;
+  // The gateway's text, kept as it arrived: a rewritten alarm message cannot
+  // be matched against the panel.
+  string message = 9;
+  Source source = 10;
+  google.protobuf.Timestamp raised_at = 11;
+  google.protobuf.Timestamp cleared_at = 12;
+  AlarmState state = 13;
+  google.protobuf.Timestamp acknowledged_at = 14;
+  string acknowledged_by = 15;
+  // Written once. Repointing it would rewrite the answer to "what did we do
+  // about the gas alarm on the 14th".
+  string work_order_id = 16;
+  google.protobuf.Timestamp linked_at = 17;
+  string linked_by = 18;
+  int64 version = 19;
+}
+
+// Which alarms raise work, and what the resulting work looks like
+// (SRS-FAC-005's "when configured").
+message AlarmRule {
+  string facility_id = 1;
+  System system = 2;
+  // The quietest alarm that raises work.
+  Severity min_severity = 3;
+  Priority priority = 4;
+  string class_code = 5;
+  string owner_team = 6;
+  bool active = 7;
+}
+
+// A person who has noticed something wrong raises a work order. Alarms come
+// from plant: SOURCE_MANUAL is refused here.
+message IngestAlarmRequest {
+  string gateway_id = 1;
+  string point_ref = 2;
+  string external_id = 3;
+  string asset_id = 4;
+  string facility_id = 5;
+  System system = 6;
+  Severity severity = 7;
+  string message = 8;
+  Source source = 9;
+  google.protobuf.Timestamp raised_at = 10;
+}
+
+message IngestAlarmResponse {
+  Alarm alarm = 1;
+  // Present when a configured rule raised one.
+  WorkOrder work_order = 2;
+  bool raised_work = 3;
+  // The gateway replayed something already recorded. Not an error.
+  bool duplicate = 4;
+}
+
+// Records the plant no longer asserting the alarm. It does not close work.
+message ClearAlarmRequest {
+  string alarm_id = 1;
+  int64 version = 2;
+}
+
+message ClearAlarmResponse { Alarm alarm = 1; }
+
+// Allowed on a cleared alarm: a pressure dip at 3am that cleared itself still
+// needs somebody to have looked at it.
+message AcknowledgeAlarmRequest {
+  string alarm_id = 1;
+  int64 version = 2;
+}
+
+message AcknowledgeAlarmResponse { Alarm alarm = 1; }
+
+message LinkAlarmWorkRequest {
+  string alarm_id = 1;
+  string work_order_id = 2;
+  int64 version = 3;
+}
+
+message LinkAlarmWorkResponse { Alarm alarm = 1; }
+
+message SetAlarmRuleRequest {
+  string facility_id = 1;
+  System system = 2;
+  Severity min_severity = 3;
+  Priority priority = 4;
+  string class_code = 5;
+  string owner_team = 6;
+  bool active = 7;
+}
+
+message SetAlarmRuleResponse { AlarmRule rule = 1; }
+
+message ListAlarmsRequest {
+  string facility_id = 1;
+  System system = 2;
+  AlarmState state = 3;
+  // Cleared alarms included: one that came and went without anybody
+  // acknowledging it is the one worth looking at.
+  bool unanswered_only = 4;
+  google.protobuf.Timestamp from = 5;
+  google.protobuf.Timestamp to = 6;
+  int32 page_size = 7;
+}
+
+message ListAlarmsResponse { repeated Alarm alarms = 1; }
+
+// -------------------------------- fire and life safety (SRS-FAC-008)
+
+// A fire or life-safety finding (SRS-FAC-008).
+message Deficiency {
+  string deficiency_id = 1;
+  string task_id = 2;
+  string asset_id = 3;
+  string facility_id = 4;
+  string location_id = 5;
+  string location_note = 6;
+  System system = 7;
+  Severity severity = 8;
+  string finding = 9;
+  // The clause it breaches. What turns "the door does not shut" into
+  // something a hospital can be held to.
+  string standard = 10;
+  DeficiencyState state = 11;
+  google.protobuf.Timestamp raised_at = 12;
+  string raised_by = 13;
+  google.protobuf.Timestamp due_at = 14;
+  string work_order_id = 15;
+  string mitigation_note = 16;
+  google.protobuf.Timestamp mitigated_at = 17;
+  string mitigated_by = 18;
+  google.protobuf.Timestamp closed_at = 19;
+  string closed_by = 20;
+  // A critical finding does not close on somebody's word.
+  string closure_evidence_ref = 21;
+  int64 version = 22;
+}
+
+// A critical finding with no work_order_id gets one raised for it: a critical
+// deficiency that is only a note is one nobody is assigned to.
+message RaiseDeficiencyRequest {
+  string task_id = 1;
+  string asset_id = 2;
+  string facility_id = 3;
+  string location_id = 4;
+  string location_note = 5;
+  System system = 6;
+  Severity severity = 7;
+  string finding = 8;
+  string standard = 9;
+  google.protobuf.Timestamp due_at = 10;
+  string work_order_id = 11;
+  string class_code = 12;
+  Priority priority = 13;
+}
+
+message RaiseDeficiencyResponse {
+  Deficiency deficiency = 1;
+  WorkOrder work_order = 2;
+  bool raised_work = 3;
+}
+
+// Records an interim measure. It closes nothing: a fire watch is not a repair.
+message MitigateDeficiencyRequest {
+  string deficiency_id = 1;
+  string note = 2;
+  int64 version = 3;
+}
+
+message MitigateDeficiencyResponse { Deficiency deficiency = 1; }
+
+message CloseDeficiencyRequest {
+  string deficiency_id = 1;
+  string evidence_ref = 2;
+  int64 version = 3;
+}
+
+message CloseDeficiencyResponse { Deficiency deficiency = 1; }
+
+// No time window, deliberately.
+message ListDeficienciesRequest {
+  string facility_id = 1;
+  string task_id = 2;
+  Severity severity = 3;
+  bool open_only = 4;
+  int32 page_size = 5;
+}
+
+message ListDeficienciesResponse { repeated Deficiency deficiencies = 1; }
+
+// SRS-FAC-008's acceptance as a call: every open critical finding,
+// unmitigated first, with no window and no cursor.
+message ListOpenCriticalRequest { string facility_id = 1; }
+message ListOpenCriticalResponse { repeated Deficiency deficiencies = 1; }
+
+// The findings that stop an inspection being signed off.
+message ListBlockingRequest { string task_id = 1; }
+message ListBlockingResponse { repeated Deficiency deficiencies = 1; }
+
+message SafetyReport {
+  int32 open_critical = 1;
+  int32 mitigated = 2;
+  int32 overdue = 3;
+  int32 closed_in_window = 4;
+  // How long the oldest unclosed critical finding has been outstanding. One
+  // number a board can be shown and cannot misread.
+  int32 oldest_open_days = 5;
+  repeated Deficiency findings = 6;
+}
+
+message GetSafetyReportRequest {
+  string facility_id = 1;
+  google.protobuf.Timestamp from = 2;
+  google.protobuf.Timestamp to = 3;
+}
+
+message GetSafetyReportResponse { SafetyReport report = 1; }
+
+// ------------------------------- utility metering and KPIs (SRS-FAC-009)
+
+// One measuring point (SRS-FAC-009).
+message Meter {
+  string meter_id = 1;
+  string code = 2;
+  string name = 3;
+  Utility utility = 4;
+  // The unit every reading on this meter is in. Readings are integers in this
+  // unit; a meter that reads in fractions declares a finer unit.
+  string unit = 5;
+  string facility_id = 6;
+  string location_id = 7;
+  string asset_id = 8;
+  // How this meter is normally read. A reading may declare a different one.
+  Source source = 9;
+  string source_ref = 10;
+  bool cumulative = 11;
+  // Where a cumulative register wraps back to zero. Zero means it does not.
+  int32 register_max = 12;
+  bool active = 13;
+  int64 version = 14;
+}
+
+// One meter reading (SRS-FAC-009).
+message Reading {
+  string reading_id = 1;
+  string meter_id = 2;
+  // In the meter's declared unit.
+  int32 value = 3;
+  google.protobuf.Timestamp read_at = 4;
+  // This reading's provenance, which may differ from the meter's.
+  Source source = 5;
+  string source_ref = 6;
+  string recorded_by = 7;
+  bool rolled_over = 8;
+  string note = 9;
+}
+
+message AddMeterRequest {
+  string code = 1;
+  string name = 2;
+  Utility utility = 3;
+  string unit = 4;
+  string facility_id = 5;
+  string location_id = 6;
+  string asset_id = 7;
+  Source source = 8;
+  string source_ref = 9;
+  bool cumulative = 10;
+  int32 register_max = 11;
+}
+
+message AddMeterResponse { Meter meter = 1; }
+
+message RecordMeterReadingRequest {
+  string meter_id = 1;
+  int32 value = 2;
+  google.protobuf.Timestamp read_at = 3;
+  // Left unspecified, the meter's usual source is used.
+  Source source = 4;
+  string source_ref = 5;
+  bool rolled_over = 6;
+  string note = 7;
+}
+
+message RecordMeterReadingResponse { Reading reading = 1; }
+
+message ListMetersRequest {
+  string facility_id = 1;
+  Utility utility = 2;
+  int32 page_size = 3;
+}
+
+message ListMetersResponse { repeated Meter meters = 1; }
+
+// What a meter recorded over a window, with its provenance (SRS-FAC-009).
+message Consumption {
+  string meter_id = 1;
+  Utility utility = 2;
+  string unit = 3;
+  google.protobuf.Timestamp from = 4;
+  google.protobuf.Timestamp to = 5;
+  int32 quantity = 6;
+  // How many readings the figure rests on. A month's consumption from two
+  // readings is an average, not a series.
+  int32 readings = 7;
+  // The distinct provenances that contributed.
+  repeated Source sources = 8;
+  // Set when any contributing reading was typed or derived rather than
+  // measured.
+  bool estimated = 9;
+  int32 rollovers = 10;
+}
+
+message GetConsumptionRequest {
+  string meter_id = 1;
+  google.protobuf.Timestamp from = 2;
+  google.protobuf.Timestamp to = 3;
+}
+
+message GetConsumptionResponse {
+  Consumption consumption = 1;
+  // False when the series could not produce a trustworthy figure — one
+  // reading of a counting register, or a counter that went backwards without
+  // declaring a rollover.
+  bool available = 2;
+}
+
+// How long a system was unavailable (SRS-FAC-009).
+message Downtime {
+  System system = 1;
+  int32 minutes = 2;
+  int32 incidents = 3;
+  // The provenance. A downtime KPI with no way back to the incidents cannot
+  // be investigated.
+  repeated string work_order_ids = 4;
+  // Closed orders on down assets that recorded no downtime, so a
+  // suspiciously low figure declares its own gap.
+  int32 unmeasured = 5;
+}
+
+message GetDowntimeRequest {
+  string facility_id = 1;
+  google.protobuf.Timestamp from = 2;
+  google.protobuf.Timestamp to = 3;
+}
+
+message GetDowntimeResponse { repeated Downtime downtime = 1; }
+
+message SLAPerformance {
+  int32 open = 1;
+  int32 response_breaches = 2;
+  int32 resolution_breaches = 3;
+  // The open work furthest past its target, which is what somebody should
+  // look at rather than a percentage nobody acts on.
+  repeated WorkOrder worst_open = 4;
+}
+
+message GetPerformanceRequest { string facility_id = 1; }
+message GetPerformanceResponse { SLAPerformance performance = 1; }
+
+// ------------------------------------ contractor visits (SRS-FAC-011)
+
+// A contractor attendance (SRS-FAC-011).
+message Visit {
+  string visit_id = 1;
+  string vendor_name = 2;
+  // The contract or purchase order this visit is under.
+  string vendor_ref = 3;
+  string contact_name = 4;
+  // The people who actually came. Names rather than accounts: a contractor's
+  // engineer has no login here.
+  repeated string technicians = 5;
+  string facility_id = 6;
+  // At least one of the three. A visit against nothing is a visitor log
+  // entry, which is a different system's problem.
+  string work_order_id = 7;
+  string asset_id = 8;
+  string task_id = 9;
+  // Read from the work order rather than taken from the caller: a contractor
+  // asked at the gate whether their work needs a permit will say no.
+  bool work_requires_permit = 10;
+  string induction_ref = 11;
+  string purpose = 12;
+  VisitState state = 13;
+  google.protobuf.Timestamp signed_in_at = 14;
+  string signed_in_by = 15;
+  google.protobuf.Timestamp signed_out_at = 16;
+  string signed_out_by = 17;
+  // Required to sign out. The reference points at a PDF nobody will open; the
+  // summary is what appears in the asset's history.
+  string service_report_ref = 18;
+  string report_summary = 19;
+  repeated string parts_used = 20;
+  // Work the contractor says is still needed. Captured because it is
+  // otherwise said out loud in a corridor and lost.
+  string follow_up = 21;
+  int64 version = 22;
+}
+
+message SignInVendorRequest {
+  string vendor_name = 1;
+  string vendor_ref = 2;
+  string contact_name = 3;
+  repeated string technicians = 4;
+  string facility_id = 5;
+  string work_order_id = 6;
+  string asset_id = 7;
+  string task_id = 8;
+  string induction_ref = 9;
+  string purpose = 10;
+}
+
+message SignInVendorResponse { Visit visit = 1; }
+
+message SignOutVendorRequest {
+  string visit_id = 1;
+  string service_report_ref = 2;
+  string report_summary = 3;
+  repeated string parts_used = 4;
+  string follow_up = 5;
+  int64 version = 6;
+}
+
+message SignOutVendorResponse { Visit visit = 1; }
+
+message ListVendorVisitsRequest {
+  string facility_id = 1;
+  string work_order_id = 2;
+  string asset_id = 3;
+  // Longest on site first: the order that surfaces the visit somebody forgot
+  // to sign out, and the list a roll call needs.
+  bool on_site_only = 4;
+  int32 page_size = 5;
+}
+
+message ListVendorVisitsResponse { repeated Visit visits = 1; }
+
+// Facilities engineering operations (SRS-FAC-001 … 011).
+service FacilitiesService {
+  // Assets (SRS-FAC-001).
+  rpc RegisterAsset(RegisterAssetRequest) returns (RegisterAssetResponse);
+  rpc SetAssetStatus(SetAssetStatusRequest) returns (SetAssetStatusResponse);
+  rpc GetAsset(GetAssetRequest) returns (GetAssetResponse);
+  rpc ListAssets(ListAssetsRequest) returns (ListAssetsResponse);
+  rpc GetAssetTree(GetAssetTreeRequest) returns (GetAssetTreeResponse);
+  rpc ListDownAssets(ListDownAssetsRequest) returns (ListDownAssetsResponse);
+
+  // Work classes and the permit contract (SRS-FAC-010).
+  rpc SetWorkClass(SetWorkClassRequest) returns (SetWorkClassResponse);
+  rpc ListWorkClasses(ListWorkClassesRequest) returns (ListWorkClassesResponse);
+
+  // Work orders (SRS-FAC-002).
+  rpc RaiseWork(RaiseWorkRequest) returns (RaiseWorkResponse);
+  rpc AssignWork(AssignWorkRequest) returns (AssignWorkResponse);
+  rpc StartWork(StartWorkRequest) returns (StartWorkResponse);
+  rpc HoldWork(HoldWorkRequest) returns (HoldWorkResponse);
+  rpc ResolveWork(ResolveWorkRequest) returns (ResolveWorkResponse);
+  rpc CloseWork(CloseWorkRequest) returns (CloseWorkResponse);
+  rpc CancelWork(CancelWorkRequest) returns (CancelWorkResponse);
+  rpc GetWork(GetWorkRequest) returns (GetWorkResponse);
+  rpc ListWork(ListWorkRequest) returns (ListWorkResponse);
+  rpc GetWorklist(GetWorklistRequest) returns (GetWorklistResponse);
+
+  // Preventive and statutory maintenance (SRS-FAC-003, SRS-FAC-007).
+  rpc AddSchedule(AddScheduleRequest) returns (AddScheduleResponse);
+  rpc ListSchedules(ListSchedulesRequest) returns (ListSchedulesResponse);
+  rpc PlanDue(PlanDueRequest) returns (PlanDueResponse);
+  rpc CompleteTask(CompleteTaskRequest) returns (CompleteTaskResponse);
+  rpc WaiveTask(WaiveTaskRequest) returns (WaiveTaskResponse);
+  rpc ListTasks(ListTasksRequest) returns (ListTasksResponse);
+  rpc GetMaintenanceReport(GetMaintenanceReportRequest)
+      returns (GetMaintenanceReportResponse);
+  rpc RecordRuntime(RecordRuntimeRequest) returns (RecordRuntimeResponse);
+
+  // Planned utility shutdowns (SRS-FAC-004).
+  rpc PlanOutage(PlanOutageRequest) returns (PlanOutageResponse);
+  rpc ApproveOutage(ApproveOutageRequest) returns (ApproveOutageResponse);
+  rpc AcknowledgeOutage(AcknowledgeOutageRequest)
+      returns (AcknowledgeOutageResponse);
+  rpc StartOutage(StartOutageRequest) returns (StartOutageResponse);
+  rpc RestoreOutage(RestoreOutageRequest) returns (RestoreOutageResponse);
+  rpc CancelOutage(CancelOutageRequest) returns (CancelOutageResponse);
+  rpc GetOutage(GetOutageRequest) returns (GetOutageResponse);
+  rpc ListOutages(ListOutagesRequest) returns (ListOutagesResponse);
+
+  // Plant alarms (SRS-FAC-005, SRS-FAC-006).
+  rpc IngestAlarm(IngestAlarmRequest) returns (IngestAlarmResponse);
+  rpc ClearAlarm(ClearAlarmRequest) returns (ClearAlarmResponse);
+  rpc AcknowledgeAlarm(AcknowledgeAlarmRequest)
+      returns (AcknowledgeAlarmResponse);
+  rpc LinkAlarmWork(LinkAlarmWorkRequest) returns (LinkAlarmWorkResponse);
+  rpc SetAlarmRule(SetAlarmRuleRequest) returns (SetAlarmRuleResponse);
+  rpc ListAlarms(ListAlarmsRequest) returns (ListAlarmsResponse);
+
+  // Fire and life safety (SRS-FAC-008).
+  rpc RaiseDeficiency(RaiseDeficiencyRequest) returns (RaiseDeficiencyResponse);
+  rpc MitigateDeficiency(MitigateDeficiencyRequest)
+      returns (MitigateDeficiencyResponse);
+  rpc CloseDeficiency(CloseDeficiencyRequest) returns (CloseDeficiencyResponse);
+  rpc ListDeficiencies(ListDeficienciesRequest)
+      returns (ListDeficienciesResponse);
+  rpc ListOpenCritical(ListOpenCriticalRequest)
+      returns (ListOpenCriticalResponse);
+  rpc ListBlocking(ListBlockingRequest) returns (ListBlockingResponse);
+  rpc GetSafetyReport(GetSafetyReportRequest) returns (GetSafetyReportResponse);
+
+  // Utility metering and KPIs (SRS-FAC-009).
+  rpc AddMeter(AddMeterRequest) returns (AddMeterResponse);
+  rpc RecordMeterReading(RecordMeterReadingRequest)
+      returns (RecordMeterReadingResponse);
+  rpc ListMeters(ListMetersRequest) returns (ListMetersResponse);
+  rpc GetConsumption(GetConsumptionRequest) returns (GetConsumptionResponse);
+  rpc GetDowntime(GetDowntimeRequest) returns (GetDowntimeResponse);
+  rpc GetPerformance(GetPerformanceRequest) returns (GetPerformanceResponse);
+
+  // Contractor attendance (SRS-FAC-011).
+  rpc SignInVendor(SignInVendorRequest) returns (SignInVendorResponse);
+  rpc SignOutVendor(SignOutVendorRequest) returns (SignOutVendorResponse);
+  rpc ListVendorVisits(ListVendorVisitsRequest)
+      returns (ListVendorVisitsResponse);
+}

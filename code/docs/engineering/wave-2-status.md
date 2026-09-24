@@ -22,8 +22,9 @@ materials and inventory, SRS-BIO biomedical engineering, SRS-QMS quality
 management, SRS-IPC infection prevention and control, SRS-MRD medical
 records and health information management, SRS-DIET dietetics and kitchen
 operations, SRS-HKP housekeeping and environmental services and SRS-LND
-laundry and linen. Their rows are below. Three support-service families
-remain: SRS-AMB, SRS-FAC and SRS-MORT.
+laundry and linen, SRS-AMB ambulance and fleet operations, SRS-MORT
+mortuary operations and SRS-FAC facilities engineering. Their rows are
+below. No family in this wave is unstarted.
 
 `make traceability` reads a row naming a requirement as a claim about it
 unless the row says the work is not built, so the unbuilt ER requirements are
@@ -110,7 +111,9 @@ clinician, and `ValidatedInputs()` is a function rather than a convention.
 | SRS-DIET Dietetics and Kitchen | 9 | **9 implemented** — see below |
 | SRS-HKP Housekeeping and Environmental Services | 8 | **8 implemented** — see below |
 | SRS-LND Laundry and Linen | 7 | **7 implemented** — see below |
-| SRS-AMB, SRS-FAC, SRS-MORT support services | 28 | **Not started** — except SRS-FAC-012 above |
+| SRS-AMB Ambulance and Fleet | 8 | **8 implemented** — see below |
+| SRS-MORT Mortuary Operations | 8 | **8 implemented** — see below |
+| SRS-FAC Facilities Engineering | 12 | **12 implemented** — SRS-FAC-012 above, the other eleven below |
 | SRS-OPSAPI / OPSNFR / OPSSEC / OPSWEB | 32 | **Partial** — the three foundations above |
 
 ### A note on SRS-BIO
@@ -1503,6 +1506,113 @@ deployment requiring one is requiring that somebody typed something. The
 records context has `records.certificate_version` and the port would be one
 method; it is not built, and a deployment should know that the check is a
 presence check rather than a real one.
+
+## SRS-FAC — Facilities engineering operations
+
+Twelve requirements, all implemented. SRS-FAC-012's escalation matrix was
+built with the Wave-2 foundations and is in the table above; the other eleven
+are here.
+
+Four rules here are held by the database rather than by the application
+remembering, and all four use the same shape: a composite foreign key carrying
+a denormalised column. A CHECK constraint can only see the row it is on, so a
+rule that depends on a fact in another table is not expressible as a CHECK
+unless the fact is copied onto the row. Copying invites drift, and the
+composite key removes it — the copy must match the original or the row cannot
+exist, and `ON UPDATE CASCADE` rewrites every copy when the original changes.
+
+**Work a hospital has decided is dangerous cannot be closed without the
+paperwork that made it safe.** `facilities.work_order` carries
+`class_requires_permit` and `class_requires_loto` beside `class_code`, held to
+`facilities.work_class (code, requires_permit, requires_loto)`. SRS-FAC-010's
+acceptance is that an unsafe work class cannot close without its required
+fields, and this makes it unwritable-without rather than unchecked-for. The
+cascade is the part worth reading twice: a hospital that marks a class
+permit-requiring after an incident cannot leave already-closed orders of that
+class sitting without paperwork — the update fails against the CHECK, and
+somebody has to look at those orders. That is the honest outcome, and the
+alternative is a system that lets it happen and then cannot say so.
+
+Above the database the same rule is two permissions. Starting permit work
+needs `fac.permit` as well as `fac.work.manage`, because "may do maintenance"
+and "may isolate an eleven-kilovolt panel" are different questions with
+different answers. The paperwork is demanded at `StartWork` and not at
+`CloseWork`: a permit exists to make the work safe, and an engineer asked for
+a permit number once the panel is back together will find one.
+
+**An alarm and the work it caused are linked and separate.** `facilities.alarm`
+has no work-order state column and `facilities.work_order` has no alarm state
+column, so neither row can express the other's lifecycle. Closing the work
+does not clear the alarm and clearing the alarm does not close the work, which
+is SRS-FAC-005's "linked but distinct" as a property of the schema rather than
+a convention two writers happen to share. The link is one field on the alarm,
+written once, with no unlink: "what did we do about the gas alarm on the 14th"
+has one answer.
+
+**A critical fire-safety deficiency stays visible until somebody closes it.**
+`OpenCritical` takes no time window and does not drop mitigated findings, and
+the port it reads through has no `From`/`To` at all. A mitigation is a state
+of its own — a fire watch on a failed detection zone is not a repair — and a
+system that filed it as closure is how a hospital ends up with a fire watch
+nobody stands down and a door nobody fixes. Closing a critical finding needs
+evidence and somebody other than the inspector who raised it, both as CHECKs.
+
+**Every measurement keeps where it came from.** A reading carries its own
+source and source reference rather than inheriting the meter's, because the
+night the gateway was down somebody read the dial, and a consumption figure
+built partly on that says `estimated`. Both series are append-only and
+registered with FIT-08.
+
+| Requirement | Summary | Status |
+|---|---|---|
+| SRS-FAC-001 | Maintain non-biomedical facility asset hierarchy across electrical, HVAC, plumbing, fire, gases, lifts, RO/STP/ETP and utility systems | **Implemented** — every asset carries a location, a criticality and a status, all three as CHECKs as well as domain rules; the acceptance is four words and an asset nobody can find is one nobody maintains; the system is an enum rather than free text, because "HVAC" and "air handling" typed into a column are two systems as far as the escalation matrix is concerned and the matrix decides who is woken at three in the morning; criticality is about consequence rather than cost, so a four-thousand-rupee changeover valve on a theatre's oxygen line outranks a hundred-thousand-rupee chiller serving an office, and the list of what is down is ordered by it — a list in tag order puts the manifold below the car park barrier; degraded is its own status, since "working" and "working for now" lead to different decisions; the hierarchy is the parent column and nothing else, and the walk terminates on a cycle rather than hanging the estates screen; a decommissioned asset keeps its history and releases its tag, because a replacement usually inherits the stencil |
+| SRS-FAC-002 | Raise facilities work order with location, fault, impact and priority | **Implemented** — the ticket receives an owner and an SLA in the same call that raises it, which is the acceptance: an order with no owner waits for somebody to notice it and one with no deadline is one no report can call late; routing always resolves, to the system's team or to a configured fallback; impact is required because without it every ticket is urgent — every ticket matters to whoever raised it; an asset is not required, since a ceiling leaking into a ward is real work with no plant behind it and refusing it would push that work off the system entirely; when an asset is named the system comes from the asset rather than the caller, or a ticket about the oxygen manifold could be filed as plumbing and escalate to nobody; `fac.work.raise` is held very widely, down to ward managers and nurses, because anybody who can see a leak should be able to report it; and closure is a second permission and a domain rule together — the engineer who did the work cannot sign it off, which is the arrangement that stops a maintenance history being a list of jobs that were all completed |
+| SRS-FAC-003 | Plan preventive maintenance and statutory inspections | **Implemented** — a statutory inspection is its own kind rather than a flag, because a missed one is not a housekeeping failure but an operating licence problem; it names the authority that requires it, since "statutory" with nobody named is a schedule that will be deferred like any other; it closes with a certificate and an expiry, both CHECKs, as a certificate with no expiry is one nobody renews and the first anybody hears of it is the inspector; it cannot be waived at all, so a hospital cannot waive its own lift inspection — if it genuinely cannot happen the schedule is what changes, with a name on that decision; a preventive schedule may also require evidence, and the task carries its schedule's kind and evidence flag so both rules are about one row; a missed occurrence is kept rather than deleted, because the reportable fact the acceptance asks for is the inspection that did not happen; and the report counts statutory overdue separately, since a single "overdue" number hides the one that matters |
+| SRS-FAC-004 | Record utility shutdown permit/planned outage and affected areas | **Implemented** — the impacted departments are declared with the outage and notified when the permit is signed, in the same call: a permit signed today with the telling left for tomorrow is a permit signed without it; approval is refused to whoever requested the shutdown, because the whole value of a permit is that somebody else looked; a critical area needs a contingency before the permit is signed, or the record is a decision to take the theatre's supply away and hope, made by nobody in particular; taking a medical gas or fire system off needs a permit-to-work behind it and not just an estates note; the supply does not go off until every critical area has answered — "we emailed theatres" and "theatres know" are different facts and only the second is safe to cut the power on — and a ward answers for itself, with `fac.outage.acknowledge` held by ward and theatre managers rather than by estates; an objection is recorded rather than enforced, since a ward cannot veto a statutory shutdown but the objection on the record changes how the conversation goes; and the database refuses two shutdowns of one system being in effect over one department at once |
+| SRS-FAC-005 | Link facility alarm/event from SCADA gateway to work order when configured | **Implemented** — the alarm and the maintenance lifecycle stay linked but distinct, as described above; "when configured" is a rule per system and severity, because a hospital that wired every informational state change to a work order would produce a thousand tickets a week and read none of them, and an alarm matching nothing is recorded and left alone; the generated ticket says in its impact line that it was raised automatically and the impact is not yet assessed, since a ticket claiming a human had assessed it would be worse than one that admits it is a transcription; the gateway's own event identifier is required and unique per gateway, because a gateway reconnecting after a network drop replays everything it buffered and a duplicated critical gas alarm is a second call-out for an event that happened once; an alarm cannot be typed by a person, held by CHECK and by the machine-account role holding only `fac.alarm.ingest`, or fabricated plant events would enter the record the command centre trusts precisely because it came off the plant; and acknowledgement is separate from state, so an alarm still sounding that somebody has seen is a situation the record can express |
+| SRS-FAC-006 | Manage medical gas source/manifold/tank status work orders and escalation | **Implemented** — a critical medical gas emergency starts on the highest rung the tenant's own matrix defines rather than on a constant, which is what "highest configured escalation" means: a hospital with a three-rung gas chain gets rung three and one with six gets six; a matrix nobody configured answers zero, because inventing a rung would page nobody while looking like it had paged somebody senior; medical gas and fire escalate on their own chains, since the people who answer an empty manifold are not the people who answer a broken lift; going straight to the top is reserved for the case where waiting fifteen minutes to tell the next person is itself the harm, so an urgent HVAC fault, a fire alarm on normal plant and a stuck lift on life-critical plant all start at zero; and `EscalateCriticalGas` is off in the zero-value config, which this document says out loud rather than the code pretending otherwise — it is the first thing a deployment should turn on |
+| SRS-FAC-007 | Track generator/UPS/chiller/AHU runtime and service counters where data exists | **Implemented** — a schedule triggers on the calendar, on running hours, or on whichever comes first, which is how plant manufacturers actually write service intervals: a generator serviced only on the calendar runs a monsoon's worth of hours between services; the due task records which trigger brought it round, so a service that fired on hours can prove it did; a cumulative counter that goes backwards is refused unless the reading declares the counter was replaced and says what happened, because a generator whose hours dropped from four thousand to twelve either has a new hour meter or a mistyped reading and silently accepting it makes every service after it fire at the wrong time; the asset's counter is derived from the readings rather than typed, so it cannot disagree with them; completing a task advances the schedule from what actually happened rather than from when it was supposed to, so a generator serviced three weeks late is next due three weeks later rather than immediately; and the readings are append-only |
+| SRS-FAC-008 | Manage fire/life-safety inspection tasks and deficiencies | **Implemented** — the visibility rule above. A critical finding gets work raised for it automatically rather than making the inspector fill in a second form, because one that is only a note is one nobody is assigned to; it needs a date to be fixed by, since one with no date is never late; the standard it breaches is recorded, which is what turns "the door does not shut" into something the hospital can be held to; mitigation and closure are separate acts with separate permissions, and the fire safety officer holds both raise and close so that the pair means two officers rather than one doing both — a facilities manager under pressure to clear a backlog cannot certify a fire door repaired at all; an unmitigated critical finding blocks its inspection being signed off, or a fire inspection closes with its own findings outstanding and the report reads as a pass; and the report carries how long the oldest unclosed critical finding has been outstanding, which is one number a board can be shown and cannot misread |
+| SRS-FAC-009 | Provide utility consumption and downtime KPI inputs for command center | **Implemented** — the provenance rule above. A consumption figure names its meter, its unit and every source that contributed, and declares itself an estimate when any contributing reading was typed or derived rather than measured — a figure that is ninety per cent instrument and ten per cent clipboard is an estimate and saying so is the honest thing; one reading of a counting register yields nothing, because it says where the counter stands rather than what was used and reporting it as consumption is the mistake that has a hospital using four million units in an hour; a declared register rollover is handled and counted, since the night a five-digit meter wraps an unaware system reports negative ninety-nine thousand units; an undeclared backwards step yields nothing at all, as contributing nothing is wrong and contributing a negative is worse; downtime is summed from what work orders recorded rather than derived from timestamps, since an order raised on Friday and worked on Monday did not have the chiller down all weekend, and it carries the work orders behind it plus a count of closed orders that recorded no downtime — so a suspiciously low figure declares its own gap |
+| SRS-FAC-010 | Support permit-to-work / lockout-tagout references for configured maintenance classes | **Implemented** — the rule this family exists for, described above. Which classes need a permit is configured once, behind `fac.permit` rather than behind ordinary asset management, because somebody who can turn the flag off has no permit system either way; an unsafe class must say why it is unsafe, or the next person to review the list quietly unmarks it; a permit reference requires who issued it and an isolation reference requires who applied it, since an unsigned permit is a form and the signature is what makes somebody answerable for the isolation being real; and the rule reaches contractors, who are the people least likely to know the building and most likely to be the ones isolating something — a visit against permit work carries the site induction, held by a fourth composite key so a contractor cannot sign in claiming safer work than the order they are here for |
+| SRS-FAC-011 | Record contractor/vendor visits and service reports | **Implemented** — a visit names the work order, asset or maintenance task it is for, as a CHECK: a contractor who came, did something to the plant and left with no record of which plant is why a maintenance history has gaps nobody can explain when the machine fails two years later; whether the work needs a permit is read from the order rather than taken from the caller, because a contractor asked at the gate will say no; the people who actually came are named, since a visit by nobody in particular cannot be matched against the induction record, the gate log, or a roll call during an evacuation; signing out requires both the service report reference and a summary, because the reference points at a PDF nobody will open and the summary is what appears in the asset's history; the follow-up the contractor mentions is captured, or it is said out loud in a corridor and lost; and the on-site list is ordered longest-visit-first, which surfaces the visit somebody forgot to sign out and is the list that matters during an evacuation |
+
+### What SRS-FAC does not reach
+
+Four seams are named rather than half-built.
+
+**Nothing polls a SCADA gateway.** `IngestAlarm` is a push endpoint behind a
+machine-account role, which is the right shape and is the whole of the
+integration: there is no poller, no protocol adapter, no Modbus or BACnet
+client, and no gateway health check. A deployment wiring this up writes the
+bridge itself. That is deliberate — the device adapter framework is SRS-IOMT
+in Wave 5 and SRS-SCA-IOT in Wave 7, and building a second one here would be
+the thing those requirements then have to replace. What this gives a hospital
+today is that whatever pushes an event gets deduplication, routing and an
+audit trail for free.
+
+**Utility consumption has no cost.** A meter records quantity in its own unit
+and nothing holds a tariff, so the command centre gets units and not rupees.
+Closing it is a tariff table and a rate lookup, and it belongs with the
+billing context rather than here: energy cost varies by time of day, by slab
+and by contract, and a naive multiplication in estates would disagree with the
+bill and be believed. It is not built.
+
+**Runtime counters come from readings and never from the plant.**
+SRS-FAC-007 says "where data exists", and the data exists here because
+somebody records it — by hand, or through the same push endpoint the alarms
+use. There is no automatic hour-meter poll, for the reason above. A hospital
+with a BMS that publishes run hours can push them; one without will have a
+technician type them, and the source on each reading says which happened.
+
+**Nothing schedules the sweeps.** `PlanDue` plans the occurrences that have
+come round and `SweepOverdueDeficiencies` escalates the critical findings past
+their date, and both are RPCs somebody has to call. There is no cron, no
+worker loop and no trigger. The platform has a durable workflow engine
+(ADR-0006) that could run them, and wiring these two onto it is a small piece
+of work that is named here rather than assumed: a deployment that never calls
+`PlanDue` has a maintenance schedule that never becomes a task, and should
+know that before it finds out.
 
 ## What Wave 2 depends on
 

@@ -25,6 +25,7 @@ import (
 	"github.com/ppusapati/health/code/gen/go/healthcare/emergency/v1/emergencyv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/empi/v1/empiv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/encounter/v1/encounterv1connect"
+	"github.com/ppusapati/health/code/gen/go/healthcare/facilities/v1/facilitiesv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/hospital_ops_diet/v1/hospitalopsdietv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/housekeeping/v1/housekeepingv1connect"
 	"github.com/ppusapati/health/code/gen/go/healthcare/icu/v1/icuv1connect"
@@ -84,6 +85,11 @@ import (
 	encounterapp "github.com/ppusapati/health/code/internal/encounter/application"
 	encounterdomain "github.com/ppusapati/health/code/internal/encounter/domain"
 	encountertransport "github.com/ppusapati/health/code/internal/encounter/transport"
+	faccrosscontext "github.com/ppusapati/health/code/internal/facilities/adapters/crosscontext"
+	facescalate "github.com/ppusapati/health/code/internal/facilities/adapters/escalate"
+	facpostgres "github.com/ppusapati/health/code/internal/facilities/adapters/postgres"
+	facapp "github.com/ppusapati/health/code/internal/facilities/application"
+	factransport "github.com/ppusapati/health/code/internal/facilities/transport"
 	hkpcrosscontext "github.com/ppusapati/health/code/internal/housekeeping/adapters/crosscontext"
 	hkpescalate "github.com/ppusapati/health/code/internal/housekeeping/adapters/escalate"
 	hkppostgres "github.com/ppusapati/health/code/internal/housekeeping/adapters/postgres"
@@ -499,6 +505,19 @@ type Deps struct {
 	// somebody's legal problem long before anybody notices.
 	Mortuary mortapp.Config
 
+	// Facilities is what a deployment has decided about its estates
+	// function: its response and resolution targets, which team owns work
+	// on each system, whether a critical medical gas failure goes straight
+	// to the top of the escalation chain, and how long a critical
+	// life-safety finding may sit past its date (SRS-FAC-002, SRS-FAC-006,
+	// SRS-FAC-008).
+	//
+	// The zero value routes everything to one team, applies the default
+	// SLA, and escalates nothing — a facilities function that will find
+	// out about an empty oxygen manifold from a ward rather than from a
+	// page. EscalateCriticalGas is the one to turn on first.
+	Facilities facapp.Config
+
 	// Emergency is what a deployment has decided about its emergency
 	// department: which triage scale it has approved, what must be measured at
 	// triage, and what each disposition requires (SRS-ER-002, SRS-ER-013).
@@ -533,6 +552,7 @@ type Server struct {
 	Laundry      *lndapp.Service
 	Ambulance    *ambapp.Service
 	Mortuary     *mortapp.Service
+	Facilities   *facapp.Service
 	Nursing      *nursingapp.Service
 	Orders       *ordersapp.Service
 	Medication   *medicationapp.Service
@@ -1219,6 +1239,45 @@ func New(deps Deps) *Server {
 		Config:      deps.Mortuary,
 	})
 
+	// Facilities engineering (SRS-FAC). Wired after the organization
+	// context because its one seam reads it: an asset's location and a
+	// shutdown's affected departments are org units, and a shutdown
+	// permit approved against a department nobody can resolve is a
+	// permit nobody was told about. The seam is read-only, so estates
+	// cannot create a department by mistyping one into a work order.
+	//
+	// The escalator is the platform's, keyed by the same matrix kinds
+	// SRS-FAC-012 configures — "medical_gas", "fire_safety",
+	// "facilities". A context that invented its own kinds would escalate
+	// to a matrix nobody configured, and the notice would go nowhere
+	// while looking like it had gone somewhere.
+	facRepo := facpostgres.New(txManager)
+	facilitiesService := facapp.NewService(facapp.Deps{
+		UnitOfWork:   txManager,
+		Assets:       facRepo,
+		Classes:      facRepo,
+		Work:         facRepo,
+		Maintenance:  facRepo,
+		Runtime:      facRepo,
+		Meters:       facRepo,
+		Outages:      facRepo,
+		Alarms:       facRepo,
+		Deficiencies: facRepo,
+		Visits:       facRepo,
+		OrgUnits: faccrosscontext.NewOrgUnits(
+			orgpostgres.FacilityRepo{Repository: repo}),
+		Events:     platformStore,
+		AuditTrail: store.AuditAppenderFunc(platformStore.AppendAudit),
+		// A critical medical gas failure and an overdue critical
+		// life-safety finding. Both are things a report would not catch
+		// in time: an empty manifold is minutes, and a blocked stairwell
+		// nobody chased is months.
+		Escalations: facescalate.New(escalationStore),
+		IDs:         uuidGenerator{},
+		Clock:       systemClock{},
+		Config:      deps.Facilities,
+	})
+
 	// Medical records and health information management (SRS-MRD). Wired
 	// after the clinical and encounter contexts because everything here is
 	// judged against what they hold, and read through ports that cannot write
@@ -1412,6 +1471,9 @@ func New(deps Deps) *Server {
 	mux.Handle(mortuaryv1connect.NewMortuaryServiceHandler(
 		morttransport.NewHandler(mortuaryService, time.Now),
 		interceptors))
+	mux.Handle(facilitiesv1connect.NewFacilitiesServiceHandler(
+		factransport.NewHandler(facilitiesService, time.Now),
+		interceptors))
 	mux.Handle(materialsv1connect.NewMaterialsServiceHandler(
 		materialstransport.NewHandler(materialsService, time.Now), interceptors))
 	billingRepo := billingpostgres.New(txManager)
@@ -1486,6 +1548,7 @@ func New(deps Deps) *Server {
 		Laundry:         laundryService,
 		Ambulance:       ambulanceService,
 		Mortuary:        mortuaryService,
+		Facilities:      facilitiesService,
 		Nursing:         nursingService,
 		Orders:          ordersService,
 		Medication:      medicationService,
