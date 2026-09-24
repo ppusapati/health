@@ -49,6 +49,7 @@ sql:
       - db/migrations/0044_ambulance.up.sql
       - db/migrations/0045_mortuary.up.sql
       - db/migrations/0046_facilities.up.sql
+      - db/migrations/0047_transfusion_unification.up.sql
     gen:
       go:
         package: sqlcgen
