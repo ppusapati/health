@@ -18,10 +18,22 @@ import (
 // Handler serves healthcare.organization.v1.OrganizationService.
 type Handler struct {
 	svc *application.Service
+	// masterData is the port bundle CreateOrgUnit takes. It is a parameter of
+	// that use case rather than a field of the service, so the handler carries
+	// it; a zero bundle means this deployment wires no master data and the
+	// ward call says so rather than panicking.
+	masterData application.MasterDataPorts
 }
 
 // NewHandler constructs the handler.
 func NewHandler(svc *application.Service) *Handler { return &Handler{svc: svc} }
+
+// NewHandlerWithMasterData constructs a handler that can also commission the
+// org-unit hierarchy a room hangs from (SRS-PLT-005, SRS-PLT-006).
+func NewHandlerWithMasterData(svc *application.Service,
+	md application.MasterDataPorts) *Handler {
+	return &Handler{svc: svc, masterData: md}
+}
 
 // CreateTenant implements SRS-PLT-001.
 func (h *Handler) CreateTenant(

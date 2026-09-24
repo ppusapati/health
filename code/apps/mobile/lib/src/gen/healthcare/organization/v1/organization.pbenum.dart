@@ -107,5 +107,102 @@ class FacilityType extends $pb.ProtobufEnum {
   const FacilityType._(super.value, super.name);
 }
 
+/// GenderPolicy is who a room may be occupied by. A capability of the room, not
+/// a description of who is in it.
+class GenderPolicy extends $pb.ProtobufEnum {
+  static const GenderPolicy GENDER_POLICY_UNSPECIFIED =
+      GenderPolicy._(0, _omitEnumNames ? '' : 'GENDER_POLICY_UNSPECIFIED');
+  static const GenderPolicy GENDER_POLICY_ANY =
+      GenderPolicy._(1, _omitEnumNames ? '' : 'GENDER_POLICY_ANY');
+  static const GenderPolicy GENDER_POLICY_MALE_ONLY =
+      GenderPolicy._(2, _omitEnumNames ? '' : 'GENDER_POLICY_MALE_ONLY');
+  static const GenderPolicy GENDER_POLICY_FEMALE_ONLY =
+      GenderPolicy._(3, _omitEnumNames ? '' : 'GENDER_POLICY_FEMALE_ONLY');
+
+  static const $core.List<GenderPolicy> values = <GenderPolicy>[
+    GENDER_POLICY_UNSPECIFIED,
+    GENDER_POLICY_ANY,
+    GENDER_POLICY_MALE_ONLY,
+    GENDER_POLICY_FEMALE_ONLY,
+  ];
+
+  static final $core.List<GenderPolicy?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 3);
+  static GenderPolicy? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const GenderPolicy._(super.value, super.name);
+}
+
+/// IsolationCapability is what a room can safely contain. Ordered: a room that
+/// can hold an airborne case can hold a droplet one.
+class IsolationCapability extends $pb.ProtobufEnum {
+  static const IsolationCapability ISOLATION_CAPABILITY_UNSPECIFIED =
+      IsolationCapability._(
+          0, _omitEnumNames ? '' : 'ISOLATION_CAPABILITY_UNSPECIFIED');
+  static const IsolationCapability ISOLATION_CAPABILITY_NONE =
+      IsolationCapability._(
+          1, _omitEnumNames ? '' : 'ISOLATION_CAPABILITY_NONE');
+  static const IsolationCapability ISOLATION_CAPABILITY_CONTACT =
+      IsolationCapability._(
+          2, _omitEnumNames ? '' : 'ISOLATION_CAPABILITY_CONTACT');
+  static const IsolationCapability ISOLATION_CAPABILITY_DROPLET =
+      IsolationCapability._(
+          3, _omitEnumNames ? '' : 'ISOLATION_CAPABILITY_DROPLET');
+  static const IsolationCapability ISOLATION_CAPABILITY_AIRBORNE =
+      IsolationCapability._(
+          4, _omitEnumNames ? '' : 'ISOLATION_CAPABILITY_AIRBORNE');
+
+  static const $core.List<IsolationCapability> values = <IsolationCapability>[
+    ISOLATION_CAPABILITY_UNSPECIFIED,
+    ISOLATION_CAPABILITY_NONE,
+    ISOLATION_CAPABILITY_CONTACT,
+    ISOLATION_CAPABILITY_DROPLET,
+    ISOLATION_CAPABILITY_AIRBORNE,
+  ];
+
+  static final $core.List<IsolationCapability?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 4);
+  static IsolationCapability? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const IsolationCapability._(super.value, super.name);
+}
+
+/// BedAvailability is whether a bed can be used right now. Separate from the
+/// bed's status, which is whether the hospital has the bed at all: SRS-PLT-006
+/// requires the two to be independently controlled.
+class BedAvailability extends $pb.ProtobufEnum {
+  static const BedAvailability BED_AVAILABILITY_UNSPECIFIED = BedAvailability._(
+      0, _omitEnumNames ? '' : 'BED_AVAILABILITY_UNSPECIFIED');
+  static const BedAvailability BED_AVAILABILITY_AVAILABLE =
+      BedAvailability._(1, _omitEnumNames ? '' : 'BED_AVAILABILITY_AVAILABLE');
+  static const BedAvailability BED_AVAILABILITY_OCCUPIED =
+      BedAvailability._(2, _omitEnumNames ? '' : 'BED_AVAILABILITY_OCCUPIED');
+  static const BedAvailability BED_AVAILABILITY_CLEANING =
+      BedAvailability._(3, _omitEnumNames ? '' : 'BED_AVAILABILITY_CLEANING');
+  static const BedAvailability BED_AVAILABILITY_BLOCKED =
+      BedAvailability._(4, _omitEnumNames ? '' : 'BED_AVAILABILITY_BLOCKED');
+  static const BedAvailability BED_AVAILABILITY_OUT_OF_SERVICE =
+      BedAvailability._(
+          5, _omitEnumNames ? '' : 'BED_AVAILABILITY_OUT_OF_SERVICE');
+
+  static const $core.List<BedAvailability> values = <BedAvailability>[
+    BED_AVAILABILITY_UNSPECIFIED,
+    BED_AVAILABILITY_AVAILABLE,
+    BED_AVAILABILITY_OCCUPIED,
+    BED_AVAILABILITY_CLEANING,
+    BED_AVAILABILITY_BLOCKED,
+    BED_AVAILABILITY_OUT_OF_SERVICE,
+  ];
+
+  static final $core.List<BedAvailability?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 5);
+  static BedAvailability? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const BedAvailability._(super.value, super.name);
+}
+
 const $core.bool _omitEnumNames =
     $core.bool.fromEnvironment('protobuf.omit_enum_names');

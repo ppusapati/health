@@ -209,6 +209,178 @@ func (FacilityType) EnumDescriptor() ([]byte, []int) {
 	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{2}
 }
 
+// GenderPolicy is who a room may be occupied by. A capability of the room, not
+// a description of who is in it.
+type GenderPolicy int32
+
+const (
+	GenderPolicy_GENDER_POLICY_UNSPECIFIED GenderPolicy = 0
+	GenderPolicy_GENDER_POLICY_ANY         GenderPolicy = 1
+	GenderPolicy_GENDER_POLICY_MALE_ONLY   GenderPolicy = 2
+	GenderPolicy_GENDER_POLICY_FEMALE_ONLY GenderPolicy = 3
+)
+
+// Enum value maps for GenderPolicy.
+var (
+	GenderPolicy_name = map[int32]string{
+		0: "GENDER_POLICY_UNSPECIFIED",
+		1: "GENDER_POLICY_ANY",
+		2: "GENDER_POLICY_MALE_ONLY",
+		3: "GENDER_POLICY_FEMALE_ONLY",
+	}
+	GenderPolicy_value = map[string]int32{
+		"GENDER_POLICY_UNSPECIFIED": 0,
+		"GENDER_POLICY_ANY":         1,
+		"GENDER_POLICY_MALE_ONLY":   2,
+		"GENDER_POLICY_FEMALE_ONLY": 3,
+	}
+)
+
+func (x GenderPolicy) Enum() *GenderPolicy {
+	p := new(GenderPolicy)
+	*p = x
+	return p
+}
+
+func (x GenderPolicy) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (GenderPolicy) Descriptor() protoreflect.EnumDescriptor {
+	return file_healthcare_organization_v1_organization_proto_enumTypes[3].Descriptor()
+}
+
+func (GenderPolicy) Type() protoreflect.EnumType {
+	return &file_healthcare_organization_v1_organization_proto_enumTypes[3]
+}
+
+func (x GenderPolicy) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use GenderPolicy.Descriptor instead.
+func (GenderPolicy) EnumDescriptor() ([]byte, []int) {
+	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{3}
+}
+
+// IsolationCapability is what a room can safely contain. Ordered: a room that
+// can hold an airborne case can hold a droplet one.
+type IsolationCapability int32
+
+const (
+	IsolationCapability_ISOLATION_CAPABILITY_UNSPECIFIED IsolationCapability = 0
+	IsolationCapability_ISOLATION_CAPABILITY_NONE        IsolationCapability = 1
+	IsolationCapability_ISOLATION_CAPABILITY_CONTACT     IsolationCapability = 2
+	IsolationCapability_ISOLATION_CAPABILITY_DROPLET     IsolationCapability = 3
+	IsolationCapability_ISOLATION_CAPABILITY_AIRBORNE    IsolationCapability = 4
+)
+
+// Enum value maps for IsolationCapability.
+var (
+	IsolationCapability_name = map[int32]string{
+		0: "ISOLATION_CAPABILITY_UNSPECIFIED",
+		1: "ISOLATION_CAPABILITY_NONE",
+		2: "ISOLATION_CAPABILITY_CONTACT",
+		3: "ISOLATION_CAPABILITY_DROPLET",
+		4: "ISOLATION_CAPABILITY_AIRBORNE",
+	}
+	IsolationCapability_value = map[string]int32{
+		"ISOLATION_CAPABILITY_UNSPECIFIED": 0,
+		"ISOLATION_CAPABILITY_NONE":        1,
+		"ISOLATION_CAPABILITY_CONTACT":     2,
+		"ISOLATION_CAPABILITY_DROPLET":     3,
+		"ISOLATION_CAPABILITY_AIRBORNE":    4,
+	}
+)
+
+func (x IsolationCapability) Enum() *IsolationCapability {
+	p := new(IsolationCapability)
+	*p = x
+	return p
+}
+
+func (x IsolationCapability) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (IsolationCapability) Descriptor() protoreflect.EnumDescriptor {
+	return file_healthcare_organization_v1_organization_proto_enumTypes[4].Descriptor()
+}
+
+func (IsolationCapability) Type() protoreflect.EnumType {
+	return &file_healthcare_organization_v1_organization_proto_enumTypes[4]
+}
+
+func (x IsolationCapability) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use IsolationCapability.Descriptor instead.
+func (IsolationCapability) EnumDescriptor() ([]byte, []int) {
+	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{4}
+}
+
+// BedAvailability is whether a bed can be used right now. Separate from the
+// bed's status, which is whether the hospital has the bed at all: SRS-PLT-006
+// requires the two to be independently controlled.
+type BedAvailability int32
+
+const (
+	BedAvailability_BED_AVAILABILITY_UNSPECIFIED    BedAvailability = 0
+	BedAvailability_BED_AVAILABILITY_AVAILABLE      BedAvailability = 1
+	BedAvailability_BED_AVAILABILITY_OCCUPIED       BedAvailability = 2
+	BedAvailability_BED_AVAILABILITY_CLEANING       BedAvailability = 3
+	BedAvailability_BED_AVAILABILITY_BLOCKED        BedAvailability = 4
+	BedAvailability_BED_AVAILABILITY_OUT_OF_SERVICE BedAvailability = 5
+)
+
+// Enum value maps for BedAvailability.
+var (
+	BedAvailability_name = map[int32]string{
+		0: "BED_AVAILABILITY_UNSPECIFIED",
+		1: "BED_AVAILABILITY_AVAILABLE",
+		2: "BED_AVAILABILITY_OCCUPIED",
+		3: "BED_AVAILABILITY_CLEANING",
+		4: "BED_AVAILABILITY_BLOCKED",
+		5: "BED_AVAILABILITY_OUT_OF_SERVICE",
+	}
+	BedAvailability_value = map[string]int32{
+		"BED_AVAILABILITY_UNSPECIFIED":    0,
+		"BED_AVAILABILITY_AVAILABLE":      1,
+		"BED_AVAILABILITY_OCCUPIED":       2,
+		"BED_AVAILABILITY_CLEANING":       3,
+		"BED_AVAILABILITY_BLOCKED":        4,
+		"BED_AVAILABILITY_OUT_OF_SERVICE": 5,
+	}
+)
+
+func (x BedAvailability) Enum() *BedAvailability {
+	p := new(BedAvailability)
+	*p = x
+	return p
+}
+
+func (x BedAvailability) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (BedAvailability) Descriptor() protoreflect.EnumDescriptor {
+	return file_healthcare_organization_v1_organization_proto_enumTypes[5].Descriptor()
+}
+
+func (BedAvailability) Type() protoreflect.EnumType {
+	return &file_healthcare_organization_v1_organization_proto_enumTypes[5]
+}
+
+func (x BedAvailability) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use BedAvailability.Descriptor instead.
+func (BedAvailability) EnumDescriptor() ([]byte, []int) {
+	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{5}
+}
+
 // SRS-PLT-001. tenant_id is opaque and immutable; display name is not a key.
 type Tenant struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
@@ -441,6 +613,1299 @@ func (x *Facility) GetVersion() int64 {
 	return 0
 }
 
+// BedClass is a tenant's own category of accommodation and the charge it maps
+// to. A catalogue rather than an enumeration: "deluxe" and "twin sharing" are
+// commercial decisions, not something this contract can list in advance.
+type BedClass struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	ClassId string                 `protobuf:"bytes,1,opt,name=class_id,json=classId,proto3" json:"class_id,omitempty"`
+	// The key. It appears in tariff imports and on printed estimates, so it is
+	// stable while the display name is not (SRS-PLT-007).
+	Code        string `protobuf:"bytes,2,opt,name=code,proto3" json:"code,omitempty"`
+	DisplayName string `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	// Required. What billing raises the accommodation charge against; a class
+	// that maps to nothing is a stay nobody can bill.
+	ChargeCode    string `protobuf:"bytes,4,opt,name=charge_code,json=chargeCode,proto3" json:"charge_code,omitempty"`
+	Status        string `protobuf:"bytes,5,opt,name=status,proto3" json:"status,omitempty"`
+	Version       int64  `protobuf:"varint,6,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BedClass) Reset() {
+	*x = BedClass{}
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BedClass) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BedClass) ProtoMessage() {}
+
+func (x *BedClass) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BedClass.ProtoReflect.Descriptor instead.
+func (*BedClass) Descriptor() ([]byte, []int) {
+	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *BedClass) GetClassId() string {
+	if x != nil {
+		return x.ClassId
+	}
+	return ""
+}
+
+func (x *BedClass) GetCode() string {
+	if x != nil {
+		return x.Code
+	}
+	return ""
+}
+
+func (x *BedClass) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+func (x *BedClass) GetChargeCode() string {
+	if x != nil {
+		return x.ChargeCode
+	}
+	return ""
+}
+
+func (x *BedClass) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *BedClass) GetVersion() int64 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+// Room is a physical space that holds beds. It carries the class, so every bed
+// in it is charged the same way.
+type Room struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	RoomId     string                 `protobuf:"bytes,1,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`
+	FacilityId string                 `protobuf:"bytes,2,opt,name=facility_id,json=facilityId,proto3" json:"facility_id,omitempty"`
+	// The ward or department: the hierarchy level above the room.
+	UnitId        string              `protobuf:"bytes,3,opt,name=unit_id,json=unitId,proto3" json:"unit_id,omitempty"`
+	Code          string              `protobuf:"bytes,4,opt,name=code,proto3" json:"code,omitempty"`
+	DisplayName   string              `protobuf:"bytes,5,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	ClassCode     string              `protobuf:"bytes,6,opt,name=class_code,json=classCode,proto3" json:"class_code,omitempty"`
+	GenderPolicy  GenderPolicy        `protobuf:"varint,7,opt,name=gender_policy,json=genderPolicy,proto3,enum=healthcare.organization.v1.GenderPolicy" json:"gender_policy,omitempty"`
+	Isolation     IsolationCapability `protobuf:"varint,8,opt,name=isolation,proto3,enum=healthcare.organization.v1.IsolationCapability" json:"isolation,omitempty"`
+	Status        string              `protobuf:"bytes,9,opt,name=status,proto3" json:"status,omitempty"`
+	Version       int64               `protobuf:"varint,10,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Room) Reset() {
+	*x = Room{}
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Room) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Room) ProtoMessage() {}
+
+func (x *Room) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Room.ProtoReflect.Descriptor instead.
+func (*Room) Descriptor() ([]byte, []int) {
+	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *Room) GetRoomId() string {
+	if x != nil {
+		return x.RoomId
+	}
+	return ""
+}
+
+func (x *Room) GetFacilityId() string {
+	if x != nil {
+		return x.FacilityId
+	}
+	return ""
+}
+
+func (x *Room) GetUnitId() string {
+	if x != nil {
+		return x.UnitId
+	}
+	return ""
+}
+
+func (x *Room) GetCode() string {
+	if x != nil {
+		return x.Code
+	}
+	return ""
+}
+
+func (x *Room) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+func (x *Room) GetClassCode() string {
+	if x != nil {
+		return x.ClassCode
+	}
+	return ""
+}
+
+func (x *Room) GetGenderPolicy() GenderPolicy {
+	if x != nil {
+		return x.GenderPolicy
+	}
+	return GenderPolicy_GENDER_POLICY_UNSPECIFIED
+}
+
+func (x *Room) GetIsolation() IsolationCapability {
+	if x != nil {
+		return x.Isolation
+	}
+	return IsolationCapability_ISOLATION_CAPABILITY_UNSPECIFIED
+}
+
+func (x *Room) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *Room) GetVersion() int64 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+// Bed is one physical bed.
+type Bed struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	BedId       string                 `protobuf:"bytes,1,opt,name=bed_id,json=bedId,proto3" json:"bed_id,omitempty"`
+	RoomId      string                 `protobuf:"bytes,2,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`
+	FacilityId  string                 `protobuf:"bytes,3,opt,name=facility_id,json=facilityId,proto3" json:"facility_id,omitempty"`
+	Code        string                 `protobuf:"bytes,4,opt,name=code,proto3" json:"code,omitempty"`
+	DisplayName string                 `protobuf:"bytes,5,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	// Physical existence: active or retired. Retirement is terminal
+	// (SRS-PLT-015).
+	Status       string          `protobuf:"bytes,6,opt,name=status,proto3" json:"status,omitempty"`
+	Availability BedAvailability `protobuf:"varint,7,opt,name=availability,proto3,enum=healthcare.organization.v1.BedAvailability" json:"availability,omitempty"`
+	// Why, for the states that are somebody's decision rather than a
+	// consequence.
+	UnavailableReason string `protobuf:"bytes,8,opt,name=unavailable_reason,json=unavailableReason,proto3" json:"unavailable_reason,omitempty"`
+	Version           int64  `protobuf:"varint,9,opt,name=version,proto3" json:"version,omitempty"`
+	// Both halves together: the bed exists and is free. Derived rather than
+	// stored, so it cannot disagree with the two fields above.
+	Usable        bool `protobuf:"varint,10,opt,name=usable,proto3" json:"usable,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Bed) Reset() {
+	*x = Bed{}
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Bed) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Bed) ProtoMessage() {}
+
+func (x *Bed) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Bed.ProtoReflect.Descriptor instead.
+func (*Bed) Descriptor() ([]byte, []int) {
+	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *Bed) GetBedId() string {
+	if x != nil {
+		return x.BedId
+	}
+	return ""
+}
+
+func (x *Bed) GetRoomId() string {
+	if x != nil {
+		return x.RoomId
+	}
+	return ""
+}
+
+func (x *Bed) GetFacilityId() string {
+	if x != nil {
+		return x.FacilityId
+	}
+	return ""
+}
+
+func (x *Bed) GetCode() string {
+	if x != nil {
+		return x.Code
+	}
+	return ""
+}
+
+func (x *Bed) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+func (x *Bed) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *Bed) GetAvailability() BedAvailability {
+	if x != nil {
+		return x.Availability
+	}
+	return BedAvailability_BED_AVAILABILITY_UNSPECIFIED
+}
+
+func (x *Bed) GetUnavailableReason() string {
+	if x != nil {
+		return x.UnavailableReason
+	}
+	return ""
+}
+
+func (x *Bed) GetVersion() int64 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+func (x *Bed) GetUsable() bool {
+	if x != nil {
+		return x.Usable
+	}
+	return false
+}
+
+// BedPlace is one row of a ward's board: a bed, its room and what it costs.
+type BedPlace struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Bed           *Bed                   `protobuf:"bytes,1,opt,name=bed,proto3" json:"bed,omitempty"`
+	Room          *Room                  `protobuf:"bytes,2,opt,name=room,proto3" json:"room,omitempty"`
+	Class         *BedClass              `protobuf:"bytes,3,opt,name=class,proto3" json:"class,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BedPlace) Reset() {
+	*x = BedPlace{}
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BedPlace) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BedPlace) ProtoMessage() {}
+
+func (x *BedPlace) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BedPlace.ProtoReflect.Descriptor instead.
+func (*BedPlace) Descriptor() ([]byte, []int) {
+	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *BedPlace) GetBed() *Bed {
+	if x != nil {
+		return x.Bed
+	}
+	return nil
+}
+
+func (x *BedPlace) GetRoom() *Room {
+	if x != nil {
+		return x.Room
+	}
+	return nil
+}
+
+func (x *BedPlace) GetClass() *BedClass {
+	if x != nil {
+		return x.Class
+	}
+	return nil
+}
+
+// CommissionOrgUnit is the hierarchy level a room hangs from (SRS-PLT-005).
+//
+// It is here because the bed master needs it: a room belongs to a ward, and
+// until now org units could only be created through the repository, so
+// commissioning a ward over the wire was impossible.
+type CommissionOrgUnitRequest struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	FacilityId string                 `protobuf:"bytes,1,opt,name=facility_id,json=facilityId,proto3" json:"facility_id,omitempty"`
+	// department, specialty, cost_center, service_unit or care_location.
+	UnitType       string                 `protobuf:"bytes,2,opt,name=unit_type,json=unitType,proto3" json:"unit_type,omitempty"`
+	Code           string                 `protobuf:"bytes,3,opt,name=code,proto3" json:"code,omitempty"`
+	DisplayName    string                 `protobuf:"bytes,4,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	ParentUnitId   string                 `protobuf:"bytes,5,opt,name=parent_unit_id,json=parentUnitId,proto3" json:"parent_unit_id,omitempty"`
+	EffectiveFrom  *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=effective_from,json=effectiveFrom,proto3" json:"effective_from,omitempty"`
+	EffectiveUntil *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=effective_until,json=effectiveUntil,proto3" json:"effective_until,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *CommissionOrgUnitRequest) Reset() {
+	*x = CommissionOrgUnitRequest{}
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CommissionOrgUnitRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CommissionOrgUnitRequest) ProtoMessage() {}
+
+func (x *CommissionOrgUnitRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CommissionOrgUnitRequest.ProtoReflect.Descriptor instead.
+func (*CommissionOrgUnitRequest) Descriptor() ([]byte, []int) {
+	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *CommissionOrgUnitRequest) GetFacilityId() string {
+	if x != nil {
+		return x.FacilityId
+	}
+	return ""
+}
+
+func (x *CommissionOrgUnitRequest) GetUnitType() string {
+	if x != nil {
+		return x.UnitType
+	}
+	return ""
+}
+
+func (x *CommissionOrgUnitRequest) GetCode() string {
+	if x != nil {
+		return x.Code
+	}
+	return ""
+}
+
+func (x *CommissionOrgUnitRequest) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+func (x *CommissionOrgUnitRequest) GetParentUnitId() string {
+	if x != nil {
+		return x.ParentUnitId
+	}
+	return ""
+}
+
+func (x *CommissionOrgUnitRequest) GetEffectiveFrom() *timestamppb.Timestamp {
+	if x != nil {
+		return x.EffectiveFrom
+	}
+	return nil
+}
+
+func (x *CommissionOrgUnitRequest) GetEffectiveUntil() *timestamppb.Timestamp {
+	if x != nil {
+		return x.EffectiveUntil
+	}
+	return nil
+}
+
+type CommissionOrgUnitResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UnitId        string                 `protobuf:"bytes,1,opt,name=unit_id,json=unitId,proto3" json:"unit_id,omitempty"`
+	Code          string                 `protobuf:"bytes,2,opt,name=code,proto3" json:"code,omitempty"`
+	DisplayName   string                 `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CommissionOrgUnitResponse) Reset() {
+	*x = CommissionOrgUnitResponse{}
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CommissionOrgUnitResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CommissionOrgUnitResponse) ProtoMessage() {}
+
+func (x *CommissionOrgUnitResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CommissionOrgUnitResponse.ProtoReflect.Descriptor instead.
+func (*CommissionOrgUnitResponse) Descriptor() ([]byte, []int) {
+	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *CommissionOrgUnitResponse) GetUnitId() string {
+	if x != nil {
+		return x.UnitId
+	}
+	return ""
+}
+
+func (x *CommissionOrgUnitResponse) GetCode() string {
+	if x != nil {
+		return x.Code
+	}
+	return ""
+}
+
+func (x *CommissionOrgUnitResponse) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+type DefineBedClassRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Code          string                 `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
+	DisplayName   string                 `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	ChargeCode    string                 `protobuf:"bytes,3,opt,name=charge_code,json=chargeCode,proto3" json:"charge_code,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DefineBedClassRequest) Reset() {
+	*x = DefineBedClassRequest{}
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DefineBedClassRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DefineBedClassRequest) ProtoMessage() {}
+
+func (x *DefineBedClassRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DefineBedClassRequest.ProtoReflect.Descriptor instead.
+func (*DefineBedClassRequest) Descriptor() ([]byte, []int) {
+	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *DefineBedClassRequest) GetCode() string {
+	if x != nil {
+		return x.Code
+	}
+	return ""
+}
+
+func (x *DefineBedClassRequest) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+func (x *DefineBedClassRequest) GetChargeCode() string {
+	if x != nil {
+		return x.ChargeCode
+	}
+	return ""
+}
+
+type DefineBedClassResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Class         *BedClass              `protobuf:"bytes,1,opt,name=class,proto3" json:"class,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DefineBedClassResponse) Reset() {
+	*x = DefineBedClassResponse{}
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DefineBedClassResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DefineBedClassResponse) ProtoMessage() {}
+
+func (x *DefineBedClassResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DefineBedClassResponse.ProtoReflect.Descriptor instead.
+func (*DefineBedClassResponse) Descriptor() ([]byte, []int) {
+	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *DefineBedClassResponse) GetClass() *BedClass {
+	if x != nil {
+		return x.Class
+	}
+	return nil
+}
+
+type ListBedClassesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListBedClassesRequest) Reset() {
+	*x = ListBedClassesRequest{}
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListBedClassesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListBedClassesRequest) ProtoMessage() {}
+
+func (x *ListBedClassesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListBedClassesRequest.ProtoReflect.Descriptor instead.
+func (*ListBedClassesRequest) Descriptor() ([]byte, []int) {
+	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{10}
+}
+
+type ListBedClassesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Classes       []*BedClass            `protobuf:"bytes,1,rep,name=classes,proto3" json:"classes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListBedClassesResponse) Reset() {
+	*x = ListBedClassesResponse{}
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListBedClassesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListBedClassesResponse) ProtoMessage() {}
+
+func (x *ListBedClassesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListBedClassesResponse.ProtoReflect.Descriptor instead.
+func (*ListBedClassesResponse) Descriptor() ([]byte, []int) {
+	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *ListBedClassesResponse) GetClasses() []*BedClass {
+	if x != nil {
+		return x.Classes
+	}
+	return nil
+}
+
+type CommissionRoomRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	FacilityId    string                 `protobuf:"bytes,1,opt,name=facility_id,json=facilityId,proto3" json:"facility_id,omitempty"`
+	UnitId        string                 `protobuf:"bytes,2,opt,name=unit_id,json=unitId,proto3" json:"unit_id,omitempty"`
+	Code          string                 `protobuf:"bytes,3,opt,name=code,proto3" json:"code,omitempty"`
+	DisplayName   string                 `protobuf:"bytes,4,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	ClassCode     string                 `protobuf:"bytes,5,opt,name=class_code,json=classCode,proto3" json:"class_code,omitempty"`
+	GenderPolicy  GenderPolicy           `protobuf:"varint,6,opt,name=gender_policy,json=genderPolicy,proto3,enum=healthcare.organization.v1.GenderPolicy" json:"gender_policy,omitempty"`
+	Isolation     IsolationCapability    `protobuf:"varint,7,opt,name=isolation,proto3,enum=healthcare.organization.v1.IsolationCapability" json:"isolation,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CommissionRoomRequest) Reset() {
+	*x = CommissionRoomRequest{}
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CommissionRoomRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CommissionRoomRequest) ProtoMessage() {}
+
+func (x *CommissionRoomRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CommissionRoomRequest.ProtoReflect.Descriptor instead.
+func (*CommissionRoomRequest) Descriptor() ([]byte, []int) {
+	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *CommissionRoomRequest) GetFacilityId() string {
+	if x != nil {
+		return x.FacilityId
+	}
+	return ""
+}
+
+func (x *CommissionRoomRequest) GetUnitId() string {
+	if x != nil {
+		return x.UnitId
+	}
+	return ""
+}
+
+func (x *CommissionRoomRequest) GetCode() string {
+	if x != nil {
+		return x.Code
+	}
+	return ""
+}
+
+func (x *CommissionRoomRequest) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+func (x *CommissionRoomRequest) GetClassCode() string {
+	if x != nil {
+		return x.ClassCode
+	}
+	return ""
+}
+
+func (x *CommissionRoomRequest) GetGenderPolicy() GenderPolicy {
+	if x != nil {
+		return x.GenderPolicy
+	}
+	return GenderPolicy_GENDER_POLICY_UNSPECIFIED
+}
+
+func (x *CommissionRoomRequest) GetIsolation() IsolationCapability {
+	if x != nil {
+		return x.Isolation
+	}
+	return IsolationCapability_ISOLATION_CAPABILITY_UNSPECIFIED
+}
+
+type CommissionRoomResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Room          *Room                  `protobuf:"bytes,1,opt,name=room,proto3" json:"room,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CommissionRoomResponse) Reset() {
+	*x = CommissionRoomResponse{}
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CommissionRoomResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CommissionRoomResponse) ProtoMessage() {}
+
+func (x *CommissionRoomResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CommissionRoomResponse.ProtoReflect.Descriptor instead.
+func (*CommissionRoomResponse) Descriptor() ([]byte, []int) {
+	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *CommissionRoomResponse) GetRoom() *Room {
+	if x != nil {
+		return x.Room
+	}
+	return nil
+}
+
+type CommissionBedRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The facility is taken from the room rather than sent, so a bed cannot be
+	// put in a facility its own room is not in.
+	RoomId        string `protobuf:"bytes,1,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`
+	Code          string `protobuf:"bytes,2,opt,name=code,proto3" json:"code,omitempty"`
+	DisplayName   string `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CommissionBedRequest) Reset() {
+	*x = CommissionBedRequest{}
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CommissionBedRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CommissionBedRequest) ProtoMessage() {}
+
+func (x *CommissionBedRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CommissionBedRequest.ProtoReflect.Descriptor instead.
+func (*CommissionBedRequest) Descriptor() ([]byte, []int) {
+	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *CommissionBedRequest) GetRoomId() string {
+	if x != nil {
+		return x.RoomId
+	}
+	return ""
+}
+
+func (x *CommissionBedRequest) GetCode() string {
+	if x != nil {
+		return x.Code
+	}
+	return ""
+}
+
+func (x *CommissionBedRequest) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+type CommissionBedResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Bed           *Bed                   `protobuf:"bytes,1,opt,name=bed,proto3" json:"bed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CommissionBedResponse) Reset() {
+	*x = CommissionBedResponse{}
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CommissionBedResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CommissionBedResponse) ProtoMessage() {}
+
+func (x *CommissionBedResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CommissionBedResponse.ProtoReflect.Descriptor instead.
+func (*CommissionBedResponse) Descriptor() ([]byte, []int) {
+	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *CommissionBedResponse) GetBed() *Bed {
+	if x != nil {
+		return x.Bed
+	}
+	return nil
+}
+
+type SetBedAvailabilityRequest struct {
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	BedId        string                 `protobuf:"bytes,1,opt,name=bed_id,json=bedId,proto3" json:"bed_id,omitempty"`
+	Availability BedAvailability        `protobuf:"varint,2,opt,name=availability,proto3,enum=healthcare.organization.v1.BedAvailability" json:"availability,omitempty"`
+	// Required when blocking or taking out of service, which are decisions
+	// somebody has to be able to review.
+	Reason          string `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	ExpectedVersion int64  `protobuf:"varint,4,opt,name=expected_version,json=expectedVersion,proto3" json:"expected_version,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *SetBedAvailabilityRequest) Reset() {
+	*x = SetBedAvailabilityRequest{}
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetBedAvailabilityRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetBedAvailabilityRequest) ProtoMessage() {}
+
+func (x *SetBedAvailabilityRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetBedAvailabilityRequest.ProtoReflect.Descriptor instead.
+func (*SetBedAvailabilityRequest) Descriptor() ([]byte, []int) {
+	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *SetBedAvailabilityRequest) GetBedId() string {
+	if x != nil {
+		return x.BedId
+	}
+	return ""
+}
+
+func (x *SetBedAvailabilityRequest) GetAvailability() BedAvailability {
+	if x != nil {
+		return x.Availability
+	}
+	return BedAvailability_BED_AVAILABILITY_UNSPECIFIED
+}
+
+func (x *SetBedAvailabilityRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *SetBedAvailabilityRequest) GetExpectedVersion() int64 {
+	if x != nil {
+		return x.ExpectedVersion
+	}
+	return 0
+}
+
+type SetBedAvailabilityResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Bed           *Bed                   `protobuf:"bytes,1,opt,name=bed,proto3" json:"bed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetBedAvailabilityResponse) Reset() {
+	*x = SetBedAvailabilityResponse{}
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetBedAvailabilityResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetBedAvailabilityResponse) ProtoMessage() {}
+
+func (x *SetBedAvailabilityResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetBedAvailabilityResponse.ProtoReflect.Descriptor instead.
+func (*SetBedAvailabilityResponse) Descriptor() ([]byte, []int) {
+	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *SetBedAvailabilityResponse) GetBed() *Bed {
+	if x != nil {
+		return x.Bed
+	}
+	return nil
+}
+
+type RetireBedRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	BedId           string                 `protobuf:"bytes,1,opt,name=bed_id,json=bedId,proto3" json:"bed_id,omitempty"`
+	ExpectedVersion int64                  `protobuf:"varint,2,opt,name=expected_version,json=expectedVersion,proto3" json:"expected_version,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *RetireBedRequest) Reset() {
+	*x = RetireBedRequest{}
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RetireBedRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RetireBedRequest) ProtoMessage() {}
+
+func (x *RetireBedRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RetireBedRequest.ProtoReflect.Descriptor instead.
+func (*RetireBedRequest) Descriptor() ([]byte, []int) {
+	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *RetireBedRequest) GetBedId() string {
+	if x != nil {
+		return x.BedId
+	}
+	return ""
+}
+
+func (x *RetireBedRequest) GetExpectedVersion() int64 {
+	if x != nil {
+		return x.ExpectedVersion
+	}
+	return 0
+}
+
+type RetireBedResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Bed           *Bed                   `protobuf:"bytes,1,opt,name=bed,proto3" json:"bed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RetireBedResponse) Reset() {
+	*x = RetireBedResponse{}
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RetireBedResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RetireBedResponse) ProtoMessage() {}
+
+func (x *RetireBedResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RetireBedResponse.ProtoReflect.Descriptor instead.
+func (*RetireBedResponse) Descriptor() ([]byte, []int) {
+	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *RetireBedResponse) GetBed() *Bed {
+	if x != nil {
+		return x.Bed
+	}
+	return nil
+}
+
+type BedBoardRequest struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	FacilityId string                 `protobuf:"bytes,1,opt,name=facility_id,json=facilityId,proto3" json:"facility_id,omitempty"`
+	// Empty means every ward in the facility.
+	UnitId        string `protobuf:"bytes,2,opt,name=unit_id,json=unitId,proto3" json:"unit_id,omitempty"`
+	PageSize      int32  `protobuf:"varint,3,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BedBoardRequest) Reset() {
+	*x = BedBoardRequest{}
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BedBoardRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BedBoardRequest) ProtoMessage() {}
+
+func (x *BedBoardRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BedBoardRequest.ProtoReflect.Descriptor instead.
+func (*BedBoardRequest) Descriptor() ([]byte, []int) {
+	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *BedBoardRequest) GetFacilityId() string {
+	if x != nil {
+		return x.FacilityId
+	}
+	return ""
+}
+
+func (x *BedBoardRequest) GetUnitId() string {
+	if x != nil {
+		return x.UnitId
+	}
+	return ""
+}
+
+func (x *BedBoardRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+type BedBoardResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Places        []*BedPlace            `protobuf:"bytes,1,rep,name=places,proto3" json:"places,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BedBoardResponse) Reset() {
+	*x = BedBoardResponse{}
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BedBoardResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BedBoardResponse) ProtoMessage() {}
+
+func (x *BedBoardResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BedBoardResponse.ProtoReflect.Descriptor instead.
+func (*BedBoardResponse) Descriptor() ([]byte, []int) {
+	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *BedBoardResponse) GetPlaces() []*BedPlace {
+	if x != nil {
+		return x.Places
+	}
+	return nil
+}
+
 type CreateTenantRequest struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	DisplayName       string                 `protobuf:"bytes,1,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
@@ -453,7 +1918,7 @@ type CreateTenantRequest struct {
 
 func (x *CreateTenantRequest) Reset() {
 	*x = CreateTenantRequest{}
-	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[2]
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -465,7 +1930,7 @@ func (x *CreateTenantRequest) String() string {
 func (*CreateTenantRequest) ProtoMessage() {}
 
 func (x *CreateTenantRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[2]
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -478,7 +1943,7 @@ func (x *CreateTenantRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateTenantRequest.ProtoReflect.Descriptor instead.
 func (*CreateTenantRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{2}
+	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *CreateTenantRequest) GetDisplayName() string {
@@ -518,7 +1983,7 @@ type CreateTenantResponse struct {
 
 func (x *CreateTenantResponse) Reset() {
 	*x = CreateTenantResponse{}
-	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[3]
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -530,7 +1995,7 @@ func (x *CreateTenantResponse) String() string {
 func (*CreateTenantResponse) ProtoMessage() {}
 
 func (x *CreateTenantResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[3]
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -543,7 +2008,7 @@ func (x *CreateTenantResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateTenantResponse.ProtoReflect.Descriptor instead.
 func (*CreateTenantResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{3}
+	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *CreateTenantResponse) GetTenant() *Tenant {
@@ -562,7 +2027,7 @@ type GetTenantRequest struct {
 
 func (x *GetTenantRequest) Reset() {
 	*x = GetTenantRequest{}
-	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[4]
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -574,7 +2039,7 @@ func (x *GetTenantRequest) String() string {
 func (*GetTenantRequest) ProtoMessage() {}
 
 func (x *GetTenantRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[4]
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -587,7 +2052,7 @@ func (x *GetTenantRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTenantRequest.ProtoReflect.Descriptor instead.
 func (*GetTenantRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{4}
+	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *GetTenantRequest) GetTenantId() string {
@@ -606,7 +2071,7 @@ type GetTenantResponse struct {
 
 func (x *GetTenantResponse) Reset() {
 	*x = GetTenantResponse{}
-	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[5]
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -618,7 +2083,7 @@ func (x *GetTenantResponse) String() string {
 func (*GetTenantResponse) ProtoMessage() {}
 
 func (x *GetTenantResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[5]
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -631,7 +2096,7 @@ func (x *GetTenantResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTenantResponse.ProtoReflect.Descriptor instead.
 func (*GetTenantResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{5}
+	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *GetTenantResponse) GetTenant() *Tenant {
@@ -655,7 +2120,7 @@ type CreateFacilityRequest struct {
 
 func (x *CreateFacilityRequest) Reset() {
 	*x = CreateFacilityRequest{}
-	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[6]
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -667,7 +2132,7 @@ func (x *CreateFacilityRequest) String() string {
 func (*CreateFacilityRequest) ProtoMessage() {}
 
 func (x *CreateFacilityRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[6]
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -680,7 +2145,7 @@ func (x *CreateFacilityRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateFacilityRequest.ProtoReflect.Descriptor instead.
 func (*CreateFacilityRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{6}
+	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *CreateFacilityRequest) GetCode() string {
@@ -720,7 +2185,7 @@ type CreateFacilityResponse struct {
 
 func (x *CreateFacilityResponse) Reset() {
 	*x = CreateFacilityResponse{}
-	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[7]
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -732,7 +2197,7 @@ func (x *CreateFacilityResponse) String() string {
 func (*CreateFacilityResponse) ProtoMessage() {}
 
 func (x *CreateFacilityResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[7]
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -745,7 +2210,7 @@ func (x *CreateFacilityResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateFacilityResponse.ProtoReflect.Descriptor instead.
 func (*CreateFacilityResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{7}
+	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *CreateFacilityResponse) GetFacility() *Facility {
@@ -764,7 +2229,7 @@ type GetFacilityRequest struct {
 
 func (x *GetFacilityRequest) Reset() {
 	*x = GetFacilityRequest{}
-	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[8]
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -776,7 +2241,7 @@ func (x *GetFacilityRequest) String() string {
 func (*GetFacilityRequest) ProtoMessage() {}
 
 func (x *GetFacilityRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[8]
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -789,7 +2254,7 @@ func (x *GetFacilityRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetFacilityRequest.ProtoReflect.Descriptor instead.
 func (*GetFacilityRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{8}
+	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *GetFacilityRequest) GetFacilityId() string {
@@ -808,7 +2273,7 @@ type GetFacilityResponse struct {
 
 func (x *GetFacilityResponse) Reset() {
 	*x = GetFacilityResponse{}
-	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[9]
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -820,7 +2285,7 @@ func (x *GetFacilityResponse) String() string {
 func (*GetFacilityResponse) ProtoMessage() {}
 
 func (x *GetFacilityResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[9]
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -833,7 +2298,7 @@ func (x *GetFacilityResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetFacilityResponse.ProtoReflect.Descriptor instead.
 func (*GetFacilityResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{9}
+	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *GetFacilityResponse) GetFacility() *Facility {
@@ -854,7 +2319,7 @@ type ListFacilitiesRequest struct {
 
 func (x *ListFacilitiesRequest) Reset() {
 	*x = ListFacilitiesRequest{}
-	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[10]
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -866,7 +2331,7 @@ func (x *ListFacilitiesRequest) String() string {
 func (*ListFacilitiesRequest) ProtoMessage() {}
 
 func (x *ListFacilitiesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[10]
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -879,7 +2344,7 @@ func (x *ListFacilitiesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListFacilitiesRequest.ProtoReflect.Descriptor instead.
 func (*ListFacilitiesRequest) Descriptor() ([]byte, []int) {
-	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{10}
+	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *ListFacilitiesRequest) GetPage() *v1.PageRequest {
@@ -906,7 +2371,7 @@ type ListFacilitiesResponse struct {
 
 func (x *ListFacilitiesResponse) Reset() {
 	*x = ListFacilitiesResponse{}
-	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[11]
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -918,7 +2383,7 @@ func (x *ListFacilitiesResponse) String() string {
 func (*ListFacilitiesResponse) ProtoMessage() {}
 
 func (x *ListFacilitiesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[11]
+	mi := &file_healthcare_organization_v1_organization_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -931,7 +2396,7 @@ func (x *ListFacilitiesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListFacilitiesResponse.ProtoReflect.Descriptor instead.
 func (*ListFacilitiesResponse) Descriptor() ([]byte, []int) {
-	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{11}
+	return file_healthcare_organization_v1_organization_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *ListFacilitiesResponse) GetFacilities() []*Facility {
@@ -979,7 +2444,106 @@ const file_healthcare_organization_v1_organization_proto_rawDesc = "" +
 	"\n" +
 	"updated_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x18\n" +
 	"\aversion\x18\n" +
-	" \x01(\x03R\aversion\"\xab\x01\n" +
+	" \x01(\x03R\aversion\"\xaf\x01\n" +
+	"\bBedClass\x12\x19\n" +
+	"\bclass_id\x18\x01 \x01(\tR\aclassId\x12\x12\n" +
+	"\x04code\x18\x02 \x01(\tR\x04code\x12!\n" +
+	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\x12\x1f\n" +
+	"\vcharge_code\x18\x04 \x01(\tR\n" +
+	"chargeCode\x12\x16\n" +
+	"\x06status\x18\x05 \x01(\tR\x06status\x12\x18\n" +
+	"\aversion\x18\x06 \x01(\x03R\aversion\"\xff\x02\n" +
+	"\x04Room\x12\x17\n" +
+	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x1f\n" +
+	"\vfacility_id\x18\x02 \x01(\tR\n" +
+	"facilityId\x12\x17\n" +
+	"\aunit_id\x18\x03 \x01(\tR\x06unitId\x12\x12\n" +
+	"\x04code\x18\x04 \x01(\tR\x04code\x12!\n" +
+	"\fdisplay_name\x18\x05 \x01(\tR\vdisplayName\x12\x1d\n" +
+	"\n" +
+	"class_code\x18\x06 \x01(\tR\tclassCode\x12M\n" +
+	"\rgender_policy\x18\a \x01(\x0e2(.healthcare.organization.v1.GenderPolicyR\fgenderPolicy\x12M\n" +
+	"\tisolation\x18\b \x01(\x0e2/.healthcare.organization.v1.IsolationCapabilityR\tisolation\x12\x16\n" +
+	"\x06status\x18\t \x01(\tR\x06status\x12\x18\n" +
+	"\aversion\x18\n" +
+	" \x01(\x03R\aversion\"\xd7\x02\n" +
+	"\x03Bed\x12\x15\n" +
+	"\x06bed_id\x18\x01 \x01(\tR\x05bedId\x12\x17\n" +
+	"\aroom_id\x18\x02 \x01(\tR\x06roomId\x12\x1f\n" +
+	"\vfacility_id\x18\x03 \x01(\tR\n" +
+	"facilityId\x12\x12\n" +
+	"\x04code\x18\x04 \x01(\tR\x04code\x12!\n" +
+	"\fdisplay_name\x18\x05 \x01(\tR\vdisplayName\x12\x16\n" +
+	"\x06status\x18\x06 \x01(\tR\x06status\x12O\n" +
+	"\favailability\x18\a \x01(\x0e2+.healthcare.organization.v1.BedAvailabilityR\favailability\x12-\n" +
+	"\x12unavailable_reason\x18\b \x01(\tR\x11unavailableReason\x12\x18\n" +
+	"\aversion\x18\t \x01(\x03R\aversion\x12\x16\n" +
+	"\x06usable\x18\n" +
+	" \x01(\bR\x06usable\"\xaf\x01\n" +
+	"\bBedPlace\x121\n" +
+	"\x03bed\x18\x01 \x01(\v2\x1f.healthcare.organization.v1.BedR\x03bed\x124\n" +
+	"\x04room\x18\x02 \x01(\v2 .healthcare.organization.v1.RoomR\x04room\x12:\n" +
+	"\x05class\x18\x03 \x01(\v2$.healthcare.organization.v1.BedClassR\x05class\"\xbd\x02\n" +
+	"\x18CommissionOrgUnitRequest\x12\x1f\n" +
+	"\vfacility_id\x18\x01 \x01(\tR\n" +
+	"facilityId\x12\x1b\n" +
+	"\tunit_type\x18\x02 \x01(\tR\bunitType\x12\x12\n" +
+	"\x04code\x18\x03 \x01(\tR\x04code\x12!\n" +
+	"\fdisplay_name\x18\x04 \x01(\tR\vdisplayName\x12$\n" +
+	"\x0eparent_unit_id\x18\x05 \x01(\tR\fparentUnitId\x12A\n" +
+	"\x0eeffective_from\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\reffectiveFrom\x12C\n" +
+	"\x0feffective_until\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x0eeffectiveUntil\"k\n" +
+	"\x19CommissionOrgUnitResponse\x12\x17\n" +
+	"\aunit_id\x18\x01 \x01(\tR\x06unitId\x12\x12\n" +
+	"\x04code\x18\x02 \x01(\tR\x04code\x12!\n" +
+	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\"o\n" +
+	"\x15DefineBedClassRequest\x12\x12\n" +
+	"\x04code\x18\x01 \x01(\tR\x04code\x12!\n" +
+	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12\x1f\n" +
+	"\vcharge_code\x18\x03 \x01(\tR\n" +
+	"chargeCode\"T\n" +
+	"\x16DefineBedClassResponse\x12:\n" +
+	"\x05class\x18\x01 \x01(\v2$.healthcare.organization.v1.BedClassR\x05class\"\x17\n" +
+	"\x15ListBedClassesRequest\"X\n" +
+	"\x16ListBedClassesResponse\x12>\n" +
+	"\aclasses\x18\x01 \x03(\v2$.healthcare.organization.v1.BedClassR\aclasses\"\xc5\x02\n" +
+	"\x15CommissionRoomRequest\x12\x1f\n" +
+	"\vfacility_id\x18\x01 \x01(\tR\n" +
+	"facilityId\x12\x17\n" +
+	"\aunit_id\x18\x02 \x01(\tR\x06unitId\x12\x12\n" +
+	"\x04code\x18\x03 \x01(\tR\x04code\x12!\n" +
+	"\fdisplay_name\x18\x04 \x01(\tR\vdisplayName\x12\x1d\n" +
+	"\n" +
+	"class_code\x18\x05 \x01(\tR\tclassCode\x12M\n" +
+	"\rgender_policy\x18\x06 \x01(\x0e2(.healthcare.organization.v1.GenderPolicyR\fgenderPolicy\x12M\n" +
+	"\tisolation\x18\a \x01(\x0e2/.healthcare.organization.v1.IsolationCapabilityR\tisolation\"N\n" +
+	"\x16CommissionRoomResponse\x124\n" +
+	"\x04room\x18\x01 \x01(\v2 .healthcare.organization.v1.RoomR\x04room\"f\n" +
+	"\x14CommissionBedRequest\x12\x17\n" +
+	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x12\n" +
+	"\x04code\x18\x02 \x01(\tR\x04code\x12!\n" +
+	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\"J\n" +
+	"\x15CommissionBedResponse\x121\n" +
+	"\x03bed\x18\x01 \x01(\v2\x1f.healthcare.organization.v1.BedR\x03bed\"\xc6\x01\n" +
+	"\x19SetBedAvailabilityRequest\x12\x15\n" +
+	"\x06bed_id\x18\x01 \x01(\tR\x05bedId\x12O\n" +
+	"\favailability\x18\x02 \x01(\x0e2+.healthcare.organization.v1.BedAvailabilityR\favailability\x12\x16\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\x12)\n" +
+	"\x10expected_version\x18\x04 \x01(\x03R\x0fexpectedVersion\"O\n" +
+	"\x1aSetBedAvailabilityResponse\x121\n" +
+	"\x03bed\x18\x01 \x01(\v2\x1f.healthcare.organization.v1.BedR\x03bed\"T\n" +
+	"\x10RetireBedRequest\x12\x15\n" +
+	"\x06bed_id\x18\x01 \x01(\tR\x05bedId\x12)\n" +
+	"\x10expected_version\x18\x02 \x01(\x03R\x0fexpectedVersion\"F\n" +
+	"\x11RetireBedResponse\x121\n" +
+	"\x03bed\x18\x01 \x01(\v2\x1f.healthcare.organization.v1.BedR\x03bed\"h\n" +
+	"\x0fBedBoardRequest\x12\x1f\n" +
+	"\vfacility_id\x18\x01 \x01(\tR\n" +
+	"facilityId\x12\x17\n" +
+	"\aunit_id\x18\x02 \x01(\tR\x06unitId\x12\x1b\n" +
+	"\tpage_size\x18\x03 \x01(\x05R\bpageSize\"P\n" +
+	"\x10BedBoardResponse\x12<\n" +
+	"\x06places\x18\x01 \x03(\v2$.healthcare.organization.v1.BedPlaceR\x06places\"\xab\x01\n" +
 	"\x13CreateTenantRequest\x12!\n" +
 	"\fdisplay_name\x18\x01 \x01(\tR\vdisplayName\x12-\n" +
 	"\x12legal_jurisdiction\x18\x02 \x01(\tR\x11legalJurisdiction\x12%\n" +
@@ -1030,13 +2594,39 @@ const file_healthcare_organization_v1_organization_proto_rawDesc = "" +
 	"\x18FACILITY_TYPE_LABORATORY\x10\x03\x12\x1a\n" +
 	"\x16FACILITY_TYPE_PHARMACY\x10\x04\x12#\n" +
 	"\x1fFACILITY_TYPE_COLLECTION_CENTRE\x10\x05\x12\x1b\n" +
-	"\x17FACILITY_TYPE_WAREHOUSE\x10\x062\xde\x04\n" +
+	"\x17FACILITY_TYPE_WAREHOUSE\x10\x06*\x80\x01\n" +
+	"\fGenderPolicy\x12\x1d\n" +
+	"\x19GENDER_POLICY_UNSPECIFIED\x10\x00\x12\x15\n" +
+	"\x11GENDER_POLICY_ANY\x10\x01\x12\x1b\n" +
+	"\x17GENDER_POLICY_MALE_ONLY\x10\x02\x12\x1d\n" +
+	"\x19GENDER_POLICY_FEMALE_ONLY\x10\x03*\xc1\x01\n" +
+	"\x13IsolationCapability\x12$\n" +
+	" ISOLATION_CAPABILITY_UNSPECIFIED\x10\x00\x12\x1d\n" +
+	"\x19ISOLATION_CAPABILITY_NONE\x10\x01\x12 \n" +
+	"\x1cISOLATION_CAPABILITY_CONTACT\x10\x02\x12 \n" +
+	"\x1cISOLATION_CAPABILITY_DROPLET\x10\x03\x12!\n" +
+	"\x1dISOLATION_CAPABILITY_AIRBORNE\x10\x04*\xd4\x01\n" +
+	"\x0fBedAvailability\x12 \n" +
+	"\x1cBED_AVAILABILITY_UNSPECIFIED\x10\x00\x12\x1e\n" +
+	"\x1aBED_AVAILABILITY_AVAILABLE\x10\x01\x12\x1d\n" +
+	"\x19BED_AVAILABILITY_OCCUPIED\x10\x02\x12\x1d\n" +
+	"\x19BED_AVAILABILITY_CLEANING\x10\x03\x12\x1c\n" +
+	"\x18BED_AVAILABILITY_BLOCKED\x10\x04\x12#\n" +
+	"\x1fBED_AVAILABILITY_OUT_OF_SERVICE\x10\x052\xa9\f\n" +
 	"\x13OrganizationService\x12s\n" +
 	"\fCreateTenant\x12/.healthcare.organization.v1.CreateTenantRequest\x1a0.healthcare.organization.v1.CreateTenantResponse\"\x00\x12j\n" +
 	"\tGetTenant\x12,.healthcare.organization.v1.GetTenantRequest\x1a-.healthcare.organization.v1.GetTenantResponse\"\x00\x12y\n" +
 	"\x0eCreateFacility\x121.healthcare.organization.v1.CreateFacilityRequest\x1a2.healthcare.organization.v1.CreateFacilityResponse\"\x00\x12p\n" +
 	"\vGetFacility\x12..healthcare.organization.v1.GetFacilityRequest\x1a/.healthcare.organization.v1.GetFacilityResponse\"\x00\x12y\n" +
-	"\x0eListFacilities\x121.healthcare.organization.v1.ListFacilitiesRequest\x1a2.healthcare.organization.v1.ListFacilitiesResponse\"\x00BSZQgithub.com/ppusapati/health/code/gen/go/healthcare/organization/v1;organizationv1b\x06proto3"
+	"\x0eListFacilities\x121.healthcare.organization.v1.ListFacilitiesRequest\x1a2.healthcare.organization.v1.ListFacilitiesResponse\"\x00\x12\x82\x01\n" +
+	"\x11CommissionOrgUnit\x124.healthcare.organization.v1.CommissionOrgUnitRequest\x1a5.healthcare.organization.v1.CommissionOrgUnitResponse\"\x00\x12y\n" +
+	"\x0eDefineBedClass\x121.healthcare.organization.v1.DefineBedClassRequest\x1a2.healthcare.organization.v1.DefineBedClassResponse\"\x00\x12y\n" +
+	"\x0eListBedClasses\x121.healthcare.organization.v1.ListBedClassesRequest\x1a2.healthcare.organization.v1.ListBedClassesResponse\"\x00\x12y\n" +
+	"\x0eCommissionRoom\x121.healthcare.organization.v1.CommissionRoomRequest\x1a2.healthcare.organization.v1.CommissionRoomResponse\"\x00\x12v\n" +
+	"\rCommissionBed\x120.healthcare.organization.v1.CommissionBedRequest\x1a1.healthcare.organization.v1.CommissionBedResponse\"\x00\x12\x85\x01\n" +
+	"\x12SetBedAvailability\x125.healthcare.organization.v1.SetBedAvailabilityRequest\x1a6.healthcare.organization.v1.SetBedAvailabilityResponse\"\x00\x12j\n" +
+	"\tRetireBed\x12,.healthcare.organization.v1.RetireBedRequest\x1a-.healthcare.organization.v1.RetireBedResponse\"\x00\x12g\n" +
+	"\bBedBoard\x12+.healthcare.organization.v1.BedBoardRequest\x1a,.healthcare.organization.v1.BedBoardResponse\"\x00BSZQgithub.com/ppusapati/health/code/gen/go/healthcare/organization/v1;organizationv1b\x06proto3"
 
 var (
 	file_healthcare_organization_v1_organization_proto_rawDescOnce sync.Once
@@ -1050,60 +2640,117 @@ func file_healthcare_organization_v1_organization_proto_rawDescGZIP() []byte {
 	return file_healthcare_organization_v1_organization_proto_rawDescData
 }
 
-var file_healthcare_organization_v1_organization_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_healthcare_organization_v1_organization_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_healthcare_organization_v1_organization_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
+var file_healthcare_organization_v1_organization_proto_msgTypes = make([]protoimpl.MessageInfo, 32)
 var file_healthcare_organization_v1_organization_proto_goTypes = []any{
-	(TenantStatus)(0),              // 0: healthcare.organization.v1.TenantStatus
-	(FacilityStatus)(0),            // 1: healthcare.organization.v1.FacilityStatus
-	(FacilityType)(0),              // 2: healthcare.organization.v1.FacilityType
-	(*Tenant)(nil),                 // 3: healthcare.organization.v1.Tenant
-	(*Facility)(nil),               // 4: healthcare.organization.v1.Facility
-	(*CreateTenantRequest)(nil),    // 5: healthcare.organization.v1.CreateTenantRequest
-	(*CreateTenantResponse)(nil),   // 6: healthcare.organization.v1.CreateTenantResponse
-	(*GetTenantRequest)(nil),       // 7: healthcare.organization.v1.GetTenantRequest
-	(*GetTenantResponse)(nil),      // 8: healthcare.organization.v1.GetTenantResponse
-	(*CreateFacilityRequest)(nil),  // 9: healthcare.organization.v1.CreateFacilityRequest
-	(*CreateFacilityResponse)(nil), // 10: healthcare.organization.v1.CreateFacilityResponse
-	(*GetFacilityRequest)(nil),     // 11: healthcare.organization.v1.GetFacilityRequest
-	(*GetFacilityResponse)(nil),    // 12: healthcare.organization.v1.GetFacilityResponse
-	(*ListFacilitiesRequest)(nil),  // 13: healthcare.organization.v1.ListFacilitiesRequest
-	(*ListFacilitiesResponse)(nil), // 14: healthcare.organization.v1.ListFacilitiesResponse
-	(*timestamppb.Timestamp)(nil),  // 15: google.protobuf.Timestamp
-	(*v1.PageRequest)(nil),         // 16: healthcare.common.v1.PageRequest
-	(*v1.PageResponse)(nil),        // 17: healthcare.common.v1.PageResponse
+	(TenantStatus)(0),                  // 0: healthcare.organization.v1.TenantStatus
+	(FacilityStatus)(0),                // 1: healthcare.organization.v1.FacilityStatus
+	(FacilityType)(0),                  // 2: healthcare.organization.v1.FacilityType
+	(GenderPolicy)(0),                  // 3: healthcare.organization.v1.GenderPolicy
+	(IsolationCapability)(0),           // 4: healthcare.organization.v1.IsolationCapability
+	(BedAvailability)(0),               // 5: healthcare.organization.v1.BedAvailability
+	(*Tenant)(nil),                     // 6: healthcare.organization.v1.Tenant
+	(*Facility)(nil),                   // 7: healthcare.organization.v1.Facility
+	(*BedClass)(nil),                   // 8: healthcare.organization.v1.BedClass
+	(*Room)(nil),                       // 9: healthcare.organization.v1.Room
+	(*Bed)(nil),                        // 10: healthcare.organization.v1.Bed
+	(*BedPlace)(nil),                   // 11: healthcare.organization.v1.BedPlace
+	(*CommissionOrgUnitRequest)(nil),   // 12: healthcare.organization.v1.CommissionOrgUnitRequest
+	(*CommissionOrgUnitResponse)(nil),  // 13: healthcare.organization.v1.CommissionOrgUnitResponse
+	(*DefineBedClassRequest)(nil),      // 14: healthcare.organization.v1.DefineBedClassRequest
+	(*DefineBedClassResponse)(nil),     // 15: healthcare.organization.v1.DefineBedClassResponse
+	(*ListBedClassesRequest)(nil),      // 16: healthcare.organization.v1.ListBedClassesRequest
+	(*ListBedClassesResponse)(nil),     // 17: healthcare.organization.v1.ListBedClassesResponse
+	(*CommissionRoomRequest)(nil),      // 18: healthcare.organization.v1.CommissionRoomRequest
+	(*CommissionRoomResponse)(nil),     // 19: healthcare.organization.v1.CommissionRoomResponse
+	(*CommissionBedRequest)(nil),       // 20: healthcare.organization.v1.CommissionBedRequest
+	(*CommissionBedResponse)(nil),      // 21: healthcare.organization.v1.CommissionBedResponse
+	(*SetBedAvailabilityRequest)(nil),  // 22: healthcare.organization.v1.SetBedAvailabilityRequest
+	(*SetBedAvailabilityResponse)(nil), // 23: healthcare.organization.v1.SetBedAvailabilityResponse
+	(*RetireBedRequest)(nil),           // 24: healthcare.organization.v1.RetireBedRequest
+	(*RetireBedResponse)(nil),          // 25: healthcare.organization.v1.RetireBedResponse
+	(*BedBoardRequest)(nil),            // 26: healthcare.organization.v1.BedBoardRequest
+	(*BedBoardResponse)(nil),           // 27: healthcare.organization.v1.BedBoardResponse
+	(*CreateTenantRequest)(nil),        // 28: healthcare.organization.v1.CreateTenantRequest
+	(*CreateTenantResponse)(nil),       // 29: healthcare.organization.v1.CreateTenantResponse
+	(*GetTenantRequest)(nil),           // 30: healthcare.organization.v1.GetTenantRequest
+	(*GetTenantResponse)(nil),          // 31: healthcare.organization.v1.GetTenantResponse
+	(*CreateFacilityRequest)(nil),      // 32: healthcare.organization.v1.CreateFacilityRequest
+	(*CreateFacilityResponse)(nil),     // 33: healthcare.organization.v1.CreateFacilityResponse
+	(*GetFacilityRequest)(nil),         // 34: healthcare.organization.v1.GetFacilityRequest
+	(*GetFacilityResponse)(nil),        // 35: healthcare.organization.v1.GetFacilityResponse
+	(*ListFacilitiesRequest)(nil),      // 36: healthcare.organization.v1.ListFacilitiesRequest
+	(*ListFacilitiesResponse)(nil),     // 37: healthcare.organization.v1.ListFacilitiesResponse
+	(*timestamppb.Timestamp)(nil),      // 38: google.protobuf.Timestamp
+	(*v1.PageRequest)(nil),             // 39: healthcare.common.v1.PageRequest
+	(*v1.PageResponse)(nil),            // 40: healthcare.common.v1.PageResponse
 }
 var file_healthcare_organization_v1_organization_proto_depIdxs = []int32{
 	0,  // 0: healthcare.organization.v1.Tenant.status:type_name -> healthcare.organization.v1.TenantStatus
-	15, // 1: healthcare.organization.v1.Tenant.created_at:type_name -> google.protobuf.Timestamp
-	15, // 2: healthcare.organization.v1.Tenant.updated_at:type_name -> google.protobuf.Timestamp
+	38, // 1: healthcare.organization.v1.Tenant.created_at:type_name -> google.protobuf.Timestamp
+	38, // 2: healthcare.organization.v1.Tenant.updated_at:type_name -> google.protobuf.Timestamp
 	2,  // 3: healthcare.organization.v1.Facility.type:type_name -> healthcare.organization.v1.FacilityType
 	1,  // 4: healthcare.organization.v1.Facility.status:type_name -> healthcare.organization.v1.FacilityStatus
-	15, // 5: healthcare.organization.v1.Facility.created_at:type_name -> google.protobuf.Timestamp
-	15, // 6: healthcare.organization.v1.Facility.updated_at:type_name -> google.protobuf.Timestamp
-	3,  // 7: healthcare.organization.v1.CreateTenantResponse.tenant:type_name -> healthcare.organization.v1.Tenant
-	3,  // 8: healthcare.organization.v1.GetTenantResponse.tenant:type_name -> healthcare.organization.v1.Tenant
-	2,  // 9: healthcare.organization.v1.CreateFacilityRequest.type:type_name -> healthcare.organization.v1.FacilityType
-	4,  // 10: healthcare.organization.v1.CreateFacilityResponse.facility:type_name -> healthcare.organization.v1.Facility
-	4,  // 11: healthcare.organization.v1.GetFacilityResponse.facility:type_name -> healthcare.organization.v1.Facility
-	16, // 12: healthcare.organization.v1.ListFacilitiesRequest.page:type_name -> healthcare.common.v1.PageRequest
-	1,  // 13: healthcare.organization.v1.ListFacilitiesRequest.status:type_name -> healthcare.organization.v1.FacilityStatus
-	4,  // 14: healthcare.organization.v1.ListFacilitiesResponse.facilities:type_name -> healthcare.organization.v1.Facility
-	17, // 15: healthcare.organization.v1.ListFacilitiesResponse.page:type_name -> healthcare.common.v1.PageResponse
-	5,  // 16: healthcare.organization.v1.OrganizationService.CreateTenant:input_type -> healthcare.organization.v1.CreateTenantRequest
-	7,  // 17: healthcare.organization.v1.OrganizationService.GetTenant:input_type -> healthcare.organization.v1.GetTenantRequest
-	9,  // 18: healthcare.organization.v1.OrganizationService.CreateFacility:input_type -> healthcare.organization.v1.CreateFacilityRequest
-	11, // 19: healthcare.organization.v1.OrganizationService.GetFacility:input_type -> healthcare.organization.v1.GetFacilityRequest
-	13, // 20: healthcare.organization.v1.OrganizationService.ListFacilities:input_type -> healthcare.organization.v1.ListFacilitiesRequest
-	6,  // 21: healthcare.organization.v1.OrganizationService.CreateTenant:output_type -> healthcare.organization.v1.CreateTenantResponse
-	8,  // 22: healthcare.organization.v1.OrganizationService.GetTenant:output_type -> healthcare.organization.v1.GetTenantResponse
-	10, // 23: healthcare.organization.v1.OrganizationService.CreateFacility:output_type -> healthcare.organization.v1.CreateFacilityResponse
-	12, // 24: healthcare.organization.v1.OrganizationService.GetFacility:output_type -> healthcare.organization.v1.GetFacilityResponse
-	14, // 25: healthcare.organization.v1.OrganizationService.ListFacilities:output_type -> healthcare.organization.v1.ListFacilitiesResponse
-	21, // [21:26] is the sub-list for method output_type
-	16, // [16:21] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	38, // 5: healthcare.organization.v1.Facility.created_at:type_name -> google.protobuf.Timestamp
+	38, // 6: healthcare.organization.v1.Facility.updated_at:type_name -> google.protobuf.Timestamp
+	3,  // 7: healthcare.organization.v1.Room.gender_policy:type_name -> healthcare.organization.v1.GenderPolicy
+	4,  // 8: healthcare.organization.v1.Room.isolation:type_name -> healthcare.organization.v1.IsolationCapability
+	5,  // 9: healthcare.organization.v1.Bed.availability:type_name -> healthcare.organization.v1.BedAvailability
+	10, // 10: healthcare.organization.v1.BedPlace.bed:type_name -> healthcare.organization.v1.Bed
+	9,  // 11: healthcare.organization.v1.BedPlace.room:type_name -> healthcare.organization.v1.Room
+	8,  // 12: healthcare.organization.v1.BedPlace.class:type_name -> healthcare.organization.v1.BedClass
+	38, // 13: healthcare.organization.v1.CommissionOrgUnitRequest.effective_from:type_name -> google.protobuf.Timestamp
+	38, // 14: healthcare.organization.v1.CommissionOrgUnitRequest.effective_until:type_name -> google.protobuf.Timestamp
+	8,  // 15: healthcare.organization.v1.DefineBedClassResponse.class:type_name -> healthcare.organization.v1.BedClass
+	8,  // 16: healthcare.organization.v1.ListBedClassesResponse.classes:type_name -> healthcare.organization.v1.BedClass
+	3,  // 17: healthcare.organization.v1.CommissionRoomRequest.gender_policy:type_name -> healthcare.organization.v1.GenderPolicy
+	4,  // 18: healthcare.organization.v1.CommissionRoomRequest.isolation:type_name -> healthcare.organization.v1.IsolationCapability
+	9,  // 19: healthcare.organization.v1.CommissionRoomResponse.room:type_name -> healthcare.organization.v1.Room
+	10, // 20: healthcare.organization.v1.CommissionBedResponse.bed:type_name -> healthcare.organization.v1.Bed
+	5,  // 21: healthcare.organization.v1.SetBedAvailabilityRequest.availability:type_name -> healthcare.organization.v1.BedAvailability
+	10, // 22: healthcare.organization.v1.SetBedAvailabilityResponse.bed:type_name -> healthcare.organization.v1.Bed
+	10, // 23: healthcare.organization.v1.RetireBedResponse.bed:type_name -> healthcare.organization.v1.Bed
+	11, // 24: healthcare.organization.v1.BedBoardResponse.places:type_name -> healthcare.organization.v1.BedPlace
+	6,  // 25: healthcare.organization.v1.CreateTenantResponse.tenant:type_name -> healthcare.organization.v1.Tenant
+	6,  // 26: healthcare.organization.v1.GetTenantResponse.tenant:type_name -> healthcare.organization.v1.Tenant
+	2,  // 27: healthcare.organization.v1.CreateFacilityRequest.type:type_name -> healthcare.organization.v1.FacilityType
+	7,  // 28: healthcare.organization.v1.CreateFacilityResponse.facility:type_name -> healthcare.organization.v1.Facility
+	7,  // 29: healthcare.organization.v1.GetFacilityResponse.facility:type_name -> healthcare.organization.v1.Facility
+	39, // 30: healthcare.organization.v1.ListFacilitiesRequest.page:type_name -> healthcare.common.v1.PageRequest
+	1,  // 31: healthcare.organization.v1.ListFacilitiesRequest.status:type_name -> healthcare.organization.v1.FacilityStatus
+	7,  // 32: healthcare.organization.v1.ListFacilitiesResponse.facilities:type_name -> healthcare.organization.v1.Facility
+	40, // 33: healthcare.organization.v1.ListFacilitiesResponse.page:type_name -> healthcare.common.v1.PageResponse
+	28, // 34: healthcare.organization.v1.OrganizationService.CreateTenant:input_type -> healthcare.organization.v1.CreateTenantRequest
+	30, // 35: healthcare.organization.v1.OrganizationService.GetTenant:input_type -> healthcare.organization.v1.GetTenantRequest
+	32, // 36: healthcare.organization.v1.OrganizationService.CreateFacility:input_type -> healthcare.organization.v1.CreateFacilityRequest
+	34, // 37: healthcare.organization.v1.OrganizationService.GetFacility:input_type -> healthcare.organization.v1.GetFacilityRequest
+	36, // 38: healthcare.organization.v1.OrganizationService.ListFacilities:input_type -> healthcare.organization.v1.ListFacilitiesRequest
+	12, // 39: healthcare.organization.v1.OrganizationService.CommissionOrgUnit:input_type -> healthcare.organization.v1.CommissionOrgUnitRequest
+	14, // 40: healthcare.organization.v1.OrganizationService.DefineBedClass:input_type -> healthcare.organization.v1.DefineBedClassRequest
+	16, // 41: healthcare.organization.v1.OrganizationService.ListBedClasses:input_type -> healthcare.organization.v1.ListBedClassesRequest
+	18, // 42: healthcare.organization.v1.OrganizationService.CommissionRoom:input_type -> healthcare.organization.v1.CommissionRoomRequest
+	20, // 43: healthcare.organization.v1.OrganizationService.CommissionBed:input_type -> healthcare.organization.v1.CommissionBedRequest
+	22, // 44: healthcare.organization.v1.OrganizationService.SetBedAvailability:input_type -> healthcare.organization.v1.SetBedAvailabilityRequest
+	24, // 45: healthcare.organization.v1.OrganizationService.RetireBed:input_type -> healthcare.organization.v1.RetireBedRequest
+	26, // 46: healthcare.organization.v1.OrganizationService.BedBoard:input_type -> healthcare.organization.v1.BedBoardRequest
+	29, // 47: healthcare.organization.v1.OrganizationService.CreateTenant:output_type -> healthcare.organization.v1.CreateTenantResponse
+	31, // 48: healthcare.organization.v1.OrganizationService.GetTenant:output_type -> healthcare.organization.v1.GetTenantResponse
+	33, // 49: healthcare.organization.v1.OrganizationService.CreateFacility:output_type -> healthcare.organization.v1.CreateFacilityResponse
+	35, // 50: healthcare.organization.v1.OrganizationService.GetFacility:output_type -> healthcare.organization.v1.GetFacilityResponse
+	37, // 51: healthcare.organization.v1.OrganizationService.ListFacilities:output_type -> healthcare.organization.v1.ListFacilitiesResponse
+	13, // 52: healthcare.organization.v1.OrganizationService.CommissionOrgUnit:output_type -> healthcare.organization.v1.CommissionOrgUnitResponse
+	15, // 53: healthcare.organization.v1.OrganizationService.DefineBedClass:output_type -> healthcare.organization.v1.DefineBedClassResponse
+	17, // 54: healthcare.organization.v1.OrganizationService.ListBedClasses:output_type -> healthcare.organization.v1.ListBedClassesResponse
+	19, // 55: healthcare.organization.v1.OrganizationService.CommissionRoom:output_type -> healthcare.organization.v1.CommissionRoomResponse
+	21, // 56: healthcare.organization.v1.OrganizationService.CommissionBed:output_type -> healthcare.organization.v1.CommissionBedResponse
+	23, // 57: healthcare.organization.v1.OrganizationService.SetBedAvailability:output_type -> healthcare.organization.v1.SetBedAvailabilityResponse
+	25, // 58: healthcare.organization.v1.OrganizationService.RetireBed:output_type -> healthcare.organization.v1.RetireBedResponse
+	27, // 59: healthcare.organization.v1.OrganizationService.BedBoard:output_type -> healthcare.organization.v1.BedBoardResponse
+	47, // [47:60] is the sub-list for method output_type
+	34, // [34:47] is the sub-list for method input_type
+	34, // [34:34] is the sub-list for extension type_name
+	34, // [34:34] is the sub-list for extension extendee
+	0,  // [0:34] is the sub-list for field type_name
 }
 
 func init() { file_healthcare_organization_v1_organization_proto_init() }
@@ -1116,8 +2763,8 @@ func file_healthcare_organization_v1_organization_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_healthcare_organization_v1_organization_proto_rawDesc), len(file_healthcare_organization_v1_organization_proto_rawDesc)),
-			NumEnums:      3,
-			NumMessages:   12,
+			NumEnums:      6,
+			NumMessages:   32,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

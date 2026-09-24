@@ -1367,6 +1367,7 @@ func New(deps Deps) *Server {
 		UnitOfWork: txManager,
 		Tenants:    orgpostgres.TenantRepo{Repository: repo},
 		Facilities: orgpostgres.FacilityRepo{Repository: repo},
+		Beds:       repo,
 		Numbers:    repo,
 		Events:     platformStore,
 		Audits:     store.AuditAppenderFunc(platformStore.AppendAudit),
@@ -1419,7 +1420,12 @@ func New(deps Deps) *Server {
 
 	mux := http.NewServeMux()
 	mux.Handle(organizationv1connect.NewOrganizationServiceHandler(
-		orgtransport.NewHandler(orgService), interceptors))
+		orgtransport.NewHandlerWithMasterData(orgService,
+			orgapp.MasterDataPorts{
+				Units:        repo,
+				Changes:      repo,
+				Entitlements: repo,
+			}), interceptors))
 	mux.Handle(identityaccessv1connect.NewIdentityServiceHandler(
 		identitytransport.NewHandler(orgService), interceptors))
 	mux.Handle(empiv1connect.NewPatientServiceHandler(

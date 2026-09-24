@@ -60,6 +60,30 @@ const (
 	// OrganizationServiceListFacilitiesProcedure is the fully-qualified name of the
 	// OrganizationService's ListFacilities RPC.
 	OrganizationServiceListFacilitiesProcedure = "/healthcare.organization.v1.OrganizationService/ListFacilities"
+	// OrganizationServiceCommissionOrgUnitProcedure is the fully-qualified name of the
+	// OrganizationService's CommissionOrgUnit RPC.
+	OrganizationServiceCommissionOrgUnitProcedure = "/healthcare.organization.v1.OrganizationService/CommissionOrgUnit"
+	// OrganizationServiceDefineBedClassProcedure is the fully-qualified name of the
+	// OrganizationService's DefineBedClass RPC.
+	OrganizationServiceDefineBedClassProcedure = "/healthcare.organization.v1.OrganizationService/DefineBedClass"
+	// OrganizationServiceListBedClassesProcedure is the fully-qualified name of the
+	// OrganizationService's ListBedClasses RPC.
+	OrganizationServiceListBedClassesProcedure = "/healthcare.organization.v1.OrganizationService/ListBedClasses"
+	// OrganizationServiceCommissionRoomProcedure is the fully-qualified name of the
+	// OrganizationService's CommissionRoom RPC.
+	OrganizationServiceCommissionRoomProcedure = "/healthcare.organization.v1.OrganizationService/CommissionRoom"
+	// OrganizationServiceCommissionBedProcedure is the fully-qualified name of the
+	// OrganizationService's CommissionBed RPC.
+	OrganizationServiceCommissionBedProcedure = "/healthcare.organization.v1.OrganizationService/CommissionBed"
+	// OrganizationServiceSetBedAvailabilityProcedure is the fully-qualified name of the
+	// OrganizationService's SetBedAvailability RPC.
+	OrganizationServiceSetBedAvailabilityProcedure = "/healthcare.organization.v1.OrganizationService/SetBedAvailability"
+	// OrganizationServiceRetireBedProcedure is the fully-qualified name of the OrganizationService's
+	// RetireBed RPC.
+	OrganizationServiceRetireBedProcedure = "/healthcare.organization.v1.OrganizationService/RetireBed"
+	// OrganizationServiceBedBoardProcedure is the fully-qualified name of the OrganizationService's
+	// BedBoard RPC.
+	OrganizationServiceBedBoardProcedure = "/healthcare.organization.v1.OrganizationService/BedBoard"
 )
 
 // OrganizationServiceClient is a client for the healthcare.organization.v1.OrganizationService
@@ -72,6 +96,16 @@ type OrganizationServiceClient interface {
 	CreateFacility(context.Context, *connect.Request[v1.CreateFacilityRequest]) (*connect.Response[v1.CreateFacilityResponse], error)
 	GetFacility(context.Context, *connect.Request[v1.GetFacilityRequest]) (*connect.Response[v1.GetFacilityResponse], error)
 	ListFacilities(context.Context, *connect.Request[v1.ListFacilitiesRequest]) (*connect.Response[v1.ListFacilitiesResponse], error)
+	// SRS-PLT-006. Commissioning the estate is a tenant-admin action; moving a
+	// bed in and out of use is ward work and takes a different permission.
+	CommissionOrgUnit(context.Context, *connect.Request[v1.CommissionOrgUnitRequest]) (*connect.Response[v1.CommissionOrgUnitResponse], error)
+	DefineBedClass(context.Context, *connect.Request[v1.DefineBedClassRequest]) (*connect.Response[v1.DefineBedClassResponse], error)
+	ListBedClasses(context.Context, *connect.Request[v1.ListBedClassesRequest]) (*connect.Response[v1.ListBedClassesResponse], error)
+	CommissionRoom(context.Context, *connect.Request[v1.CommissionRoomRequest]) (*connect.Response[v1.CommissionRoomResponse], error)
+	CommissionBed(context.Context, *connect.Request[v1.CommissionBedRequest]) (*connect.Response[v1.CommissionBedResponse], error)
+	SetBedAvailability(context.Context, *connect.Request[v1.SetBedAvailabilityRequest]) (*connect.Response[v1.SetBedAvailabilityResponse], error)
+	RetireBed(context.Context, *connect.Request[v1.RetireBedRequest]) (*connect.Response[v1.RetireBedResponse], error)
+	BedBoard(context.Context, *connect.Request[v1.BedBoardRequest]) (*connect.Response[v1.BedBoardResponse], error)
 }
 
 // NewOrganizationServiceClient constructs a client for the
@@ -116,16 +150,72 @@ func NewOrganizationServiceClient(httpClient connect.HTTPClient, baseURL string,
 			connect.WithSchema(organizationServiceMethods.ByName("ListFacilities")),
 			connect.WithClientOptions(opts...),
 		),
+		commissionOrgUnit: connect.NewClient[v1.CommissionOrgUnitRequest, v1.CommissionOrgUnitResponse](
+			httpClient,
+			baseURL+OrganizationServiceCommissionOrgUnitProcedure,
+			connect.WithSchema(organizationServiceMethods.ByName("CommissionOrgUnit")),
+			connect.WithClientOptions(opts...),
+		),
+		defineBedClass: connect.NewClient[v1.DefineBedClassRequest, v1.DefineBedClassResponse](
+			httpClient,
+			baseURL+OrganizationServiceDefineBedClassProcedure,
+			connect.WithSchema(organizationServiceMethods.ByName("DefineBedClass")),
+			connect.WithClientOptions(opts...),
+		),
+		listBedClasses: connect.NewClient[v1.ListBedClassesRequest, v1.ListBedClassesResponse](
+			httpClient,
+			baseURL+OrganizationServiceListBedClassesProcedure,
+			connect.WithSchema(organizationServiceMethods.ByName("ListBedClasses")),
+			connect.WithClientOptions(opts...),
+		),
+		commissionRoom: connect.NewClient[v1.CommissionRoomRequest, v1.CommissionRoomResponse](
+			httpClient,
+			baseURL+OrganizationServiceCommissionRoomProcedure,
+			connect.WithSchema(organizationServiceMethods.ByName("CommissionRoom")),
+			connect.WithClientOptions(opts...),
+		),
+		commissionBed: connect.NewClient[v1.CommissionBedRequest, v1.CommissionBedResponse](
+			httpClient,
+			baseURL+OrganizationServiceCommissionBedProcedure,
+			connect.WithSchema(organizationServiceMethods.ByName("CommissionBed")),
+			connect.WithClientOptions(opts...),
+		),
+		setBedAvailability: connect.NewClient[v1.SetBedAvailabilityRequest, v1.SetBedAvailabilityResponse](
+			httpClient,
+			baseURL+OrganizationServiceSetBedAvailabilityProcedure,
+			connect.WithSchema(organizationServiceMethods.ByName("SetBedAvailability")),
+			connect.WithClientOptions(opts...),
+		),
+		retireBed: connect.NewClient[v1.RetireBedRequest, v1.RetireBedResponse](
+			httpClient,
+			baseURL+OrganizationServiceRetireBedProcedure,
+			connect.WithSchema(organizationServiceMethods.ByName("RetireBed")),
+			connect.WithClientOptions(opts...),
+		),
+		bedBoard: connect.NewClient[v1.BedBoardRequest, v1.BedBoardResponse](
+			httpClient,
+			baseURL+OrganizationServiceBedBoardProcedure,
+			connect.WithSchema(organizationServiceMethods.ByName("BedBoard")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // organizationServiceClient implements OrganizationServiceClient.
 type organizationServiceClient struct {
-	createTenant   *connect.Client[v1.CreateTenantRequest, v1.CreateTenantResponse]
-	getTenant      *connect.Client[v1.GetTenantRequest, v1.GetTenantResponse]
-	createFacility *connect.Client[v1.CreateFacilityRequest, v1.CreateFacilityResponse]
-	getFacility    *connect.Client[v1.GetFacilityRequest, v1.GetFacilityResponse]
-	listFacilities *connect.Client[v1.ListFacilitiesRequest, v1.ListFacilitiesResponse]
+	createTenant       *connect.Client[v1.CreateTenantRequest, v1.CreateTenantResponse]
+	getTenant          *connect.Client[v1.GetTenantRequest, v1.GetTenantResponse]
+	createFacility     *connect.Client[v1.CreateFacilityRequest, v1.CreateFacilityResponse]
+	getFacility        *connect.Client[v1.GetFacilityRequest, v1.GetFacilityResponse]
+	listFacilities     *connect.Client[v1.ListFacilitiesRequest, v1.ListFacilitiesResponse]
+	commissionOrgUnit  *connect.Client[v1.CommissionOrgUnitRequest, v1.CommissionOrgUnitResponse]
+	defineBedClass     *connect.Client[v1.DefineBedClassRequest, v1.DefineBedClassResponse]
+	listBedClasses     *connect.Client[v1.ListBedClassesRequest, v1.ListBedClassesResponse]
+	commissionRoom     *connect.Client[v1.CommissionRoomRequest, v1.CommissionRoomResponse]
+	commissionBed      *connect.Client[v1.CommissionBedRequest, v1.CommissionBedResponse]
+	setBedAvailability *connect.Client[v1.SetBedAvailabilityRequest, v1.SetBedAvailabilityResponse]
+	retireBed          *connect.Client[v1.RetireBedRequest, v1.RetireBedResponse]
+	bedBoard           *connect.Client[v1.BedBoardRequest, v1.BedBoardResponse]
 }
 
 // CreateTenant calls healthcare.organization.v1.OrganizationService.CreateTenant.
@@ -153,6 +243,46 @@ func (c *organizationServiceClient) ListFacilities(ctx context.Context, req *con
 	return c.listFacilities.CallUnary(ctx, req)
 }
 
+// CommissionOrgUnit calls healthcare.organization.v1.OrganizationService.CommissionOrgUnit.
+func (c *organizationServiceClient) CommissionOrgUnit(ctx context.Context, req *connect.Request[v1.CommissionOrgUnitRequest]) (*connect.Response[v1.CommissionOrgUnitResponse], error) {
+	return c.commissionOrgUnit.CallUnary(ctx, req)
+}
+
+// DefineBedClass calls healthcare.organization.v1.OrganizationService.DefineBedClass.
+func (c *organizationServiceClient) DefineBedClass(ctx context.Context, req *connect.Request[v1.DefineBedClassRequest]) (*connect.Response[v1.DefineBedClassResponse], error) {
+	return c.defineBedClass.CallUnary(ctx, req)
+}
+
+// ListBedClasses calls healthcare.organization.v1.OrganizationService.ListBedClasses.
+func (c *organizationServiceClient) ListBedClasses(ctx context.Context, req *connect.Request[v1.ListBedClassesRequest]) (*connect.Response[v1.ListBedClassesResponse], error) {
+	return c.listBedClasses.CallUnary(ctx, req)
+}
+
+// CommissionRoom calls healthcare.organization.v1.OrganizationService.CommissionRoom.
+func (c *organizationServiceClient) CommissionRoom(ctx context.Context, req *connect.Request[v1.CommissionRoomRequest]) (*connect.Response[v1.CommissionRoomResponse], error) {
+	return c.commissionRoom.CallUnary(ctx, req)
+}
+
+// CommissionBed calls healthcare.organization.v1.OrganizationService.CommissionBed.
+func (c *organizationServiceClient) CommissionBed(ctx context.Context, req *connect.Request[v1.CommissionBedRequest]) (*connect.Response[v1.CommissionBedResponse], error) {
+	return c.commissionBed.CallUnary(ctx, req)
+}
+
+// SetBedAvailability calls healthcare.organization.v1.OrganizationService.SetBedAvailability.
+func (c *organizationServiceClient) SetBedAvailability(ctx context.Context, req *connect.Request[v1.SetBedAvailabilityRequest]) (*connect.Response[v1.SetBedAvailabilityResponse], error) {
+	return c.setBedAvailability.CallUnary(ctx, req)
+}
+
+// RetireBed calls healthcare.organization.v1.OrganizationService.RetireBed.
+func (c *organizationServiceClient) RetireBed(ctx context.Context, req *connect.Request[v1.RetireBedRequest]) (*connect.Response[v1.RetireBedResponse], error) {
+	return c.retireBed.CallUnary(ctx, req)
+}
+
+// BedBoard calls healthcare.organization.v1.OrganizationService.BedBoard.
+func (c *organizationServiceClient) BedBoard(ctx context.Context, req *connect.Request[v1.BedBoardRequest]) (*connect.Response[v1.BedBoardResponse], error) {
+	return c.bedBoard.CallUnary(ctx, req)
+}
+
 // OrganizationServiceHandler is an implementation of the
 // healthcare.organization.v1.OrganizationService service.
 type OrganizationServiceHandler interface {
@@ -163,6 +293,16 @@ type OrganizationServiceHandler interface {
 	CreateFacility(context.Context, *connect.Request[v1.CreateFacilityRequest]) (*connect.Response[v1.CreateFacilityResponse], error)
 	GetFacility(context.Context, *connect.Request[v1.GetFacilityRequest]) (*connect.Response[v1.GetFacilityResponse], error)
 	ListFacilities(context.Context, *connect.Request[v1.ListFacilitiesRequest]) (*connect.Response[v1.ListFacilitiesResponse], error)
+	// SRS-PLT-006. Commissioning the estate is a tenant-admin action; moving a
+	// bed in and out of use is ward work and takes a different permission.
+	CommissionOrgUnit(context.Context, *connect.Request[v1.CommissionOrgUnitRequest]) (*connect.Response[v1.CommissionOrgUnitResponse], error)
+	DefineBedClass(context.Context, *connect.Request[v1.DefineBedClassRequest]) (*connect.Response[v1.DefineBedClassResponse], error)
+	ListBedClasses(context.Context, *connect.Request[v1.ListBedClassesRequest]) (*connect.Response[v1.ListBedClassesResponse], error)
+	CommissionRoom(context.Context, *connect.Request[v1.CommissionRoomRequest]) (*connect.Response[v1.CommissionRoomResponse], error)
+	CommissionBed(context.Context, *connect.Request[v1.CommissionBedRequest]) (*connect.Response[v1.CommissionBedResponse], error)
+	SetBedAvailability(context.Context, *connect.Request[v1.SetBedAvailabilityRequest]) (*connect.Response[v1.SetBedAvailabilityResponse], error)
+	RetireBed(context.Context, *connect.Request[v1.RetireBedRequest]) (*connect.Response[v1.RetireBedResponse], error)
+	BedBoard(context.Context, *connect.Request[v1.BedBoardRequest]) (*connect.Response[v1.BedBoardResponse], error)
 }
 
 // NewOrganizationServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -202,6 +342,54 @@ func NewOrganizationServiceHandler(svc OrganizationServiceHandler, opts ...conne
 		connect.WithSchema(organizationServiceMethods.ByName("ListFacilities")),
 		connect.WithHandlerOptions(opts...),
 	)
+	organizationServiceCommissionOrgUnitHandler := connect.NewUnaryHandler(
+		OrganizationServiceCommissionOrgUnitProcedure,
+		svc.CommissionOrgUnit,
+		connect.WithSchema(organizationServiceMethods.ByName("CommissionOrgUnit")),
+		connect.WithHandlerOptions(opts...),
+	)
+	organizationServiceDefineBedClassHandler := connect.NewUnaryHandler(
+		OrganizationServiceDefineBedClassProcedure,
+		svc.DefineBedClass,
+		connect.WithSchema(organizationServiceMethods.ByName("DefineBedClass")),
+		connect.WithHandlerOptions(opts...),
+	)
+	organizationServiceListBedClassesHandler := connect.NewUnaryHandler(
+		OrganizationServiceListBedClassesProcedure,
+		svc.ListBedClasses,
+		connect.WithSchema(organizationServiceMethods.ByName("ListBedClasses")),
+		connect.WithHandlerOptions(opts...),
+	)
+	organizationServiceCommissionRoomHandler := connect.NewUnaryHandler(
+		OrganizationServiceCommissionRoomProcedure,
+		svc.CommissionRoom,
+		connect.WithSchema(organizationServiceMethods.ByName("CommissionRoom")),
+		connect.WithHandlerOptions(opts...),
+	)
+	organizationServiceCommissionBedHandler := connect.NewUnaryHandler(
+		OrganizationServiceCommissionBedProcedure,
+		svc.CommissionBed,
+		connect.WithSchema(organizationServiceMethods.ByName("CommissionBed")),
+		connect.WithHandlerOptions(opts...),
+	)
+	organizationServiceSetBedAvailabilityHandler := connect.NewUnaryHandler(
+		OrganizationServiceSetBedAvailabilityProcedure,
+		svc.SetBedAvailability,
+		connect.WithSchema(organizationServiceMethods.ByName("SetBedAvailability")),
+		connect.WithHandlerOptions(opts...),
+	)
+	organizationServiceRetireBedHandler := connect.NewUnaryHandler(
+		OrganizationServiceRetireBedProcedure,
+		svc.RetireBed,
+		connect.WithSchema(organizationServiceMethods.ByName("RetireBed")),
+		connect.WithHandlerOptions(opts...),
+	)
+	organizationServiceBedBoardHandler := connect.NewUnaryHandler(
+		OrganizationServiceBedBoardProcedure,
+		svc.BedBoard,
+		connect.WithSchema(organizationServiceMethods.ByName("BedBoard")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/healthcare.organization.v1.OrganizationService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case OrganizationServiceCreateTenantProcedure:
@@ -214,6 +402,22 @@ func NewOrganizationServiceHandler(svc OrganizationServiceHandler, opts ...conne
 			organizationServiceGetFacilityHandler.ServeHTTP(w, r)
 		case OrganizationServiceListFacilitiesProcedure:
 			organizationServiceListFacilitiesHandler.ServeHTTP(w, r)
+		case OrganizationServiceCommissionOrgUnitProcedure:
+			organizationServiceCommissionOrgUnitHandler.ServeHTTP(w, r)
+		case OrganizationServiceDefineBedClassProcedure:
+			organizationServiceDefineBedClassHandler.ServeHTTP(w, r)
+		case OrganizationServiceListBedClassesProcedure:
+			organizationServiceListBedClassesHandler.ServeHTTP(w, r)
+		case OrganizationServiceCommissionRoomProcedure:
+			organizationServiceCommissionRoomHandler.ServeHTTP(w, r)
+		case OrganizationServiceCommissionBedProcedure:
+			organizationServiceCommissionBedHandler.ServeHTTP(w, r)
+		case OrganizationServiceSetBedAvailabilityProcedure:
+			organizationServiceSetBedAvailabilityHandler.ServeHTTP(w, r)
+		case OrganizationServiceRetireBedProcedure:
+			organizationServiceRetireBedHandler.ServeHTTP(w, r)
+		case OrganizationServiceBedBoardProcedure:
+			organizationServiceBedBoardHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -241,4 +445,36 @@ func (UnimplementedOrganizationServiceHandler) GetFacility(context.Context, *con
 
 func (UnimplementedOrganizationServiceHandler) ListFacilities(context.Context, *connect.Request[v1.ListFacilitiesRequest]) (*connect.Response[v1.ListFacilitiesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.organization.v1.OrganizationService.ListFacilities is not implemented"))
+}
+
+func (UnimplementedOrganizationServiceHandler) CommissionOrgUnit(context.Context, *connect.Request[v1.CommissionOrgUnitRequest]) (*connect.Response[v1.CommissionOrgUnitResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.organization.v1.OrganizationService.CommissionOrgUnit is not implemented"))
+}
+
+func (UnimplementedOrganizationServiceHandler) DefineBedClass(context.Context, *connect.Request[v1.DefineBedClassRequest]) (*connect.Response[v1.DefineBedClassResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.organization.v1.OrganizationService.DefineBedClass is not implemented"))
+}
+
+func (UnimplementedOrganizationServiceHandler) ListBedClasses(context.Context, *connect.Request[v1.ListBedClassesRequest]) (*connect.Response[v1.ListBedClassesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.organization.v1.OrganizationService.ListBedClasses is not implemented"))
+}
+
+func (UnimplementedOrganizationServiceHandler) CommissionRoom(context.Context, *connect.Request[v1.CommissionRoomRequest]) (*connect.Response[v1.CommissionRoomResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.organization.v1.OrganizationService.CommissionRoom is not implemented"))
+}
+
+func (UnimplementedOrganizationServiceHandler) CommissionBed(context.Context, *connect.Request[v1.CommissionBedRequest]) (*connect.Response[v1.CommissionBedResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.organization.v1.OrganizationService.CommissionBed is not implemented"))
+}
+
+func (UnimplementedOrganizationServiceHandler) SetBedAvailability(context.Context, *connect.Request[v1.SetBedAvailabilityRequest]) (*connect.Response[v1.SetBedAvailabilityResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.organization.v1.OrganizationService.SetBedAvailability is not implemented"))
+}
+
+func (UnimplementedOrganizationServiceHandler) RetireBed(context.Context, *connect.Request[v1.RetireBedRequest]) (*connect.Response[v1.RetireBedResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.organization.v1.OrganizationService.RetireBed is not implemented"))
+}
+
+func (UnimplementedOrganizationServiceHandler) BedBoard(context.Context, *connect.Request[v1.BedBoardRequest]) (*connect.Response[v1.BedBoardResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("healthcare.organization.v1.OrganizationService.BedBoard is not implemented"))
 }

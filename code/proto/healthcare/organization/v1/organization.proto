@@ -80,6 +80,196 @@ message Facility {
   int64 version = 10;
 }
 
+// The bed and room master (SRS-PLT-006, and the location levels of
+// SRS-PLT-002's hierarchy).
+
+// BedClass is a tenant's own category of accommodation and the charge it maps
+// to. A catalogue rather than an enumeration: "deluxe" and "twin sharing" are
+// commercial decisions, not something this contract can list in advance.
+message BedClass {
+  string class_id = 1;
+  // The key. It appears in tariff imports and on printed estimates, so it is
+  // stable while the display name is not (SRS-PLT-007).
+  string code = 2;
+  string display_name = 3;
+  // Required. What billing raises the accommodation charge against; a class
+  // that maps to nothing is a stay nobody can bill.
+  string charge_code = 4;
+  string status = 5;
+  int64 version = 6;
+}
+
+// GenderPolicy is who a room may be occupied by. A capability of the room, not
+// a description of who is in it.
+enum GenderPolicy {
+  GENDER_POLICY_UNSPECIFIED = 0;
+  GENDER_POLICY_ANY = 1;
+  GENDER_POLICY_MALE_ONLY = 2;
+  GENDER_POLICY_FEMALE_ONLY = 3;
+}
+
+// IsolationCapability is what a room can safely contain. Ordered: a room that
+// can hold an airborne case can hold a droplet one.
+enum IsolationCapability {
+  ISOLATION_CAPABILITY_UNSPECIFIED = 0;
+  ISOLATION_CAPABILITY_NONE = 1;
+  ISOLATION_CAPABILITY_CONTACT = 2;
+  ISOLATION_CAPABILITY_DROPLET = 3;
+  ISOLATION_CAPABILITY_AIRBORNE = 4;
+}
+
+// Room is a physical space that holds beds. It carries the class, so every bed
+// in it is charged the same way.
+message Room {
+  string room_id = 1;
+  string facility_id = 2;
+  // The ward or department: the hierarchy level above the room.
+  string unit_id = 3;
+  string code = 4;
+  string display_name = 5;
+  string class_code = 6;
+  GenderPolicy gender_policy = 7;
+  IsolationCapability isolation = 8;
+  string status = 9;
+  int64 version = 10;
+}
+
+// BedAvailability is whether a bed can be used right now. Separate from the
+// bed's status, which is whether the hospital has the bed at all: SRS-PLT-006
+// requires the two to be independently controlled.
+enum BedAvailability {
+  BED_AVAILABILITY_UNSPECIFIED = 0;
+  BED_AVAILABILITY_AVAILABLE = 1;
+  BED_AVAILABILITY_OCCUPIED = 2;
+  BED_AVAILABILITY_CLEANING = 3;
+  BED_AVAILABILITY_BLOCKED = 4;
+  BED_AVAILABILITY_OUT_OF_SERVICE = 5;
+}
+
+// Bed is one physical bed.
+message Bed {
+  string bed_id = 1;
+  string room_id = 2;
+  string facility_id = 3;
+  string code = 4;
+  string display_name = 5;
+  // Physical existence: active or retired. Retirement is terminal
+  // (SRS-PLT-015).
+  string status = 6;
+  BedAvailability availability = 7;
+  // Why, for the states that are somebody's decision rather than a
+  // consequence.
+  string unavailable_reason = 8;
+  int64 version = 9;
+  // Both halves together: the bed exists and is free. Derived rather than
+  // stored, so it cannot disagree with the two fields above.
+  bool usable = 10;
+}
+
+// BedPlace is one row of a ward's board: a bed, its room and what it costs.
+message BedPlace {
+  Bed bed = 1;
+  Room room = 2;
+  BedClass class = 3;
+}
+
+// CommissionOrgUnit is the hierarchy level a room hangs from (SRS-PLT-005).
+//
+// It is here because the bed master needs it: a room belongs to a ward, and
+// until now org units could only be created through the repository, so
+// commissioning a ward over the wire was impossible.
+message CommissionOrgUnitRequest {
+  string facility_id = 1;
+  // department, specialty, cost_center, service_unit or care_location.
+  string unit_type = 2;
+  string code = 3;
+  string display_name = 4;
+  string parent_unit_id = 5;
+  google.protobuf.Timestamp effective_from = 6;
+  google.protobuf.Timestamp effective_until = 7;
+}
+
+message CommissionOrgUnitResponse {
+  string unit_id = 1;
+  string code = 2;
+  string display_name = 3;
+}
+
+message DefineBedClassRequest {
+  string code = 1;
+  string display_name = 2;
+  string charge_code = 3;
+}
+
+message DefineBedClassResponse {
+  BedClass class = 1;
+}
+
+message ListBedClassesRequest {}
+
+message ListBedClassesResponse {
+  repeated BedClass classes = 1;
+}
+
+message CommissionRoomRequest {
+  string facility_id = 1;
+  string unit_id = 2;
+  string code = 3;
+  string display_name = 4;
+  string class_code = 5;
+  GenderPolicy gender_policy = 6;
+  IsolationCapability isolation = 7;
+}
+
+message CommissionRoomResponse {
+  Room room = 1;
+}
+
+message CommissionBedRequest {
+  // The facility is taken from the room rather than sent, so a bed cannot be
+  // put in a facility its own room is not in.
+  string room_id = 1;
+  string code = 2;
+  string display_name = 3;
+}
+
+message CommissionBedResponse {
+  Bed bed = 1;
+}
+
+message SetBedAvailabilityRequest {
+  string bed_id = 1;
+  BedAvailability availability = 2;
+  // Required when blocking or taking out of service, which are decisions
+  // somebody has to be able to review.
+  string reason = 3;
+  int64 expected_version = 4;
+}
+
+message SetBedAvailabilityResponse {
+  Bed bed = 1;
+}
+
+message RetireBedRequest {
+  string bed_id = 1;
+  int64 expected_version = 2;
+}
+
+message RetireBedResponse {
+  Bed bed = 1;
+}
+
+message BedBoardRequest {
+  string facility_id = 1;
+  // Empty means every ward in the facility.
+  string unit_id = 2;
+  int32 page_size = 3;
+}
+
+message BedBoardResponse {
+  repeated BedPlace places = 1;
+}
+
 service OrganizationService {
   // SRS-PLT-001. Platform-operator scope; emits organization.tenant_provisioned.
   rpc CreateTenant(CreateTenantRequest) returns (CreateTenantResponse) {}
@@ -89,6 +279,19 @@ service OrganizationService {
   rpc CreateFacility(CreateFacilityRequest) returns (CreateFacilityResponse) {}
   rpc GetFacility(GetFacilityRequest) returns (GetFacilityResponse) {}
   rpc ListFacilities(ListFacilitiesRequest) returns (ListFacilitiesResponse) {}
+
+  // SRS-PLT-006. Commissioning the estate is a tenant-admin action; moving a
+  // bed in and out of use is ward work and takes a different permission.
+  rpc CommissionOrgUnit(CommissionOrgUnitRequest)
+      returns (CommissionOrgUnitResponse) {}
+  rpc DefineBedClass(DefineBedClassRequest) returns (DefineBedClassResponse) {}
+  rpc ListBedClasses(ListBedClassesRequest) returns (ListBedClassesResponse) {}
+  rpc CommissionRoom(CommissionRoomRequest) returns (CommissionRoomResponse) {}
+  rpc CommissionBed(CommissionBedRequest) returns (CommissionBedResponse) {}
+  rpc SetBedAvailability(SetBedAvailabilityRequest)
+      returns (SetBedAvailabilityResponse) {}
+  rpc RetireBed(RetireBedRequest) returns (RetireBedResponse) {}
+  rpc BedBoard(BedBoardRequest) returns (BedBoardResponse) {}
 }
 
 message CreateTenantRequest {

@@ -563,6 +563,19 @@ var rolePermissions = map[Role][]string{
 		"organization.tenant.read",
 		"organization.facility.create",
 		"organization.facility.read",
+		// The hierarchy below a facility: wards, departments, specialties and
+		// cost centres (SRS-PLT-005, SRS-PLT-002). The use case existed and
+		// was checked, but no role held the permission, so nothing could
+		// reach it — a ward could only be created by writing to the database.
+		"organization.unit.manage",
+		// Commissioning the estate: accommodation classes, rooms and beds,
+		// and retiring a bed out of it (SRS-PLT-006). Note what is absent:
+		// no organization.bed.state. Deciding what beds a hospital has is
+		// estate work; moving one in and out of use is ward work, and a role
+		// that held both would let an administrator block a bed without the
+		// ward knowing and a ward lose one permanently.
+		"organization.bed_master.manage",
+		"organization.bed.read",
 		// Configuring the demographic minimum set and the duplicate-matching
 		// thresholds is tenant administration. Note what is absent: no
 		// empi.patient.read. Tuning how the register behaves and looking
@@ -1076,6 +1089,12 @@ var rolePermissions = map[Role][]string{
 		// the control that bites is the mandatory reason and the stored report,
 		// not scarcity of the permission.
 		"nur.medication.override",
+		// The ward's own beds: seeing the board and moving a bed in and out of
+		// use (SRS-PLT-006). Not organization.bed_master.manage — a nurse who
+		// could retire a bed could lose one permanently by reaching for the
+		// wrong control, and what a hospital owns is not a ward decision.
+		"organization.bed.read",
+		"organization.bed.state",
 		// A restraint is a nursing act carried out under a clinician's
 		// authorization, and the authorization is checked in the record
 		// rather than in the permission (SRS-NUR-013). Transfusion is not

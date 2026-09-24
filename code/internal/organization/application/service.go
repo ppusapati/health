@@ -50,6 +50,7 @@ type Service struct {
 	uow        ports.UnitOfWork
 	tenants    ports.TenantRepository
 	facilities ports.FacilityRepository
+	beds       ports.BedMasterRepository
 	numbers    ports.NumberIssuer
 	events     ports.EventAppender
 	audits     ports.AuditAppender
@@ -66,6 +67,8 @@ type Deps struct {
 	UnitOfWork ports.UnitOfWork
 	Tenants    ports.TenantRepository
 	Facilities ports.FacilityRepository
+	// Beds is the bed and room master (SRS-PLT-006).
+	Beds ports.BedMasterRepository
 	// Numbers provisions and issues document numbers. Optional: a deployment
 	// that wires no issuer creates facilities that cannot yet issue an MRN, and
 	// says so at the point of issue rather than at commissioning.
@@ -80,6 +83,7 @@ type Deps struct {
 func NewService(d Deps) *Service {
 	return &Service{
 		uow: d.UnitOfWork, tenants: d.Tenants, facilities: d.Facilities,
+		beds:    d.Beds,
 		numbers: d.Numbers, events: d.Events, audits: d.Audits,
 		ids: d.IDs, clock: d.Clock,
 	}

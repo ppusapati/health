@@ -252,3 +252,83 @@ SELECT label_id, tenant_id, code_system, code, locale, display, short_display,
 FROM organization.display_label
 WHERE tenant_id = @tenant_id AND code_system = @code_system AND code = @code
 ORDER BY locale;
+
+-- The bed and room master (SRS-PLT-006, SRS-PLT-002).
+
+-- name: InsertBedClass :exec
+INSERT INTO organization.bed_class (
+    class_id, tenant_id, code, display_name, charge_code, status,
+    created_at, updated_at, version
+) VALUES (
+    @class_id, @tenant_id, @code, @display_name, @charge_code, @status,
+    @created_at, @updated_at, @version
+);
+
+-- name: GetBedClassByCode :one
+SELECT * FROM organization.bed_class
+WHERE tenant_id = @tenant_id AND code = @code;
+
+-- name: ListBedClasses :many
+SELECT * FROM organization.bed_class
+WHERE tenant_id = @tenant_id
+ORDER BY code;
+
+-- name: InsertRoom :exec
+INSERT INTO organization.room (
+    room_id, tenant_id, facility_id, unit_id, code, display_name, class_code,
+    gender_policy, isolation, status, created_at, updated_at, version
+) VALUES (
+    @room_id, @tenant_id, @facility_id, @unit_id, @code, @display_name,
+    @class_code, @gender_policy, @isolation, @status, @created_at,
+    @updated_at, @version
+);
+
+-- name: GetRoom :one
+SELECT * FROM organization.room
+WHERE tenant_id = @tenant_id AND room_id = @room_id;
+
+-- name: InsertBed :exec
+INSERT INTO organization.bed (
+    bed_id, tenant_id, room_id, facility_id, code, display_name, status,
+    availability, unavailable_reason, created_at, updated_at, version
+) VALUES (
+    @bed_id, @tenant_id, @room_id, @facility_id, @code, @display_name,
+    @status, @availability, @unavailable_reason, @created_at, @updated_at,
+    @version
+);
+
+-- name: GetBed :one
+SELECT * FROM organization.bed
+WHERE tenant_id = @tenant_id AND bed_id = @bed_id;
+
+-- name: UpdateBedState :execrows
+UPDATE organization.bed
+SET status = @status, availability = @availability,
+    unavailable_reason = @unavailable_reason,
+    updated_at = @updated_at, version = version + 1
+WHERE tenant_id = @tenant_id AND bed_id = @bed_id AND version = @expected_version;
+
+-- BedBoard is what a ward looks at: every bed in a facility with the room it
+-- is in, the class it is charged at and what the room can take. One query
+-- rather than three, because a board assembled from three reads shows a bed as
+-- free in one column and occupied in another.
+--
+-- name: BedBoard :many
+SELECT
+    b.bed_id, b.code AS bed_code, b.display_name AS bed_name,
+    b.status, b.availability, b.unavailable_reason, b.version,
+    r.room_id, r.code AS room_code, r.unit_id,
+    r.gender_policy, r.isolation,
+    c.code AS class_code, c.display_name AS class_name, c.charge_code
+FROM organization.bed b
+JOIN organization.room r ON r.room_id = b.room_id AND r.tenant_id = b.tenant_id
+JOIN organization.bed_class c
+    ON c.code = r.class_code AND c.tenant_id = r.tenant_id
+WHERE b.tenant_id = @tenant_id
+  AND b.facility_id = @facility_id
+  AND (@unit_id::text = '' OR r.unit_id = @unit_id::uuid)
+  -- Retired beds are out of the estate, so they are off the board. A ward
+  -- that could see them would count them.
+  AND b.status = 'active'
+ORDER BY r.code, b.code
+LIMIT @page_limit;

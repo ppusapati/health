@@ -4402,6 +4402,33 @@ type OrdersOrderStatusChange struct {
 	OccurredAt pgtype.Timestamptz
 }
 
+type OrganizationBed struct {
+	BedID             uuid.UUID
+	TenantID          uuid.UUID
+	RoomID            uuid.UUID
+	FacilityID        uuid.UUID
+	Code              string
+	DisplayName       string
+	Status            string
+	Availability      string
+	UnavailableReason string
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	Version           int64
+}
+
+type OrganizationBedClass struct {
+	ClassID     uuid.UUID
+	TenantID    uuid.UUID
+	Code        string
+	DisplayName string
+	ChargeCode  string
+	Status      string
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+	Version     int64
+}
+
 type OrganizationDisplayLabel struct {
 	LabelID      uuid.UUID
 	TenantID     uuid.UUID
@@ -4503,6 +4530,22 @@ type OrganizationOrgUnit struct {
 	CreatedAt                   pgtype.Timestamptz
 	UpdatedAt                   pgtype.Timestamptz
 	Version                     int64
+}
+
+type OrganizationRoom struct {
+	RoomID       uuid.UUID
+	TenantID     uuid.UUID
+	FacilityID   uuid.UUID
+	UnitID       uuid.UUID
+	Code         string
+	DisplayName  string
+	ClassCode    string
+	GenderPolicy string
+	Isolation    string
+	Status       string
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+	Version      int64
 }
 
 // SRS-PLT-001. tenant_id is immutable; display_name is not a key.

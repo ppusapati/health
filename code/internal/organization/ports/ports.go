@@ -123,3 +123,51 @@ type LabelRepository interface {
 	PutLabel(ctx context.Context, scope authctx.TenantScope, l domain.DisplayLabel) error
 	LabelsFor(ctx context.Context, scope authctx.TenantScope, codeSystem, code string) ([]domain.DisplayLabel, error)
 }
+
+// BedPlace is one row of the ward's bed board: a bed, the room it is in and
+// what that room can take (SRS-PLT-006).
+//
+// Assembled by the repository in one read rather than by the application from
+// three, because a board stitched together from separate reads can show a bed
+// free in one column and occupied in another.
+type BedPlace struct {
+	Bed  domain.Bed
+	Room domain.Room
+	// Class is the accommodation the bed is charged at, derived from its room.
+	Class domain.BedClass
+}
+
+// BedBoardFilter narrows a bed board.
+type BedBoardFilter struct {
+	FacilityID string
+	// UnitID empty means every ward in the facility.
+	UnitID   string
+	PageSize int32
+}
+
+// BedMasterRepository persists the bed and room master (SRS-PLT-006).
+type BedMasterRepository interface {
+	InsertClass(ctx context.Context, scope authctx.TenantScope,
+		c domain.BedClass) error
+	ClassByCode(ctx context.Context, scope authctx.TenantScope, code string) (
+		domain.BedClass, error)
+	ListClasses(ctx context.Context, scope authctx.TenantScope) (
+		[]domain.BedClass, error)
+
+	InsertRoom(ctx context.Context, scope authctx.TenantScope,
+		r domain.Room) error
+	Room(ctx context.Context, scope authctx.TenantScope, roomID string) (
+		domain.Room, error)
+
+	InsertBed(ctx context.Context, scope authctx.TenantScope, b domain.Bed) error
+	Bed(ctx context.Context, scope authctx.TenantScope, bedID string) (
+		domain.Bed, error)
+	// UpdateBedState writes both halves of a bed's state at once. They change
+	// together or not at all: a retirement that wrote the status and lost the
+	// availability would leave a bed the ward still counts.
+	UpdateBedState(ctx context.Context, scope authctx.TenantScope,
+		b domain.Bed, expectedVersion int64) error
+
+	Board(ctx context.Context, scope authctx.TenantScope, f BedBoardFilter) (
+		[]BedPlace, error)
+}

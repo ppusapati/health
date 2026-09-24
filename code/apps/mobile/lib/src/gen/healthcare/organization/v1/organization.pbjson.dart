@@ -79,6 +79,62 @@ final $typed_data.Uint8List facilityTypeDescriptor = $convert.base64Decode(
     'lUWV9UWVBFX0NPTExFQ1RJT05fQ0VOVFJFEAUSGwoXRkFDSUxJVFlfVFlQRV9XQVJFSE9VU0UQ'
     'Bg==');
 
+@$core.Deprecated('Use genderPolicyDescriptor instead')
+const GenderPolicy$json = {
+  '1': 'GenderPolicy',
+  '2': [
+    {'1': 'GENDER_POLICY_UNSPECIFIED', '2': 0},
+    {'1': 'GENDER_POLICY_ANY', '2': 1},
+    {'1': 'GENDER_POLICY_MALE_ONLY', '2': 2},
+    {'1': 'GENDER_POLICY_FEMALE_ONLY', '2': 3},
+  ],
+};
+
+/// Descriptor for `GenderPolicy`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List genderPolicyDescriptor = $convert.base64Decode(
+    'CgxHZW5kZXJQb2xpY3kSHQoZR0VOREVSX1BPTElDWV9VTlNQRUNJRklFRBAAEhUKEUdFTkRFUl'
+    '9QT0xJQ1lfQU5ZEAESGwoXR0VOREVSX1BPTElDWV9NQUxFX09OTFkQAhIdChlHRU5ERVJfUE9M'
+    'SUNZX0ZFTUFMRV9PTkxZEAM=');
+
+@$core.Deprecated('Use isolationCapabilityDescriptor instead')
+const IsolationCapability$json = {
+  '1': 'IsolationCapability',
+  '2': [
+    {'1': 'ISOLATION_CAPABILITY_UNSPECIFIED', '2': 0},
+    {'1': 'ISOLATION_CAPABILITY_NONE', '2': 1},
+    {'1': 'ISOLATION_CAPABILITY_CONTACT', '2': 2},
+    {'1': 'ISOLATION_CAPABILITY_DROPLET', '2': 3},
+    {'1': 'ISOLATION_CAPABILITY_AIRBORNE', '2': 4},
+  ],
+};
+
+/// Descriptor for `IsolationCapability`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List isolationCapabilityDescriptor = $convert.base64Decode(
+    'ChNJc29sYXRpb25DYXBhYmlsaXR5EiQKIElTT0xBVElPTl9DQVBBQklMSVRZX1VOU1BFQ0lGSU'
+    'VEEAASHQoZSVNPTEFUSU9OX0NBUEFCSUxJVFlfTk9ORRABEiAKHElTT0xBVElPTl9DQVBBQklM'
+    'SVRZX0NPTlRBQ1QQAhIgChxJU09MQVRJT05fQ0FQQUJJTElUWV9EUk9QTEVUEAMSIQodSVNPTE'
+    'FUSU9OX0NBUEFCSUxJVFlfQUlSQk9STkUQBA==');
+
+@$core.Deprecated('Use bedAvailabilityDescriptor instead')
+const BedAvailability$json = {
+  '1': 'BedAvailability',
+  '2': [
+    {'1': 'BED_AVAILABILITY_UNSPECIFIED', '2': 0},
+    {'1': 'BED_AVAILABILITY_AVAILABLE', '2': 1},
+    {'1': 'BED_AVAILABILITY_OCCUPIED', '2': 2},
+    {'1': 'BED_AVAILABILITY_CLEANING', '2': 3},
+    {'1': 'BED_AVAILABILITY_BLOCKED', '2': 4},
+    {'1': 'BED_AVAILABILITY_OUT_OF_SERVICE', '2': 5},
+  ],
+};
+
+/// Descriptor for `BedAvailability`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List bedAvailabilityDescriptor = $convert.base64Decode(
+    'Cg9CZWRBdmFpbGFiaWxpdHkSIAocQkVEX0FWQUlMQUJJTElUWV9VTlNQRUNJRklFRBAAEh4KGk'
+    'JFRF9BVkFJTEFCSUxJVFlfQVZBSUxBQkxFEAESHQoZQkVEX0FWQUlMQUJJTElUWV9PQ0NVUElF'
+    'RBACEh0KGUJFRF9BVkFJTEFCSUxJVFlfQ0xFQU5JTkcQAxIcChhCRURfQVZBSUxBQklMSVRZX0'
+    'JMT0NLRUQQBBIjCh9CRURfQVZBSUxBQklMSVRZX09VVF9PRl9TRVJWSUNFEAU=');
+
 @$core.Deprecated('Use tenantDescriptor instead')
 const Tenant$json = {
   '1': 'Tenant',
@@ -188,6 +244,472 @@ final $typed_data.Uint8List facilityDescriptor = $convert.base64Decode(
     'h0aW1lWm9uZRI5CgpjcmVhdGVkX2F0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFt'
     'cFIJY3JlYXRlZEF0EjkKCnVwZGF0ZWRfYXQYCSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZX'
     'N0YW1wUgl1cGRhdGVkQXQSGAoHdmVyc2lvbhgKIAEoA1IHdmVyc2lvbg==');
+
+@$core.Deprecated('Use bedClassDescriptor instead')
+const BedClass$json = {
+  '1': 'BedClass',
+  '2': [
+    {'1': 'class_id', '3': 1, '4': 1, '5': 9, '10': 'classId'},
+    {'1': 'code', '3': 2, '4': 1, '5': 9, '10': 'code'},
+    {'1': 'display_name', '3': 3, '4': 1, '5': 9, '10': 'displayName'},
+    {'1': 'charge_code', '3': 4, '4': 1, '5': 9, '10': 'chargeCode'},
+    {'1': 'status', '3': 5, '4': 1, '5': 9, '10': 'status'},
+    {'1': 'version', '3': 6, '4': 1, '5': 3, '10': 'version'},
+  ],
+};
+
+/// Descriptor for `BedClass`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List bedClassDescriptor = $convert.base64Decode(
+    'CghCZWRDbGFzcxIZCghjbGFzc19pZBgBIAEoCVIHY2xhc3NJZBISCgRjb2RlGAIgASgJUgRjb2'
+    'RlEiEKDGRpc3BsYXlfbmFtZRgDIAEoCVILZGlzcGxheU5hbWUSHwoLY2hhcmdlX2NvZGUYBCAB'
+    'KAlSCmNoYXJnZUNvZGUSFgoGc3RhdHVzGAUgASgJUgZzdGF0dXMSGAoHdmVyc2lvbhgGIAEoA1'
+    'IHdmVyc2lvbg==');
+
+@$core.Deprecated('Use roomDescriptor instead')
+const Room$json = {
+  '1': 'Room',
+  '2': [
+    {'1': 'room_id', '3': 1, '4': 1, '5': 9, '10': 'roomId'},
+    {'1': 'facility_id', '3': 2, '4': 1, '5': 9, '10': 'facilityId'},
+    {'1': 'unit_id', '3': 3, '4': 1, '5': 9, '10': 'unitId'},
+    {'1': 'code', '3': 4, '4': 1, '5': 9, '10': 'code'},
+    {'1': 'display_name', '3': 5, '4': 1, '5': 9, '10': 'displayName'},
+    {'1': 'class_code', '3': 6, '4': 1, '5': 9, '10': 'classCode'},
+    {
+      '1': 'gender_policy',
+      '3': 7,
+      '4': 1,
+      '5': 14,
+      '6': '.healthcare.organization.v1.GenderPolicy',
+      '10': 'genderPolicy'
+    },
+    {
+      '1': 'isolation',
+      '3': 8,
+      '4': 1,
+      '5': 14,
+      '6': '.healthcare.organization.v1.IsolationCapability',
+      '10': 'isolation'
+    },
+    {'1': 'status', '3': 9, '4': 1, '5': 9, '10': 'status'},
+    {'1': 'version', '3': 10, '4': 1, '5': 3, '10': 'version'},
+  ],
+};
+
+/// Descriptor for `Room`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List roomDescriptor = $convert.base64Decode(
+    'CgRSb29tEhcKB3Jvb21faWQYASABKAlSBnJvb21JZBIfCgtmYWNpbGl0eV9pZBgCIAEoCVIKZm'
+    'FjaWxpdHlJZBIXCgd1bml0X2lkGAMgASgJUgZ1bml0SWQSEgoEY29kZRgEIAEoCVIEY29kZRIh'
+    'CgxkaXNwbGF5X25hbWUYBSABKAlSC2Rpc3BsYXlOYW1lEh0KCmNsYXNzX2NvZGUYBiABKAlSCW'
+    'NsYXNzQ29kZRJNCg1nZW5kZXJfcG9saWN5GAcgASgOMiguaGVhbHRoY2FyZS5vcmdhbml6YXRp'
+    'b24udjEuR2VuZGVyUG9saWN5UgxnZW5kZXJQb2xpY3kSTQoJaXNvbGF0aW9uGAggASgOMi8uaG'
+    'VhbHRoY2FyZS5vcmdhbml6YXRpb24udjEuSXNvbGF0aW9uQ2FwYWJpbGl0eVIJaXNvbGF0aW9u'
+    'EhYKBnN0YXR1cxgJIAEoCVIGc3RhdHVzEhgKB3ZlcnNpb24YCiABKANSB3ZlcnNpb24=');
+
+@$core.Deprecated('Use bedDescriptor instead')
+const Bed$json = {
+  '1': 'Bed',
+  '2': [
+    {'1': 'bed_id', '3': 1, '4': 1, '5': 9, '10': 'bedId'},
+    {'1': 'room_id', '3': 2, '4': 1, '5': 9, '10': 'roomId'},
+    {'1': 'facility_id', '3': 3, '4': 1, '5': 9, '10': 'facilityId'},
+    {'1': 'code', '3': 4, '4': 1, '5': 9, '10': 'code'},
+    {'1': 'display_name', '3': 5, '4': 1, '5': 9, '10': 'displayName'},
+    {'1': 'status', '3': 6, '4': 1, '5': 9, '10': 'status'},
+    {
+      '1': 'availability',
+      '3': 7,
+      '4': 1,
+      '5': 14,
+      '6': '.healthcare.organization.v1.BedAvailability',
+      '10': 'availability'
+    },
+    {
+      '1': 'unavailable_reason',
+      '3': 8,
+      '4': 1,
+      '5': 9,
+      '10': 'unavailableReason'
+    },
+    {'1': 'version', '3': 9, '4': 1, '5': 3, '10': 'version'},
+    {'1': 'usable', '3': 10, '4': 1, '5': 8, '10': 'usable'},
+  ],
+};
+
+/// Descriptor for `Bed`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List bedDescriptor = $convert.base64Decode(
+    'CgNCZWQSFQoGYmVkX2lkGAEgASgJUgViZWRJZBIXCgdyb29tX2lkGAIgASgJUgZyb29tSWQSHw'
+    'oLZmFjaWxpdHlfaWQYAyABKAlSCmZhY2lsaXR5SWQSEgoEY29kZRgEIAEoCVIEY29kZRIhCgxk'
+    'aXNwbGF5X25hbWUYBSABKAlSC2Rpc3BsYXlOYW1lEhYKBnN0YXR1cxgGIAEoCVIGc3RhdHVzEk'
+    '8KDGF2YWlsYWJpbGl0eRgHIAEoDjIrLmhlYWx0aGNhcmUub3JnYW5pemF0aW9uLnYxLkJlZEF2'
+    'YWlsYWJpbGl0eVIMYXZhaWxhYmlsaXR5Ei0KEnVuYXZhaWxhYmxlX3JlYXNvbhgIIAEoCVIRdW'
+    '5hdmFpbGFibGVSZWFzb24SGAoHdmVyc2lvbhgJIAEoA1IHdmVyc2lvbhIWCgZ1c2FibGUYCiAB'
+    'KAhSBnVzYWJsZQ==');
+
+@$core.Deprecated('Use bedPlaceDescriptor instead')
+const BedPlace$json = {
+  '1': 'BedPlace',
+  '2': [
+    {
+      '1': 'bed',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.healthcare.organization.v1.Bed',
+      '10': 'bed'
+    },
+    {
+      '1': 'room',
+      '3': 2,
+      '4': 1,
+      '5': 11,
+      '6': '.healthcare.organization.v1.Room',
+      '10': 'room'
+    },
+    {
+      '1': 'class',
+      '3': 3,
+      '4': 1,
+      '5': 11,
+      '6': '.healthcare.organization.v1.BedClass',
+      '10': 'class'
+    },
+  ],
+};
+
+/// Descriptor for `BedPlace`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List bedPlaceDescriptor = $convert.base64Decode(
+    'CghCZWRQbGFjZRIxCgNiZWQYASABKAsyHy5oZWFsdGhjYXJlLm9yZ2FuaXphdGlvbi52MS5CZW'
+    'RSA2JlZBI0CgRyb29tGAIgASgLMiAuaGVhbHRoY2FyZS5vcmdhbml6YXRpb24udjEuUm9vbVIE'
+    'cm9vbRI6CgVjbGFzcxgDIAEoCzIkLmhlYWx0aGNhcmUub3JnYW5pemF0aW9uLnYxLkJlZENsYX'
+    'NzUgVjbGFzcw==');
+
+@$core.Deprecated('Use commissionOrgUnitRequestDescriptor instead')
+const CommissionOrgUnitRequest$json = {
+  '1': 'CommissionOrgUnitRequest',
+  '2': [
+    {'1': 'facility_id', '3': 1, '4': 1, '5': 9, '10': 'facilityId'},
+    {'1': 'unit_type', '3': 2, '4': 1, '5': 9, '10': 'unitType'},
+    {'1': 'code', '3': 3, '4': 1, '5': 9, '10': 'code'},
+    {'1': 'display_name', '3': 4, '4': 1, '5': 9, '10': 'displayName'},
+    {'1': 'parent_unit_id', '3': 5, '4': 1, '5': 9, '10': 'parentUnitId'},
+    {
+      '1': 'effective_from',
+      '3': 6,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'effectiveFrom'
+    },
+    {
+      '1': 'effective_until',
+      '3': 7,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'effectiveUntil'
+    },
+  ],
+};
+
+/// Descriptor for `CommissionOrgUnitRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List commissionOrgUnitRequestDescriptor = $convert.base64Decode(
+    'ChhDb21taXNzaW9uT3JnVW5pdFJlcXVlc3QSHwoLZmFjaWxpdHlfaWQYASABKAlSCmZhY2lsaX'
+    'R5SWQSGwoJdW5pdF90eXBlGAIgASgJUgh1bml0VHlwZRISCgRjb2RlGAMgASgJUgRjb2RlEiEK'
+    'DGRpc3BsYXlfbmFtZRgEIAEoCVILZGlzcGxheU5hbWUSJAoOcGFyZW50X3VuaXRfaWQYBSABKA'
+    'lSDHBhcmVudFVuaXRJZBJBCg5lZmZlY3RpdmVfZnJvbRgGIAEoCzIaLmdvb2dsZS5wcm90b2J1'
+    'Zi5UaW1lc3RhbXBSDWVmZmVjdGl2ZUZyb20SQwoPZWZmZWN0aXZlX3VudGlsGAcgASgLMhouZ2'
+    '9vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcFIOZWZmZWN0aXZlVW50aWw=');
+
+@$core.Deprecated('Use commissionOrgUnitResponseDescriptor instead')
+const CommissionOrgUnitResponse$json = {
+  '1': 'CommissionOrgUnitResponse',
+  '2': [
+    {'1': 'unit_id', '3': 1, '4': 1, '5': 9, '10': 'unitId'},
+    {'1': 'code', '3': 2, '4': 1, '5': 9, '10': 'code'},
+    {'1': 'display_name', '3': 3, '4': 1, '5': 9, '10': 'displayName'},
+  ],
+};
+
+/// Descriptor for `CommissionOrgUnitResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List commissionOrgUnitResponseDescriptor =
+    $convert.base64Decode(
+        'ChlDb21taXNzaW9uT3JnVW5pdFJlc3BvbnNlEhcKB3VuaXRfaWQYASABKAlSBnVuaXRJZBISCg'
+        'Rjb2RlGAIgASgJUgRjb2RlEiEKDGRpc3BsYXlfbmFtZRgDIAEoCVILZGlzcGxheU5hbWU=');
+
+@$core.Deprecated('Use defineBedClassRequestDescriptor instead')
+const DefineBedClassRequest$json = {
+  '1': 'DefineBedClassRequest',
+  '2': [
+    {'1': 'code', '3': 1, '4': 1, '5': 9, '10': 'code'},
+    {'1': 'display_name', '3': 2, '4': 1, '5': 9, '10': 'displayName'},
+    {'1': 'charge_code', '3': 3, '4': 1, '5': 9, '10': 'chargeCode'},
+  ],
+};
+
+/// Descriptor for `DefineBedClassRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List defineBedClassRequestDescriptor = $convert.base64Decode(
+    'ChVEZWZpbmVCZWRDbGFzc1JlcXVlc3QSEgoEY29kZRgBIAEoCVIEY29kZRIhCgxkaXNwbGF5X2'
+    '5hbWUYAiABKAlSC2Rpc3BsYXlOYW1lEh8KC2NoYXJnZV9jb2RlGAMgASgJUgpjaGFyZ2VDb2Rl');
+
+@$core.Deprecated('Use defineBedClassResponseDescriptor instead')
+const DefineBedClassResponse$json = {
+  '1': 'DefineBedClassResponse',
+  '2': [
+    {
+      '1': 'class',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.healthcare.organization.v1.BedClass',
+      '10': 'class'
+    },
+  ],
+};
+
+/// Descriptor for `DefineBedClassResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List defineBedClassResponseDescriptor =
+    $convert.base64Decode(
+        'ChZEZWZpbmVCZWRDbGFzc1Jlc3BvbnNlEjoKBWNsYXNzGAEgASgLMiQuaGVhbHRoY2FyZS5vcm'
+        'dhbml6YXRpb24udjEuQmVkQ2xhc3NSBWNsYXNz');
+
+@$core.Deprecated('Use listBedClassesRequestDescriptor instead')
+const ListBedClassesRequest$json = {
+  '1': 'ListBedClassesRequest',
+};
+
+/// Descriptor for `ListBedClassesRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List listBedClassesRequestDescriptor =
+    $convert.base64Decode('ChVMaXN0QmVkQ2xhc3Nlc1JlcXVlc3Q=');
+
+@$core.Deprecated('Use listBedClassesResponseDescriptor instead')
+const ListBedClassesResponse$json = {
+  '1': 'ListBedClassesResponse',
+  '2': [
+    {
+      '1': 'classes',
+      '3': 1,
+      '4': 3,
+      '5': 11,
+      '6': '.healthcare.organization.v1.BedClass',
+      '10': 'classes'
+    },
+  ],
+};
+
+/// Descriptor for `ListBedClassesResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List listBedClassesResponseDescriptor =
+    $convert.base64Decode(
+        'ChZMaXN0QmVkQ2xhc3Nlc1Jlc3BvbnNlEj4KB2NsYXNzZXMYASADKAsyJC5oZWFsdGhjYXJlLm'
+        '9yZ2FuaXphdGlvbi52MS5CZWRDbGFzc1IHY2xhc3Nlcw==');
+
+@$core.Deprecated('Use commissionRoomRequestDescriptor instead')
+const CommissionRoomRequest$json = {
+  '1': 'CommissionRoomRequest',
+  '2': [
+    {'1': 'facility_id', '3': 1, '4': 1, '5': 9, '10': 'facilityId'},
+    {'1': 'unit_id', '3': 2, '4': 1, '5': 9, '10': 'unitId'},
+    {'1': 'code', '3': 3, '4': 1, '5': 9, '10': 'code'},
+    {'1': 'display_name', '3': 4, '4': 1, '5': 9, '10': 'displayName'},
+    {'1': 'class_code', '3': 5, '4': 1, '5': 9, '10': 'classCode'},
+    {
+      '1': 'gender_policy',
+      '3': 6,
+      '4': 1,
+      '5': 14,
+      '6': '.healthcare.organization.v1.GenderPolicy',
+      '10': 'genderPolicy'
+    },
+    {
+      '1': 'isolation',
+      '3': 7,
+      '4': 1,
+      '5': 14,
+      '6': '.healthcare.organization.v1.IsolationCapability',
+      '10': 'isolation'
+    },
+  ],
+};
+
+/// Descriptor for `CommissionRoomRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List commissionRoomRequestDescriptor = $convert.base64Decode(
+    'ChVDb21taXNzaW9uUm9vbVJlcXVlc3QSHwoLZmFjaWxpdHlfaWQYASABKAlSCmZhY2lsaXR5SW'
+    'QSFwoHdW5pdF9pZBgCIAEoCVIGdW5pdElkEhIKBGNvZGUYAyABKAlSBGNvZGUSIQoMZGlzcGxh'
+    'eV9uYW1lGAQgASgJUgtkaXNwbGF5TmFtZRIdCgpjbGFzc19jb2RlGAUgASgJUgljbGFzc0NvZG'
+    'USTQoNZ2VuZGVyX3BvbGljeRgGIAEoDjIoLmhlYWx0aGNhcmUub3JnYW5pemF0aW9uLnYxLkdl'
+    'bmRlclBvbGljeVIMZ2VuZGVyUG9saWN5Ek0KCWlzb2xhdGlvbhgHIAEoDjIvLmhlYWx0aGNhcm'
+    'Uub3JnYW5pemF0aW9uLnYxLklzb2xhdGlvbkNhcGFiaWxpdHlSCWlzb2xhdGlvbg==');
+
+@$core.Deprecated('Use commissionRoomResponseDescriptor instead')
+const CommissionRoomResponse$json = {
+  '1': 'CommissionRoomResponse',
+  '2': [
+    {
+      '1': 'room',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.healthcare.organization.v1.Room',
+      '10': 'room'
+    },
+  ],
+};
+
+/// Descriptor for `CommissionRoomResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List commissionRoomResponseDescriptor =
+    $convert.base64Decode(
+        'ChZDb21taXNzaW9uUm9vbVJlc3BvbnNlEjQKBHJvb20YASABKAsyIC5oZWFsdGhjYXJlLm9yZ2'
+        'FuaXphdGlvbi52MS5Sb29tUgRyb29t');
+
+@$core.Deprecated('Use commissionBedRequestDescriptor instead')
+const CommissionBedRequest$json = {
+  '1': 'CommissionBedRequest',
+  '2': [
+    {'1': 'room_id', '3': 1, '4': 1, '5': 9, '10': 'roomId'},
+    {'1': 'code', '3': 2, '4': 1, '5': 9, '10': 'code'},
+    {'1': 'display_name', '3': 3, '4': 1, '5': 9, '10': 'displayName'},
+  ],
+};
+
+/// Descriptor for `CommissionBedRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List commissionBedRequestDescriptor = $convert.base64Decode(
+    'ChRDb21taXNzaW9uQmVkUmVxdWVzdBIXCgdyb29tX2lkGAEgASgJUgZyb29tSWQSEgoEY29kZR'
+    'gCIAEoCVIEY29kZRIhCgxkaXNwbGF5X25hbWUYAyABKAlSC2Rpc3BsYXlOYW1l');
+
+@$core.Deprecated('Use commissionBedResponseDescriptor instead')
+const CommissionBedResponse$json = {
+  '1': 'CommissionBedResponse',
+  '2': [
+    {
+      '1': 'bed',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.healthcare.organization.v1.Bed',
+      '10': 'bed'
+    },
+  ],
+};
+
+/// Descriptor for `CommissionBedResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List commissionBedResponseDescriptor = $convert.base64Decode(
+    'ChVDb21taXNzaW9uQmVkUmVzcG9uc2USMQoDYmVkGAEgASgLMh8uaGVhbHRoY2FyZS5vcmdhbm'
+    'l6YXRpb24udjEuQmVkUgNiZWQ=');
+
+@$core.Deprecated('Use setBedAvailabilityRequestDescriptor instead')
+const SetBedAvailabilityRequest$json = {
+  '1': 'SetBedAvailabilityRequest',
+  '2': [
+    {'1': 'bed_id', '3': 1, '4': 1, '5': 9, '10': 'bedId'},
+    {
+      '1': 'availability',
+      '3': 2,
+      '4': 1,
+      '5': 14,
+      '6': '.healthcare.organization.v1.BedAvailability',
+      '10': 'availability'
+    },
+    {'1': 'reason', '3': 3, '4': 1, '5': 9, '10': 'reason'},
+    {'1': 'expected_version', '3': 4, '4': 1, '5': 3, '10': 'expectedVersion'},
+  ],
+};
+
+/// Descriptor for `SetBedAvailabilityRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List setBedAvailabilityRequestDescriptor = $convert.base64Decode(
+    'ChlTZXRCZWRBdmFpbGFiaWxpdHlSZXF1ZXN0EhUKBmJlZF9pZBgBIAEoCVIFYmVkSWQSTwoMYX'
+    'ZhaWxhYmlsaXR5GAIgASgOMisuaGVhbHRoY2FyZS5vcmdhbml6YXRpb24udjEuQmVkQXZhaWxh'
+    'YmlsaXR5UgxhdmFpbGFiaWxpdHkSFgoGcmVhc29uGAMgASgJUgZyZWFzb24SKQoQZXhwZWN0ZW'
+    'RfdmVyc2lvbhgEIAEoA1IPZXhwZWN0ZWRWZXJzaW9u');
+
+@$core.Deprecated('Use setBedAvailabilityResponseDescriptor instead')
+const SetBedAvailabilityResponse$json = {
+  '1': 'SetBedAvailabilityResponse',
+  '2': [
+    {
+      '1': 'bed',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.healthcare.organization.v1.Bed',
+      '10': 'bed'
+    },
+  ],
+};
+
+/// Descriptor for `SetBedAvailabilityResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List setBedAvailabilityResponseDescriptor =
+    $convert.base64Decode(
+        'ChpTZXRCZWRBdmFpbGFiaWxpdHlSZXNwb25zZRIxCgNiZWQYASABKAsyHy5oZWFsdGhjYXJlLm'
+        '9yZ2FuaXphdGlvbi52MS5CZWRSA2JlZA==');
+
+@$core.Deprecated('Use retireBedRequestDescriptor instead')
+const RetireBedRequest$json = {
+  '1': 'RetireBedRequest',
+  '2': [
+    {'1': 'bed_id', '3': 1, '4': 1, '5': 9, '10': 'bedId'},
+    {'1': 'expected_version', '3': 2, '4': 1, '5': 3, '10': 'expectedVersion'},
+  ],
+};
+
+/// Descriptor for `RetireBedRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List retireBedRequestDescriptor = $convert.base64Decode(
+    'ChBSZXRpcmVCZWRSZXF1ZXN0EhUKBmJlZF9pZBgBIAEoCVIFYmVkSWQSKQoQZXhwZWN0ZWRfdm'
+    'Vyc2lvbhgCIAEoA1IPZXhwZWN0ZWRWZXJzaW9u');
+
+@$core.Deprecated('Use retireBedResponseDescriptor instead')
+const RetireBedResponse$json = {
+  '1': 'RetireBedResponse',
+  '2': [
+    {
+      '1': 'bed',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.healthcare.organization.v1.Bed',
+      '10': 'bed'
+    },
+  ],
+};
+
+/// Descriptor for `RetireBedResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List retireBedResponseDescriptor = $convert.base64Decode(
+    'ChFSZXRpcmVCZWRSZXNwb25zZRIxCgNiZWQYASABKAsyHy5oZWFsdGhjYXJlLm9yZ2FuaXphdG'
+    'lvbi52MS5CZWRSA2JlZA==');
+
+@$core.Deprecated('Use bedBoardRequestDescriptor instead')
+const BedBoardRequest$json = {
+  '1': 'BedBoardRequest',
+  '2': [
+    {'1': 'facility_id', '3': 1, '4': 1, '5': 9, '10': 'facilityId'},
+    {'1': 'unit_id', '3': 2, '4': 1, '5': 9, '10': 'unitId'},
+    {'1': 'page_size', '3': 3, '4': 1, '5': 5, '10': 'pageSize'},
+  ],
+};
+
+/// Descriptor for `BedBoardRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List bedBoardRequestDescriptor = $convert.base64Decode(
+    'Cg9CZWRCb2FyZFJlcXVlc3QSHwoLZmFjaWxpdHlfaWQYASABKAlSCmZhY2lsaXR5SWQSFwoHdW'
+    '5pdF9pZBgCIAEoCVIGdW5pdElkEhsKCXBhZ2Vfc2l6ZRgDIAEoBVIIcGFnZVNpemU=');
+
+@$core.Deprecated('Use bedBoardResponseDescriptor instead')
+const BedBoardResponse$json = {
+  '1': 'BedBoardResponse',
+  '2': [
+    {
+      '1': 'places',
+      '3': 1,
+      '4': 3,
+      '5': 11,
+      '6': '.healthcare.organization.v1.BedPlace',
+      '10': 'places'
+    },
+  ],
+};
+
+/// Descriptor for `BedBoardResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List bedBoardResponseDescriptor = $convert.base64Decode(
+    'ChBCZWRCb2FyZFJlc3BvbnNlEjwKBnBsYWNlcxgBIAMoCzIkLmhlYWx0aGNhcmUub3JnYW5pem'
+    'F0aW9uLnYxLkJlZFBsYWNlUgZwbGFjZXM=');
 
 @$core.Deprecated('Use createTenantRequestDescriptor instead')
 const CreateTenantRequest$json = {
@@ -434,6 +956,54 @@ const $core.Map<$core.String, $core.dynamic> OrganizationServiceBase$json = {
       '3': '.healthcare.organization.v1.ListFacilitiesResponse',
       '4': {}
     },
+    {
+      '1': 'CommissionOrgUnit',
+      '2': '.healthcare.organization.v1.CommissionOrgUnitRequest',
+      '3': '.healthcare.organization.v1.CommissionOrgUnitResponse',
+      '4': {}
+    },
+    {
+      '1': 'DefineBedClass',
+      '2': '.healthcare.organization.v1.DefineBedClassRequest',
+      '3': '.healthcare.organization.v1.DefineBedClassResponse',
+      '4': {}
+    },
+    {
+      '1': 'ListBedClasses',
+      '2': '.healthcare.organization.v1.ListBedClassesRequest',
+      '3': '.healthcare.organization.v1.ListBedClassesResponse',
+      '4': {}
+    },
+    {
+      '1': 'CommissionRoom',
+      '2': '.healthcare.organization.v1.CommissionRoomRequest',
+      '3': '.healthcare.organization.v1.CommissionRoomResponse',
+      '4': {}
+    },
+    {
+      '1': 'CommissionBed',
+      '2': '.healthcare.organization.v1.CommissionBedRequest',
+      '3': '.healthcare.organization.v1.CommissionBedResponse',
+      '4': {}
+    },
+    {
+      '1': 'SetBedAvailability',
+      '2': '.healthcare.organization.v1.SetBedAvailabilityRequest',
+      '3': '.healthcare.organization.v1.SetBedAvailabilityResponse',
+      '4': {}
+    },
+    {
+      '1': 'RetireBed',
+      '2': '.healthcare.organization.v1.RetireBedRequest',
+      '3': '.healthcare.organization.v1.RetireBedResponse',
+      '4': {}
+    },
+    {
+      '1': 'BedBoard',
+      '2': '.healthcare.organization.v1.BedBoardRequest',
+      '3': '.healthcare.organization.v1.BedBoardResponse',
+      '4': {}
+    },
   ],
 };
 
@@ -459,6 +1029,37 @@ const $core.Map<$core.String, $core.Map<$core.String, $core.dynamic>>
   '.healthcare.organization.v1.ListFacilitiesResponse':
       ListFacilitiesResponse$json,
   '.healthcare.common.v1.PageResponse': $1.PageResponse$json,
+  '.healthcare.organization.v1.CommissionOrgUnitRequest':
+      CommissionOrgUnitRequest$json,
+  '.healthcare.organization.v1.CommissionOrgUnitResponse':
+      CommissionOrgUnitResponse$json,
+  '.healthcare.organization.v1.DefineBedClassRequest':
+      DefineBedClassRequest$json,
+  '.healthcare.organization.v1.DefineBedClassResponse':
+      DefineBedClassResponse$json,
+  '.healthcare.organization.v1.BedClass': BedClass$json,
+  '.healthcare.organization.v1.ListBedClassesRequest':
+      ListBedClassesRequest$json,
+  '.healthcare.organization.v1.ListBedClassesResponse':
+      ListBedClassesResponse$json,
+  '.healthcare.organization.v1.CommissionRoomRequest':
+      CommissionRoomRequest$json,
+  '.healthcare.organization.v1.CommissionRoomResponse':
+      CommissionRoomResponse$json,
+  '.healthcare.organization.v1.Room': Room$json,
+  '.healthcare.organization.v1.CommissionBedRequest': CommissionBedRequest$json,
+  '.healthcare.organization.v1.CommissionBedResponse':
+      CommissionBedResponse$json,
+  '.healthcare.organization.v1.Bed': Bed$json,
+  '.healthcare.organization.v1.SetBedAvailabilityRequest':
+      SetBedAvailabilityRequest$json,
+  '.healthcare.organization.v1.SetBedAvailabilityResponse':
+      SetBedAvailabilityResponse$json,
+  '.healthcare.organization.v1.RetireBedRequest': RetireBedRequest$json,
+  '.healthcare.organization.v1.RetireBedResponse': RetireBedResponse$json,
+  '.healthcare.organization.v1.BedBoardRequest': BedBoardRequest$json,
+  '.healthcare.organization.v1.BedBoardResponse': BedBoardResponse$json,
+  '.healthcare.organization.v1.BedPlace': BedPlace$json,
 };
 
 /// Descriptor for `OrganizationService`. Decode as a `google.protobuf.ServiceDescriptorProto`.
@@ -473,4 +1074,22 @@ final $typed_data.Uint8List organizationServiceDescriptor = $convert.base64Decod
     'VhbHRoY2FyZS5vcmdhbml6YXRpb24udjEuR2V0RmFjaWxpdHlSZXF1ZXN0Gi8uaGVhbHRoY2Fy'
     'ZS5vcmdhbml6YXRpb24udjEuR2V0RmFjaWxpdHlSZXNwb25zZSIAEnkKDkxpc3RGYWNpbGl0aW'
     'VzEjEuaGVhbHRoY2FyZS5vcmdhbml6YXRpb24udjEuTGlzdEZhY2lsaXRpZXNSZXF1ZXN0GjIu'
-    'aGVhbHRoY2FyZS5vcmdhbml6YXRpb24udjEuTGlzdEZhY2lsaXRpZXNSZXNwb25zZSIA');
+    'aGVhbHRoY2FyZS5vcmdhbml6YXRpb24udjEuTGlzdEZhY2lsaXRpZXNSZXNwb25zZSIAEoIBCh'
+    'FDb21taXNzaW9uT3JnVW5pdBI0LmhlYWx0aGNhcmUub3JnYW5pemF0aW9uLnYxLkNvbW1pc3Np'
+    'b25PcmdVbml0UmVxdWVzdBo1LmhlYWx0aGNhcmUub3JnYW5pemF0aW9uLnYxLkNvbW1pc3Npb2'
+    '5PcmdVbml0UmVzcG9uc2UiABJ5Cg5EZWZpbmVCZWRDbGFzcxIxLmhlYWx0aGNhcmUub3JnYW5p'
+    'emF0aW9uLnYxLkRlZmluZUJlZENsYXNzUmVxdWVzdBoyLmhlYWx0aGNhcmUub3JnYW5pemF0aW'
+    '9uLnYxLkRlZmluZUJlZENsYXNzUmVzcG9uc2UiABJ5Cg5MaXN0QmVkQ2xhc3NlcxIxLmhlYWx0'
+    'aGNhcmUub3JnYW5pemF0aW9uLnYxLkxpc3RCZWRDbGFzc2VzUmVxdWVzdBoyLmhlYWx0aGNhcm'
+    'Uub3JnYW5pemF0aW9uLnYxLkxpc3RCZWRDbGFzc2VzUmVzcG9uc2UiABJ5Cg5Db21taXNzaW9u'
+    'Um9vbRIxLmhlYWx0aGNhcmUub3JnYW5pemF0aW9uLnYxLkNvbW1pc3Npb25Sb29tUmVxdWVzdB'
+    'oyLmhlYWx0aGNhcmUub3JnYW5pemF0aW9uLnYxLkNvbW1pc3Npb25Sb29tUmVzcG9uc2UiABJ2'
+    'Cg1Db21taXNzaW9uQmVkEjAuaGVhbHRoY2FyZS5vcmdhbml6YXRpb24udjEuQ29tbWlzc2lvbk'
+    'JlZFJlcXVlc3QaMS5oZWFsdGhjYXJlLm9yZ2FuaXphdGlvbi52MS5Db21taXNzaW9uQmVkUmVz'
+    'cG9uc2UiABKFAQoSU2V0QmVkQXZhaWxhYmlsaXR5EjUuaGVhbHRoY2FyZS5vcmdhbml6YXRpb2'
+    '4udjEuU2V0QmVkQXZhaWxhYmlsaXR5UmVxdWVzdBo2LmhlYWx0aGNhcmUub3JnYW5pemF0aW9u'
+    'LnYxLlNldEJlZEF2YWlsYWJpbGl0eVJlc3BvbnNlIgASagoJUmV0aXJlQmVkEiwuaGVhbHRoY2'
+    'FyZS5vcmdhbml6YXRpb24udjEuUmV0aXJlQmVkUmVxdWVzdBotLmhlYWx0aGNhcmUub3JnYW5p'
+    'emF0aW9uLnYxLlJldGlyZUJlZFJlc3BvbnNlIgASZwoIQmVkQm9hcmQSKy5oZWFsdGhjYXJlLm'
+    '9yZ2FuaXphdGlvbi52MS5CZWRCb2FyZFJlcXVlc3QaLC5oZWFsdGhjYXJlLm9yZ2FuaXphdGlv'
+    'bi52MS5CZWRCb2FyZFJlc3BvbnNlIgA=');

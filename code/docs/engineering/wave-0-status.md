@@ -87,9 +87,9 @@ four are not built and say so.
 | ID | Requirement | State |
 |---|---|---|
 | SRS-PLT-001 | Tenant with immutable id, jurisdiction, locale, time zone | **Implemented** — the milestone-1 transaction creates one and scopes its children to it |
-| SRS-PLT-002 | Hierarchy Tenant → Legal Entity → Region → Facility → Department → Room/Bed/Store | **Partial** — tenant, facility and effective-dated org units below a facility. Legal entity, region, room, bed and store are not modelled; a deployment whose legal entities differ from its tenants has nowhere to say so |
+| SRS-PLT-002 | Hierarchy Tenant → Legal Entity → Region → Facility → Department → Room/Bed/Store | **Partial** — tenant, facility, effective-dated org units, and now rooms and beds below them (migration 0049). Legal entity, region and store are still not modelled; a deployment whose legal entities differ from its tenants has nowhere to say so |
 | SRS-PLT-004 | Facility type, address, contact, licences, operating hours, identifiers | **Partial** — type, status, time zone and operating hours, which scheduling reads. No address, contact, licence or registration identifier, so billing and printed documents cannot carry what a facility is legally required to print on them |
-| SRS-PLT-006 | Bed and room class, gender/isolation capability, operational status, charge mapping | **Not built** — there is no bed or room master anywhere. `housekeeping.bed_hold` and the ICU and emergency contexts reference beds by free identifier, and `billing.*.room_class` is free text with nothing behind it, which is the charge mapping this requirement was supposed to supply. The organization contract traces it; that trace line is now removed |
+| SRS-PLT-006 | Bed and room class, gender/isolation capability, operational status, charge mapping | **Implemented** — migration 0049. A class catalogue carrying the charge code, rooms carrying the class and the gender and isolation capability, and beds carrying two independent states: whether the hospital has the bed and whether it can be used. The verification clause is held by the database as well as the domain — a retired bed cannot read as available, and a bed out of use records why |
 | SRS-PLT-019 | Global reference data separated from tenant-owned configuration | **Not built** — traced to migration 0001, which separates bounded-context schemas. That is a different separation: every table there is tenant-owned. There is no platform-owned catalogue, so there is nothing a platform role is needed to change |
 | SRS-IAM-005 | Break-glass with reason capture, elevated audit and review notification | **Implemented** — as emergency grants in `security_platform`: justification and incident reference required, bounded TTL, expiry independent of the sweeper, self-review refused, the access list append-only and the review's subject matter |
 | SRS-IAM-011 | Active sessions and devices, with self-revocation | **Partial** — revocation works and is monotonic: a revoked session is refused at its next validation despite a signed, unexpired token. There is no surface for a user to see their own sessions or end one, which is the "self" in self-revocation |
@@ -203,12 +203,28 @@ verification clause; the rest were cited when they were built. A row is only as
 good as its test, which is why the gate's job is to notice when a claim stops
 having one — not to decide whether the test was a good one.
 
-**What the four unbuilt ones cost.** SRS-PLT-006 is the one to fix first, and
-not because it is a MUST: three contexts already shipped against beds that have
-no master, so each of them invented its own idea of what a bed is. That
-divergence grows with every context that touches a bed, and the cost of
-reconciling it grows with it — this is the SRS-NUR-014 shape, found earlier
-rather than later.
+**SRS-PLT-006 is built; three left.** The bed master was the one to fix first,
+and not because it is a MUST: four contexts had already shipped against beds
+that had no master, so each of them invented its own idea of what a bed is.
+Migration 0049 gives them one record to resolve against.
+
+What it deliberately does not do is repoint those four. `icu.episode`,
+`infection.*`, `dietetics.*` and `housekeeping.*` still hold `bed_id` as free
+text, and `billing.*.room_class` still holds a class as free text. Repointing
+them means migrating live rows in five contexts and is its own change; until it
+happens, the master is the authority and they are copies that can drift from
+it. The seam exists — `organization.bed_state_changed` is emitted whenever a
+bed moves — but nothing consumes it yet.
+
+Two things were found while building it, both the same shape as the trace line
+that started this: a use case nobody could reach.
+
+- `organization.unit.manage` was defined and checked, and granted to no role.
+  A ward could only be created by writing to the database, which is why rooms
+  had nothing to hang from. It is now granted to the tenant administrator.
+- Org units had no RPC at all. `CommissionOrgUnit` adds one, because a bed
+  master whose rooms need a ward that cannot be created over the wire is not a
+  feature anybody can use.
 
 **This is traceability and passing tests, not RTM `Verified`.** The distinction
 matters and is not a formality:

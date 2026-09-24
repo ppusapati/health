@@ -12,6 +12,97 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const bedBoard = `-- name: BedBoard :many
+SELECT
+    b.bed_id, b.code AS bed_code, b.display_name AS bed_name,
+    b.status, b.availability, b.unavailable_reason, b.version,
+    r.room_id, r.code AS room_code, r.unit_id,
+    r.gender_policy, r.isolation,
+    c.code AS class_code, c.display_name AS class_name, c.charge_code
+FROM organization.bed b
+JOIN organization.room r ON r.room_id = b.room_id AND r.tenant_id = b.tenant_id
+JOIN organization.bed_class c
+    ON c.code = r.class_code AND c.tenant_id = r.tenant_id
+WHERE b.tenant_id = $1
+  AND b.facility_id = $2
+  AND ($3::text = '' OR r.unit_id = $3::uuid)
+  -- Retired beds are out of the estate, so they are off the board. A ward
+  -- that could see them would count them.
+  AND b.status = 'active'
+ORDER BY r.code, b.code
+LIMIT $4
+`
+
+type BedBoardParams struct {
+	TenantID   uuid.UUID
+	FacilityID uuid.UUID
+	UnitID     string
+	PageLimit  int32
+}
+
+type BedBoardRow struct {
+	BedID             uuid.UUID
+	BedCode           string
+	BedName           string
+	Status            string
+	Availability      string
+	UnavailableReason string
+	Version           int64
+	RoomID            uuid.UUID
+	RoomCode          string
+	UnitID            uuid.UUID
+	GenderPolicy      string
+	Isolation         string
+	ClassCode         string
+	ClassName         string
+	ChargeCode        string
+}
+
+// BedBoard is what a ward looks at: every bed in a facility with the room it
+// is in, the class it is charged at and what the room can take. One query
+// rather than three, because a board assembled from three reads shows a bed as
+// free in one column and occupied in another.
+func (q *Queries) BedBoard(ctx context.Context, arg BedBoardParams) ([]BedBoardRow, error) {
+	rows, err := q.db.Query(ctx, bedBoard,
+		arg.TenantID,
+		arg.FacilityID,
+		arg.UnitID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []BedBoardRow{}
+	for rows.Next() {
+		var i BedBoardRow
+		if err := rows.Scan(
+			&i.BedID,
+			&i.BedCode,
+			&i.BedName,
+			&i.Status,
+			&i.Availability,
+			&i.UnavailableReason,
+			&i.Version,
+			&i.RoomID,
+			&i.RoomCode,
+			&i.UnitID,
+			&i.GenderPolicy,
+			&i.Isolation,
+			&i.ClassCode,
+			&i.ClassName,
+			&i.ChargeCode,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const decideMasterDataChange = `-- name: DecideMasterDataChange :execrows
 UPDATE organization.master_data_change
 SET status = $1, decided_by = $2, decided_at = $3,
@@ -65,6 +156,63 @@ func (q *Queries) FacilityCodeExists(ctx context.Context, arg FacilityCodeExists
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const getBed = `-- name: GetBed :one
+SELECT bed_id, tenant_id, room_id, facility_id, code, display_name, status, availability, unavailable_reason, created_at, updated_at, version FROM organization.bed
+WHERE tenant_id = $1 AND bed_id = $2
+`
+
+type GetBedParams struct {
+	TenantID uuid.UUID
+	BedID    uuid.UUID
+}
+
+func (q *Queries) GetBed(ctx context.Context, arg GetBedParams) (OrganizationBed, error) {
+	row := q.db.QueryRow(ctx, getBed, arg.TenantID, arg.BedID)
+	var i OrganizationBed
+	err := row.Scan(
+		&i.BedID,
+		&i.TenantID,
+		&i.RoomID,
+		&i.FacilityID,
+		&i.Code,
+		&i.DisplayName,
+		&i.Status,
+		&i.Availability,
+		&i.UnavailableReason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Version,
+	)
+	return i, err
+}
+
+const getBedClassByCode = `-- name: GetBedClassByCode :one
+SELECT class_id, tenant_id, code, display_name, charge_code, status, created_at, updated_at, version FROM organization.bed_class
+WHERE tenant_id = $1 AND code = $2
+`
+
+type GetBedClassByCodeParams struct {
+	TenantID uuid.UUID
+	Code     string
+}
+
+func (q *Queries) GetBedClassByCode(ctx context.Context, arg GetBedClassByCodeParams) (OrganizationBedClass, error) {
+	row := q.db.QueryRow(ctx, getBedClassByCode, arg.TenantID, arg.Code)
+	var i OrganizationBedClass
+	err := row.Scan(
+		&i.ClassID,
+		&i.TenantID,
+		&i.Code,
+		&i.DisplayName,
+		&i.ChargeCode,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Version,
+	)
+	return i, err
 }
 
 const getFacilityByID = `-- name: GetFacilityByID :one
@@ -220,6 +368,37 @@ func (q *Queries) GetOrgUnitByCode(ctx context.Context, arg GetOrgUnitByCodePara
 	return i, err
 }
 
+const getRoom = `-- name: GetRoom :one
+SELECT room_id, tenant_id, facility_id, unit_id, code, display_name, class_code, gender_policy, isolation, status, created_at, updated_at, version FROM organization.room
+WHERE tenant_id = $1 AND room_id = $2
+`
+
+type GetRoomParams struct {
+	TenantID uuid.UUID
+	RoomID   uuid.UUID
+}
+
+func (q *Queries) GetRoom(ctx context.Context, arg GetRoomParams) (OrganizationRoom, error) {
+	row := q.db.QueryRow(ctx, getRoom, arg.TenantID, arg.RoomID)
+	var i OrganizationRoom
+	err := row.Scan(
+		&i.RoomID,
+		&i.TenantID,
+		&i.FacilityID,
+		&i.UnitID,
+		&i.Code,
+		&i.DisplayName,
+		&i.ClassCode,
+		&i.GenderPolicy,
+		&i.Isolation,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Version,
+	)
+	return i, err
+}
+
 const getTenantByID = `-- name: GetTenantByID :one
 SELECT tenant_id, display_name, legal_jurisdiction, default_locale, time_zone,
        status, created_at, updated_at, version
@@ -254,6 +433,89 @@ func (q *Queries) GetTenantByID(ctx context.Context, tenantID uuid.UUID) (GetTen
 		&i.Version,
 	)
 	return i, err
+}
+
+const insertBed = `-- name: InsertBed :exec
+INSERT INTO organization.bed (
+    bed_id, tenant_id, room_id, facility_id, code, display_name, status,
+    availability, unavailable_reason, created_at, updated_at, version
+) VALUES (
+    $1, $2, $3, $4, $5, $6,
+    $7, $8, $9, $10, $11,
+    $12
+)
+`
+
+type InsertBedParams struct {
+	BedID             uuid.UUID
+	TenantID          uuid.UUID
+	RoomID            uuid.UUID
+	FacilityID        uuid.UUID
+	Code              string
+	DisplayName       string
+	Status            string
+	Availability      string
+	UnavailableReason string
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	Version           int64
+}
+
+func (q *Queries) InsertBed(ctx context.Context, arg InsertBedParams) error {
+	_, err := q.db.Exec(ctx, insertBed,
+		arg.BedID,
+		arg.TenantID,
+		arg.RoomID,
+		arg.FacilityID,
+		arg.Code,
+		arg.DisplayName,
+		arg.Status,
+		arg.Availability,
+		arg.UnavailableReason,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+		arg.Version,
+	)
+	return err
+}
+
+const insertBedClass = `-- name: InsertBedClass :exec
+
+INSERT INTO organization.bed_class (
+    class_id, tenant_id, code, display_name, charge_code, status,
+    created_at, updated_at, version
+) VALUES (
+    $1, $2, $3, $4, $5, $6,
+    $7, $8, $9
+)
+`
+
+type InsertBedClassParams struct {
+	ClassID     uuid.UUID
+	TenantID    uuid.UUID
+	Code        string
+	DisplayName string
+	ChargeCode  string
+	Status      string
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+	Version     int64
+}
+
+// The bed and room master (SRS-PLT-006, SRS-PLT-002).
+func (q *Queries) InsertBedClass(ctx context.Context, arg InsertBedClassParams) error {
+	_, err := q.db.Exec(ctx, insertBedClass,
+		arg.ClassID,
+		arg.TenantID,
+		arg.Code,
+		arg.DisplayName,
+		arg.ChargeCode,
+		arg.Status,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+		arg.Version,
+	)
+	return err
 }
 
 const insertCalendarEntry = `-- name: InsertCalendarEntry :exec
@@ -477,6 +739,52 @@ func (q *Queries) InsertOrgUnit(ctx context.Context, arg InsertOrgUnitParams) er
 	return err
 }
 
+const insertRoom = `-- name: InsertRoom :exec
+INSERT INTO organization.room (
+    room_id, tenant_id, facility_id, unit_id, code, display_name, class_code,
+    gender_policy, isolation, status, created_at, updated_at, version
+) VALUES (
+    $1, $2, $3, $4, $5, $6,
+    $7, $8, $9, $10, $11,
+    $12, $13
+)
+`
+
+type InsertRoomParams struct {
+	RoomID       uuid.UUID
+	TenantID     uuid.UUID
+	FacilityID   uuid.UUID
+	UnitID       uuid.UUID
+	Code         string
+	DisplayName  string
+	ClassCode    string
+	GenderPolicy string
+	Isolation    string
+	Status       string
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+	Version      int64
+}
+
+func (q *Queries) InsertRoom(ctx context.Context, arg InsertRoomParams) error {
+	_, err := q.db.Exec(ctx, insertRoom,
+		arg.RoomID,
+		arg.TenantID,
+		arg.FacilityID,
+		arg.UnitID,
+		arg.Code,
+		arg.DisplayName,
+		arg.ClassCode,
+		arg.GenderPolicy,
+		arg.Isolation,
+		arg.Status,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+		arg.Version,
+	)
+	return err
+}
+
 const insertTenant = `-- name: InsertTenant :exec
 
 INSERT INTO organization.tenant (
@@ -598,6 +906,42 @@ func (q *Queries) IssueTenantNumber(ctx context.Context, arg IssueTenantNumberPa
 	var i IssueTenantNumberRow
 	err := row.Scan(&i.Issued, &i.Prefix, &i.PadWidth)
 	return i, err
+}
+
+const listBedClasses = `-- name: ListBedClasses :many
+SELECT class_id, tenant_id, code, display_name, charge_code, status, created_at, updated_at, version FROM organization.bed_class
+WHERE tenant_id = $1
+ORDER BY code
+`
+
+func (q *Queries) ListBedClasses(ctx context.Context, tenantID uuid.UUID) ([]OrganizationBedClass, error) {
+	rows, err := q.db.Query(ctx, listBedClasses, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []OrganizationBedClass{}
+	for rows.Next() {
+		var i OrganizationBedClass
+		if err := rows.Scan(
+			&i.ClassID,
+			&i.TenantID,
+			&i.Code,
+			&i.DisplayName,
+			&i.ChargeCode,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Version,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listCalendarEntriesOn = `-- name: ListCalendarEntriesOn :many
@@ -969,6 +1313,40 @@ func (q *Queries) ListTenantEntitlements(ctx context.Context, tenantID uuid.UUID
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateBedState = `-- name: UpdateBedState :execrows
+UPDATE organization.bed
+SET status = $1, availability = $2,
+    unavailable_reason = $3,
+    updated_at = $4, version = version + 1
+WHERE tenant_id = $5 AND bed_id = $6 AND version = $7
+`
+
+type UpdateBedStateParams struct {
+	Status            string
+	Availability      string
+	UnavailableReason string
+	UpdatedAt         pgtype.Timestamptz
+	TenantID          uuid.UUID
+	BedID             uuid.UUID
+	ExpectedVersion   int64
+}
+
+func (q *Queries) UpdateBedState(ctx context.Context, arg UpdateBedStateParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateBedState,
+		arg.Status,
+		arg.Availability,
+		arg.UnavailableReason,
+		arg.UpdatedAt,
+		arg.TenantID,
+		arg.BedID,
+		arg.ExpectedVersion,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateOrgUnit = `-- name: UpdateOrgUnit :execrows

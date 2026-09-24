@@ -51,6 +51,7 @@ sql:
       - db/migrations/0046_facilities.up.sql
       - db/migrations/0047_transfusion_unification.up.sql
       - db/migrations/0048_reaction_action_taken.up.sql
+      - db/migrations/0049_bed_master.up.sql
     gen:
       go:
         package: sqlcgen
