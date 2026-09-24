@@ -2753,8 +2753,12 @@ type Reaction struct {
 	ConcludedAt    *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=concluded_at,json=concludedAt,proto3" json:"concluded_at,omitempty"`
 	ConcludedBy    string                 `protobuf:"bytes,14,opt,name=concluded_by,json=concludedBy,proto3" json:"concluded_by,omitempty"`
 	UnitReturned   bool                   `protobuf:"varint,15,opt,name=unit_returned,json=unitReturned,proto3" json:"unit_returned,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Required. What was done at the bedside — the transfusion stopped, the line
+	// kept open with saline, the unit returned. The reaction action runs from
+	// the bedside (SRS-NUR-014), and this report is where it is written down.
+	ActionTaken   string `protobuf:"bytes,16,opt,name=action_taken,json=actionTaken,proto3" json:"action_taken,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Reaction) Reset() {
@@ -2890,6 +2894,13 @@ func (x *Reaction) GetUnitReturned() bool {
 		return x.UnitReturned
 	}
 	return false
+}
+
+func (x *Reaction) GetActionTaken() string {
+	if x != nil {
+		return x.ActionTaken
+	}
+	return ""
 }
 
 // One step of the vein-to-vein chain (SRS-BLD-014).
@@ -6883,13 +6894,19 @@ func (x *ListPatientTransfusionsResponse) GetEpisodes() []*Episode {
 }
 
 type ReportReactionRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	EpisodeId     string                 `protobuf:"bytes,1,opt,name=episode_id,json=episodeId,proto3" json:"episode_id,omitempty"`
-	ComponentId   string                 `protobuf:"bytes,2,opt,name=component_id,json=componentId,proto3" json:"component_id,omitempty"`
-	PatientId     string                 `protobuf:"bytes,3,opt,name=patient_id,json=patientId,proto3" json:"patient_id,omitempty"`
-	Severity      ReactionSeverity       `protobuf:"varint,4,opt,name=severity,proto3,enum=healthcare.bloodbank.v1.ReactionSeverity" json:"severity,omitempty"`
-	Features      []string               `protobuf:"bytes,5,rep,name=features,proto3" json:"features,omitempty"`
-	Note          string                 `protobuf:"bytes,6,opt,name=note,proto3" json:"note,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	EpisodeId   string                 `protobuf:"bytes,1,opt,name=episode_id,json=episodeId,proto3" json:"episode_id,omitempty"`
+	ComponentId string                 `protobuf:"bytes,2,opt,name=component_id,json=componentId,proto3" json:"component_id,omitempty"`
+	PatientId   string                 `protobuf:"bytes,3,opt,name=patient_id,json=patientId,proto3" json:"patient_id,omitempty"`
+	Severity    ReactionSeverity       `protobuf:"varint,4,opt,name=severity,proto3,enum=healthcare.bloodbank.v1.ReactionSeverity" json:"severity,omitempty"`
+	Features    []string               `protobuf:"bytes,5,rep,name=features,proto3" json:"features,omitempty"`
+	Note        string                 `protobuf:"bytes,6,opt,name=note,proto3" json:"note,omitempty"`
+	// Required. What was done about it at the bedside.
+	ActionTaken string `protobuf:"bytes,7,opt,name=action_taken,json=actionTaken,proto3" json:"action_taken,omitempty"`
+	// What the patient received before the transfusion was stopped. Reporting a
+	// reaction stops the transfusion it was reported against, so the volume is
+	// recorded here rather than in a second call.
+	VolumeGivenMl int32 `protobuf:"varint,8,opt,name=volume_given_ml,json=volumeGivenMl,proto3" json:"volume_given_ml,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6964,6 +6981,20 @@ func (x *ReportReactionRequest) GetNote() string {
 		return x.Note
 	}
 	return ""
+}
+
+func (x *ReportReactionRequest) GetActionTaken() string {
+	if x != nil {
+		return x.ActionTaken
+	}
+	return ""
+}
+
+func (x *ReportReactionRequest) GetVolumeGivenMl() int32 {
+	if x != nil {
+		return x.VolumeGivenMl
+	}
+	return 0
 }
 
 type ReportReactionResponse struct {
@@ -7903,7 +7934,7 @@ const file_healthcare_bloodbank_v1_bloodbank_proto_rawDesc = "" +
 	" \x01(\x05R\rvolumeGivenMl\x12\x1f\n" +
 	"\vstop_reason\x18\v \x01(\tR\n" +
 	"stopReason\x12H\n" +
-	"\fobservations\x18\f \x03(\v2$.healthcare.bloodbank.v1.ObservationR\fobservations\"\xf3\x04\n" +
+	"\fobservations\x18\f \x03(\v2$.healthcare.bloodbank.v1.ObservationR\fobservations\"\x96\x05\n" +
 	"\bReaction\x12\x1f\n" +
 	"\vreaction_id\x18\x01 \x01(\tR\n" +
 	"reactionId\x12\x1d\n" +
@@ -7927,7 +7958,8 @@ const file_healthcare_bloodbank_v1_bloodbank_proto_rawDesc = "" +
 	"conclusion\x12=\n" +
 	"\fconcluded_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\vconcludedAt\x12!\n" +
 	"\fconcluded_by\x18\x0e \x01(\tR\vconcludedBy\x12#\n" +
-	"\runit_returned\x18\x0f \x01(\bR\funitReturned\"\x83\x01\n" +
+	"\runit_returned\x18\x0f \x01(\bR\funitReturned\x12!\n" +
+	"\faction_taken\x18\x10 \x01(\tR\vactionTaken\"\x83\x01\n" +
 	"\tChainLink\x12\x14\n" +
 	"\x05stage\x18\x01 \x01(\tR\x05stage\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x12\x14\n" +
@@ -8236,7 +8268,7 @@ const file_healthcare_bloodbank_v1_bloodbank_proto_rawDesc = "" +
 	"patient_id\x18\x01 \x01(\tR\tpatientId\x12\x1b\n" +
 	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\"_\n" +
 	"\x1fListPatientTransfusionsResponse\x12<\n" +
-	"\bepisodes\x18\x01 \x03(\v2 .healthcare.bloodbank.v1.EpisodeR\bepisodes\"\xef\x01\n" +
+	"\bepisodes\x18\x01 \x03(\v2 .healthcare.bloodbank.v1.EpisodeR\bepisodes\"\xba\x02\n" +
 	"\x15ReportReactionRequest\x12\x1d\n" +
 	"\n" +
 	"episode_id\x18\x01 \x01(\tR\tepisodeId\x12!\n" +
@@ -8245,7 +8277,9 @@ const file_healthcare_bloodbank_v1_bloodbank_proto_rawDesc = "" +
 	"patient_id\x18\x03 \x01(\tR\tpatientId\x12E\n" +
 	"\bseverity\x18\x04 \x01(\x0e2).healthcare.bloodbank.v1.ReactionSeverityR\bseverity\x12\x1a\n" +
 	"\bfeatures\x18\x05 \x03(\tR\bfeatures\x12\x12\n" +
-	"\x04note\x18\x06 \x01(\tR\x04note\"W\n" +
+	"\x04note\x18\x06 \x01(\tR\x04note\x12!\n" +
+	"\faction_taken\x18\a \x01(\tR\vactionTaken\x12&\n" +
+	"\x0fvolume_given_ml\x18\b \x01(\x05R\rvolumeGivenMl\"W\n" +
 	"\x16ReportReactionResponse\x12=\n" +
 	"\breaction\x18\x01 \x01(\v2!.healthcare.bloodbank.v1.ReactionR\breaction\"\xac\x01\n" +
 	"\x1cConcludeInvestigationRequest\x12\x1f\n" +

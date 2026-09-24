@@ -285,9 +285,19 @@ type NursingServiceClient interface {
 	DiscontinueRestraint(context.Context, *connect.Request[v1.DiscontinueRestraintRequest]) (*connect.Response[v1.DiscontinueRestraintResponse], error)
 	ListRestraints(context.Context, *connect.Request[v1.ListRestraintsRequest]) (*connect.Response[v1.ListRestraintsResponse], error)
 	GetRestraintAlerts(context.Context, *connect.Request[v1.GetRestraintAlertsRequest]) (*connect.Response[v1.GetRestraintAlertsResponse], error)
+	// Transfusions moved to the blood bank (SRS-NUR-014, migration 0047). These
+	// four remain on the wire because removing them would break every client
+	// built against this version (SRS-API-002); each refuses and names the
+	// healthcare.bloodbank.v1.BloodBankService call that replaces it. They go in
+	// nursing v2.
+	//
+	// Deprecated: do not use.
 	StartTransfusion(context.Context, *connect.Request[v1.StartTransfusionRequest]) (*connect.Response[v1.StartTransfusionResponse], error)
+	// Deprecated: do not use.
 	ObserveTransfusion(context.Context, *connect.Request[v1.ObserveTransfusionRequest]) (*connect.Response[v1.ObserveTransfusionResponse], error)
+	// Deprecated: do not use.
 	ReportTransfusionReaction(context.Context, *connect.Request[v1.ReportTransfusionReactionRequest]) (*connect.Response[v1.ReportTransfusionReactionResponse], error)
+	// Deprecated: do not use.
 	CompleteTransfusion(context.Context, *connect.Request[v1.CompleteTransfusionRequest]) (*connect.Response[v1.CompleteTransfusionResponse], error)
 	// Wounds, education and discharge (SRS-NUR-012, SRS-NUR-015).
 	AssessWound(context.Context, *connect.Request[v1.AssessWoundRequest]) (*connect.Response[v1.AssessWoundResponse], error)
@@ -953,21 +963,29 @@ func (c *nursingServiceClient) GetRestraintAlerts(ctx context.Context, req *conn
 }
 
 // StartTransfusion calls healthcare.nursing.v1.NursingService.StartTransfusion.
+//
+// Deprecated: do not use.
 func (c *nursingServiceClient) StartTransfusion(ctx context.Context, req *connect.Request[v1.StartTransfusionRequest]) (*connect.Response[v1.StartTransfusionResponse], error) {
 	return c.startTransfusion.CallUnary(ctx, req)
 }
 
 // ObserveTransfusion calls healthcare.nursing.v1.NursingService.ObserveTransfusion.
+//
+// Deprecated: do not use.
 func (c *nursingServiceClient) ObserveTransfusion(ctx context.Context, req *connect.Request[v1.ObserveTransfusionRequest]) (*connect.Response[v1.ObserveTransfusionResponse], error) {
 	return c.observeTransfusion.CallUnary(ctx, req)
 }
 
 // ReportTransfusionReaction calls healthcare.nursing.v1.NursingService.ReportTransfusionReaction.
+//
+// Deprecated: do not use.
 func (c *nursingServiceClient) ReportTransfusionReaction(ctx context.Context, req *connect.Request[v1.ReportTransfusionReactionRequest]) (*connect.Response[v1.ReportTransfusionReactionResponse], error) {
 	return c.reportTransfusionReaction.CallUnary(ctx, req)
 }
 
 // CompleteTransfusion calls healthcare.nursing.v1.NursingService.CompleteTransfusion.
+//
+// Deprecated: do not use.
 func (c *nursingServiceClient) CompleteTransfusion(ctx context.Context, req *connect.Request[v1.CompleteTransfusionRequest]) (*connect.Response[v1.CompleteTransfusionResponse], error) {
 	return c.completeTransfusion.CallUnary(ctx, req)
 }
@@ -1098,9 +1116,19 @@ type NursingServiceHandler interface {
 	DiscontinueRestraint(context.Context, *connect.Request[v1.DiscontinueRestraintRequest]) (*connect.Response[v1.DiscontinueRestraintResponse], error)
 	ListRestraints(context.Context, *connect.Request[v1.ListRestraintsRequest]) (*connect.Response[v1.ListRestraintsResponse], error)
 	GetRestraintAlerts(context.Context, *connect.Request[v1.GetRestraintAlertsRequest]) (*connect.Response[v1.GetRestraintAlertsResponse], error)
+	// Transfusions moved to the blood bank (SRS-NUR-014, migration 0047). These
+	// four remain on the wire because removing them would break every client
+	// built against this version (SRS-API-002); each refuses and names the
+	// healthcare.bloodbank.v1.BloodBankService call that replaces it. They go in
+	// nursing v2.
+	//
+	// Deprecated: do not use.
 	StartTransfusion(context.Context, *connect.Request[v1.StartTransfusionRequest]) (*connect.Response[v1.StartTransfusionResponse], error)
+	// Deprecated: do not use.
 	ObserveTransfusion(context.Context, *connect.Request[v1.ObserveTransfusionRequest]) (*connect.Response[v1.ObserveTransfusionResponse], error)
+	// Deprecated: do not use.
 	ReportTransfusionReaction(context.Context, *connect.Request[v1.ReportTransfusionReactionRequest]) (*connect.Response[v1.ReportTransfusionReactionResponse], error)
+	// Deprecated: do not use.
 	CompleteTransfusion(context.Context, *connect.Request[v1.CompleteTransfusionRequest]) (*connect.Response[v1.CompleteTransfusionResponse], error)
 	// Wounds, education and discharge (SRS-NUR-012, SRS-NUR-015).
 	AssessWound(context.Context, *connect.Request[v1.AssessWoundRequest]) (*connect.Response[v1.AssessWoundResponse], error)

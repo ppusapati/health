@@ -560,6 +560,8 @@ func (h *Handler) ReportReaction(ctx context.Context,
 		PatientID: msg.GetPatientId(),
 		Severity:  severityFromWire[msg.GetSeverity()],
 		Features:  msg.GetFeatures(), Note: msg.GetNote(),
+		ActionTaken:   msg.GetActionTaken(),
+		VolumeGivenML: int(msg.GetVolumeGivenMl()),
 	})
 	if err != nil {
 		return nil, err

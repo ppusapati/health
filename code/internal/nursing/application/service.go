@@ -39,8 +39,9 @@ const (
 	PermOverrideVerification = "nur.medication.override"
 	// PermRestrain applies or renews a restraint (SRS-NUR-013).
 	PermRestrain = "nur.restraint.manage"
-	// PermTransfuse starts and monitors a transfusion (SRS-NUR-014).
-	PermTransfuse = "nur.transfusion.manage"
+	// No transfusion permission. A ward nurse transfuses through the blood
+	// bank, holding bld.transfusion.write and bld.reaction.write, because the
+	// transfusion record lives there (SRS-NUR-014, migration 0047).
 	// PermAssign assigns nurses to patients and beds (SRS-NUR-017).
 	PermAssign = "nur.assignment.manage"
 	// PermNursingConfigure maintains assessment templates, risk scales, the
@@ -69,8 +70,9 @@ const (
 	// because SRS-NUR-013 asks for an alert and a list nobody queries is not
 	// one.
 	EventRestraintAuthorizationExpired = "nursing.restraint_authorization_expired"
-	EventTransfusionReaction           = "nursing.transfusion_reaction"
-	EventTaskEscalated                 = "nursing.task_escalated"
+	// No transfusion reaction event. A reaction is reported to the blood bank,
+	// which emits its own and quarantines the siblings (SRS-NUR-014).
+	EventTaskEscalated = "nursing.task_escalated"
 )
 
 const (

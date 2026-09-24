@@ -483,6 +483,10 @@ message Reaction {
   google.protobuf.Timestamp concluded_at = 13;
   string concluded_by = 14;
   bool unit_returned = 15;
+  // Required. What was done at the bedside — the transfusion stopped, the line
+  // kept open with saline, the unit returned. The reaction action runs from
+  // the bedside (SRS-NUR-014), and this report is where it is written down.
+  string action_taken = 16;
 }
 
 // One step of the vein-to-vein chain (SRS-BLD-014).
@@ -942,6 +946,12 @@ message ReportReactionRequest {
   ReactionSeverity severity = 4;
   repeated string features = 5;
   string note = 6;
+  // Required. What was done about it at the bedside.
+  string action_taken = 7;
+  // What the patient received before the transfusion was stopped. Reporting a
+  // reaction stops the transfusion it was reported against, so the volume is
+  // recorded here rather than in a second call.
+  int32 volume_given_ml = 8;
 }
 
 message ReportReactionResponse {

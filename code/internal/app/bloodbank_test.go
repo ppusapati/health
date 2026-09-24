@@ -765,6 +765,7 @@ func TestABedsideMismatchBlocksAndEscalates(t *testing.T) {
 		UnitNumber: "G600001", PatientId: other,
 		PatientGroup: oNeg(), UnitGroup: oNeg(),
 		CheckedWith: "nurse-2",
+		Baseline:    map[string]float64{"temperature": 36.8, "pulse": 88},
 	}
 	if _, err := h.bank.StartTransfusion(ctx,
 		withFacility(h.nurseToken(), h.facility,
@@ -944,6 +945,7 @@ func TestAReactionPullsTheSiblingsAndTheLookBackFindsThePatients(t *testing.T) {
 	check := &bloodbankv1.BedsideCheck{
 		UnitNumber: "G800001", PatientId: patientID,
 		PatientGroup: oNeg(), UnitGroup: oNeg(), CheckedWith: "nurse-2",
+		Baseline: map[string]float64{"temperature": 36.8, "pulse": 88},
 	}
 	started, err := h.bank.StartTransfusion(ctx,
 		withFacility(h.nurseToken(), h.facility,
@@ -952,15 +954,22 @@ func TestAReactionPullsTheSiblingsAndTheLookBackFindsThePatients(t *testing.T) {
 		t.Fatalf("StartTransfusion: %v", err)
 	}
 
-	// Fifteen minutes in, rigors.
-	if _, err := h.bank.EndTransfusion(ctx,
+	// Fifteen minutes in, rigors. SRS-NUR-014: the action runs from the
+	// bedside, so reporting is one call — it stops the transfusion, records
+	// what was done and what the patient had received, and opens the
+	// investigation. A nurse who had to call EndTransfusion as well would be
+	// filling in a form while the patient is reacting.
+	if _, err := h.bank.ReportReaction(ctx,
 		withFacility(h.nurseToken(), h.facility,
-			&bloodbankv1.EndTransfusionRequest{
-				EpisodeId:     started.Msg.GetEpisode().GetEpisodeId(),
-				VolumeGivenMl: 60, StopReason: "suspected reaction",
-			})); err != nil {
-		t.Fatalf("EndTransfusion: %v", err)
+			&bloodbankv1.ReportReactionRequest{
+				EpisodeId:   started.Msg.GetEpisode().GetEpisodeId(),
+				ComponentId: cells, PatientId: patientID,
+				Severity: bloodbankv1.ReactionSeverity_REACTION_SEVERITY_SEVERE,
+				Features: []string{"rigors", "fever", "hypotension"},
+			})); err == nil {
+		t.Fatal("a reaction was reported with no account of what was done")
 	}
+
 	reported, err := h.bank.ReportReaction(ctx,
 		withFacility(h.nurseToken(), h.facility,
 			&bloodbankv1.ReportReactionRequest{
@@ -968,9 +977,37 @@ func TestAReactionPullsTheSiblingsAndTheLookBackFindsThePatients(t *testing.T) {
 				ComponentId: cells, PatientId: patientID,
 				Severity: bloodbankv1.ReactionSeverity_REACTION_SEVERITY_SEVERE,
 				Features: []string{"rigors", "fever", "hypotension"},
+				ActionTaken: "transfusion stopped, line kept open with saline, " +
+					"unit and giving set returned to the blood bank",
+				VolumeGivenMl: 60,
 			}))
 	if err != nil {
 		t.Fatalf("ReportReaction: %v", err)
+	}
+	if reported.Msg.GetReaction().GetActionTaken() == "" {
+		t.Error("the reaction came back without what was done about it")
+	}
+
+	stopped, err := h.bank.GetEpisode(ctx,
+		withFacility(h.nurseToken(), h.facility,
+			&bloodbankv1.GetEpisodeRequest{
+				EpisodeId: started.Msg.GetEpisode().GetEpisodeId(),
+			}))
+	if err != nil {
+		t.Fatalf("GetEpisode: %v", err)
+	}
+	episode := stopped.Msg.GetEpisode()
+	if episode.GetStatus() != bloodbankv1.EpisodeStatus_EPISODE_STATUS_STOPPED {
+		t.Errorf("the transfusion is %v after a reaction was reported; "+
+			"the unit was left running", episode.GetStatus())
+	}
+	if !strings.Contains(episode.GetStopReason(), "saline") {
+		t.Errorf("stop reason = %q; it does not carry the bedside action",
+			episode.GetStopReason())
+	}
+	if episode.GetVolumeGivenMl() != 60 {
+		t.Errorf("volume given = %d, want the 60ml the patient received",
+			episode.GetVolumeGivenMl())
 	}
 
 	// The plasma from the same donation comes off the shelf.
@@ -1296,6 +1333,7 @@ func TestUtilisationDerivesFromWhatHappened(t *testing.T) {
 	check := &bloodbankv1.BedsideCheck{
 		UnitNumber: "GA00001", PatientId: patientID,
 		PatientGroup: oNeg(), UnitGroup: oNeg(), CheckedWith: "nurse-2",
+		Baseline: map[string]float64{"temperature": 36.6, "pulse": 76},
 	}
 	started, err := h.bank.StartTransfusion(ctx,
 		withFacility(h.nurseToken(), h.facility,

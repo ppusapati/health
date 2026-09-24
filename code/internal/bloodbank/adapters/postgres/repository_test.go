@@ -642,6 +642,7 @@ func TestTheDatabaseRefusesASecondTransfusionOfOneUnit(t *testing.T) {
 	second, err := domain.StartTransfusion(uuid.NewString(), f.tenantID,
 		domain.StartTransfusionInput{
 			ComponentID: component.ID, PatientID: uuid.NewString(),
+			Baseline: map[string]float64{"temperature": 37.0},
 		}, nil, "nurse-3", at.Add(time.Hour))
 	if err != nil {
 		t.Fatalf("StartTransfusion: %v", err)
@@ -692,6 +693,7 @@ func TestTheLookBackRunsInBothDirections(t *testing.T) {
 	episode, err := domain.StartTransfusion(uuid.NewString(), f.tenantID,
 		domain.StartTransfusionInput{
 			ComponentID: cells.ID, PatientID: f.patientID,
+			Baseline: map[string]float64{"temperature": 36.7},
 		}, nil, "nurse-1", at)
 	if err != nil {
 		t.Fatalf("StartTransfusion: %v", err)
@@ -746,6 +748,19 @@ func TestTheDatabaseRefusesAReactionWithNoComponent(t *testing.T) {
 	if err == nil {
 		t.Fatal("a reaction with nothing observed was accepted")
 	}
+
+	// SRS-NUR-014. And one that does not say what was done about it. The
+	// action runs from the bedside, and the report is where it is recorded.
+	_, err = f.pool.Exec(ctx, `
+		INSERT INTO bloodbank.reaction (
+		    reaction_id, tenant_id, component_id, patient_id, severity,
+		    features, action_taken, reported_at, reported_by, state)
+		VALUES ($1, $2, $3, $4, 'severe', ARRAY['rigors'], '', now(),
+		    'doctor-1', 'open')`,
+		uuid.New(), f.tenantID, component.ID, f.patientID)
+	if err == nil {
+		t.Fatal("a reaction was recorded with no account of what was done")
+	}
 }
 
 // SRS-BLD-012. A reaction round-trips and concludes once.
@@ -758,9 +773,10 @@ func TestAReactionConcludesOnce(t *testing.T) {
 	reaction, err := domain.ReportReaction(uuid.NewString(), f.tenantID,
 		domain.NewReactionInput{
 			ComponentID: component.ID, PatientID: f.patientID,
-			Severity: domain.ReactionSevere,
-			Features: []string{"rigors", "fever", "hypotension"},
-			Note:     "15 minutes in",
+			Severity:    domain.ReactionSevere,
+			Features:    []string{"rigors", "fever", "hypotension"},
+			ActionTaken: "transfusion stopped, unit returned to the blood bank",
+			Note:        "15 minutes in",
 		}, "doctor-1", at)
 	if err != nil {
 		t.Fatalf("ReportReaction: %v", err)

@@ -942,6 +942,7 @@ type BloodbankReaction struct {
 	ConcludedAt    pgtype.Timestamptz
 	ConcludedBy    string
 	UnitReturned   bool
+	ActionTaken    string
 }
 
 type BloodbankRequest struct {
@@ -4196,6 +4197,7 @@ type NursingTask struct {
 	Version           int64
 }
 
+// Closed to new writes at migration 0047. bloodbank.episode is the record of a transfusion (SRS-NUR-014, SRS-BLD-010). What remains here is the set that could not be linked to a blood-product record: units this deployment never registered, and rows superseded by an episode that already existed. Kept because a transfusion that happened is a transfusion that happened; reconcile by registering the component and recording the episode.
 type NursingTransfusion struct {
 	TransfusionID        uuid.UUID
 	TenantID             uuid.UUID
@@ -4222,6 +4224,7 @@ type NursingTransfusion struct {
 	Version              int64
 }
 
+// Closed to new writes at migration 0047. See nursing.transfusion.
 type NursingTransfusionObservation struct {
 	ObservationID   uuid.UUID
 	TenantID        uuid.UUID

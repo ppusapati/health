@@ -406,7 +406,7 @@ func (q *Queries) GetPatientSample(ctx context.Context, arg GetPatientSamplePara
 }
 
 const getReaction = `-- name: GetReaction :one
-SELECT reaction_id, tenant_id, episode_id, component_id, patient_id, severity, features, note, reported_at, reported_by, state, classification, conclusion, concluded_at, concluded_by, unit_returned FROM bloodbank.reaction WHERE tenant_id = $1 AND reaction_id = $2
+SELECT reaction_id, tenant_id, episode_id, component_id, patient_id, severity, features, note, reported_at, reported_by, state, classification, conclusion, concluded_at, concluded_by, unit_returned, action_taken FROM bloodbank.reaction WHERE tenant_id = $1 AND reaction_id = $2
 `
 
 type GetReactionParams struct {
@@ -434,6 +434,7 @@ func (q *Queries) GetReaction(ctx context.Context, arg GetReactionParams) (Blood
 		&i.ConcludedAt,
 		&i.ConcludedBy,
 		&i.UnitReturned,
+		&i.ActionTaken,
 	)
 	return i, err
 }
@@ -842,10 +843,11 @@ func (q *Queries) InsertPatientSample(ctx context.Context, arg InsertPatientSamp
 const insertReaction = `-- name: InsertReaction :exec
 INSERT INTO bloodbank.reaction (
     reaction_id, tenant_id, episode_id, component_id, patient_id, severity,
-    features, note, reported_at, reported_by, state
+    features, action_taken, note, reported_at, reported_by, state
 ) VALUES (
     $1, $2, $3, $4, $5,
-    $6, $7, $8, $9, $10, $11
+    $6, $7, $8, $9, $10, $11,
+    $12
 )
 `
 
@@ -857,6 +859,7 @@ type InsertReactionParams struct {
 	PatientID   uuid.UUID
 	Severity    string
 	Features    []string
+	ActionTaken string
 	Note        string
 	ReportedAt  pgtype.Timestamptz
 	ReportedBy  string
@@ -872,6 +875,7 @@ func (q *Queries) InsertReaction(ctx context.Context, arg InsertReactionParams) 
 		arg.PatientID,
 		arg.Severity,
 		arg.Features,
+		arg.ActionTaken,
 		arg.Note,
 		arg.ReportedAt,
 		arg.ReportedBy,
@@ -1731,7 +1735,7 @@ func (q *Queries) ListLapsedReservations(ctx context.Context, arg ListLapsedRese
 }
 
 const listOpenReactions = `-- name: ListOpenReactions :many
-SELECT reaction_id, tenant_id, episode_id, component_id, patient_id, severity, features, note, reported_at, reported_by, state, classification, conclusion, concluded_at, concluded_by, unit_returned FROM bloodbank.reaction
+SELECT reaction_id, tenant_id, episode_id, component_id, patient_id, severity, features, note, reported_at, reported_by, state, classification, conclusion, concluded_at, concluded_by, unit_returned, action_taken FROM bloodbank.reaction
 WHERE tenant_id = $1 AND state = 'open'
 ORDER BY reported_at
 LIMIT $2
@@ -1768,6 +1772,7 @@ func (q *Queries) ListOpenReactions(ctx context.Context, arg ListOpenReactionsPa
 			&i.ConcludedAt,
 			&i.ConcludedBy,
 			&i.UnitReturned,
+			&i.ActionTaken,
 		); err != nil {
 			return nil, err
 		}
@@ -1986,7 +1991,7 @@ func (q *Queries) ListPatientReservations(ctx context.Context, arg ListPatientRe
 }
 
 const listReactionsForComponent = `-- name: ListReactionsForComponent :many
-SELECT reaction_id, tenant_id, episode_id, component_id, patient_id, severity, features, note, reported_at, reported_by, state, classification, conclusion, concluded_at, concluded_by, unit_returned FROM bloodbank.reaction
+SELECT reaction_id, tenant_id, episode_id, component_id, patient_id, severity, features, note, reported_at, reported_by, state, classification, conclusion, concluded_at, concluded_by, unit_returned, action_taken FROM bloodbank.reaction
 WHERE tenant_id = $1 AND component_id = $2
 ORDER BY reported_at
 `
@@ -2022,6 +2027,7 @@ func (q *Queries) ListReactionsForComponent(ctx context.Context, arg ListReactio
 			&i.ConcludedAt,
 			&i.ConcludedBy,
 			&i.UnitReturned,
+			&i.ActionTaken,
 		); err != nil {
 			return nil, err
 		}
@@ -2034,7 +2040,7 @@ func (q *Queries) ListReactionsForComponent(ctx context.Context, arg ListReactio
 }
 
 const listReactionsInPeriod = `-- name: ListReactionsInPeriod :many
-SELECT reaction_id, tenant_id, episode_id, component_id, patient_id, severity, features, note, reported_at, reported_by, state, classification, conclusion, concluded_at, concluded_by, unit_returned FROM bloodbank.reaction
+SELECT reaction_id, tenant_id, episode_id, component_id, patient_id, severity, features, note, reported_at, reported_by, state, classification, conclusion, concluded_at, concluded_by, unit_returned, action_taken FROM bloodbank.reaction
 WHERE tenant_id = $1
   AND reported_at >= $2 AND reported_at < $3
 ORDER BY reported_at
@@ -2079,6 +2085,7 @@ func (q *Queries) ListReactionsInPeriod(ctx context.Context, arg ListReactionsIn
 			&i.ConcludedAt,
 			&i.ConcludedBy,
 			&i.UnitReturned,
+			&i.ActionTaken,
 		); err != nil {
 			return nil, err
 		}

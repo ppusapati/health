@@ -728,6 +728,7 @@ func (RestraintKind) EnumDescriptor() ([]byte, []int) {
 	return file_healthcare_nursing_v1_nursing_proto_rawDescGZIP(), []int{11}
 }
 
+// Deprecated: Marked as deprecated in healthcare/nursing/v1/nursing.proto.
 type TransfusionStatus int32
 
 const (
@@ -9273,6 +9274,8 @@ func (x *GetRestraintAlertsResponse) GetRestraints() []*Restraint {
 }
 
 // One set of monitoring observations (SRS-NUR-014).
+//
+// Deprecated: Marked as deprecated in healthcare/nursing/v1/nursing.proto.
 type TransfusionObservation struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	ObservationId   string                 `protobuf:"bytes,1,opt,name=observation_id,json=observationId,proto3" json:"observation_id,omitempty"`
@@ -9383,6 +9386,7 @@ func (x *TransfusionObservation) GetNotes() string {
 	return ""
 }
 
+// Deprecated: Marked as deprecated in healthcare/nursing/v1/nursing.proto.
 type TransfusionReaction struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	ReportedAt *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=reported_at,json=reportedAt,proto3" json:"reported_at,omitempty"`
@@ -9462,6 +9466,8 @@ func (x *TransfusionReaction) GetUnitReturned() bool {
 }
 
 // One blood-product episode (SRS-NUR-014).
+//
+// Deprecated: Marked as deprecated in healthcare/nursing/v1/nursing.proto.
 type Transfusion struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TransfusionId string                 `protobuf:"bytes,1,opt,name=transfusion_id,json=transfusionId,proto3" json:"transfusion_id,omitempty"`
@@ -9631,6 +9637,7 @@ func (x *Transfusion) GetVersion() int64 {
 	return 0
 }
 
+// Deprecated: Marked as deprecated in healthcare/nursing/v1/nursing.proto.
 type StartTransfusionRequest struct {
 	state         protoimpl.MessageState  `protogen:"open.v1"`
 	PatientId     string                  `protobuf:"bytes,1,opt,name=patient_id,json=patientId,proto3" json:"patient_id,omitempty"`
@@ -9747,6 +9754,7 @@ func (x *StartTransfusionRequest) GetBaseline() *TransfusionObservation {
 	return nil
 }
 
+// Deprecated: Marked as deprecated in healthcare/nursing/v1/nursing.proto.
 type StartTransfusionResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Transfusion   *Transfusion           `protobuf:"bytes,1,opt,name=transfusion,proto3" json:"transfusion,omitempty"`
@@ -9791,6 +9799,7 @@ func (x *StartTransfusionResponse) GetTransfusion() *Transfusion {
 	return nil
 }
 
+// Deprecated: Marked as deprecated in healthcare/nursing/v1/nursing.proto.
 type ObserveTransfusionRequest struct {
 	state         protoimpl.MessageState  `protogen:"open.v1"`
 	TransfusionId string                  `protobuf:"bytes,1,opt,name=transfusion_id,json=transfusionId,proto3" json:"transfusion_id,omitempty"`
@@ -9843,6 +9852,7 @@ func (x *ObserveTransfusionRequest) GetObservation() *TransfusionObservation {
 	return nil
 }
 
+// Deprecated: Marked as deprecated in healthcare/nursing/v1/nursing.proto.
 type ObserveTransfusionResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Transfusion   *Transfusion           `protobuf:"bytes,1,opt,name=transfusion,proto3" json:"transfusion,omitempty"`
@@ -9890,6 +9900,8 @@ func (x *ObserveTransfusionResponse) GetTransfusion() *Transfusion {
 // Stopping and reporting are one operation, because they are one act at the
 // bedside and splitting them creates a window in which the system believes
 // blood is still running into a patient having a reaction.
+//
+// Deprecated: Marked as deprecated in healthcare/nursing/v1/nursing.proto.
 type ReportTransfusionReactionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TransfusionId string                 `protobuf:"bytes,1,opt,name=transfusion_id,json=transfusionId,proto3" json:"transfusion_id,omitempty"`
@@ -9958,6 +9970,7 @@ func (x *ReportTransfusionReactionRequest) GetUnitReturned() bool {
 	return false
 }
 
+// Deprecated: Marked as deprecated in healthcare/nursing/v1/nursing.proto.
 type ReportTransfusionReactionResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Transfusion   *Transfusion           `protobuf:"bytes,1,opt,name=transfusion,proto3" json:"transfusion,omitempty"`
@@ -10002,6 +10015,7 @@ func (x *ReportTransfusionReactionResponse) GetTransfusion() *Transfusion {
 	return nil
 }
 
+// Deprecated: Marked as deprecated in healthcare/nursing/v1/nursing.proto.
 type CompleteTransfusionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TransfusionId string                 `protobuf:"bytes,1,opt,name=transfusion_id,json=transfusionId,proto3" json:"transfusion_id,omitempty"`
@@ -10054,6 +10068,7 @@ func (x *CompleteTransfusionRequest) GetEndedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+// Deprecated: Marked as deprecated in healthcare/nursing/v1/nursing.proto.
 type CompleteTransfusionResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Transfusion   *Transfusion           `protobuf:"bytes,1,opt,name=transfusion,proto3" json:"transfusion,omitempty"`
@@ -13948,7 +13963,7 @@ const file_healthcare_nursing_v1_nursing_proto_rawDesc = "" +
 	"\x1aGetRestraintAlertsResponse\x12@\n" +
 	"\n" +
 	"restraints\x18\x01 \x03(\v2 .healthcare.nursing.v1.RestraintR\n" +
-	"restraints\"\xd6\x02\n" +
+	"restraints\"\xda\x02\n" +
 	"\x16TransfusionObservation\x12%\n" +
 	"\x0eobservation_id\x18\x01 \x01(\tR\robservationId\x12;\n" +
 	"\vobserved_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
@@ -13961,7 +13976,7 @@ const file_healthcare_nursing_v1_nursing_proto_rawDesc = "" +
 	"systolicBp\x12)\n" +
 	"\x10respiratory_rate\x18\a \x01(\x05R\x0frespiratoryRate\x12\x1a\n" +
 	"\bbaseline\x18\b \x01(\bR\bbaseline\x12\x14\n" +
-	"\x05notes\x18\t \x01(\tR\x05notes\"\xd7\x01\n" +
+	"\x05notes\x18\t \x01(\tR\x05notes:\x02\x18\x01\"\xdb\x01\n" +
 	"\x13TransfusionReaction\x12;\n" +
 	"\vreported_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"reportedAt\x12\x1f\n" +
@@ -13969,7 +13984,7 @@ const file_healthcare_nursing_v1_nursing_proto_rawDesc = "" +
 	"reportedBy\x12\x1a\n" +
 	"\bfeatures\x18\x03 \x01(\tR\bfeatures\x12!\n" +
 	"\faction_taken\x18\x04 \x01(\tR\vactionTaken\x12#\n" +
-	"\runit_returned\x18\x05 \x01(\bR\funitReturned\"\xc3\x05\n" +
+	"\runit_returned\x18\x05 \x01(\bR\funitReturned:\x02\x18\x01\"\xc7\x05\n" +
 	"\vTransfusion\x12%\n" +
 	"\x0etransfusion_id\x18\x01 \x01(\tR\rtransfusionId\x12\x1d\n" +
 	"\n" +
@@ -13992,7 +14007,7 @@ const file_healthcare_nursing_v1_nursing_proto_rawDesc = "" +
 	"\x06status\x18\r \x01(\x0e2(.healthcare.nursing.v1.TransfusionStatusR\x06status\x125\n" +
 	"\bended_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\aendedAt\x12F\n" +
 	"\breaction\x18\x0f \x01(\v2*.healthcare.nursing.v1.TransfusionReactionR\breaction\x12\x18\n" +
-	"\aversion\x18\x10 \x01(\x03R\aversion\"\xa6\x03\n" +
+	"\aversion\x18\x10 \x01(\x03R\aversion:\x02\x18\x01\"\xaa\x03\n" +
 	"\x17StartTransfusionRequest\x12\x1d\n" +
 	"\n" +
 	"patient_id\x18\x01 \x01(\tR\tpatientId\x12!\n" +
@@ -14008,26 +14023,26 @@ const file_healthcare_nursing_v1_nursing_proto_rawDesc = "" +
 	"\n" +
 	"checked_by\x18\t \x01(\tR\tcheckedBy\x12I\n" +
 	"\bbaseline\x18\n" +
-	" \x01(\v2-.healthcare.nursing.v1.TransfusionObservationR\bbaseline\"`\n" +
+	" \x01(\v2-.healthcare.nursing.v1.TransfusionObservationR\bbaseline:\x02\x18\x01\"d\n" +
 	"\x18StartTransfusionResponse\x12D\n" +
-	"\vtransfusion\x18\x01 \x01(\v2\".healthcare.nursing.v1.TransfusionR\vtransfusion\"\x93\x01\n" +
+	"\vtransfusion\x18\x01 \x01(\v2\".healthcare.nursing.v1.TransfusionR\vtransfusion:\x02\x18\x01\"\x97\x01\n" +
 	"\x19ObserveTransfusionRequest\x12%\n" +
 	"\x0etransfusion_id\x18\x01 \x01(\tR\rtransfusionId\x12O\n" +
-	"\vobservation\x18\x02 \x01(\v2-.healthcare.nursing.v1.TransfusionObservationR\vobservation\"b\n" +
+	"\vobservation\x18\x02 \x01(\v2-.healthcare.nursing.v1.TransfusionObservationR\vobservation:\x02\x18\x01\"f\n" +
 	"\x1aObserveTransfusionResponse\x12D\n" +
-	"\vtransfusion\x18\x01 \x01(\v2\".healthcare.nursing.v1.TransfusionR\vtransfusion\"\xad\x01\n" +
+	"\vtransfusion\x18\x01 \x01(\v2\".healthcare.nursing.v1.TransfusionR\vtransfusion:\x02\x18\x01\"\xb1\x01\n" +
 	" ReportTransfusionReactionRequest\x12%\n" +
 	"\x0etransfusion_id\x18\x01 \x01(\tR\rtransfusionId\x12\x1a\n" +
 	"\bfeatures\x18\x02 \x01(\tR\bfeatures\x12!\n" +
 	"\faction_taken\x18\x03 \x01(\tR\vactionTaken\x12#\n" +
-	"\runit_returned\x18\x04 \x01(\bR\funitReturned\"i\n" +
+	"\runit_returned\x18\x04 \x01(\bR\funitReturned:\x02\x18\x01\"m\n" +
 	"!ReportTransfusionReactionResponse\x12D\n" +
-	"\vtransfusion\x18\x01 \x01(\v2\".healthcare.nursing.v1.TransfusionR\vtransfusion\"z\n" +
+	"\vtransfusion\x18\x01 \x01(\v2\".healthcare.nursing.v1.TransfusionR\vtransfusion:\x02\x18\x01\"~\n" +
 	"\x1aCompleteTransfusionRequest\x12%\n" +
 	"\x0etransfusion_id\x18\x01 \x01(\tR\rtransfusionId\x125\n" +
-	"\bended_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\aendedAt\"c\n" +
+	"\bended_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\aendedAt:\x02\x18\x01\"g\n" +
 	"\x1bCompleteTransfusionResponse\x12D\n" +
-	"\vtransfusion\x18\x01 \x01(\v2\".healthcare.nursing.v1.TransfusionR\vtransfusion\"\x84\x02\n" +
+	"\vtransfusion\x18\x01 \x01(\v2\".healthcare.nursing.v1.TransfusionR\vtransfusion:\x02\x18\x01\"\x84\x02\n" +
 	"\n" +
 	"WoundImage\x12\x19\n" +
 	"\bimage_id\x18\x01 \x01(\tR\aimageId\x12\x1d\n" +
@@ -14392,12 +14407,12 @@ const file_healthcare_nursing_v1_nursing_proto_rawDesc = "" +
 	"\x1aRESTRAINT_KIND_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17RESTRAINT_KIND_PHYSICAL\x10\x01\x12\x1b\n" +
 	"\x17RESTRAINT_KIND_CHEMICAL\x10\x02\x12\x1c\n" +
-	"\x18RESTRAINT_KIND_SECLUSION\x10\x03*\x9d\x01\n" +
+	"\x18RESTRAINT_KIND_SECLUSION\x10\x03*\xa1\x01\n" +
 	"\x11TransfusionStatus\x12\"\n" +
 	"\x1eTRANSFUSION_STATUS_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eTRANSFUSION_STATUS_IN_PROGRESS\x10\x01\x12 \n" +
 	"\x1cTRANSFUSION_STATUS_COMPLETED\x10\x02\x12\x1e\n" +
-	"\x1aTRANSFUSION_STATUS_STOPPED\x10\x03*\xb8\x01\n" +
+	"\x1aTRANSFUSION_STATUS_STOPPED\x10\x03\x1a\x02\x18\x01*\xb8\x01\n" +
 	"\tWoundKind\x12\x1a\n" +
 	"\x16WOUND_KIND_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aWOUND_KIND_PRESSURE_INJURY\x10\x01\x12\x17\n" +
@@ -14422,7 +14437,7 @@ const file_healthcare_nursing_v1_nursing_proto_rawDesc = "" +
 	"\x19CARE_RELATIONSHIP_PRIMARY\x10\x01\x12\x1f\n" +
 	"\x1bCARE_RELATIONSHIP_ASSOCIATE\x10\x02\x12\x1e\n" +
 	"\x1aCARE_RELATIONSHIP_COVERING\x10\x03\x12\x1f\n" +
-	"\x1bCARE_RELATIONSHIP_IN_CHARGE\x10\x042\x9a6\n" +
+	"\x1bCARE_RELATIONSHIP_IN_CHARGE\x10\x042\xaf6\n" +
 	"\x0eNursingService\x12s\n" +
 	"\x10ChartObservation\x12..healthcare.nursing.v1.ChartObservationRequest\x1a/.healthcare.nursing.v1.ChartObservationResponse\x12g\n" +
 	"\fGetFlowsheet\x12*.healthcare.nursing.v1.GetFlowsheetRequest\x1a+.healthcare.nursing.v1.GetFlowsheetResponse\x12d\n" +
@@ -14466,11 +14481,11 @@ const file_healthcare_nursing_v1_nursing_proto_rawDesc = "" +
 	"\x0eCheckRestraint\x12,.healthcare.nursing.v1.CheckRestraintRequest\x1a-.healthcare.nursing.v1.CheckRestraintResponse\x12\x7f\n" +
 	"\x14DiscontinueRestraint\x122.healthcare.nursing.v1.DiscontinueRestraintRequest\x1a3.healthcare.nursing.v1.DiscontinueRestraintResponse\x12m\n" +
 	"\x0eListRestraints\x12,.healthcare.nursing.v1.ListRestraintsRequest\x1a-.healthcare.nursing.v1.ListRestraintsResponse\x12y\n" +
-	"\x12GetRestraintAlerts\x120.healthcare.nursing.v1.GetRestraintAlertsRequest\x1a1.healthcare.nursing.v1.GetRestraintAlertsResponse\x12s\n" +
-	"\x10StartTransfusion\x12..healthcare.nursing.v1.StartTransfusionRequest\x1a/.healthcare.nursing.v1.StartTransfusionResponse\x12y\n" +
-	"\x12ObserveTransfusion\x120.healthcare.nursing.v1.ObserveTransfusionRequest\x1a1.healthcare.nursing.v1.ObserveTransfusionResponse\x12\x8e\x01\n" +
-	"\x19ReportTransfusionReaction\x127.healthcare.nursing.v1.ReportTransfusionReactionRequest\x1a8.healthcare.nursing.v1.ReportTransfusionReactionResponse\x12|\n" +
-	"\x13CompleteTransfusion\x121.healthcare.nursing.v1.CompleteTransfusionRequest\x1a2.healthcare.nursing.v1.CompleteTransfusionResponse\x12d\n" +
+	"\x12GetRestraintAlerts\x120.healthcare.nursing.v1.GetRestraintAlertsRequest\x1a1.healthcare.nursing.v1.GetRestraintAlertsResponse\x12x\n" +
+	"\x10StartTransfusion\x12..healthcare.nursing.v1.StartTransfusionRequest\x1a/.healthcare.nursing.v1.StartTransfusionResponse\"\x03\x88\x02\x01\x12~\n" +
+	"\x12ObserveTransfusion\x120.healthcare.nursing.v1.ObserveTransfusionRequest\x1a1.healthcare.nursing.v1.ObserveTransfusionResponse\"\x03\x88\x02\x01\x12\x93\x01\n" +
+	"\x19ReportTransfusionReaction\x127.healthcare.nursing.v1.ReportTransfusionReactionRequest\x1a8.healthcare.nursing.v1.ReportTransfusionReactionResponse\"\x03\x88\x02\x01\x12\x81\x01\n" +
+	"\x13CompleteTransfusion\x121.healthcare.nursing.v1.CompleteTransfusionRequest\x1a2.healthcare.nursing.v1.CompleteTransfusionResponse\"\x03\x88\x02\x01\x12d\n" +
 	"\vAssessWound\x12).healthcare.nursing.v1.AssessWoundRequest\x1a*.healthcare.nursing.v1.AssessWoundResponse\x12s\n" +
 	"\x10AttachWoundImage\x12..healthcare.nursing.v1.AttachWoundImageRequest\x1a/.healthcare.nursing.v1.AttachWoundImageResponse\x12p\n" +
 	"\x0fGetWoundHistory\x12-.healthcare.nursing.v1.GetWoundHistoryRequest\x1a..healthcare.nursing.v1.GetWoundHistoryResponse\x12p\n" +

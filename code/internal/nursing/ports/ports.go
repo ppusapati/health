@@ -244,16 +244,11 @@ type SafetyRepository interface {
 	InsertRestraintCheck(ctx context.Context, scope authctx.TenantScope,
 		restraintID string, c domain.RestraintCheck) error
 
-	InsertTransfusion(ctx context.Context, scope authctx.TenantScope,
-		t *domain.Transfusion) error
-	GetTransfusion(ctx context.Context, scope authctx.TenantScope,
-		transfusionID string) (*domain.Transfusion, error)
-	EndTransfusion(ctx context.Context, scope authctx.TenantScope,
-		t *domain.Transfusion, expectedVersion int64) error
-	ListTransfusions(ctx context.Context, scope authctx.TenantScope,
-		encounterID string, limit int32) ([]*domain.Transfusion, error)
-	InsertTransfusionObservation(ctx context.Context, scope authctx.TenantScope,
-		transfusionID string, o domain.TransfusionObservation) error
+	// No transfusion methods. The record of a transfusion is
+	// bloodbank.episode, which is the only one linked to the issue, the
+	// component and the collection — see the note in application/ward.go.
+	// A port here would be a second way to write the thing that already
+	// disagreed with itself once.
 }
 
 // WardRepository persists wound assessments, education, assignments and the

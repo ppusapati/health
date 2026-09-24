@@ -1076,11 +1076,13 @@ var rolePermissions = map[Role][]string{
 		// the control that bites is the mandatory reason and the stored report,
 		// not scarcity of the permission.
 		"nur.medication.override",
-		// Restraints and transfusion are nursing acts carried out under a
-		// clinician's authorization, and the authorization is checked in the
-		// record rather than in the permission (SRS-NUR-013, SRS-NUR-014).
+		// A restraint is a nursing act carried out under a clinician's
+		// authorization, and the authorization is checked in the record
+		// rather than in the permission (SRS-NUR-013). Transfusion is not
+		// here: it is bld.transfusion.write below, granted to this same role,
+		// because the transfusion record lives in the blood bank
+		// (SRS-NUR-014, migration 0047).
 		"nur.restraint.manage",
-		"nur.transfusion.manage",
 		// Declaring downtime and reconciling the paper chart afterwards is the
 		// ward's job, and the ward is who knows the system has gone
 		// (SRS-NUR-018).

@@ -391,6 +391,7 @@ class RestraintKind extends $pb.ProtobufEnum {
   const RestraintKind._(super.value, super.name);
 }
 
+@$core.Deprecated('This enum is deprecated')
 class TransfusionStatus extends $pb.ProtobufEnum {
   static const TransfusionStatus TRANSFUSION_STATUS_UNSPECIFIED =
       TransfusionStatus._(

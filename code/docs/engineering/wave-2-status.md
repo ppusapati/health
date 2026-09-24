@@ -432,8 +432,8 @@ because a look-back reaches every patient who received blood from one donation.
 | SRS-BLD-008 | Reserve/crossmatch with expiry of reservation | **Implemented** — one live hold per unit, held by a partial unique index; holds lapse, and a sweep returns the blood to the shelf |
 | SRS-BLD-009 | Issue only after final identity/compatibility checks | **Implemented** — the check is compared against the record rather than trusted, and who made it is on the issue row |
 | SRS-BLD-010 | Bedside positive patient/unit verification; mismatch blocks and raises a critical exception | **Implemented** — two people required, every failure reported at once, and the escalation survives the refusal |
-| SRS-BLD-011 | Transfusion start/end, observations and interruption; longitudinally visible | **Implemented** — one transfusion per unit, held by a unique index; the protocol sets a transfusion has not had are named rather than blocking |
-| SRS-BLD-012 | Suspected reaction triggering a blood bank investigation | **Implemented** — a reaction names the component, so the siblings from the same donation are found and quarantined immediately rather than after the investigation |
+| SRS-BLD-011 | Transfusion start/end, observations and interruption; longitudinally visible | **Implemented** — one transfusion per unit, held by a unique index; a transfusion does not start without the baseline every later set is read against; the protocol sets it has not had are named rather than blocking |
+| SRS-BLD-012 | Suspected reaction triggering a blood bank investigation | **Implemented** — a reaction names the component, so the siblings from the same donation are found and quarantined immediately rather than after the investigation; reporting stops the transfusion and records what was done at the bedside, in the same transaction |
 | SRS-BLD-013 | Return/reissue/discard with reason and eligibility checks | **Partial** — discard with a coded reason is built, and a transfused unit cannot be unwound. The temperature and time-window checks on a *return* are not: this deployment has no cold-chain telemetry, and a check that assumed compliance would be worse than none |
 | SRS-BLD-014 | Full vein-to-vein traceability where data exists | **Implemented** — the chain runs in both directions and names its gaps, so "never transfused" is distinguishable from "we lost the record" |
 | SRS-BLD-015 | Haemovigilance and component utilisation reports | **Implemented** — derived from the issue, transfusion and reaction records every time; a running transfusion is not counted as one that happened |
@@ -515,24 +515,54 @@ log.
 | SRS-CSSD-011 | Recall affected packs after a failed indicator or sterilizer event; locations and cases identified, recall tasks generated | **Implemented** — every pack in the load including the ones already opened; a durable acknowledged notice rather than a screen nobody opened; its own permission |
 | SRS-CSSD-012 | Track instrument lifecycle, repairs and missing instruments; history supports replacement and loss analysis | **Implemented** — an append-only history written in the same transaction as every move, so a status cannot change without it; the database refuses a move out of service with no reason |
 
-### The SRS-NUR-014 duplication
+### The SRS-NUR-014 duplication, resolved
 
 SRS-NUR-014 built a transfusion record in Wave 1 — `nursing.transfusion` and
-`nursing.transfusion_observation` — before this context existed. It records the
-same clinical event from the ward's side: a unit number, a bedside check,
-observations, a reaction.
+`nursing.transfusion_observation` — before this context existed. It recorded
+the same clinical event from the ward's side: a unit number, a bedside check,
+observations, a reaction. Two records of one transfusion will disagree, which
+is the defect most of this codebase's constraints exist to prevent.
 
-Two records of one transfusion will disagree, which is the defect most of this
-codebase's constraints exist to prevent. `bloodbank.episode` is the one that
-should survive, because it is the only one linked to the issue, the component
-and the collection, and therefore the only one a look-back can run along: asked
-"who else received blood from this donation", the nursing table cannot answer.
+`bloodbank.episode` is the one that survives, because it is the only one linked
+to the issue, the component and the collection, and therefore the only one a
+look-back can run along: asked "who else received blood from this donation",
+the nursing table cannot answer — it holds the unit number as free text and
+nothing behind it.
 
-Resolving it means changing a Wave-1 contract and migrating the rows, which is
-not SRS-BLD's to do unasked. Until then a deployment entitled to the bloodbank
-module records transfusions here and the nursing table is the ward chart's view
-of the same event. This is a known defect with a named resolution, not a
-design.
+**Migration 0047 leaves one record.** Every nursing row whose unit number
+resolves to a component becomes an episode with its observations, the bedside
+pair mapping across intact. A component that already has an episode is skipped:
+that is the duplication in the flesh, and the episode wins. Rows that resolve
+to nothing stay in `nursing.transfusion`, which carries a `COMMENT ON TABLE`
+saying why — they are a ward's free text and inventing a unit to attach them to
+would be worse than leaving them. `tools/migrations` applies 0001–0046 against
+a real database, seeds a donation through to a component and three ward rows,
+and asserts what moved and what stayed.
+
+**The four nursing RPCs stay on the wire and refuse.** Removing them would
+break every client built against this version (SRS-API-002, which `buf
+breaking` enforces in CI), so each is `deprecated = true` and returns
+`failed_precondition` naming the `healthcare.bloodbank.v1.BloodBankService`
+call that replaces it — `StartTransfusion`, `Observe`, `ReportReaction`,
+`EndTransfusion`. They go in nursing v2. The ward nurse loses nothing: the
+`nurse` role already held `bld.transfusion.write` and `bld.reaction.write`, and
+`nur.transfusion.manage` is gone from the catalogue rather than left granting
+access to nothing.
+
+**Two rules moved rather than dying with the table.** Nursing refused to start
+a transfusion without a baseline set of observations, and the blood bank
+treated them as optional; a transfusion whose first temperature was never
+recorded has nothing for a later rise to be a rise from, so `StartTransfusion`
+now refuses — after the bedside check, which is the louder refusal. And nursing
+made reporting a reaction stop the transfusion and record what was done.
+Reporting now does both, in the transaction that quarantines the siblings and
+opens the investigation: `bloodbank.reaction.action_taken` is NOT NULL and
+non-empty (migration 0048), and the episode is stopped with the action as its
+reason and the volume the patient actually received. That is the requirement's
+own clause — *the reaction action runs from the bedside* — and a nurse who had
+to make a second call to stop the unit would be filling in a form while the
+patient is reacting. A reaction against a transfusion that already ended, a
+delayed one or a retrospective report, leaves it as it ended.
 
 ## SRS-MAT — Materials, procurement and inventory
 

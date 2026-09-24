@@ -812,8 +812,10 @@ func TestATransfusionNamesTheObservationsItHasNotHad(t *testing.T) {
 // the two numbers a haemovigilance report needs.
 func TestAStoppedTransfusionRecordsWhyAndHowMuch(t *testing.T) {
 	episode, err := domain.StartTransfusion("ep-1", "tenant-1",
-		domain.StartTransfusionInput{ComponentID: "unit-1", PatientID: "patient-1"},
-		nil, "nurse-1", at)
+		domain.StartTransfusionInput{
+			ComponentID: "unit-1", PatientID: "patient-1",
+			Baseline: map[string]float64{"temperature": 36.8},
+		}, nil, "nurse-1", at)
 	if err != nil {
 		t.Fatalf("StartTransfusion: %v", err)
 	}
@@ -839,7 +841,7 @@ func TestAReactionNamesTheComponentSoTheSiblingsCanBeFound(t *testing.T) {
 	if _, err := domain.ReportReaction("rx-1", "tenant-1",
 		domain.NewReactionInput{
 			PatientID: "patient-1", Severity: domain.ReactionSevere,
-			Features: []string{"rigors"},
+			Features: []string{"rigors"}, ActionTaken: "transfusion stopped",
 		}, "doctor-1", at); err == nil {
 		t.Fatal("a reaction was reported against no component; the other " +
 			"components from that donation could not be found")
@@ -847,7 +849,7 @@ func TestAReactionNamesTheComponentSoTheSiblingsCanBeFound(t *testing.T) {
 	if _, err := domain.ReportReaction("rx-1", "tenant-1",
 		domain.NewReactionInput{
 			PatientID: "patient-1", ComponentID: "unit-1",
-			Severity: domain.ReactionSevere,
+			Severity: domain.ReactionSevere, ActionTaken: "transfusion stopped",
 		}, "doctor-1", at); err == nil {
 		t.Error("a reaction with nothing observed was accepted")
 	}
@@ -857,6 +859,8 @@ func TestAReactionNamesTheComponentSoTheSiblingsCanBeFound(t *testing.T) {
 			EpisodeID: "ep-1", ComponentID: "unit-1", PatientID: "patient-1",
 			Severity: domain.ReactionSevere,
 			Features: []string{"Rigors", "fever", "rigors"},
+			ActionTaken: "transfusion stopped, line kept open with saline, " +
+				"unit and giving set returned to the blood bank",
 		}, "doctor-1", at)
 	if err != nil {
 		t.Fatalf("ReportReaction: %v", err)
@@ -1085,5 +1089,115 @@ func TestATransfusedUnitCannotBeUnwound(t *testing.T) {
 	}
 	if available.Issuable(at) {
 		t.Error("a discarded unit is issuable")
+	}
+}
+
+// SRS-NUR-014. A transfusion does not start without the observations every
+// later set is read against. This rule came from nursing, which held the ward's
+// own transfusion record until migration 0047 left one.
+func TestATransfusionNeedsTheObservationsItWillBeReadAgainst(t *testing.T) {
+	if _, err := domain.StartTransfusion("ep-1", "tenant-1",
+		domain.StartTransfusionInput{
+			ComponentID: "unit-1", PatientID: "patient-1",
+		}, nil, "nurse-1", at); err == nil {
+		t.Fatal("a transfusion started with no baseline; a later temperature " +
+			"has nothing to be a rise from")
+	} else if !strings.Contains(err.Error(), "before the unit is hung") {
+		t.Errorf("the refusal does not say what is missing: %v", err)
+	}
+
+	// The bedside check is the louder refusal: a nurse at the wrong bed hears
+	// that first, not that a set of observations is missing.
+	_, err := domain.StartTransfusion("ep-1", "tenant-1",
+		domain.StartTransfusionInput{
+			ComponentID: "unit-1", PatientID: "patient-2",
+		}, []domain.BedsideRefusal{domain.BedsideWrongPatient}, "nurse-1", at)
+	if err == nil || !strings.Contains(err.Error(), "not the patient") {
+		t.Errorf("a failed bedside check was reported as a missing baseline: %v",
+			err)
+	}
+}
+
+// SRS-NUR-014, SRS-BLD-012. The reaction action runs from the bedside:
+// reporting records what was done and stops the transfusion it was reported
+// against.
+func TestReportingAReactionRecordsWhatWasDoneAndStopsTheTransfusion(t *testing.T) {
+	if _, err := domain.ReportReaction("rx-1", "tenant-1",
+		domain.NewReactionInput{
+			EpisodeID: "ep-1", ComponentID: "unit-1", PatientID: "patient-1",
+			Severity: domain.ReactionSevere, Features: []string{"rigors"},
+		}, "nurse-1", at); err == nil {
+		t.Fatal("a reaction was reported with no account of what was done")
+	}
+
+	episode, err := domain.StartTransfusion("ep-1", "tenant-1",
+		domain.StartTransfusionInput{
+			ComponentID: "unit-1", PatientID: "patient-1",
+			Baseline: map[string]float64{"temperature": 36.8, "pulse": 88},
+		}, nil, "nurse-1", at)
+	if err != nil {
+		t.Fatalf("StartTransfusion: %v", err)
+	}
+	reaction, err := domain.ReportReaction("rx-1", "tenant-1",
+		domain.NewReactionInput{
+			EpisodeID: "ep-1", ComponentID: "unit-1", PatientID: "patient-1",
+			Severity: domain.ReactionSevere, Features: []string{"rigors"},
+			ActionTaken: "transfusion stopped, line kept open with saline",
+		}, "nurse-1", at.Add(20*time.Minute))
+	if err != nil {
+		t.Fatalf("ReportReaction: %v", err)
+	}
+
+	// A reaction reported against a different transfusion cannot stop this one.
+	other := reaction
+	other.EpisodeID = "ep-2"
+	if _, err := episode.StopForReaction(
+		other, 60, at.Add(21*time.Minute)); err == nil {
+		t.Error("a reaction against another transfusion stopped this one")
+	}
+
+	stopped, err := episode.StopForReaction(reaction, 60, at.Add(21*time.Minute))
+	if err != nil {
+		t.Fatalf("StopForReaction: %v", err)
+	}
+	if !stopped {
+		t.Fatal("a running transfusion was left running after a reaction")
+	}
+	if episode.Status != domain.EpisodeStopped {
+		t.Errorf("status = %q, want stopped", episode.Status)
+	}
+	if !strings.Contains(episode.StopReason, "suspected reaction") ||
+		!strings.Contains(episode.StopReason, "saline") {
+		t.Errorf("stop reason = %q; it does not carry the reaction or the "+
+			"bedside action", episode.StopReason)
+	}
+	if episode.VolumeGivenML != 60 {
+		t.Errorf("volume = %d, want the 60ml the patient received",
+			episode.VolumeGivenML)
+	}
+
+	// A delayed reaction against a transfusion that already ended leaves it as
+	// it ended rather than rewriting it.
+	finished, err := domain.StartTransfusion("ep-3", "tenant-1",
+		domain.StartTransfusionInput{
+			ComponentID: "unit-3", PatientID: "patient-1",
+			Baseline: map[string]float64{"temperature": 36.6},
+		}, nil, "nurse-1", at)
+	if err != nil {
+		t.Fatalf("StartTransfusion: %v", err)
+	}
+	if err := finished.Complete(280, at.Add(2*time.Hour)); err != nil {
+		t.Fatalf("Complete: %v", err)
+	}
+	delayed := reaction
+	delayed.EpisodeID = "ep-3"
+	stopped, err = finished.StopForReaction(delayed, 0, at.Add(6*time.Hour))
+	if err != nil {
+		t.Fatalf("StopForReaction on a finished transfusion: %v", err)
+	}
+	if stopped || finished.Status != domain.EpisodeCompleted ||
+		finished.VolumeGivenML != 280 {
+		t.Errorf("a delayed reaction rewrote how the transfusion ended: %+v",
+			finished)
 	}
 }

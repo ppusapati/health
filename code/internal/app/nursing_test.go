@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	clinicalv1 "github.com/ppusapati/health/code/gen/go/healthcare/clinical/v1"
@@ -1174,63 +1175,58 @@ func TestAnExpiredRestraintAuthorizationAlertsWithoutFreeingThePatient(t *testin
 	}
 }
 
-// SRS-NUR-014: reporting a reaction stops the transfusion.
-func TestReportingATransfusionReactionStopsIt(t *testing.T) {
+// SRS-NUR-014: the four transfusion RPCs refuse and name their replacement.
+//
+// The transfusion record moved to the blood bank in migration 0047, because it
+// is the only context that can link a transfusion to the unit, the donation
+// and the look-back. The RPCs stay on the wire — removing them would break
+// every client built against this version (SRS-API-002) — so a client that has
+// not moved gets an answer it can act on rather than a not-found.
+func TestTheNursingTransfusionCallsNameTheirReplacement(t *testing.T) {
 	h := newNurHarness(t)
 	patient, encounter := h.ward(t, "Iyer", "9876543210")
+	ctx := context.Background()
 
-	started := time.Now().UTC().Add(-30 * time.Minute)
-	begun, err := h.nursing.StartTransfusion(context.Background(),
+	refusals := map[string]error{}
+	_, refusals["StartTransfusion"] = h.nursing.StartTransfusion(ctx,
 		withFacility(h.nurseToken(), h.facility, &nursingv1.StartTransfusionRequest{
 			PatientId: patient, EncounterId: encounter,
 			UnitNumber: "G123456789012",
-			Product: nurCode("http://snomed.info/sct", "256395009",
-				"Packed red blood cells"),
-			AboGroup: "O", Rhd: "positive", VolumeMl: 280,
-			StartedAt: timestamppb.New(started),
-			// The second person at the bedside check.
-			CheckedBy: "nurse-2",
-			Baseline: &nursingv1.TransfusionObservation{
-				ObservedAt:   timestamppb.New(started.Add(-15 * time.Minute)),
-				ObservedBy:   "nurse-1",
-				TemperatureC: 36.8, Pulse: 82, SystolicBp: 118,
-				RespiratoryRate: 16,
-			},
 		}))
-	if err != nil {
-		t.Fatalf("StartTransfusion: %v", err)
-	}
-	transfusion := begun.Msg.GetTransfusion()
-
-	stopped, err := h.nursing.ReportTransfusionReaction(context.Background(),
+	_, refusals["ObserveTransfusion"] = h.nursing.ObserveTransfusion(ctx,
 		withFacility(h.nurseToken(), h.facility,
+			&nursingv1.ObserveTransfusionRequest{TransfusionId: "transfusion-1"}))
+	_, refusals["ReportTransfusionReaction"] = h.nursing.ReportTransfusionReaction(
+		ctx, withFacility(h.nurseToken(), h.facility,
 			&nursingv1.ReportTransfusionReactionRequest{
-				TransfusionId: transfusion.GetTransfusionId(),
+				TransfusionId: "transfusion-1",
 				Features:      "rigors, temperature 38.9, loin pain",
-				ActionTaken: "transfusion stopped, line kept open with saline, " +
-					"medical staff called",
-				UnitReturned: true,
 			}))
-	if err != nil {
-		t.Fatalf("ReportTransfusionReaction: %v", err)
-	}
-	if stopped.Msg.GetTransfusion().GetStatus() !=
-		nursingv1.TransfusionStatus_TRANSFUSION_STATUS_STOPPED {
-		t.Fatalf("status is %v, want stopped",
-			stopped.Msg.GetTransfusion().GetStatus())
-	}
-
-	// A stopped transfusion takes no more observations.
-	if _, err := h.nursing.ObserveTransfusion(context.Background(),
+	_, refusals["CompleteTransfusion"] = h.nursing.CompleteTransfusion(ctx,
 		withFacility(h.nurseToken(), h.facility,
-			&nursingv1.ObserveTransfusionRequest{
-				TransfusionId: transfusion.GetTransfusionId(),
-				Observation: &nursingv1.TransfusionObservation{
-					ObservedAt: timestamppb.New(time.Now().UTC()),
-					ObservedBy: "nurse-1", TemperatureC: 38.4,
-				},
-			})); err == nil {
-		t.Fatal("a stopped transfusion accepted an observation")
+			&nursingv1.CompleteTransfusionRequest{TransfusionId: "transfusion-1"}))
+
+	replacements := map[string]string{
+		"StartTransfusion":          "StartTransfusion",
+		"ObserveTransfusion":        "Observe",
+		"ReportTransfusionReaction": "ReportReaction",
+		"CompleteTransfusion":       "EndTransfusion",
+	}
+	for call, err := range refusals {
+		if err == nil {
+			t.Errorf("%s recorded a transfusion the blood bank knows nothing "+
+				"about", call)
+			continue
+		}
+		if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+			t.Errorf("%s refused with %v, want failed_precondition: a client "+
+				"that retries will not get a different answer",
+				call, connect.CodeOf(err))
+		}
+		want := "BloodBankService/" + replacements[call]
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("%s does not name %s: %v", call, want, err)
+		}
 	}
 }
 

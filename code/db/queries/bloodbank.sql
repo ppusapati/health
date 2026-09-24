@@ -358,10 +358,11 @@ ORDER BY observed_at;
 -- name: InsertReaction :exec
 INSERT INTO bloodbank.reaction (
     reaction_id, tenant_id, episode_id, component_id, patient_id, severity,
-    features, note, reported_at, reported_by, state
+    features, action_taken, note, reported_at, reported_by, state
 ) VALUES (
     @reaction_id, @tenant_id, @episode_id, @component_id, @patient_id,
-    @severity, @features, @note, @reported_at, @reported_by, @state
+    @severity, @features, @action_taken, @note, @reported_at, @reported_by,
+    @state
 );
 
 -- name: GetReaction :one

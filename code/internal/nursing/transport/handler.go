@@ -842,78 +842,53 @@ func (h *Handler) GetRestraintAlerts(
 	}), nil
 }
 
-// StartTransfusion implements SRS-NUR-014.
+// The four transfusion RPCs refuse and name their replacement
+// (SRS-NUR-014, SRS-BLD-010).
+//
+// They stay on the wire because evolution here is additive and a breaking
+// change is a deliberate new package version (SRS-API-002); they are marked
+// deprecated in the contract and go at nursing v2. Until then a client that
+// has not moved is told where to go rather than quietly writing a second
+// record of a transfusion that nothing reads.
+
+// StartTransfusion is replaced by BloodBankService/StartTransfusion.
+//
+// Deprecated: see the note above.
 func (h *Handler) StartTransfusion(
 	ctx context.Context,
 	req *connect.Request[nursingv1.StartTransfusionRequest],
 ) (*connect.Response[nursingv1.StartTransfusionResponse], error) {
-	msg := req.Msg
-
-	transfusion, err := h.svc.StartTransfusion(ctx, domain.NewTransfusionInput{
-		PatientID: msg.GetPatientId(), EncounterID: msg.GetEncounterId(),
-		UnitNumber: msg.GetUnitNumber(), Product: codingFromProto(msg.GetProduct()),
-		ABOGroup: msg.GetAboGroup(), RhD: msg.GetRhd(),
-		VolumeML: msg.GetVolumeMl(), StartedAt: goTime(msg.GetStartedAt()),
-		CheckedBy: msg.GetCheckedBy(),
-		Baseline:  transfusionObservationFromProto(msg.GetBaseline()),
-	})
-	if err != nil {
-		return nil, fail(ctx, err)
-	}
-	return connect.NewResponse(&nursingv1.StartTransfusionResponse{
-		Transfusion: transfusionToProto(transfusion),
-	}), nil
+	return nil, fail(ctx, h.svc.StartTransfusion(ctx))
 }
 
-// ObserveTransfusion records a monitoring set.
+// ObserveTransfusion is replaced by BloodBankService/Observe.
+//
+// Deprecated: see the note above.
 func (h *Handler) ObserveTransfusion(
 	ctx context.Context,
 	req *connect.Request[nursingv1.ObserveTransfusionRequest],
 ) (*connect.Response[nursingv1.ObserveTransfusionResponse], error) {
-	transfusion, err := h.svc.ObserveTransfusion(ctx,
-		req.Msg.GetTransfusionId(),
-		transfusionObservationFromProto(req.Msg.GetObservation()))
-	if err != nil {
-		return nil, fail(ctx, err)
-	}
-	return connect.NewResponse(&nursingv1.ObserveTransfusionResponse{
-		Transfusion: transfusionToProto(transfusion),
-	}), nil
+	return nil, fail(ctx, h.svc.ObserveTransfusion(ctx))
 }
 
-// ReportTransfusionReaction stops the transfusion and records the reaction.
+// ReportTransfusionReaction is replaced by BloodBankService/ReportReaction.
+//
+// Deprecated: see the note above.
 func (h *Handler) ReportTransfusionReaction(
 	ctx context.Context,
 	req *connect.Request[nursingv1.ReportTransfusionReactionRequest],
 ) (*connect.Response[nursingv1.ReportTransfusionReactionResponse], error) {
-	msg := req.Msg
-
-	transfusion, err := h.svc.ReportTransfusionReaction(ctx,
-		msg.GetTransfusionId(), domain.TransfusionReaction{
-			Features: msg.GetFeatures(), ActionTaken: msg.GetActionTaken(),
-			UnitReturned: msg.GetUnitReturned(),
-		})
-	if err != nil {
-		return nil, fail(ctx, err)
-	}
-	return connect.NewResponse(&nursingv1.ReportTransfusionReactionResponse{
-		Transfusion: transfusionToProto(transfusion),
-	}), nil
+	return nil, fail(ctx, h.svc.ReportTransfusionReaction(ctx))
 }
 
-// CompleteTransfusion ends a transfusion that finished normally.
+// CompleteTransfusion is replaced by BloodBankService/EndTransfusion.
+//
+// Deprecated: see the note above.
 func (h *Handler) CompleteTransfusion(
 	ctx context.Context,
 	req *connect.Request[nursingv1.CompleteTransfusionRequest],
 ) (*connect.Response[nursingv1.CompleteTransfusionResponse], error) {
-	transfusion, err := h.svc.CompleteTransfusion(ctx,
-		req.Msg.GetTransfusionId(), goTime(req.Msg.GetEndedAt()))
-	if err != nil {
-		return nil, fail(ctx, err)
-	}
-	return connect.NewResponse(&nursingv1.CompleteTransfusionResponse{
-		Transfusion: transfusionToProto(transfusion),
-	}), nil
+	return nil, fail(ctx, h.svc.CompleteTransfusion(ctx))
 }
 
 // AssessWound implements SRS-NUR-012.

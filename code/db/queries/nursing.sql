@@ -585,68 +585,6 @@ WHERE tenant_id = @tenant_id AND restraint_id = @restraint_id
 ORDER BY observed_at
 LIMIT @page_limit;
 
--- name: InsertTransfusion :exec
-INSERT INTO nursing.transfusion (
-    transfusion_id, tenant_id, patient_id, encounter_id, unit_number,
-    product_system, product_version, product_code, product_display,
-    abo_group, rhd, volume_ml, started_at, started_by, checked_by, status,
-    version
-) VALUES (
-    @transfusion_id, @tenant_id, @patient_id, @encounter_id, @unit_number,
-    @product_system, @product_version, @product_code, @product_display,
-    @abo_group, @rhd, @volume_ml, @started_at, @started_by, @checked_by,
-    'in_progress', 1
-);
-
--- name: GetTransfusion :one
-SELECT transfusion_id, tenant_id, patient_id, encounter_id, unit_number,
-       product_system, product_version, product_code, product_display,
-       abo_group, rhd, volume_ml, started_at, started_by, checked_by, status,
-       ended_at, reaction_reported_at, reaction_reported_by, reaction_features,
-       reaction_action, reaction_unit_returned, version
-FROM nursing.transfusion
-WHERE tenant_id = @tenant_id AND transfusion_id = @transfusion_id;
-
--- name: EndTransfusion :execrows
-UPDATE nursing.transfusion
-SET status = @status, ended_at = sqlc.narg('ended_at')::timestamptz,
-    reaction_reported_at = sqlc.narg('reaction_reported_at')::timestamptz,
-    reaction_reported_by = @reaction_reported_by,
-    reaction_features = @reaction_features,
-    reaction_action = @reaction_action,
-    reaction_unit_returned = @reaction_unit_returned,
-    version = version + 1
-WHERE tenant_id = @tenant_id AND transfusion_id = @transfusion_id
-  AND status = 'in_progress' AND version = @expected_version;
-
--- name: ListTransfusions :many
-SELECT transfusion_id, tenant_id, patient_id, encounter_id, unit_number,
-       product_system, product_version, product_code, product_display,
-       abo_group, rhd, volume_ml, started_at, started_by, checked_by, status,
-       ended_at, reaction_reported_at, reaction_reported_by, reaction_features,
-       reaction_action, reaction_unit_returned, version
-FROM nursing.transfusion
-WHERE tenant_id = @tenant_id AND encounter_id = @encounter_id
-ORDER BY started_at DESC
-LIMIT @page_limit;
-
--- name: InsertTransfusionObservation :exec
-INSERT INTO nursing.transfusion_observation (
-    observation_id, tenant_id, transfusion_id, observed_at, observed_by,
-    temperature_c, pulse, systolic_bp, respiratory_rate, baseline, notes
-) VALUES (
-    @observation_id, @tenant_id, @transfusion_id, @observed_at, @observed_by,
-    @temperature_c, @pulse, @systolic_bp, @respiratory_rate, @baseline, @notes
-);
-
--- name: ListTransfusionObservations :many
-SELECT observation_id, tenant_id, transfusion_id, observed_at, observed_by,
-       temperature_c, pulse, systolic_bp, respiratory_rate, baseline, notes
-FROM nursing.transfusion_observation
-WHERE tenant_id = @tenant_id AND transfusion_id = @transfusion_id
-ORDER BY baseline DESC, observed_at
-LIMIT @page_limit;
-
 -- name: InsertWoundAssessment :exec
 INSERT INTO nursing.wound_assessment (
     wound_assessment_id, tenant_id, patient_id, encounter_id, wound_id,
@@ -819,3 +757,9 @@ WHERE tenant_id = @tenant_id
   AND (@unreconciled_only::boolean = false OR reconciled_at IS NULL)
 ORDER BY started_at DESC
 LIMIT @page_limit;
+
+-- No transfusion queries. bloodbank.episode is the record of a
+-- transfusion (SRS-NUR-014, SRS-BLD-010) and migration 0047 moved the
+-- rows; what is left in nursing.transfusion is the archive of the ones
+-- that could not be linked, and nothing here reads it.
+

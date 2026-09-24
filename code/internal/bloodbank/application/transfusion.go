@@ -376,12 +376,16 @@ func (s *Service) PatientTransfusions(ctx context.Context, patientID string,
 		ctx, scope, patientID, clampPageSize(limit))
 }
 
-// ReportReaction records a suspected transfusion reaction (SRS-BLD-012).
+// ReportReaction records a suspected transfusion reaction (SRS-BLD-012,
+// SRS-NUR-014).
 //
-// It quarantines the implicated unit's siblings. A reaction that might be
+// Reporting does three things in one transaction, because they are one action
+// at the bedside. It stops the transfusion the reaction was reported against.
+// It quarantines the implicated unit's siblings — a reaction that might be
 // bacterial contamination or a mislabelled donation implicates everything made
 // from the same collection, and waiting for the investigation to conclude
-// before pulling them is waiting while they are given to somebody else.
+// before pulling them is waiting while they are given to somebody else. And it
+// opens the investigation.
 func (s *Service) ReportReaction(ctx context.Context,
 	in domain.NewReactionInput) (domain.Reaction, error) {
 
@@ -408,6 +412,11 @@ func (s *Service) ReportReaction(ctx context.Context,
 		}
 		out = reaction
 
+		if err := s.stopForReaction(
+			ctx, session, scope, reaction, in.VolumeGivenML, now); err != nil {
+			return err
+		}
+
 		if err := s.quarantineSiblings(
 			ctx, session, scope, component, now); err != nil {
 			return err
@@ -433,6 +442,56 @@ func (s *Service) ReportReaction(ctx context.Context,
 		return domain.Reaction{}, err
 	}
 	return out, nil
+}
+
+// stopForReaction ends the transfusion the reaction was reported against.
+//
+// A reaction with no episode — reported against a unit rather than a running
+// transfusion — has nothing to stop, and a transfusion that already ended is
+// left as it ended.
+//
+// The episode and the component are not required to agree, and deliberately
+// so. A patient who has had two units may react to the first while the second
+// is running: the unit to stop is the one in the line, and the donation to
+// investigate is the one suspected. Insisting they match would force the nurse
+// to choose between stopping the wrong transfusion and quarantining the wrong
+// siblings.
+func (s *Service) stopForReaction(ctx context.Context, session authctx.Session,
+	scope authctx.TenantScope, reaction domain.Reaction, volumeML int,
+	now time.Time) error {
+
+	if reaction.EpisodeID == "" {
+		return nil
+	}
+	episode, err := s.transfusion.Episode(ctx, scope, reaction.EpisodeID)
+	if err != nil {
+		return err
+	}
+	stopped, err := episode.StopForReaction(reaction, volumeML, now)
+	if err != nil {
+		return bloodbankError(err)
+	}
+	if !stopped {
+		return nil
+	}
+	if err := s.transfusion.UpdateEpisode(ctx, scope, episode); err != nil {
+		return err
+	}
+	if err := s.appendEvent(ctx, session, EventTransfusionEnd,
+		"bloodbank_episode", episode.ID, map[string]any{
+			"component_id":    episode.ComponentID,
+			"patient_id":      episode.PatientID,
+			"status":          string(episode.Status),
+			"volume_given_ml": episode.VolumeGivenML,
+		}, now); err != nil {
+		return err
+	}
+	return s.appendAudit(ctx, session, audit.Record{
+		TenantID: session.TenantID, Action: PermReaction,
+		ResourceType: "bloodbank_episode", ResourceID: episode.ID,
+		Outcome: audit.OutcomeSuccess,
+		Reason:  "transfusion stopped: reaction reported",
+	}, now)
 }
 
 func (s *Service) quarantineSiblings(ctx context.Context,

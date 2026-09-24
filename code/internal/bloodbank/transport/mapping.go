@@ -417,7 +417,7 @@ func reactionToProto(in domain.Reaction) *bloodbankv1.Reaction {
 		ReactionId: in.ID, EpisodeId: in.EpisodeID,
 		ComponentId: in.ComponentID, PatientId: in.PatientID,
 		Severity: severityToWire[in.Severity],
-		Features: in.Features, Note: in.Note,
+		Features: in.Features, ActionTaken: in.ActionTaken, Note: in.Note,
 		ReportedAt: stamp(in.ReportedAt), ReportedBy: in.ReportedBy,
 		State:          investigationToWire[in.State],
 		Classification: in.Classification, Conclusion: in.Conclusion,

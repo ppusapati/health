@@ -1121,6 +1121,8 @@ message GetRestraintAlertsResponse {
 }
 
 enum TransfusionStatus {
+  option deprecated = true;
+
   TRANSFUSION_STATUS_UNSPECIFIED = 0;
   TRANSFUSION_STATUS_IN_PROGRESS = 1;
   TRANSFUSION_STATUS_COMPLETED = 2;
@@ -1131,6 +1133,8 @@ enum TransfusionStatus {
 
 // One set of monitoring observations (SRS-NUR-014).
 message TransfusionObservation {
+  option deprecated = true;
+
   string observation_id = 1;
   google.protobuf.Timestamp observed_at = 2;
   string observed_by = 3;
@@ -1145,6 +1149,8 @@ message TransfusionObservation {
 }
 
 message TransfusionReaction {
+  option deprecated = true;
+
   google.protobuf.Timestamp reported_at = 1;
   string reported_by = 2;
   string features = 3;
@@ -1156,6 +1162,8 @@ message TransfusionReaction {
 
 // One blood-product episode (SRS-NUR-014).
 message Transfusion {
+  option deprecated = true;
+
   string transfusion_id = 1;
   string patient_id = 2;
   string encounter_id = 3;
@@ -1180,6 +1188,8 @@ message Transfusion {
 }
 
 message StartTransfusionRequest {
+  option deprecated = true;
+
   string patient_id = 1;
   string encounter_id = 2;
   string unit_number = 3;
@@ -1193,15 +1203,21 @@ message StartTransfusionRequest {
 }
 
 message StartTransfusionResponse {
+  option deprecated = true;
+
   Transfusion transfusion = 1;
 }
 
 message ObserveTransfusionRequest {
+  option deprecated = true;
+
   string transfusion_id = 1;
   TransfusionObservation observation = 2;
 }
 
 message ObserveTransfusionResponse {
+  option deprecated = true;
+
   Transfusion transfusion = 1;
 }
 
@@ -1209,6 +1225,8 @@ message ObserveTransfusionResponse {
 // bedside and splitting them creates a window in which the system believes
 // blood is still running into a patient having a reaction.
 message ReportTransfusionReactionRequest {
+  option deprecated = true;
+
   string transfusion_id = 1;
   string features = 2;
   string action_taken = 3;
@@ -1216,15 +1234,21 @@ message ReportTransfusionReactionRequest {
 }
 
 message ReportTransfusionReactionResponse {
+  option deprecated = true;
+
   Transfusion transfusion = 1;
 }
 
 message CompleteTransfusionRequest {
+  option deprecated = true;
+
   string transfusion_id = 1;
   google.protobuf.Timestamp ended_at = 2;
 }
 
 message CompleteTransfusionResponse {
+  option deprecated = true;
+
   Transfusion transfusion = 1;
 }
 
@@ -1699,13 +1723,26 @@ service NursingService {
   rpc ListRestraints(ListRestraintsRequest) returns (ListRestraintsResponse);
   rpc GetRestraintAlerts(GetRestraintAlertsRequest)
       returns (GetRestraintAlertsResponse);
-  rpc StartTransfusion(StartTransfusionRequest) returns (StartTransfusionResponse);
+  // Transfusions moved to the blood bank (SRS-NUR-014, migration 0047). These
+  // four remain on the wire because removing them would break every client
+  // built against this version (SRS-API-002); each refuses and names the
+  // healthcare.bloodbank.v1.BloodBankService call that replaces it. They go in
+  // nursing v2.
+  rpc StartTransfusion(StartTransfusionRequest) returns (StartTransfusionResponse) {
+    option deprecated = true;
+  }
   rpc ObserveTransfusion(ObserveTransfusionRequest)
-      returns (ObserveTransfusionResponse);
+      returns (ObserveTransfusionResponse) {
+    option deprecated = true;
+  }
   rpc ReportTransfusionReaction(ReportTransfusionReactionRequest)
-      returns (ReportTransfusionReactionResponse);
+      returns (ReportTransfusionReactionResponse) {
+    option deprecated = true;
+  }
   rpc CompleteTransfusion(CompleteTransfusionRequest)
-      returns (CompleteTransfusionResponse);
+      returns (CompleteTransfusionResponse) {
+    option deprecated = true;
+  }
 
   // Wounds, education and discharge (SRS-NUR-012, SRS-NUR-015).
   rpc AssessWound(AssessWoundRequest) returns (AssessWoundResponse);

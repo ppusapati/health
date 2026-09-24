@@ -78,7 +78,11 @@ type StartTransfusionInput struct {
 	IssueID     string
 	PatientID   string
 	EncounterID string
-	Baseline    map[string]float64
+	// Baseline is the set of observations taken before the unit is hung. It
+	// is required: every later set is read as a change from it, and a
+	// transfusion whose first temperature was never recorded has nothing for
+	// a rise to be a rise from (SRS-NUR-014).
+	Baseline map[string]float64
 }
 
 // StartTransfusion begins a transfusion at the bedside (SRS-BLD-010,
@@ -109,6 +113,11 @@ func StartTransfusion(id, tenantID string, in StartTransfusionInput,
 		}
 		return Episode{}, fmt.Errorf("%w: %s", ErrInvalidUnit,
 			strings.Join(explanations, " "))
+	case len(in.Baseline) == 0:
+		return Episode{}, fmt.Errorf(
+			"%w: a transfusion records the patient's observations before the "+
+				"unit is hung, because a later rise is read against them",
+			ErrInvalidUnit)
 	}
 
 	episode := Episode{
@@ -120,13 +129,11 @@ func StartTransfusion(id, tenantID string, in StartTransfusionInput,
 		Status:      EpisodeRunning,
 		StartedAt:   now.UTC(), StartedBy: strings.TrimSpace(by),
 	}
-	if len(in.Baseline) > 0 {
-		episode.Observations = append(episode.Observations, Observation{
-			TenantID: tenantID, EpisodeID: id,
-			Timing: TimingBaseline, Values: copyValues(in.Baseline),
-			ObservedAt: now.UTC(), ObservedBy: strings.TrimSpace(by),
-		})
-	}
+	episode.Observations = append(episode.Observations, Observation{
+		TenantID: tenantID, EpisodeID: id,
+		Timing: TimingBaseline, Values: copyValues(in.Baseline),
+		ObservedAt: now.UTC(), ObservedBy: strings.TrimSpace(by),
+	})
 	return episode, nil
 }
 
@@ -230,6 +237,36 @@ func (e *Episode) Stop(reason string, volumeML int, at time.Time) error {
 	return nil
 }
 
+// StopForReaction stops a running transfusion because a reaction was reported
+// against it (SRS-NUR-014, SRS-BLD-012).
+//
+// Reporting is what stops it. The requirement's clause is that the reaction
+// action runs from the bedside, and a system that recorded the report and left
+// the unit running would be one where the transfusion stops only if somebody
+// remembers to make a second call.
+//
+// A transfusion that has already ended is left alone and reports false. A
+// reaction can be delayed by hours, or reported retrospectively, and stopping
+// a finished transfusion would rewrite how it ended.
+func (e *Episode) StopForReaction(r Reaction, volumeML int, at time.Time) (
+	bool, error) {
+
+	if r.EpisodeID != e.ID {
+		return false, fmt.Errorf(
+			"%w: this reaction was reported against another transfusion",
+			ErrInvalidUnit)
+	}
+	if e.Status == EpisodeCompleted || e.Status == EpisodeStopped {
+		return false, nil
+	}
+	// Coded as a reaction and then the bedside action, because a
+	// haemovigilance report counts reactions and reads the rest.
+	if err := e.Stop("suspected reaction: "+r.ActionTaken, volumeML, at); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // MissingObservations names the protocol sets a transfusion has not had.
 //
 // A projection rather than a refusal: a nurse who has not yet taken the
@@ -294,7 +331,12 @@ type Reaction struct {
 	// rather than classified, because the classification is the
 	// investigation's conclusion and this is the report that starts it.
 	Features []string
-	Note     string
+	// ActionTaken is what was done at the bedside — the transfusion stopped,
+	// the line kept open with saline, the unit returned. Recorded because the
+	// action runs from the bedside and the report that starts the
+	// investigation is the only place it is written down (SRS-NUR-014).
+	ActionTaken string
+	Note        string
 
 	ReportedAt time.Time
 	ReportedBy string
@@ -317,7 +359,13 @@ type NewReactionInput struct {
 	PatientID   string
 	Severity    ReactionSeverity
 	Features    []string
-	Note        string
+	ActionTaken string
+	// VolumeGivenML is what the patient received before the transfusion was
+	// stopped. It is reported here because the stop happens as part of the
+	// report: a nurse who had to make a second call to record the volume
+	// would be filling in a form while the patient is reacting.
+	VolumeGivenML int
+	Note          string
 }
 
 // ReportReaction records a suspected transfusion reaction (SRS-BLD-012).
@@ -342,6 +390,10 @@ func ReportReaction(id, tenantID string, in NewReactionInput, by string,
 	case len(normalised(in.Features)) == 0:
 		return Reaction{}, fmt.Errorf("%w: a reaction records what was seen",
 			ErrInvalidUnit)
+	case strings.TrimSpace(in.ActionTaken) == "":
+		return Reaction{}, fmt.Errorf(
+			"%w: a reaction records what was done about it at the bedside",
+			ErrInvalidUnit)
 	case strings.TrimSpace(by) == "":
 		return Reaction{}, fmt.Errorf("%w: a reaction names who reported it",
 			ErrInvalidUnit)
@@ -354,6 +406,7 @@ func ReportReaction(id, tenantID string, in NewReactionInput, by string,
 		PatientID:   strings.TrimSpace(in.PatientID),
 		Severity:    in.Severity,
 		Features:    normalised(in.Features),
+		ActionTaken: strings.TrimSpace(in.ActionTaken),
 		Note:        strings.TrimSpace(in.Note),
 		ReportedAt:  now.UTC(), ReportedBy: strings.TrimSpace(by),
 		State: InvestigationOpen,

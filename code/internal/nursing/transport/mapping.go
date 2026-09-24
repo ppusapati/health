@@ -164,12 +164,6 @@ var restraintKindFromProto = map[nursingv1.RestraintKind]domain.RestraintKind{
 	nursingv1.RestraintKind_RESTRAINT_KIND_SECLUSION: domain.RestraintSeclusion,
 }
 
-var transfusionStatusToProto = map[domain.TransfusionStatus]nursingv1.TransfusionStatus{
-	domain.TransfusionInProgress: nursingv1.TransfusionStatus_TRANSFUSION_STATUS_IN_PROGRESS,
-	domain.TransfusionCompleted:  nursingv1.TransfusionStatus_TRANSFUSION_STATUS_COMPLETED,
-	domain.TransfusionStopped:    nursingv1.TransfusionStatus_TRANSFUSION_STATUS_STOPPED,
-}
-
 var woundKindToProto = map[domain.WoundKind]nursingv1.WoundKind{
 	domain.WoundPressureInjury: nursingv1.WoundKind_WOUND_KIND_PRESSURE_INJURY,
 	domain.WoundSurgical:       nursingv1.WoundKind_WOUND_KIND_SURGICAL,
@@ -776,56 +770,11 @@ func restraintToProto(r *domain.Restraint, now time.Time) *nursingv1.Restraint {
 	}
 }
 
-func transfusionObservationToProto(o domain.TransfusionObservation) *nursingv1.TransfusionObservation {
-	return &nursingv1.TransfusionObservation{
-		ObservationId: o.ID, ObservedAt: ts(o.ObservedAt),
-		ObservedBy: o.ObservedBy, TemperatureC: o.TemperatureC,
-		Pulse: o.Pulse, SystolicBp: o.SystolicBP,
-		RespiratoryRate: o.RespiratoryRate, Baseline: o.Baseline,
-		Notes: o.Notes,
-	}
-}
-
-func transfusionObservationFromProto(o *nursingv1.TransfusionObservation) domain.TransfusionObservation {
-	if o == nil {
-		return domain.TransfusionObservation{}
-	}
-	return domain.TransfusionObservation{
-		ObservedAt: goTime(o.GetObservedAt()), ObservedBy: o.GetObservedBy(),
-		TemperatureC: o.GetTemperatureC(), Pulse: o.GetPulse(),
-		SystolicBP: o.GetSystolicBp(), RespiratoryRate: o.GetRespiratoryRate(),
-		Notes: o.GetNotes(),
-	}
-}
-
-func transfusionToProto(t *domain.Transfusion) *nursingv1.Transfusion {
-	if t == nil {
-		return nil
-	}
-	observations := make([]*nursingv1.TransfusionObservation, 0, len(t.Observations))
-	for _, o := range t.Observations {
-		observations = append(observations, transfusionObservationToProto(o))
-	}
-	out := &nursingv1.Transfusion{
-		TransfusionId: t.ID, PatientId: t.PatientID, EncounterId: t.EncounterID,
-		UnitNumber: t.UnitNumber, Product: codingToProto(t.Product),
-		AboGroup: t.ABOGroup, Rhd: t.RhD, VolumeMl: t.VolumeML,
-		StartedAt: ts(t.StartedAt), StartedBy: t.StartedBy,
-		CheckedBy: t.CheckedBy, Observations: observations,
-		Status: transfusionStatusToProto[t.Status], EndedAt: ts(t.EndedAt),
-		Version: t.Version,
-	}
-	if t.Reaction != nil {
-		out.Reaction = &nursingv1.TransfusionReaction{
-			ReportedAt:   ts(t.Reaction.ReportedAt),
-			ReportedBy:   t.Reaction.ReportedBy,
-			Features:     t.Reaction.Features,
-			ActionTaken:  t.Reaction.ActionTaken,
-			UnitReturned: t.Reaction.UnitReturned,
-		}
-	}
-	return out
-}
+// No transfusion mapping. The four transfusion RPCs refuse and carry no
+// payload back, because bloodbank.episode is the record of a transfusion
+// (SRS-NUR-014, SRS-BLD-010). The proto messages stay on the wire until
+// nursing v2; mapping into them would mean building a reply out of a record
+// this context no longer keeps.
 
 func woundToProto(w *domain.WoundAssessment) *nursingv1.WoundAssessment {
 	if w == nil {

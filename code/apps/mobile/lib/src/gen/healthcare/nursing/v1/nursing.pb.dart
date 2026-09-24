@@ -11336,6 +11336,7 @@ class GetRestraintAlertsResponse extends $pb.GeneratedMessage {
 }
 
 /// One set of monitoring observations (SRS-NUR-014).
+@$core.Deprecated('This message is deprecated')
 class TransfusionObservation extends $pb.GeneratedMessage {
   factory TransfusionObservation({
     $core.String? observationId,
@@ -11493,6 +11494,7 @@ class TransfusionObservation extends $pb.GeneratedMessage {
   void clearNotes() => $_clearField(9);
 }
 
+@$core.Deprecated('This message is deprecated')
 class TransfusionReaction extends $pb.GeneratedMessage {
   factory TransfusionReaction({
     $0.Timestamp? reportedAt,
@@ -11602,6 +11604,7 @@ class TransfusionReaction extends $pb.GeneratedMessage {
 }
 
 /// One blood-product episode (SRS-NUR-014).
+@$core.Deprecated('This message is deprecated')
 class Transfusion extends $pb.GeneratedMessage {
   factory Transfusion({
     $core.String? transfusionId,
@@ -11850,6 +11853,7 @@ class Transfusion extends $pb.GeneratedMessage {
   void clearVersion() => $_clearField(16);
 }
 
+@$core.Deprecated('This message is deprecated')
 class StartTransfusionRequest extends $pb.GeneratedMessage {
   factory StartTransfusionRequest({
     $core.String? patientId,
@@ -12023,6 +12027,7 @@ class StartTransfusionRequest extends $pb.GeneratedMessage {
   TransfusionObservation ensureBaseline() => $_ensure(9);
 }
 
+@$core.Deprecated('This message is deprecated')
 class StartTransfusionResponse extends $pb.GeneratedMessage {
   factory StartTransfusionResponse({
     Transfusion? transfusion,
@@ -12082,6 +12087,7 @@ class StartTransfusionResponse extends $pb.GeneratedMessage {
   Transfusion ensureTransfusion() => $_ensure(0);
 }
 
+@$core.Deprecated('This message is deprecated')
 class ObserveTransfusionRequest extends $pb.GeneratedMessage {
   factory ObserveTransfusionRequest({
     $core.String? transfusionId,
@@ -12153,6 +12159,7 @@ class ObserveTransfusionRequest extends $pb.GeneratedMessage {
   TransfusionObservation ensureObservation() => $_ensure(1);
 }
 
+@$core.Deprecated('This message is deprecated')
 class ObserveTransfusionResponse extends $pb.GeneratedMessage {
   factory ObserveTransfusionResponse({
     Transfusion? transfusion,
@@ -12216,6 +12223,7 @@ class ObserveTransfusionResponse extends $pb.GeneratedMessage {
 /// Stopping and reporting are one operation, because they are one act at the
 /// bedside and splitting them creates a window in which the system believes
 /// blood is still running into a patient having a reaction.
+@$core.Deprecated('This message is deprecated')
 class ReportTransfusionReactionRequest extends $pb.GeneratedMessage {
   factory ReportTransfusionReactionRequest({
     $core.String? transfusionId,
@@ -12312,6 +12320,7 @@ class ReportTransfusionReactionRequest extends $pb.GeneratedMessage {
   void clearUnitReturned() => $_clearField(4);
 }
 
+@$core.Deprecated('This message is deprecated')
 class ReportTransfusionReactionResponse extends $pb.GeneratedMessage {
   factory ReportTransfusionReactionResponse({
     Transfusion? transfusion,
@@ -12375,6 +12384,7 @@ class ReportTransfusionReactionResponse extends $pb.GeneratedMessage {
   Transfusion ensureTransfusion() => $_ensure(0);
 }
 
+@$core.Deprecated('This message is deprecated')
 class CompleteTransfusionRequest extends $pb.GeneratedMessage {
   factory CompleteTransfusionRequest({
     $core.String? transfusionId,
@@ -12447,6 +12457,7 @@ class CompleteTransfusionRequest extends $pb.GeneratedMessage {
   $0.Timestamp ensureEndedAt() => $_ensure(1);
 }
 
+@$core.Deprecated('This message is deprecated')
 class CompleteTransfusionResponse extends $pb.GeneratedMessage {
   factory CompleteTransfusionResponse({
     Transfusion? transfusion,
@@ -16902,14 +16913,23 @@ class NursingServiceApi {
           $pb.ClientContext? ctx, GetRestraintAlertsRequest request) =>
       _client.invoke<GetRestraintAlertsResponse>(ctx, 'NursingService',
           'GetRestraintAlerts', request, GetRestraintAlertsResponse());
+
+  /// Transfusions moved to the blood bank (SRS-NUR-014, migration 0047). These
+  /// four remain on the wire because removing them would break every client
+  /// built against this version (SRS-API-002); each refuses and names the
+  /// healthcare.bloodbank.v1.BloodBankService call that replaces it. They go in
+  /// nursing v2.
+  @$core.Deprecated('This method is deprecated')
   $async.Future<StartTransfusionResponse> startTransfusion(
           $pb.ClientContext? ctx, StartTransfusionRequest request) =>
       _client.invoke<StartTransfusionResponse>(ctx, 'NursingService',
           'StartTransfusion', request, StartTransfusionResponse());
+  @$core.Deprecated('This method is deprecated')
   $async.Future<ObserveTransfusionResponse> observeTransfusion(
           $pb.ClientContext? ctx, ObserveTransfusionRequest request) =>
       _client.invoke<ObserveTransfusionResponse>(ctx, 'NursingService',
           'ObserveTransfusion', request, ObserveTransfusionResponse());
+  @$core.Deprecated('This method is deprecated')
   $async.Future<ReportTransfusionReactionResponse> reportTransfusionReaction(
           $pb.ClientContext? ctx, ReportTransfusionReactionRequest request) =>
       _client.invoke<ReportTransfusionReactionResponse>(
@@ -16918,6 +16938,7 @@ class NursingServiceApi {
           'ReportTransfusionReaction',
           request,
           ReportTransfusionReactionResponse());
+  @$core.Deprecated('This method is deprecated')
   $async.Future<CompleteTransfusionResponse> completeTransfusion(
           $pb.ClientContext? ctx, CompleteTransfusionRequest request) =>
       _client.invoke<CompleteTransfusionResponse>(ctx, 'NursingService',

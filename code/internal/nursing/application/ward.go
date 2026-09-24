@@ -270,178 +270,53 @@ func (s *Service) ListRestraints(ctx context.Context, encounterID string,
 	return out, nil
 }
 
-// StartTransfusion begins a blood-product episode (SRS-NUR-014).
-func (s *Service) StartTransfusion(ctx context.Context,
-	in domain.NewTransfusionInput) (*domain.Transfusion, error) {
-
-	session, scope, err := s.authorize(ctx, PermTransfuse, "transfusion",
-		in.EncounterID, true)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := s.requireOpenEncounter(ctx, scope, in.EncounterID,
-		in.PatientID); err != nil {
-		return nil, err
-	}
-
-	now := s.clock.Now()
-	in.Baseline.ID = s.ids.NewID()
-	transfusion, err := domain.NewTransfusion(s.ids.NewID(), session.TenantID,
-		in, session.SubjectID, now)
-	if err != nil {
-		return nil, nursingError(err)
-	}
-
-	err = s.uow.WithinTx(ctx, func(ctx context.Context) error {
-		if err := s.safety.InsertTransfusion(ctx, scope, transfusion); err != nil {
-			return err
-		}
-		return s.appendAudit(ctx, session, audit.Record{
-			Action: "nursing.transfusion.start", ResourceType: "transfusion",
-			ResourceID: transfusion.ID, Outcome: audit.OutcomeSuccess,
-		}, now)
-	})
-	if err != nil {
-		return nil, mapConflict(err)
-	}
-	return transfusion, nil
-}
-
-// ObserveTransfusion records a monitoring set (SRS-NUR-014).
-func (s *Service) ObserveTransfusion(ctx context.Context, transfusionID string,
-	o domain.TransfusionObservation) (*domain.Transfusion, error) {
-
-	session, scope, err := s.authorize(ctx, PermTransfuse, "transfusion",
-		transfusionID, true)
-	if err != nil {
-		return nil, err
-	}
-
-	transfusion, err := s.safety.GetTransfusion(ctx, scope, transfusionID)
-	if err != nil {
-		return nil, err
-	}
-
-	now := s.clock.Now()
-	o.ID = s.ids.NewID()
-	if o.ObservedBy == "" {
-		o.ObservedBy = session.SubjectID
-	}
-	if err := transfusion.Observe(o, now); err != nil {
-		return nil, nursingError(err)
-	}
-
-	err = s.uow.WithinTx(ctx, func(ctx context.Context) error {
-		if err := s.safety.InsertTransfusionObservation(ctx, scope,
-			transfusionID, o); err != nil {
-			return err
-		}
-		return s.appendAudit(ctx, session, audit.Record{
-			Action: "nursing.transfusion.observe", ResourceType: "transfusion",
-			ResourceID: transfusionID, Outcome: audit.OutcomeSuccess,
-		}, now)
-	})
-	if err != nil {
-		return nil, mapConflict(err)
-	}
-	return transfusion, nil
-}
-
-// ReportTransfusionReaction stops a transfusion and records a suspected
-// reaction (SRS-NUR-014).
+// The transfusion use cases are gone, and the four RPCs above them refuse.
 //
-// Stopping and reporting are one operation, because they are one act at the
-// bedside and splitting them creates a window in which the system believes
-// blood is still running into a patient having a reaction.
-func (s *Service) ReportTransfusionReaction(ctx context.Context,
-	transfusionID string, r domain.TransfusionReaction) (
-	*domain.Transfusion, error) {
-
-	session, scope, err := s.authorize(ctx, PermTransfuse, "transfusion",
-		transfusionID, true)
-	if err != nil {
-		return nil, err
-	}
-
-	transfusion, err := s.safety.GetTransfusion(ctx, scope, transfusionID)
-	if err != nil {
-		return nil, err
-	}
-	expected := transfusion.Version
-
-	now := s.clock.Now()
-	if r.ReportedBy == "" {
-		r.ReportedBy = session.SubjectID
-	}
-	if err := transfusion.ReportReaction(r, now); err != nil {
-		return nil, nursingError(err)
-	}
-
-	err = s.uow.WithinTx(ctx, func(ctx context.Context) error {
-		if err := s.safety.EndTransfusion(ctx, scope, transfusion,
-			expected); err != nil {
-			return err
-		}
-		if err := s.appendAudit(ctx, session, audit.Record{
-			Action: "nursing.transfusion.reaction", ResourceType: "transfusion",
-			ResourceID: transfusion.ID, Outcome: audit.OutcomeSuccess,
-			Reason: r.Features,
-		}, now); err != nil {
-			return err
-		}
-		// The blood bank and the haemovigilance scheme both need this, and
-		// neither reads the ward's chart.
-		return s.appendEvent(ctx, session, EventTransfusionReaction,
-			"transfusion", transfusion.ID, map[string]any{
-				"transfusion_id": transfusion.ID,
-				"patient_id":     transfusion.PatientID,
-				"encounter_id":   transfusion.EncounterID,
-				"unit_number":    transfusion.UnitNumber,
-				"product_code":   transfusion.Product.Code,
-				"unit_returned":  r.UnitReturned,
-			}, now)
-	})
-	if err != nil {
-		return nil, mapConflict(err)
-	}
-	return transfusion, nil
+// SRS-NUR-014 built a transfusion record here in Wave 1, before the blood bank
+// context existed. SRS-BLD-010 built bloodbank.episode in Wave 2, and two
+// records of one transfusion will disagree. The episode is the one that
+// survives: it is the only one linked to the issue, the component and the
+// collection, and therefore the only one a look-back can run along.
+//
+// Nursing cannot simply write the episode instead. Each schema has exactly one
+// owning package (FIT-02), and bloodbank's is bloodbank's — a second writer is
+// how the two records came to disagree in the first place. So the bedside
+// workflow moved rather than being proxied: BloodBankService already carries
+// the whole of it, including the two-person check SRS-NUR-014 asks for.
+//
+// The RPCs stay on the wire because evolution here is additive and a breaking
+// change is a deliberate new package version (SRS-API-002). They are marked
+// deprecated in the contract and refuse with the call that replaces them, so a
+// client that has not moved is told where to go rather than quietly writing a
+// record nobody reads. They go at nursing v2.
+func transfusionMoved(replacement string) error {
+	return rpcerr.FailedPrecondition("NUR_TRANSFUSION_MOVED",
+		"transfusions are recorded by the blood bank, which links them to "+
+			"the unit, the donation and the look-back; call "+
+			"healthcare.bloodbank.v1.BloodBankService/"+replacement)
 }
 
-// CompleteTransfusion ends a transfusion that finished normally.
-func (s *Service) CompleteTransfusion(ctx context.Context, transfusionID string,
-	at time.Time) (*domain.Transfusion, error) {
+// StartTransfusion is replaced by BloodBankService/StartTransfusion
+// (SRS-NUR-014, SRS-BLD-010).
+func (s *Service) StartTransfusion(ctx context.Context) error {
+	return transfusionMoved("StartTransfusion")
+}
 
-	session, scope, err := s.authorize(ctx, PermTransfuse, "transfusion",
-		transfusionID, true)
-	if err != nil {
-		return nil, err
-	}
+// ObserveTransfusion is replaced by BloodBankService/Observe (SRS-NUR-014).
+func (s *Service) ObserveTransfusion(ctx context.Context) error {
+	return transfusionMoved("Observe")
+}
 
-	transfusion, err := s.safety.GetTransfusion(ctx, scope, transfusionID)
-	if err != nil {
-		return nil, err
-	}
-	expected := transfusion.Version
+// ReportTransfusionReaction is replaced by BloodBankService/ReportReaction
+// (SRS-NUR-014, SRS-BLD-011).
+func (s *Service) ReportTransfusionReaction(ctx context.Context) error {
+	return transfusionMoved("ReportReaction")
+}
 
-	now := s.clock.Now()
-	if err := transfusion.Complete(at, now); err != nil {
-		return nil, nursingError(err)
-	}
-
-	err = s.uow.WithinTx(ctx, func(ctx context.Context) error {
-		if err := s.safety.EndTransfusion(ctx, scope, transfusion,
-			expected); err != nil {
-			return err
-		}
-		return s.appendAudit(ctx, session, audit.Record{
-			Action: "nursing.transfusion.complete", ResourceType: "transfusion",
-			ResourceID: transfusion.ID, Outcome: audit.OutcomeSuccess,
-		}, now)
-	})
-	if err != nil {
-		return nil, mapConflict(err)
-	}
-	return transfusion, nil
+// CompleteTransfusion is replaced by BloodBankService/EndTransfusion
+// (SRS-NUR-014).
+func (s *Service) CompleteTransfusion(ctx context.Context) error {
+	return transfusionMoved("EndTransfusion")
 }
 
 // AssessWound records a wound assessment (SRS-NUR-012).
